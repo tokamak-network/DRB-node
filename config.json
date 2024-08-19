@@ -1,8 +1,8 @@
 {
   "RpcURL": "wss//rpc.titan-sepolia.tokamak.network",
   "HttpURL": "https://rpc.titan-sepolia.tokamak.network",
-  "PrivateKey": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  "PrivateKey": "",
   "ContractAddress": "0xb25aB1b23edB0341c68179aEE13A7B43C73AAfE0",
-  "WalletAddress": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+  "WalletAddress": "",
   "SubgraphURL": "https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drb-subgraph"
 }
