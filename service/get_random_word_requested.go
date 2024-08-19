@@ -12,7 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/machinebox/graphql"
-	"github.com/sirupsen/logrus"
+	"github.com/tokamak-network/DRB-Node/logger"
 	"github.com/tokamak-network/DRB-Node/utils"
 )
 
@@ -28,6 +28,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
     }
 
     if err := client.Run(ctx, req, &respData); err != nil {
+        logger.Log.Errorf("Error fetching random words requested: %v", err)
         return nil, err
     }
 
@@ -52,7 +53,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
     for round, data := range latestRounds {
         roundInt, err := strconv.Atoi(round)
         if err != nil {
-            logrus.Errorf("Error converting round to int: %s, %v", round, err)
+            logger.Log.Errorf("Error converting round to int: %s, %v", round, err)
             continue
         }
         rounds = append(rounds, struct {
@@ -101,7 +102,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
         }
 
         if err := client.Run(ctx, reqOne, &respOneData); err != nil {
-            logrus.Errorf("Error running commitCs query: %v", err)
+            logger.Log.Errorf("Error running commitCs query for round %s: %v", item.Round, err)
             continue
         }
 
@@ -109,7 +110,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
         for _, data := range respOneData.CommitCs {
             myCommitBlockTimestampInt, err := strconv.ParseInt(data.BlockTimestamp, 10, 64)
             if err != nil {
-                logrus.Errorf("Error converting block timestamp to int64: %v", err)
+                logger.Log.Errorf("Error converting block timestamp to int64: %v", err)
                 continue
             }
             myCommitBlockTimestamp = time.Unix(myCommitBlockTimestampInt, 0)
@@ -117,13 +118,13 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
 
         validCommitCount, err := strconv.Atoi(item.RoundInfo.ValidCommitCount)
         if err != nil {
-            logrus.Errorf("Error converting ValidCommitCount to int: %v", err)
+            logger.Log.Errorf("Error converting ValidCommitCount to int: %v", err)
             continue
         }
 
         recoveredData, err := GetRecoveredData(item.Round)
         if err != nil {
-            logrus.Errorf("Error retrieving recovered data for round %s: %v", item.Round, err)
+            logger.Log.Errorf("Error retrieving recovered data for round %s: %v", item.Round, err)
         }
 
         var isRecovered bool
@@ -136,7 +137,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
 
         fulfillData, err := GetFulfillRandomnessData(item.Round)
         if err != nil {
-            logrus.Errorf("Error retrieving fulfill randomness data for round %s: %v", item.Round, err)
+            logger.Log.Errorf("Error retrieving fulfill randomness data for round %s: %v", item.Round, err)
         }
 
         var fulfillSender string
@@ -150,14 +151,14 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
         requestBlockTimestampStr := item.BlockTimestamp
         requestBlockTimestampInt, err := strconv.ParseInt(requestBlockTimestampStr, 10, 64)
         if err != nil {
-            logrus.Errorf("Error converting block timestamp to int64: %v", err)
+            logger.Log.Errorf("Error converting block timestamp to int64: %v", err)
             return nil, err
         }
         requestBlockTimestamp := time.Unix(requestBlockTimestampInt, 0)
 
         getCommitData, err := GetCommitData(item.Round)
         if err != nil {
-            logrus.Errorf("Error retrieving commit data for round %s: %v", item.Round, err)
+            logger.Log.Errorf("Error retrieving commit data for round %s: %v", item.Round, err)
         }
 
         var commitSenders []common.Address
@@ -183,14 +184,14 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
         var isPreviousRoundRecovered bool
         previousRoundInt, err := strconv.Atoi(item.Round)
         if err != nil {
-            logrus.Errorf("Error converting round to int: %v", err)
+            logger.Log.Errorf("Error converting round to int: %v", err)
             continue
         }
         previousRound := strconv.Itoa(previousRoundInt - 1)
 
         previousRoundData, err := GetRecoveredData(previousRound)
         if err != nil {
-            logrus.Errorf("Error retrieving recovered data for previous round %s: %v", previousRound, err)
+            logger.Log.Errorf("Error retrieving recovered data for previous round %s: %v", previousRound, err)
         } else {
             isPreviousRoundRecovered = false
             for _, data := range previousRoundData {
@@ -207,7 +208,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
 
         commitTimeStampInt, err := strconv.ParseInt(commitTimeStampStr, 10, 64)
         if err != nil {
-            logrus.Errorf("Error converting commit timestamp to int64: %v", err)
+            logger.Log.Errorf("Error converting commit timestamp to int64: %v", err)
             return nil, err
         }
         commitTimeStampTime := time.Unix(commitTimeStampInt, 0)
@@ -234,12 +235,12 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
         if validCommitCount >= 2 && !isRecovered {
             recoverData, err = BeforeRecoverPhase(item.Round, pofClient)
             if err != nil {
-                logrus.Errorf("Error processing BeforeRecoverPhase for round %s: %v", item.Round, err)
+                logger.Log.Errorf("Error processing BeforeRecoverPhase for round %s: %v", item.Round, err)
                 continue
             }
 
             if recoverData.OmegaRecov == nil {
-                logrus.Errorf("OmegaRecov is nil for round %s", item.Round)
+                logger.Log.Errorf("OmegaRecov is nil for round %s", item.Round)
                 continue
             }
 
@@ -294,20 +295,18 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
             }
         }
 
-         // Complete Rounds
-         if isRecovered && fulfillSender == config.WalletAddress {
+        // Complete Rounds
+        if isRecovered && fulfillSender == config.WalletAddress {
             if _, exists := roundStatus[item.Round+":Completed"]; !exists {
                 results.CompleteRounds = append(results.CompleteRounds, item.Round)
                 roundStatus[item.Round+":Completed"] = "Processed"
-                logrus.WithFields(logrus.Fields{
-                    "round": item.Round,
-                }).Info("Added to complete rounds")
+                logger.Log.Infof("Round %s added to complete rounds", item.Round)
             }
         }
     }
 
 	// Logging the results
-	fmt.Println("---------------------------------------------------------------------------")
+	logger.Log.Info("---------------------------------------------------------------------------")
 	w := tabwriter.NewWriter(log.Writer(), 0, 0, 1, ' ', tabwriter.Debug)
 	fmt.Fprintln(w, "Category\tRounds")
 	fmt.Fprintln(w, "RecoverableRounds\t", results.RecoverableRounds)
@@ -317,8 +316,9 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
 	fmt.Fprintln(w, "RecoverDisputeableRounds\t", results.RecoverDisputeableRounds)
 	fmt.Fprintln(w, "LeadershipDisputeableRounds\t", results.LeadershipDisputeableRounds)
 	w.Flush()
-	fmt.Println("---------------------------------------------------------------------------")
+	logger.Log.Info("---------------------------------------------------------------------------")
 
-    logrus.Info("Random words requested fetch completed successfully")
+    logger.Log.Info("Random words requested fetch completed successfully")
+    
     return results, nil
 }

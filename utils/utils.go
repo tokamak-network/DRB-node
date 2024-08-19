@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 
 	"github.com/fatih/color"
-	"github.com/sirupsen/logrus"
+	"github.com/tokamak-network/DRB-Node/logger" // Import your logger package
 )
 
 type Config struct {
@@ -21,10 +21,10 @@ func LoadConfig() Config {
 	var cfg Config
 	configFile, err := ioutil.ReadFile("../config.json")
 	if err != nil {
-		logrus.Fatalf("Error reading config file: %s", err)
+		logger.Log.Fatalf("Error reading config file: %s", err)
 	}
 	if err := json.Unmarshal(configFile, &cfg); err != nil {
-		logrus.Fatalf("Error parsing config file: %s", err)
+		logger.Log.Fatalf("Error parsing config file: %s", err)
 	}
 	return cfg
 }

@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"io"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -12,13 +13,17 @@ var Log *logrus.Logger
 func InitLogger() {
 	Log = logrus.New()
 
-	// Set output to a file
+	// Set up the log file
 	file, err := os.OpenFile("service.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		Log.Fatalf("Error opening log file: %v", err)
 	}
 
-	Log.Out = file
+	// Set up the console output
+	console := os.Stdout
+
+	// Use MultiWriter to write to both the file and console
+	Log.SetOutput(io.MultiWriter(file, console))
 
 	// Set log format to JSON or Text
 	Log.SetFormatter(&logrus.TextFormatter{
@@ -29,7 +34,7 @@ func InitLogger() {
 	Log.SetLevel(logrus.InfoLevel)
 }
 
-// CloseLogger is not necessary with logrus as it handles file closing automatically
+// CloseLogger closes the file output if it is open.
 func CloseLogger() {
 	if file, ok := Log.Out.(*os.File); ok {
 		file.Close()

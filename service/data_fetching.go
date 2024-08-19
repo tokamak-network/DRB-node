@@ -12,6 +12,7 @@ import (
 	"github.com/machinebox/graphql"
 	"github.com/sirupsen/logrus"
 	crr "github.com/tokamak-network/DRB-Node/dependencies/commit_reveal_recover"
+	"github.com/tokamak-network/DRB-Node/logger" // Use the custom logger package
 	"github.com/tokamak-network/DRB-Node/utils"
 )
 
@@ -37,7 +38,7 @@ func GetRecoveredData(round string) ([]utils.RecoveredData, error) {
 
 	ctx := context.Background()
 	if err := client.Run(ctx, req, &respData); err != nil {
-		logrus.Errorf("Failed to execute query: %v", err)
+		logger.Log.Errorf("Failed to execute query: %v", err) // Replacing logrus with logger.Log
 		return nil, err
 	}
 
@@ -63,18 +64,16 @@ func GetCommitData(round string) ([]utils.CommitData, error) {
 
 	req := utils.GetCommitDataRequest(round)
 
-	// Define a structure to hold the query response
 	var respData struct {
 		CommitCs []utils.CommitData `json:"commitCs"`
 	}
 
 	ctx := context.Background()
 	if err := client.Run(ctx, req, &respData); err != nil {
-		logrus.Errorf("Failed to execute query: %v", err)
+		logger.Log.Errorf("Failed to execute query: %v", err) // Replacing logrus with logger.Log
 		return nil, err
 	}
 
-	// Return the list of commit data and no error
 	return respData.CommitCs, nil
 }
 
@@ -85,7 +84,6 @@ func GetFulfillRandomnessData(round string) ([]utils.FulfillRandomnessData, erro
 
 	req := utils.GetFulfillRandomnessDataRequest(round)
 
-	// Define a structure to hold the query response
 	var respData struct {
 		FulfillRandomnesses []struct {
 			MsgSender      string `json:"msgSender"`
@@ -96,11 +94,10 @@ func GetFulfillRandomnessData(round string) ([]utils.FulfillRandomnessData, erro
 
 	ctx := context.Background()
 	if err := client.Run(ctx, req, &respData); err != nil {
-		logrus.Errorf("Failed to execute GetFulfillRandomnessData query: %v", err)
+		logger.Log.Errorf("Failed to execute GetFulfillRandomnessData query: %v", err) // Replacing logrus with logger.Log
 		return nil, err
 	}
 
-	// Map the response data to the FulfillRandomnessData struct
 	var fulfillRandomnessData []utils.FulfillRandomnessData
 	for _, item := range respData.FulfillRandomnesses {
 		fulfillRandomnessData = append(fulfillRandomnessData, utils.FulfillRandomnessData{
@@ -115,21 +112,18 @@ func GetFulfillRandomnessData(round string) ([]utils.FulfillRandomnessData, erro
 
 // BeforeRecoverPhase checks if the local node is the leader by recovering the minimum hash and compares it against its own.
 func BeforeRecoverPhase(round string, pofClient *utils.PoFClient) (utils.RecoveryResult, error) {
-	logrus.Info("Starting BeforeRecoverPhase...")
+	logger.Log.Info("Starting BeforeRecoverPhase...") // Replacing logrus with logger.Log
 
-	// Fetch setup values
 	setupValues := utils.GetSetupValue()
 
-	// Fetch commit data using the round number
 	commitDataList, err := GetCommitData(round)
 	if err != nil {
-		logrus.Errorf("Error retrieving commit-reveal data: %v", err)
+		logger.Log.Errorf("Error retrieving commit-reveal data: %v", err) // Replacing logrus with logger.Log
 		return utils.RecoveryResult{}, err
 	}
 
-	logrus.Info("Processing commit data...")
+	logger.Log.Info("Processing commit data...") // Replacing logrus with logger.Log
 
-	// Process commit data to extract commit values
 	var commits []*big.Int
 	for _, commitData := range commitDataList {
 		if commitData.CommitVal != "" {
@@ -142,14 +136,13 @@ func BeforeRecoverPhase(round string, pofClient *utils.PoFClient) (utils.Recover
 			}
 
 			if !ok {
-				logrus.Warnf("Failed to convert commit val to big.Int: %s", commitData.CommitVal)
+				logger.Log.Warnf("Failed to convert commit val to big.Int: %s", commitData.CommitVal) // Replacing logrus with logger.Log
 				continue
 			}
 			commits = append(commits, commitBigInt)
 		}
 	}
 
-	// Assuming T and NVal are used directly from setupValues for recovery
 	omegaRecov, proofListRecovery := crr.Recover(new(big.Int).SetBytes(setupValues.NVal), int(setupValues.T.Int64()), commits)
 	if len(proofListRecovery) == 0 {
 		return utils.RecoveryResult{}, fmt.Errorf("proofListRecovery is empty")
@@ -180,7 +173,7 @@ func BeforeRecoverPhase(round string, pofClient *utils.PoFClient) (utils.Recover
 		V:          v,
 	}
 
-	logrus.Info("BeforeRecoverPhase completed successfully")
+	logger.Log.Info("BeforeRecoverPhase completed successfully") // Replacing logrus with logger.Log
 	return result, nil
 }
 
@@ -190,7 +183,7 @@ func FindOffChainLeaderAtRound(round string, OmegaRecov *big.Int) (bool, common.
 	mySender := common.HexToAddress(config.WalletAddress)
 	commitDataList, err := GetCommitData(round)
 	if err != nil {
-		logrus.Errorf("Error fetching commit data for round %s: %v", round, err)
+		logger.Log.Errorf("Error fetching commit data for round %s: %v", round, err) // Replacing logrus with logger.Log
 		return false, common.Address{}, err
 	}
 
@@ -216,13 +209,13 @@ func FindOffChainLeaderAtRound(round string, OmegaRecov *big.Int) (bool, common.
 
 	isMyAddressLeader := myHash != nil && myHash.Cmp(minHash) == 0 && mySender == leaderAddress
 	if isMyAddressLeader {
-		logrus.WithFields(logrus.Fields{
+		logger.Log.WithFields(logrus.Fields{ // Corrected fields usage
 			"round": round,
-		}).Info("My sender's address has the min hash - I am the leader")
+		}).Info("My sender's address has the min hash - I am the leader") // Replacing logrus with logger.Log
 	} else {
-		logrus.WithFields(logrus.Fields{
+		logger.Log.WithFields(logrus.Fields{ // Corrected fields usage
 			"round": round,
-		}).Info("My sender's address does not have the min hash - I am not the leader")
+		}).Info("My sender's address does not have the min hash - I am not the leader") // Replacing logrus with logger.Log
 		time.Sleep(10 * time.Second)
 	}
 
