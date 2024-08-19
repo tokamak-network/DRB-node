@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/machinebox/graphql"
-	"github.com/tokamak-network/DRB-Node/utils" // Adjust the import path to your project structure
+	"github.com/tokamak-network/DRB-Node/utils"
 )
 
 func IsOperator(operator string) (bool, error) {

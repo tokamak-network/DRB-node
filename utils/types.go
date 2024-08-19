@@ -13,8 +13,9 @@ import (
 // Constants defining durations and timeouts
 const (
 	CommitDuration  = 70  // Commit duration in seconds
-	DisputeDuration = 130 // Dispute duration in seconds
 	ContextTimeout  = 600000
+	RecoverDuration = 130
+	ReRequestDuration = 120
 )
 
 // BigNumber represents a big number with value and bit length.

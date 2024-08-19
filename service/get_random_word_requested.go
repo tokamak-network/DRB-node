@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/big"
 	"sort"
 	"strconv"
 	"strings"
@@ -213,6 +212,8 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
         }
         commitTimeStampTime := time.Unix(commitTimeStampInt, 0)
         commitPhaseEndTime := commitTimeStampTime.Add(time.Duration(utils.CommitDuration) * time.Second)
+        recoverPhaseEndTime := commitPhaseEndTime.Add(time.Duration(utils.RecoverDuration) * time.Second)
+        reRequestTime := commitPhaseEndTime.Add(time.Duration(utils.ReRequestDuration) * time.Second)
 
         if item.Round == "0" {
             isPreviousRoundRecovered = true
@@ -253,6 +254,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
             }
         }
 
+        // Recover
         if !isRecovered && isMyAddressLeader && isCommitSender && commitPhaseEndTime.Before(time.Now()) && !item.RoundInfo.IsRecovered && !item.RoundInfo.IsFulfillExecuted && validCommitCount > 1 {
             if _, exists := roundStatus[item.Round+":Recovered"]; !exists {
                 results.RecoverableRounds = append(results.RecoverableRounds, item.Round)
@@ -260,36 +262,47 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
             }
         }
 
-        if item.RoundInfo.IsRecovered && !item.RoundInfo.IsFulfillExecuted {
-            results.FulfillableRounds = append(results.FulfillableRounds, item.Round)
+        // Fulfill
+        if isMyAddressLeader && isCommitSender && recoverPhaseEndTime.Before(time.Now()) && item.RoundInfo.IsRecovered && !item.RoundInfo.IsFulfillExecuted && validCommitCount > 1 {
+            if _, exists := roundStatus[item.Round+":Fulfilled"]; !exists {
+                results.FulfillableRounds = append(results.FulfillableRounds, item.Round)
+                roundStatus[item.Round+":Fulfilled"] = "Processed"
+            }
         }
 
-        if !item.RoundInfo.IsFulfillExecuted {
+        // Re-request
+        if isPreviousRoundRecovered && reRequestTime.Before(time.Now()) && !item.RoundInfo.IsRecovered && validCommitCount < 2 && validCommitCount > 0 && commitTimeStampStr != "0" {
             if _, exists := roundStatus[item.Round+":ReRequested"]; !exists {
                 results.ReRequestableRounds = append(results.ReRequestableRounds, item.Round)
                 roundStatus[item.Round+":ReRequested"] = "Processed"
             }
         }
 
-        if recoverDataMap[item.Round].OmegaRecov != nil && recoverDataMap[item.Round].OmegaRecov.Cmp(big.NewInt(0)) > 0 && recoverDataMap[item.Round].OmegaRecov.Cmp(big.NewInt(1)) < 0 && commitPhaseEndTime.Before(time.Now()) && fulfillSender != "" {
-            results.RecoverDisputeableRounds = append(results.RecoverDisputeableRounds, item.Round)
-            logrus.WithFields(logrus.Fields{
-                "round": item.Round,
-            }).Info("Added to recover disputeable rounds")
+        // Dispute Recover
+        if !isCommitSender && time.Now().Before(recoverPhaseEndTime) && item.RoundInfo.IsRecovered && !item.RoundInfo.IsFulfillExecuted {
+            if _, exists := roundStatus[item.Round+":DisputeRecover"]; !exists {
+                results.RecoverDisputeableRounds = append(results.RecoverDisputeableRounds, item.Round)
+                roundStatus[item.Round+":DisputeRecover"] = "Processed"
+            }
         }
 
-        if recoverDataMap[item.Round].OmegaRecov != nil && recoverDataMap[item.Round].OmegaRecov.Cmp(big.NewInt(1)) >= 0 && commitPhaseEndTime.Before(time.Now()) && fulfillSender == "" {
-            results.LeadershipDisputeableRounds = append(results.LeadershipDisputeableRounds, item.Round)
-            logrus.WithFields(logrus.Fields{
-                "round": item.Round,
-            }).Info("Added to leadership disputeable rounds")
+        // Dispute Leadership
+        if !isCommitSender && time.Now().Before(recoverPhaseEndTime) && item.RoundInfo.IsRecovered && item.RoundInfo.IsFulfillExecuted {
+            if _, exists := roundStatus[item.Round+":DisputeLeadership"]; !exists {
+                results.LeadershipDisputeableRounds = append(results.LeadershipDisputeableRounds, item.Round)
+                roundStatus[item.Round+":DisputeLeadership"] = "Processed"
+            }
         }
 
-        if isRecovered && fulfillSender == config.WalletAddress {
-            results.CompleteRounds = append(results.CompleteRounds, item.Round)
-            logrus.WithFields(logrus.Fields{
-                "round": item.Round,
-            }).Info("Added to complete rounds")
+         // Complete Rounds
+         if isRecovered && fulfillSender == config.WalletAddress {
+            if _, exists := roundStatus[item.Round+":Completed"]; !exists {
+                results.CompleteRounds = append(results.CompleteRounds, item.Round)
+                roundStatus[item.Round+":Completed"] = "Processed"
+                logrus.WithFields(logrus.Fields{
+                    "round": item.Round,
+                }).Info("Added to complete rounds")
+            }
         }
     }
 
@@ -309,5 +322,3 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
     logrus.Info("Random words requested fetch completed successfully")
     return results, nil
 }
-
-

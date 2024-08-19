@@ -53,6 +53,8 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error 
 						continue
 					}
 
+					ctx := context.Background();
+
 					err := transactions.Recover(ctx, round, recoveryData.Y, pofClient)
 					if err != nil {
 						log.Printf("Failed to recover round: %s, error: %v", roundStr, err)
@@ -87,6 +89,8 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error 
 				continue
 			}
 
+			ctx := context.Background();
+
 			address, byteData, err := transactions.Commit(ctx, round, pofClient)
 			if err != nil {
 				log.Printf("Failed to commit round: %v", err)
@@ -107,6 +111,8 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error 
 				continue
 			}
 
+			ctx := context.Background();
+
 			tx, err := transactions.FulfillRandomness(ctx, round, pofClient)
 			if err != nil {
 				log.Printf("Failed to fulfill randomness for round: %v", err)
@@ -125,6 +131,8 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error 
 				log.Printf("Failed to convert round string to big.Int: %s", roundStr)
 				continue
 			}
+
+			ctx := context.Background();
 
 			err := transactions.ReRequestRandomWordAtRound(ctx, round, pofClient)
 			if err != nil {
@@ -168,6 +176,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error 
 					// Check if the dispute conditions are met
 					if recoveryData.OmegaRecov.Cmp(omega) != 0 && !disputeInitiated {
 						// Call DisputeRecover with correct parameters
+						ctx := context.Background();
 						tx, err := transactions.DisputeRecover(ctx, round, recoveryData.V, recoveryData.X, recoveryData.Y, pofClient)
 						if err != nil {
 							log.Printf("Failed to initiate dispute recovery: %v", err)
@@ -219,6 +228,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error 
 				isMyAddressLeader, leaderAddress, _ := FindOffChainLeaderAtRound(roundStr, results.RecoveryData[i].OmegaRecov)
 
 				if msgSender != leaderAddress {
+					ctx := context.Background();
 					// If the current address is supposed to be the leader
 					if isMyAddressLeader {
 						// Call the DisputeLeadershipAtRound function
