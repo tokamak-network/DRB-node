@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  my-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: my-service-container
+    environment:
+      - CONFIG_BASE_PATH=/root/
+    volumes:
+      - ./config.json:/root/config.json
+      - ./contract/abi/CRRNGCoordinatorPoF.json:/root/contract/abi/CRRNGCoordinatorPoF.json
+    restart: unless-stopped

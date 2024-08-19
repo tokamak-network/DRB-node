@@ -19,7 +19,7 @@ type Config struct {
 
 func LoadConfig() Config {
 	var cfg Config
-	configFile, err := ioutil.ReadFile("../config.json")
+	configFile, err := ioutil.ReadFile("./config.json")
 	if err != nil {
 		logger.Log.Fatalf("Error reading config file: %s", err)
 	}

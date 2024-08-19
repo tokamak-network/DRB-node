@@ -1,0 +1,17 @@
+# Ignore the Go bin directory and build outputs
+/bin
+/build
+main
+*.exe
+
+# Ignore Go mod cache
+/go
+
+# Ignore any IDE or editor configurations
+.vscode/
+.idea/
+*.log
+*.env.local
+
+# Ignore local env files that should not be included
+.env.*

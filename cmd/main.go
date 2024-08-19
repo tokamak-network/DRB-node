@@ -18,7 +18,7 @@ func main() {
 	logger.InitLogger()
 	defer logger.CloseLogger() // Ensure the log file is properly closed
 
-	if err := godotenv.Load("../.env"); err != nil {
+	if err := godotenv.Load("./.env"); err != nil {
 		logger.Log.Fatalf("Error loading .env file: %v", err)
 	}
 

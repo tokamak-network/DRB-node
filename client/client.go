@@ -36,7 +36,7 @@ func NewPoFClient(config utils.Config) (*utils.PoFClient, error) {
 		return nil, fmt.Errorf("failed to parse private key: %v", err)
 	}
 
-	contractABI, err := LoadContractABI("../contract/abi/CRRNGCoordinatorPoF.json")
+	contractABI, err := LoadContractABI("./contract/abi/CRRNGCoordinatorPoF.json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
 	}
