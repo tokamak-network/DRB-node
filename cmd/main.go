@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"os"
+
 	"github.com/fatih/color"
 	"github.com/tokamak-network/DRB-Node/client"
 	"github.com/tokamak-network/DRB-Node/logger"
@@ -46,5 +48,6 @@ func main() {
 	}()
 
 	logger.Log.Info("Service is now running")
-	select {}
+	// Use os.Stdout to keep the service running
+	_, _ = os.Stdout.Read(make([]byte, 1))
 }

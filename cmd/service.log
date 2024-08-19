@@ -1,8 +1,0 @@
-time="2024-08-19T12:48:17+04:00" level=info msg="Service starting..."
-time="2024-08-19T12:48:17+04:00" level=info msg="Loaded configuration: {RpcURL:wss//rpc.titan-sepolia.tokamak.network HttpURL:https://rpc.titan-sepolia.tokamak.network PrivateKey:0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 ContractAddress:0xb25aB1b23edB0341c68179aEE13A7B43C73AAfE0 WalletAddress:0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266 SubgraphURL:https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drb-subgraph}"
-time="2024-08-19T12:48:17+04:00" level=info msg="PoFClient created successfully"
-time="2024-08-19T12:48:17+04:00" level=info msg="Service is now running"
-time="2024-08-19T12:48:33+04:00" level=info msg="Random words requested fetch completed successfully"
-time="2024-08-19T12:48:33+04:00" level=info msg="Round results processed successfully"
-time="2024-08-19T12:48:47+04:00" level=info msg="Random words requested fetch completed successfully"
-time="2024-08-19T12:48:47+04:00" level=info msg="Round results processed successfully"
