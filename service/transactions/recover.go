@@ -13,7 +13,6 @@ import (
 )
 
 func Recover(ctx context.Context, round *big.Int, y utils.BigNumber, pofClient *utils.PoFClient) error {
-	// Use the logger from the logger package
 	log := logger.Log.WithFields(logrus.Fields{
 		"function": "Recover",
 		"round":    round.String(),
@@ -21,48 +20,10 @@ func Recover(ctx context.Context, round *big.Int, y utils.BigNumber, pofClient *
 
 	log.Info("Starting recovery process...")
 
-	chainID, err := pofClient.Client.NetworkID(ctx)
+	// Use the generic ExecuteTransaction function to handle the transaction
+	signedTx, _, err := ExecuteTransaction(ctx, pofClient, "recover", round, y)
 	if err != nil {
-		log.Errorf("Failed to fetch network ID: %v", err)
-		return fmt.Errorf("failed to fetch network ID: %v", err)
-	}
-
-	auth, err := bind.NewKeyedTransactorWithChainID(pofClient.PrivateKey, chainID)
-	if err != nil {
-		log.Errorf("Failed to create authorized transactor: %v", err)
-		return fmt.Errorf("failed to create authorized transactor: %v", err)
-	}
-
-	nonce, err := pofClient.Client.PendingNonceAt(ctx, auth.From)
-	if err != nil {
-		log.Errorf("Failed to fetch nonce: %v", err)
-		return fmt.Errorf("failed to fetch nonce: %v", err)
-	}
-	auth.Nonce = big.NewInt(int64(nonce))
-
-	gasPrice, err := pofClient.Client.SuggestGasPrice(ctx)
-	if err != nil {
-		log.Errorf("Failed to suggest gas price: %v", err)
-		return fmt.Errorf("failed to suggest gas price: %v", err)
-	}
-	auth.GasPrice = gasPrice
-
-	packedData, err := pofClient.ContractABI.Pack("recover", round, y)
-	if err != nil {
-		log.Errorf("Failed to pack data for recovery: %v", err)
-		return fmt.Errorf("failed to pack data for recovery: %v", err)
-	}
-
-	tx := types.NewTransaction(auth.Nonce.Uint64(), pofClient.ContractAddress, nil, 6000000, auth.GasPrice, packedData)
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), pofClient.PrivateKey)
-	if err != nil {
-		log.Errorf("Failed to sign the transaction: %v", err)
-		return fmt.Errorf("failed to sign the transaction: %v", err)
-	}
-
-	if err := pofClient.Client.SendTransaction(ctx, signedTx); err != nil {
-		log.Errorf("Failed to send the signed transaction: %v", err)
-		return fmt.Errorf("failed to send the signed transaction: %v", err)
+		return err
 	}
 
 	log.Infof("Recovery transaction sent! Tx Hash: %s", signedTx.Hash().Hex())

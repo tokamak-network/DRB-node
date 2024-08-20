@@ -14,55 +14,16 @@ import (
 )
 
 func FulfillRandomness(ctx context.Context, round *big.Int, pofClient *utils.PoFClient) (*types.Transaction, error) {
-	// Use the logger from the logger package
 	log := logger.Log.WithFields(logrus.Fields{
 		"round": round,
 	})
 
 	log.Info("Starting FulfillRandomness process")
 
-	chainID, err := pofClient.Client.NetworkID(ctx)
+	// Use the generic ExecuteTransaction function to handle the transaction
+	signedTx, _, err := ExecuteTransaction(ctx, pofClient, "fulfillRandomness", round)
 	if err != nil {
-		log.Errorf("Failed to fetch network ID: %v", err)
-		return nil, fmt.Errorf("failed to fetch network ID: %v", err)
-	}
-
-	auth, err := bind.NewKeyedTransactorWithChainID(pofClient.PrivateKey, chainID)
-	if err != nil {
-		log.Errorf("Failed to create authorized transactor: %v", err)
-		return nil, fmt.Errorf("failed to create authorized transactor: %v", err)
-	}
-
-	nonce, err := pofClient.Client.PendingNonceAt(ctx, auth.From)
-	if err != nil {
-		log.Errorf("Failed to fetch nonce: %v", err)
-		return nil, fmt.Errorf("failed to fetch nonce: %v", err)
-	}
-	auth.Nonce = big.NewInt(int64(nonce))
-
-	gasPrice, err := pofClient.Client.SuggestGasPrice(ctx)
-	if err != nil {
-		log.Errorf("Failed to suggest gas price: %v", err)
-		return nil, fmt.Errorf("failed to suggest gas price: %v", err)
-	}
-	auth.GasPrice = gasPrice
-
-	packedData, err := pofClient.ContractABI.Pack("fulfillRandomness", round)
-	if err != nil {
-		log.Errorf("Failed to pack data for fulfillRandomness: %v", err)
-		return nil, fmt.Errorf("failed to pack data for fulfillRandomness: %v", err)
-	}
-
-	tx := types.NewTransaction(auth.Nonce.Uint64(), pofClient.ContractAddress, nil, 6000000, auth.GasPrice, packedData)
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), pofClient.PrivateKey)
-	if err != nil {
-		log.Errorf("Failed to sign the transaction: %v", err)
-		return nil, fmt.Errorf("failed to sign the transaction: %v", err)
-	}
-
-	if err := pofClient.Client.SendTransaction(ctx, signedTx); err != nil {
-		log.Errorf("Failed to send the signed transaction: %v", err)
-		return nil, fmt.Errorf("failed to send the signed transaction: %v", err)
+		return nil, err
 	}
 
 	// Wait for the transaction to be mined

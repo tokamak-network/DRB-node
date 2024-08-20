@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,6 +20,12 @@ import (
 func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, error) {
     config := utils.GetConfig()
     client := graphql.NewClient(config.SubgraphURL)
+
+    walletAddress := os.Getenv("WALLET_ADDRESS")
+    if walletAddress == "" {
+        logger.Log.Error("WALLET_ADDRESS environment variable is not set")
+        return nil, fmt.Errorf("WALLET_ADDRESS environment variable is not set")
+    }
 
     req := utils.GetRandomWordsRequestedRequest()
     ctx := context.Background()
@@ -93,7 +100,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
     for _, round := range filteredRounds {
         item := round.Data
 
-        reqOne := utils.GetCommitCsRequest(item.Round, config.WalletAddress)
+        reqOne := utils.GetCommitCsRequest(item.Round, walletAddress)
         var respOneData struct {
             CommitCs []struct {
                 BlockTimestamp string `json:"blockTimestamp"`
@@ -172,7 +179,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
         }
 
         for _, commitSender := range commitSenders {
-            if commitSender == common.HexToAddress(config.WalletAddress) {
+            if commitSender == common.HexToAddress(walletAddress) {
                 isCommitSender = true
                 break
             }
@@ -248,7 +255,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
             isMyAddressLeader, _, _ = FindOffChainLeaderAtRound(item.Round, recoverData.OmegaRecov)
             results.RecoveryData = append(results.RecoveryData, recoverData)
         } else if validCommitCount >= 2 && isRecovered {
-            if strings.ToLower(config.WalletAddress) == msgSender {
+            if strings.ToLower(walletAddress) == msgSender {
                 isMyAddressLeader = true
             } else {
                 isMyAddressLeader = false
@@ -296,7 +303,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
         }
 
         // Complete Rounds
-        if isRecovered && fulfillSender == config.WalletAddress {
+        if isRecovered && fulfillSender == walletAddress {
             if _, exists := roundStatus[item.Round+":Completed"]; !exists {
                 results.CompleteRounds = append(results.CompleteRounds, item.Round)
                 roundStatus[item.Round+":Completed"] = "Processed"

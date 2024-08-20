@@ -27,13 +27,20 @@ func NewPoFClient(config utils.Config) (*utils.PoFClient, error) {
 		logger.Log.Error("PRIVATE_KEY environment variable is not set")
 		return nil, fmt.Errorf("PRIVATE_KEY environment variable is not set")
 	} else {
-		logger.Log.Info("PRIVATE_KEY loaded: %s") // Debug log
+		logger.Log.Info("PRIVATE_KEY loaded")
 	}
 
 	privateKey, err := crypto.HexToECDSA(privateKeyHex[2:])
 	if err != nil {
-		logger.Log.Error("Failed to parse private key: %v", err)
+		logger.Log.Errorf("Failed to parse private key: %v", err)
 		return nil, fmt.Errorf("failed to parse private key: %v", err)
+	}
+
+	// Fetch WalletAddress from .env file
+	walletAddressHex := os.Getenv("WALLET_ADDRESS")
+	if walletAddressHex == "" {
+		logger.Log.Error("WALLET_ADDRESS environment variable is not set")
+		return nil, fmt.Errorf("WALLET_ADDRESS environment variable is not set")
 	}
 
 	contractABI, err := LoadContractABI("./contract/abi/CRRNGCoordinatorPoF.json")
@@ -42,7 +49,7 @@ func NewPoFClient(config utils.Config) (*utils.PoFClient, error) {
 	}
 
 	contractAddress := common.HexToAddress(config.ContractAddress)
-	myAddress := common.HexToAddress(config.WalletAddress)
+	myAddress := common.HexToAddress(walletAddressHex)
 
 	return &utils.PoFClient{
 		Client:          client,
