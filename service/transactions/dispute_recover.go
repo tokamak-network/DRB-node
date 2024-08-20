@@ -12,67 +12,29 @@ import (
 	"github.com/tokamak-network/DRB-Node/utils"
 )
 
+// DisputeRecover handles the dispute recovery process.
 func DisputeRecover(ctx context.Context, round *big.Int, v []utils.BigNumber, x utils.BigNumber, y utils.BigNumber, pofClient *utils.PoFClient) (*types.Transaction, error) {
-	// Use the logger from the logger package
 	log := logger.Log.WithFields(logrus.Fields{
 		"round": round,
 	})
 
 	log.Info("Starting DisputeRecover process")
 
-	chainID, err := pofClient.Client.NetworkID(ctx)
+	// Execute the transaction using the generic function
+	tx, _, err := ExecuteTransaction(ctx, pofClient, "disputeRecover", nil, round, v, x, y)
 	if err != nil {
-		log.Errorf("Failed to fetch network ID: %v", err)
-		return nil, fmt.Errorf("failed to fetch network ID: %v", err)
-	}
-
-	auth, err := bind.NewKeyedTransactorWithChainID(pofClient.PrivateKey, chainID)
-	if err != nil {
-		log.Errorf("Failed to create authorized transactor: %v", err)
-		return nil, fmt.Errorf("failed to create authorized transactor: %v", err)
-	}
-
-	nonce, err := pofClient.Client.PendingNonceAt(ctx, auth.From)
-	if err != nil {
-		log.Errorf("Failed to fetch nonce: %v", err)
-		return nil, fmt.Errorf("failed to fetch nonce: %v", err)
-	}
-	auth.Nonce = big.NewInt(int64(nonce))
-
-	gasPrice, err := pofClient.Client.SuggestGasPrice(ctx)
-	if err != nil {
-		log.Errorf("Failed to suggest gas price: %v", err)
-		return nil, fmt.Errorf("failed to suggest gas price: %v", err)
-	}
-	auth.GasPrice = gasPrice
-
-	packedData, err := pofClient.ContractABI.Pack("disputeRecover", round, v, x, y)
-	if err != nil {
-		log.Errorf("Failed to pack data for dispute recover: %v", err)
-		return nil, fmt.Errorf("failed to pack data for dispute recover: %v", err)
-	}
-
-	tx := types.NewTransaction(auth.Nonce.Uint64(), pofClient.ContractAddress, nil, 6000000, auth.GasPrice, packedData)
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), pofClient.PrivateKey)
-	if err != nil {
-		log.Errorf("Failed to sign the transaction: %v", err)
-		return nil, fmt.Errorf("failed to sign the transaction: %v", err)
-	}
-
-	if err := pofClient.Client.SendTransaction(ctx, signedTx); err != nil {
-		log.Errorf("Failed to send the signed transaction: %v", err)
-		return nil, fmt.Errorf("failed to send the signed transaction: %v", err)
+		return nil, err
 	}
 
 	// Wait for the transaction to be mined
-	receipt, err := bind.WaitMined(ctx, pofClient.Client, signedTx)
+	receipt, err := bind.WaitMined(ctx, pofClient.Client, tx)
 	if err != nil {
 		log.Errorf("Failed to wait for transaction to be mined: %v", err)
 		return nil, fmt.Errorf("failed to wait for transaction to be mined: %v", err)
 	}
 
 	if receipt.Status == types.ReceiptStatusFailed {
-		errMsg := fmt.Sprintf("Transaction %s reverted", signedTx.Hash().Hex())
+		errMsg := fmt.Sprintf("Transaction %s reverted", tx.Hash().Hex())
 		log.Errorf("❌ %s", errMsg)
 		return nil, fmt.Errorf("%s", errMsg)
 	}
@@ -80,8 +42,8 @@ func DisputeRecover(ctx context.Context, round *big.Int, v []utils.BigNumber, x 
 	roundStatus.Store(round.String(), "DisputeRecovered")
 
 	log.WithFields(logrus.Fields{
-		"tx_hash": signedTx.Hash().Hex(),
+		"tx_hash": tx.Hash().Hex(),
 	}).Info("✅ Dispute recover successful!")
 
-	return signedTx, nil
+	return tx, nil
 }
