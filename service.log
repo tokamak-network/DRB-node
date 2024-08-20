@@ -1,0 +1,51 @@
+time="2024-08-20T09:14:58+04:00" level=info msg="Service starting..."
+time="2024-08-20T09:14:58+04:00" level=info msg="Loaded configuration: {RpcURL:wss//rpc.titan-sepolia.tokamak.network HttpURL:https://rpc.titan-sepolia.tokamak.network ContractAddress:0xb25aB1b23edB0341c68179aEE13A7B43C73AAfE0 SubgraphURL:https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drb-subgraph}"
+time="2024-08-20T09:14:58+04:00" level=info msg="PRIVATE_KEY loaded: %s"
+time="2024-08-20T09:14:58+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/CRRNGCoordinatorPoF.json"
+time="2024-08-20T09:14:58+04:00" level=info msg="PoFClient created successfully"
+time="2024-08-20T09:14:58+04:00" level=info msg="Service is now running"
+time="2024-08-20T09:15:43+04:00" level=error msg="Failed to execute query for operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: Post \"https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drb-subgraph\": dial tcp: lookup graph-node.titan-sepolia.tokamak.network: i/o timeout"
+time="2024-08-20T09:15:43+04:00" level=error msg="Error fetching isOperator results: Post \"https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drb-subgraph\": dial tcp: lookup graph-node.titan-sepolia.tokamak.network: i/o timeout"
+time="2024-08-20T09:15:43+04:00" level=error msg="Processing round results failed: Post \"https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drb-subgraph\": dial tcp: lookup graph-node.titan-sepolia.tokamak.network: i/o timeout"
+time="2024-08-20T09:16:00+04:00" level=info msg="Fetched 1 operator records"
+time="2024-08-20T09:16:00+04:00" level=info msg="Operator status: true"
+time="2024-08-20T09:16:01+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:01+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:01+04:00" level=info msg="Random words requested fetch completed successfully"
+time="2024-08-20T09:16:01+04:00" level=info msg="Round results processed successfully"
+time="2024-08-20T09:16:01+04:00" level=info msg="Fetched 1 operator records"
+time="2024-08-20T09:16:01+04:00" level=info msg="Operator status: true"
+time="2024-08-20T09:16:01+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:01+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:01+04:00" level=info msg="Random words requested fetch completed successfully"
+time="2024-08-20T09:16:01+04:00" level=info msg="Round results processed successfully"
+time="2024-08-20T09:16:14+04:00" level=info msg="Fetched 1 operator records"
+time="2024-08-20T09:16:14+04:00" level=info msg="Operator status: true"
+time="2024-08-20T09:16:14+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:14+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:14+04:00" level=info msg="Random words requested fetch completed successfully"
+time="2024-08-20T09:16:14+04:00" level=info msg="Round results processed successfully"
+time="2024-08-20T09:16:29+04:00" level=info msg="Fetched 1 operator records"
+time="2024-08-20T09:16:29+04:00" level=info msg="Operator status: true"
+time="2024-08-20T09:16:29+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:29+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:29+04:00" level=info msg="Random words requested fetch completed successfully"
+time="2024-08-20T09:16:29+04:00" level=info msg="Round results processed successfully"
+time="2024-08-20T09:16:43+04:00" level=info msg="Fetched 1 operator records"
+time="2024-08-20T09:16:43+04:00" level=info msg="Operator status: true"
+time="2024-08-20T09:16:44+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:44+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:44+04:00" level=info msg="Random words requested fetch completed successfully"
+time="2024-08-20T09:16:44+04:00" level=info msg="Round results processed successfully"
+time="2024-08-20T09:16:59+04:00" level=info msg="Fetched 1 operator records"
+time="2024-08-20T09:16:59+04:00" level=info msg="Operator status: true"
+time="2024-08-20T09:16:59+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:59+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:16:59+04:00" level=info msg="Random words requested fetch completed successfully"
+time="2024-08-20T09:16:59+04:00" level=info msg="Round results processed successfully"
+time="2024-08-20T09:17:14+04:00" level=info msg="Fetched 1 operator records"
+time="2024-08-20T09:17:14+04:00" level=info msg="Operator status: true"
+time="2024-08-20T09:17:14+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:17:14+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-08-20T09:17:14+04:00" level=info msg="Random words requested fetch completed successfully"
+time="2024-08-20T09:17:14+04:00" level=info msg="Round results processed successfully"

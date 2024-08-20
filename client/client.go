@@ -27,12 +27,12 @@ func NewPoFClient(config utils.Config) (*utils.PoFClient, error) {
 		logger.Log.Error("PRIVATE_KEY environment variable is not set")
 		return nil, fmt.Errorf("PRIVATE_KEY environment variable is not set")
 	} else {
-		logger.Log.Info("PRIVATE_KEY loaded: %s") // Debug log
+		logger.Log.Info("PRIVATE_KEY loaded")
 	}
 
 	privateKey, err := crypto.HexToECDSA(privateKeyHex[2:])
 	if err != nil {
-		logger.Log.Error("Failed to parse private key: %v", err)
+		logger.Log.Errorf("Failed to parse private key: %v", err)
 		return nil, fmt.Errorf("failed to parse private key: %v", err)
 	}
 
