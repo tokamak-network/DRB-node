@@ -5,10 +5,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: my-service-container
+    container_name: drb-node
     environment:
       - CONFIG_BASE_PATH=/root/
     volumes:
       - ./config.json:/root/config.json
       - ./contract/abi/CRRNGCoordinatorPoF.json:/root/contract/abi/CRRNGCoordinatorPoF.json
+      - .env:/root/.env
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
