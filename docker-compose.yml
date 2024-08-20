@@ -12,9 +12,5 @@ services:
       - ./config.json:/root/config.json
       - ./contract/abi/CRRNGCoordinatorPoF.json:/root/contract/abi/CRRNGCoordinatorPoF.json
       - .env:/root/.env
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    stdin_open: true
+    tty: true

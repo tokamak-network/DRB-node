@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -13,8 +14,13 @@ import (
 )
 
 func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error {
-	config := utils.GetConfig()
-	isOperator, err := IsOperator(config.WalletAddress)
+	walletAddress := os.Getenv("WALLET_ADDRESS")
+    if walletAddress == "" {
+        logger.Log.Error("WALLET_ADDRESS environment variable is not set")
+        return fmt.Errorf("WALLET_ADDRESS environment variable is not set")
+    }
+
+	isOperator, err := IsOperator(walletAddress)
 	if err != nil {
 		logger.Log.Errorf("Error fetching isOperator results: %v", err)
 		return err
