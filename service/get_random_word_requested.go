@@ -134,12 +134,21 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
             logger.Log.Errorf("Error retrieving recovered data for round %s: %v", item.Round, err)
         }
 
+        var recoverPhaseEndTime time.Time
         var isRecovered bool
         var msgSender string
 
         for _, data := range recoveredData {
+            myRecoverBlockTimestampInt, err := strconv.ParseInt(data.BlockTimestamp, 10, 64)
+			if err != nil {
+				log.Printf("Failed to parse block timestamp for round %s: %v", item.Round, err)
+				continue
+			}
+
             isRecovered = data.IsRecovered
             msgSender = data.MsgSender
+            blockTime := time.Unix(myRecoverBlockTimestampInt, 0)
+            recoverPhaseEndTime = blockTime.Add(time.Duration(utils.RecoverDuration) * time.Second)
         }
 
         fulfillData, err := GetFulfillRandomnessData(item.Round)
@@ -220,7 +229,6 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
         }
         commitTimeStampTime := time.Unix(commitTimeStampInt, 0)
         commitPhaseEndTime := commitTimeStampTime.Add(time.Duration(utils.CommitDuration) * time.Second)
-        recoverPhaseEndTime := commitPhaseEndTime.Add(time.Duration(utils.RecoverDuration) * time.Second)
         reRequestTime := commitPhaseEndTime.Add(time.Duration(utils.ReRequestDuration) * time.Second)
 
         if item.Round == "0" {
