@@ -199,6 +199,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
         }
 
         var isMyAddressLeader bool
+        var leaderAddress common.Address
         var recoverData utils.RecoveryResult
 
         var isPreviousRoundRecovered bool
@@ -265,7 +266,7 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
             }
 
             recoverDataMap[roundStr] = recoverData
-            isMyAddressLeader, _, _ = FindOffChainLeaderAtRound(roundStr, recoverData.OmegaRecov)
+            isMyAddressLeader, leaderAddress, _ = FindOffChainLeaderAtRound(roundStr, recoverData.OmegaRecov)
             results.RecoveryData = append(results.RecoveryData, recoverData)
         } else if validCommitCount >= 2 && isRecovered {
             if strings.ToLower(walletAddress) == msgSender {
@@ -346,10 +347,16 @@ func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, er
 
         // Dispute Leadership
         if !isCommitSender && time.Now().Before(recoverPhaseEndTime) && item.RoundInfo.IsRecovered && item.RoundInfo.IsFulfillExecuted {
-            if _, exists := roundStatus.Load(roundStr + ":DisputeLeadershiped"); !exists {
-                results.LeadershipDisputeableRounds = append(results.LeadershipDisputeableRounds, roundStr)
-                roundStatus.Store(roundStr+":DisputeLeadershiped", "Processed")
-            }
+            fulfillSenderAddress := common.HexToAddress(fulfillSender)
+
+			if fulfillSenderAddress != leaderAddress {
+				if _, exists := roundStatus.Load(roundStr + ":DisputeLeadershiped"); !exists {
+					if !containsRound(results.LeadershipDisputeableRounds, roundStr) {
+						results.LeadershipDisputeableRounds = append(results.LeadershipDisputeableRounds, roundStr)
+						roundStatus.Store(roundStr+":DisputeLeadershiped", "Processed")
+					}
+				}
+			}
         }
 
         // Complete Rounds
