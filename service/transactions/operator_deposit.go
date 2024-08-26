@@ -20,9 +20,11 @@ func OperatorDeposit(ctx context.Context, pofClient *utils.PoFClient) (common.Ad
 
 	log.Info("Starting OperatorDeposit process")
 
+	config := utils.GetConfig()
+		
 	// Define the amount of Ether you want to send in the transaction
 	amount := new(big.Int)
-	amount.SetString("5000000000000000", 10) // 0.005 ether in wei
+	amount.SetString(config.OperatorDespoitFee, 10)
 
 	// Execute the transaction using the generic function
 	tx, auth, err := ExecuteTransaction(ctx, pofClient, "operatorDeposit", amount)

@@ -13,6 +13,7 @@ type Config struct {
 	HttpURL         string `json:"HttpURL"`
 	ContractAddress string `json:"ContractAddress"`
 	SubgraphURL     string `json:"SubgraphURL"`
+	OperatorDespoitFee string `json:"OperatorDespoitFee"`
 }
 
 func LoadConfig() Config {
