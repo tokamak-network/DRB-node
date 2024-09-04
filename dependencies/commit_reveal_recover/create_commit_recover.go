@@ -7,8 +7,8 @@ import (
 	"time"
 
 	crrUtil "github.com/tokamak-network/DRB-Node/dependencies/commit_reveal_recover/util"
-	prover "github.com/tokamak-network/DRB-Node/dependencies/pieterzak_vdf_prover"
-	"github.com/tokamak-network/DRB-Node/dependencies/pieterzak_vdf_prover/util"
+	prover "github.com/tokamak-network/DRB-Node/dependencies/pietrzak_vdf_prover"
+	"github.com/tokamak-network/DRB-Node/dependencies/pietrzak_vdf_prover/util"
 )
 
 func Setup(N *big.Int, x *big.Int, T int) (*big.Int, []prover.Claim) {

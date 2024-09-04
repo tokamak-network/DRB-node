@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math/big"
 
-	prover "github.com/tokamak-network/DRB-Node/dependencies/pieterzak_vdf_prover"
+	prover "github.com/tokamak-network/DRB-Node/dependencies/pietrzak_vdf_prover"
 )
 
 func ConstructClaim(N, x, y *big.Int, T int) prover.Claim {
