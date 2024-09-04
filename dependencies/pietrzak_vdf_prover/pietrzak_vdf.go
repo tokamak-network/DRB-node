@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/tokamak-network/DRB-Node/dependencies/pieterzak_vdf_prover/util"
+	"github.com/tokamak-network/DRB-Node/dependencies/pietrzak_vdf_prover/util"
 )
 
 type Claim struct {
