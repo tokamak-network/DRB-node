@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"os"
 	"strings"
 	"time"
 
@@ -179,8 +180,13 @@ func BeforeRecoverPhase(round string, pofClient *utils.PoFClient) (utils.Recover
 
 // FindOffChainLeaderAtRound determines if the local node is the leader for the given round based on the recovered Omega value.
 func FindOffChainLeaderAtRound(round string, OmegaRecov *big.Int) (bool, common.Address, error) {
-	config := utils.GetConfig()
-	mySender := common.HexToAddress(config.WalletAddress)
+	walletAddress := os.Getenv("WALLET_ADDRESS")
+    if walletAddress == "" {
+        logger.Log.Error("WALLET_ADDRESS environment variable is not set")
+        return false, common.Address{}, fmt.Errorf("WALLET_ADDRESS environment variable is not set")
+    }
+	
+	mySender := common.HexToAddress(walletAddress)
 	commitDataList, err := GetCommitData(round)
 	if err != nil {
 		logger.Log.Errorf("Error fetching commit data for round %s: %v", round, err) // Replacing logrus with logger.Log
