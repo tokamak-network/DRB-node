@@ -8,17 +8,17 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/tokamak-network/DRB-Node/logger" // Import your logger package
-	"github.com/tokamak-network/DRB-Node/service/transactions"
-	"github.com/tokamak-network/DRB-Node/utils"
+	"github.com/tokamak-network/DRB-node/logger" // Import your logger package
+	"github.com/tokamak-network/DRB-node/service/transactions"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error {
 	walletAddress := os.Getenv("WALLET_ADDRESS")
-    if walletAddress == "" {
-        logger.Log.Error("WALLET_ADDRESS environment variable is not set")
-        return fmt.Errorf("WALLET_ADDRESS environment variable is not set")
-    }
+	if walletAddress == "" {
+		logger.Log.Error("WALLET_ADDRESS environment variable is not set")
+		return fmt.Errorf("WALLET_ADDRESS environment variable is not set")
+	}
 
 	isOperator, err := IsOperator(walletAddress)
 	if err != nil {
@@ -181,7 +181,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error 
 							return err // Or handle the error accordingly
 						}
 						logger.Log.Infof("Dispute recovery initiated successfully. Tx Hash: %s", tx.Hash().Hex())
-						
+
 						// Set the flag to true to prevent multiple disputes
 						disputeInitiated = true
 					}
@@ -233,7 +233,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error 
 						if err != nil {
 							return fmt.Errorf("failed to initiate dispute leadership at round: %w", err)
 						}
-			
+
 						// Log the information
 						logger.Log.Infof("MsgSender %s is not the leader for round %s", msgSender.Hex(), roundStr)
 					}

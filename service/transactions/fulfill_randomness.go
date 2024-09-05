@@ -9,8 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/fatih/color"
 	"github.com/sirupsen/logrus"
-	"github.com/tokamak-network/DRB-Node/logger"
-	"github.com/tokamak-network/DRB-Node/utils"
+	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 func FulfillRandomness(ctx context.Context, round *big.Int, pofClient *utils.PoFClient) (*types.Transaction, error) {

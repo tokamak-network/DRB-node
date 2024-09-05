@@ -12,9 +12,9 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/machinebox/graphql"
 	"github.com/sirupsen/logrus"
-	crr "github.com/tokamak-network/DRB-Node/dependencies/commit_reveal_recover"
-	"github.com/tokamak-network/DRB-Node/logger" // Use the custom logger package
-	"github.com/tokamak-network/DRB-Node/utils"
+	crr "github.com/tokamak-network/DRB-node/dependencies/commit_reveal_recover"
+	"github.com/tokamak-network/DRB-node/logger" // Use the custom logger package
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // GetRecoveredData fetches recovered data from a GraphQL endpoint
@@ -181,11 +181,11 @@ func BeforeRecoverPhase(round string, pofClient *utils.PoFClient) (utils.Recover
 // FindOffChainLeaderAtRound determines if the local node is the leader for the given round based on the recovered Omega value.
 func FindOffChainLeaderAtRound(round string, OmegaRecov *big.Int) (bool, common.Address, error) {
 	walletAddress := os.Getenv("WALLET_ADDRESS")
-    if walletAddress == "" {
-        logger.Log.Error("WALLET_ADDRESS environment variable is not set")
-        return false, common.Address{}, fmt.Errorf("WALLET_ADDRESS environment variable is not set")
-    }
-	
+	if walletAddress == "" {
+		logger.Log.Error("WALLET_ADDRESS environment variable is not set")
+		return false, common.Address{}, fmt.Errorf("WALLET_ADDRESS environment variable is not set")
+	}
+
 	mySender := common.HexToAddress(walletAddress)
 	commitDataList, err := GetCommitData(round)
 	if err != nil {

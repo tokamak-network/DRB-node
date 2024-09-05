@@ -5,14 +5,14 @@ import (
 	"io/ioutil"
 
 	"github.com/fatih/color"
-	"github.com/tokamak-network/DRB-Node/logger" // Import your logger package
+	"github.com/tokamak-network/DRB-node/logger" // Import your logger package
 )
 
 type Config struct {
-	RpcURL          string `json:"RpcURL"`
-	HttpURL         string `json:"HttpURL"`
-	ContractAddress string `json:"ContractAddress"`
-	SubgraphURL     string `json:"SubgraphURL"`
+	RpcURL             string `json:"RpcURL"`
+	HttpURL            string `json:"HttpURL"`
+	ContractAddress    string `json:"ContractAddress"`
+	SubgraphURL        string `json:"SubgraphURL"`
 	OperatorDespoitFee string `json:"OperatorDespoitFee"`
 }
 

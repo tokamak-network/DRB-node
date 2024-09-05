@@ -6,9 +6,9 @@ import (
 	"math/big"
 	"time"
 
-	crrUtil "github.com/tokamak-network/DRB-Node/dependencies/commit_reveal_recover/util"
-	prover "github.com/tokamak-network/DRB-Node/dependencies/pietrzak_vdf_prover"
-	"github.com/tokamak-network/DRB-Node/dependencies/pietrzak_vdf_prover/util"
+	crrUtil "github.com/tokamak-network/DRB-node/dependencies/commit_reveal_recover/util"
+	prover "github.com/tokamak-network/DRB-node/dependencies/pietrzak_vdf"
+	"github.com/tokamak-network/DRB-node/dependencies/pietrzak_vdf/util"
 )
 
 func Setup(N *big.Int, x *big.Int, T int) (*big.Int, []prover.Claim) {

@@ -7,7 +7,7 @@ import (
 	"io/ioutil"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/tokamak-network/DRB-Node/logger"
+	"github.com/tokamak-network/DRB-node/logger"
 )
 
 // LoadContractABI loads and parses the contract ABI from a file.
@@ -42,7 +42,9 @@ func readFile(filename string) ([]byte, error) {
 }
 
 // parseABIJSON unmarshals the ABI JSON from the file content.
-func parseABIJSON(fileContent []byte) (struct{ Abi []interface{} `json:"abi"` }, error) {
+func parseABIJSON(fileContent []byte) (struct {
+	Abi []interface{} `json:"abi"`
+}, error) {
 	var abiObject struct {
 		Abi []interface{} `json:"abi"`
 	}
@@ -54,7 +56,9 @@ func parseABIJSON(fileContent []byte) (struct{ Abi []interface{} `json:"abi"` },
 }
 
 // convertToABI marshals the ABI object and converts it to an abi.ABI structure.
-func convertToABI(abiObject struct{ Abi []interface{} `json:"abi"` }) (abi.ABI, error) {
+func convertToABI(abiObject struct {
+	Abi []interface{} `json:"abi"`
+}) (abi.ABI, error) {
 	abiBytes, err := json.Marshal(abiObject.Abi)
 	if err != nil {
 		logger.Log.Errorf("Failed to re-marshal ABI: %v", err)

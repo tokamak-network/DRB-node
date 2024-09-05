@@ -8,10 +8,10 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/joho/godotenv"
-	"github.com/tokamak-network/DRB-Node/client"
-	"github.com/tokamak-network/DRB-Node/logger"
-	"github.com/tokamak-network/DRB-Node/service"
-	"github.com/tokamak-network/DRB-Node/utils"
+	"github.com/tokamak-network/DRB-node/client"
+	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/service"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 func main() {

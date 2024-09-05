@@ -9,8 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/sirupsen/logrus"
-	"github.com/tokamak-network/DRB-Node/logger"
-	"github.com/tokamak-network/DRB-Node/utils"
+	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 func OperatorDeposit(ctx context.Context, pofClient *utils.PoFClient) (common.Address, *types.Transaction, error) {
@@ -21,7 +21,7 @@ func OperatorDeposit(ctx context.Context, pofClient *utils.PoFClient) (common.Ad
 	log.Info("Starting OperatorDeposit process")
 
 	config := utils.GetConfig()
-		
+
 	// Define the amount of Ether you want to send in the transaction
 	amount := new(big.Int)
 	amount.SetString(config.OperatorDespoitFee, 10)

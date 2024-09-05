@@ -1,4 +1,4 @@
-# DRB-Node
+# DRB-node
 
 # Without Docker
 go run cmd/main.go

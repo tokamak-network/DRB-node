@@ -8,8 +8,8 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/sirupsen/logrus"
-	"github.com/tokamak-network/DRB-Node/logger"
-	"github.com/tokamak-network/DRB-Node/utils"
+	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 func Recover(ctx context.Context, round *big.Int, y utils.BigNumber, pofClient *utils.PoFClient) error {

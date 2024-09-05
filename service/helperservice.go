@@ -7,8 +7,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/machinebox/graphql"
-	"github.com/tokamak-network/DRB-Node/logger" // Import your logger package
-	"github.com/tokamak-network/DRB-Node/utils"
+	"github.com/tokamak-network/DRB-node/logger" // Import your logger package
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 func IsOperator(operator string) (bool, error) {

@@ -1,4 +1,4 @@
-module github.com/tokamak-network/DRB-Node
+module github.com/tokamak-network/DRB-node
 
 go 1.22
 
