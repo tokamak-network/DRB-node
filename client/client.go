@@ -60,3 +60,14 @@ func NewPoFClient(config utils.Config) (*utils.PoFClient, error) {
 		MyAddress:       myAddress,
 	}, nil
 }
+
+// ConnectToEthereumClient establishes a connection to an Ethereum client using the provided URL.
+//func ConnectToEthereumClient(url string) (*ethclient.Client, error) {
+//	client, err := ethclient.Dial(url)
+//	if err != nil {
+//		logger.Log.Errorf("Failed to connect to Ethereum client at %s: %v", url, err)
+//		return nil, err
+//	}
+//	logger.Log.Infof("Connected to Ethereum client at %s", url)
+//	return client, nil
+//}
