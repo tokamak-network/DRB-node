@@ -16,7 +16,7 @@ import (
 
 func main() {
 	logger.InitLogger()
-	defer logger.CloseLogger() // Ensure the log file is properly closed
+	defer logger.CloseLogger()
 
 	if err := godotenv.Load("./.env"); err != nil {
 		logger.Log.Fatalf("Error loading .env file: %v", err)

@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/utils"
-	// Import the service package
 )
 
 // NewPoFClient initializes and returns a new PoFClient instance.
