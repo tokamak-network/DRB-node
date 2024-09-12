@@ -9,11 +9,18 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/tokamak-network/DRB-node/contract/DRBCoordinator"
 	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/utils"
+	"math/big"
 )
 
 // DepositAndActivate initializes and executes a transaction to deposit ETH and activate a contract.
 func DepositAndActivate(ctx context.Context, ethClient *ethclient.Client, contractAddress common.Address, auth *bind.TransactOpts) (common.Address, *types.Transaction, error) {
 	log := logger.Log.WithFields(logrus.Fields{})
+
+	config := utils.GetConfig()
+	amount := new(big.Int)
+	amount.SetString(config.OperatorDespositFee, 10)
+	auth.Value = amount
 
 	// Create a new instance of the DRBCoordinator transactor
 	coordinator, err := DRBCoordinator.NewDRBCoordinatorTransactor(contractAddress, ethClient)

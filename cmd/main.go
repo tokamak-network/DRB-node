@@ -43,10 +43,10 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := service.InitialSettings(context.Background(), client); err != nil {
-					logger.Log.Errorf("DRB node start failed: %v", err)
+				if err := service.ProcessRoundResults(context.Background(), client); err != nil {
+					logger.Log.Errorf("Processing round results failed: %v", err)
 				} else {
-					logger.Log.Info("DRB node start successfully")
+					logger.Log.Info("Round results processed successfully")
 				}
 			}
 		}

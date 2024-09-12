@@ -9,11 +9,11 @@ import (
 )
 
 type Config struct {
-	RpcURL             string `json:"RpcURL"`
-	HttpURL            string `json:"HttpURL"`
-	ContractAddress    string `json:"ContractAddress"`
-	SubgraphURL        string `json:"SubgraphURL"`
-	OperatorDespoitFee string `json:"OperatorDespoitFee"`
+	RpcURL              string `json:"RpcURL"`
+	HttpURL             string `json:"HttpURL"`
+	ContractAddress     string `json:"ContractAddress"`
+	SubgraphURL         string `json:"SubgraphURL"`
+	OperatorDespositFee string `json:"OperatorDespositFee"`
 }
 
 func LoadConfig() Config {
