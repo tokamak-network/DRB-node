@@ -17,7 +17,7 @@ var roundStatus sync.Map
 
 func ExecuteTransaction(
 	ctx context.Context,
-	pofClient *utils.PoFClient,
+	pofClient *utils.Client,
 	functionName string,
 	params ...interface{},
 ) (*types.Transaction, *bind.TransactOpts, error) {

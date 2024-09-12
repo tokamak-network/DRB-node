@@ -12,9 +12,9 @@ import (
 
 // Constants defining durations and timeouts
 const (
-	CommitDuration  = 70  // Commit duration in seconds
-	ContextTimeout  = 600000
-	RecoverDuration = 130
+	CommitDuration    = 70 // Commit duration in seconds
+	ContextTimeout    = 600000
+	RecoverDuration   = 130
 	ReRequestDuration = 120
 )
 
@@ -24,8 +24,8 @@ type BigNumber struct {
 	Bitlen *big.Int `json:"bitlen"`
 }
 
-// PoFClient contains essential data for interacting with the Ethereum client and smart contracts.
-type PoFClient struct {
+// Client contains essential data for interacting with the Ethereum client and smart contracts.
+type Client struct {
 	Client          *ethclient.Client
 	ContractAddress common.Address
 	ContractABI     abi.ABI

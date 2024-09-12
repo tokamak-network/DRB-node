@@ -13,7 +13,7 @@ import (
 )
 
 // DisputeRecover handles the dispute recovery process.
-func DisputeRecover(ctx context.Context, round *big.Int, v []utils.BigNumber, x utils.BigNumber, y utils.BigNumber, pofClient *utils.PoFClient) (*types.Transaction, error) {
+func DisputeRecover(ctx context.Context, round *big.Int, v []utils.BigNumber, x utils.BigNumber, y utils.BigNumber, pofClient *utils.Client) (*types.Transaction, error) {
 	log := logger.Log.WithFields(logrus.Fields{
 		"round": round,
 	})

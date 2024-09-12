@@ -13,7 +13,7 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-func OperatorDeposit(ctx context.Context, pofClient *utils.PoFClient) (common.Address, *types.Transaction, error) {
+func OperatorDeposit(ctx context.Context, pofClient *utils.Client) (common.Address, *types.Transaction, error) {
 	log := logger.Log.WithFields(logrus.Fields{
 		"function": "OperatorDeposit",
 	})

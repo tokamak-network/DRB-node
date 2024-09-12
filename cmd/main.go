@@ -30,11 +30,11 @@ func main() {
 	cfg := utils.LoadConfig()
 	logger.Log.Infof("Loaded configuration: %+v", cfg)
 
-	pofClient, err := client.NewPoFClient(cfg)
+	client, err := client.NewClient(cfg)
 	if err != nil {
-		logger.Log.Fatalf("Failed to create PoFClient: %v", err)
+		logger.Log.Fatalf("Failed to create Client: %v", err)
 	}
-	logger.Log.Info("PoFClient created successfully")
+	logger.Log.Info("Client created successfully")
 
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
@@ -43,10 +43,10 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := service.ProcessRoundResults(context.Background(), pofClient); err != nil {
-					logger.Log.Errorf("Processing round results failed: %v", err)
+				if err := service.InitialSettings(context.Background(), client); err != nil {
+					logger.Log.Errorf("DRB node start failed: %v", err)
 				} else {
-					logger.Log.Info("Round results processed successfully")
+					logger.Log.Info("DRB node start successfully")
 				}
 			}
 		}

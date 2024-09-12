@@ -13,7 +13,7 @@ import (
 )
 
 // ReRequestRandomWordAtRound re-requests a random word for a specified round.
-func ReRequestRandomWordAtRound(ctx context.Context, round *big.Int, pofClient *utils.PoFClient) error {
+func ReRequestRandomWordAtRound(ctx context.Context, round *big.Int, pofClient *utils.Client) error {
 	log := logger.Log.WithFields(logrus.Fields{
 		"function": "ReRequestRandomWordAtRound",
 		"round":    round.String(),

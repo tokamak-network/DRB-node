@@ -13,7 +13,7 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-func ProcessRoundResults(ctx context.Context, pofClient *utils.PoFClient) error {
+func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
 	walletAddress := os.Getenv("WALLET_ADDRESS")
 	if walletAddress == "" {
 		logger.Log.Error("WALLET_ADDRESS environment variable is not set")

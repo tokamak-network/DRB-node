@@ -13,7 +13,7 @@ import (
 )
 
 // DisputeLeadershipAtRound handles the dispute leadership process.
-func DisputeLeadershipAtRound(ctx context.Context, round *big.Int, pofClient *utils.PoFClient) error {
+func DisputeLeadershipAtRound(ctx context.Context, round *big.Int, pofClient *utils.Client) error {
 	log := logger.Log.WithFields(logrus.Fields{
 		"round": round,
 	})

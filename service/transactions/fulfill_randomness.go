@@ -13,7 +13,7 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-func FulfillRandomness(ctx context.Context, round *big.Int, pofClient *utils.PoFClient) (*types.Transaction, error) {
+func FulfillRandomness(ctx context.Context, round *big.Int, pofClient *utils.Client) (*types.Transaction, error) {
 	log := logger.Log.WithFields(logrus.Fields{
 		"round": round,
 	})

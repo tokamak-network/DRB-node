@@ -15,7 +15,7 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-func Commit(ctx context.Context, round *big.Int, pofClient *utils.PoFClient) (common.Address, []byte, error) {
+func Commit(ctx context.Context, round *big.Int, pofClient *utils.Client) (common.Address, []byte, error) {
 	log := logger.Log.WithFields(logrus.Fields{
 		"round": round,
 	})

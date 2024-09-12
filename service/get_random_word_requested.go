@@ -19,7 +19,7 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-func GetRandomWordRequested(pofClient *utils.PoFClient) (*utils.RoundResults, error) {
+func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error) {
 	config := utils.GetConfig()
 	client := graphql.NewClient(config.SubgraphURL)
 

@@ -12,7 +12,7 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-func Recover(ctx context.Context, round *big.Int, y utils.BigNumber, pofClient *utils.PoFClient) error {
+func Recover(ctx context.Context, round *big.Int, y utils.BigNumber, pofClient *utils.Client) error {
 	log := logger.Log.WithFields(logrus.Fields{
 		"function": "Recover",
 		"round":    round.String(),
