@@ -3,37 +3,36 @@ package transactions
 import (
 	"context"
 	"fmt"
-	"math/big"
-
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/sirupsen/logrus"
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/utils"
+	"math/big"
 )
 
-func OperatorDeposit(ctx context.Context, pofClient *utils.Client) (common.Address, *types.Transaction, error) {
+func OperatorDepositAndActivate(ctx context.Context, client *utils.Client) (common.Address, *types.Transaction, error) {
 	log := logger.Log.WithFields(logrus.Fields{
-		"function": "OperatorDeposit",
+		"function": "OperatorDepositAndActivate",
 	})
 
 	log.Info("Starting OperatorDeposit process")
 
-	config := utils.GetConfig()
-
-	// Define the amount of Ether you want to send in the transaction
-	amount := new(big.Int)
-	amount.SetString(config.OperatorDespoitFee, 10)
-
 	// Execute the transaction using the generic function
-	tx, auth, err := ExecuteTransaction(ctx, pofClient, "operatorDeposit", amount)
+	// If depositAndActivate requires no parameters, send nil or appropriate parameters
+	tx, auth, err := ExecuteTransaction(ctx, client, "depositAndActivate")
 	if err != nil {
 		return common.Address{}, nil, err
 	}
 
+	config := utils.GetConfig()
+	amount := new(big.Int)
+	amount.SetString(config.OperatorDespositFee, 10)
+	auth.Value = amount
+
 	// Wait for the transaction to be mined
-	receipt, err := bind.WaitMined(ctx, pofClient.Client, tx)
+	receipt, err := bind.WaitMined(ctx, client.Client, tx)
 	if err != nil {
 		log.Errorf("Failed to wait for transaction to be mined: %v", err)
 		return common.Address{}, nil, fmt.Errorf("failed to wait for transaction to be mined: %v", err)
