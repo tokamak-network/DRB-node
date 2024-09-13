@@ -43,7 +43,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := service.ProcessRoundResults(context.Background(), client); err != nil {
+				if err := service.RoundHandler(context.Background(), client); err != nil {
 					logger.Log.Errorf("Processing round results failed: %v", err)
 				} else {
 					logger.Log.Info("Round results processed successfully")

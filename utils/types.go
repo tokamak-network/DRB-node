@@ -139,7 +139,10 @@ type CommitCsResponse struct {
 	} `json:"data"`
 }
 
-// GetConfig returns the loaded configuration.
-func GetConfig() Config {
-	return LoadConfig()
+type Config struct {
+	RpcURL             string `json:"RpcURL"`
+	HttpURL            string `json:"HttpURL"`
+	ContractAddress    string `json:"ContractAddress"`
+	SubgraphURL        string `json:"SubgraphURL"`
+	OperatorDepositFee string `json:"OperatorDepositFee"`
 }

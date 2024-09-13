@@ -8,12 +8,9 @@ import (
 	"github.com/tokamak-network/DRB-node/logger" // Import your logger package
 )
 
-type Config struct {
-	RpcURL             string `json:"RpcURL"`
-	HttpURL            string `json:"HttpURL"`
-	ContractAddress    string `json:"ContractAddress"`
-	SubgraphURL        string `json:"SubgraphURL"`
-	OperatorDepositFee string `json:"OperatorDepositFee"`
+// GetConfig returns the loaded configuration.
+func GetConfig() Config {
+	return LoadConfig()
 }
 
 func LoadConfig() Config {

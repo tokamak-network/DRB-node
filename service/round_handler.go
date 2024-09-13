@@ -9,7 +9,7 @@ import (
 	"os"
 )
 
-func ProcessRoundResults(ctx context.Context, client *utils.Client) error {
+func RoundHandler(ctx context.Context, client *utils.Client) error {
 	walletAddress := os.Getenv("WALLET_ADDRESS")
 	if walletAddress == "" {
 		logger.Log.Error("WALLET_ADDRESS environment variable is not set")
