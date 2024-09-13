@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/tokamak-network/DRB-node/logger" // Import your logger package
-	"github.com/tokamak-network/DRB-node/service/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
 	"os"
 )
@@ -16,24 +15,20 @@ func ProcessRoundResults(ctx context.Context, client *utils.Client) error {
 		return fmt.Errorf("WALLET_ADDRESS environment variable is not set")
 	}
 
-	//isOperator, err := IsOperator(walletAddress)
-	//if err != nil {
-	//	logger.Log.Errorf("Error fetching isOperator results: %v", err)
-	//	return err
-	//}
-	//
-	//if !isOperator {
-	//	_, _, err := transactions.OperatorDeposit(ctx, pofClient) // Call as function
-	//	if err != nil {
-	//		logger.Log.Errorf("Error during OperatorDeposit: %v", err)
-	//		return err
-	//	}
-	//}
-
-	_, _, err := transactions.OperatorDepositAndActivate(ctx, client) // Call as function
+	isOperator, err := IsOperator(walletAddress)
 	if err != nil {
-		logger.Log.Errorf("Error during OperatorDeposit: %v", err)
+		logger.Log.Errorf("Error fetching isOperator results: %v", err)
 		return err
+	}
+
+	fmt.Printf("isOperator: %v\n", isOperator)
+
+	if !isOperator {
+		//_, _, err := transactions.OperatorDepositAndActivate(ctx, client) // Call as function
+		//if err != nil {
+		//	logger.Log.Errorf("Error during OperatorDeposit: %v", err)
+		//	return err
+		//}
 	}
 
 	//results, err := GetRandomWordRequested(pofClient)

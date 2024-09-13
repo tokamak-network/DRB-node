@@ -19,17 +19,16 @@ func OperatorDepositAndActivate(ctx context.Context, client *utils.Client) (comm
 
 	log.Info("Starting OperatorDeposit process")
 
+	// Configuration and amount setup
+	config := utils.GetConfig()
+	amount := new(big.Int)
+	amount.SetString(config.OperatorDepositFee, 10)
+
 	// Execute the transaction using the generic function
-	// If depositAndActivate requires no parameters, send nil or appropriate parameters
-	tx, auth, err := ExecuteTransaction(ctx, client, "depositAndActivate")
+	tx, auth, err := ExecuteTransaction(ctx, client, "depositAndActivate", amount)
 	if err != nil {
 		return common.Address{}, nil, err
 	}
-
-	config := utils.GetConfig()
-	amount := new(big.Int)
-	amount.SetString(config.OperatorDespositFee, 10)
-	auth.Value = amount
 
 	// Wait for the transaction to be mined
 	receipt, err := bind.WaitMined(ctx, client.Client, tx)
@@ -44,6 +43,6 @@ func OperatorDepositAndActivate(ctx context.Context, client *utils.Client) (comm
 		return common.Address{}, nil, fmt.Errorf("%s", errMsg)
 	}
 
-	log.Infof("✅ Deposit successful!!\n🔗 Tx Hash: %s", tx.Hash().Hex())
+	log.Infof("✅ Deposit successful!! 🔗 Tx Hash: %s", tx.Hash().Hex())
 	return auth.From, tx, nil
 }

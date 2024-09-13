@@ -19,6 +19,7 @@ func ExecuteTransaction(
 	ctx context.Context,
 	client *utils.Client,
 	functionName string,
+	amount *big.Int,
 	params ...interface{},
 ) (*types.Transaction, *bind.TransactOpts, error) {
 	log := logger.Log.WithFields(logrus.Fields{
@@ -60,7 +61,7 @@ func ExecuteTransaction(
 		return nil, nil, fmt.Errorf("failed to pack data for %s: %v", functionName, err)
 	}
 
-	tx := types.NewTransaction(auth.Nonce.Uint64(), client.ContractAddress, nil, 3000000, auth.GasPrice, packedData)
+	tx := types.NewTransaction(auth.Nonce.Uint64(), client.ContractAddress, amount, 3000000, auth.GasPrice, packedData)
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), client.PrivateKey)
 	if err != nil {
 		log.Errorf("Failed to sign the transaction: %v", err)

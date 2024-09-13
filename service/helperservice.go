@@ -2,58 +2,50 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"text/tabwriter"
-
 	"github.com/machinebox/graphql"
-	"github.com/tokamak-network/DRB-node/logger" // Import your logger package
+	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/utils"
+	"strings"
 )
 
 func IsOperator(operator string) (bool, error) {
 	config := utils.GetConfig()
 	client := graphql.NewClient(config.SubgraphURL)
 
-	req := utils.GetIsOperatorRequest(operator)
+	req := utils.GetIsOperatorRequest() // 이 부분은 쿼리를 잘 로드하는지 확인해야 합니다.
 
 	var respData struct {
-		OperatorNumberChangeds []utils.OperatorNumberChanged `json:"operatorNumberChangeds"`
+		Data struct {
+			ActivatedOperatorsCollection []struct {
+				Operators      []string `json:"operators"`
+				OperatorsCount string   `json:"operatorsCount"`
+			} `json:"activatedOperators_collection"`
+			ActivatedOperators struct {
+				Operators      []string `json:"operators"`
+				OperatorsCount string   `json:"operatorsCount"`
+			} `json:"activatedOperators"`
+		} `json:"data"`
 	}
 
 	ctx := context.Background()
 	if err := client.Run(ctx, req, &respData); err != nil {
-		logger.Log.Errorf("Failed to execute query for operator %s: %v", operator, err)
+		logger.Log.Errorf("Failed to execute query: %v", err)
 		return false, err
 	}
 
-	// Log the fetched data for debugging
-	if len(respData.OperatorNumberChangeds) > 0 {
-		logger.Log.Infof("Fetched %d operator records", len(respData.OperatorNumberChangeds))
-		for _, record := range respData.OperatorNumberChangeds {
-			logger.Log.Infof("Operator status: %v", record.IsOperator)
+	// 추가된 로그
+	logger.Log.Infof("Activated Operators Collection Data: %+v", respData.Data.ActivatedOperatorsCollection)
+	logger.Log.Infof("Activated Operators Data: %+v", respData.Data.ActivatedOperators)
+
+	isOperator := false
+	for _, op := range respData.Data.ActivatedOperators.Operators {
+		if strings.ToLower(op) == strings.ToLower(operator) {
+			isOperator = true
+			break
 		}
-	} else {
-		logger.Log.Infof("No operator records found for %s", operator)
 	}
 
-	// Print results to the terminal
-	fmt.Println("---------------------------------------------------------------------------")
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
-	fmt.Fprintln(w, "Operator\tStatus")
-	if len(respData.OperatorNumberChangeds) > 0 {
-		for _, record := range respData.OperatorNumberChangeds {
-			fmt.Fprintf(w, "%s\t%v\n", operator, record.IsOperator)
-		}
-	} else {
-		fmt.Fprintf(w, "%s\tNo records found\n", operator)
-	}
-	w.Flush()
-	fmt.Println("---------------------------------------------------------------------------")
+	logger.Log.Infof("Operator status for %s: %v", operator, isOperator)
 
-	if len(respData.OperatorNumberChangeds) > 0 {
-		return respData.OperatorNumberChangeds[0].IsOperator, nil
-	}
-
-	return false, nil
+	return isOperator, nil
 }
