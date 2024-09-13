@@ -61,7 +61,7 @@ const (
         }`
 
 	IsOperatorQuery = `
-        query MyQuery {
+		query MyQuery {
             activatedOperators_collection {
                 operators
                 operatorsCount
