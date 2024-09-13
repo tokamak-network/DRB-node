@@ -3,5 +3,5 @@
   "HttpURL": "https://rpc.thanos-sepolia.tokamak.network",
   "ContractAddress": "0xf5A79df75194DDd01a0C1a16d93D0dF5D78935A7",
   "SubgraphURL": "https://graph-node.thanos-sepolia.tokamak.network/subgraphs/name/drbcoordinator",
-  "OperatorDespoitFee": "1000000000000000000" 
+  "OperatorDepositFee": "1000000000000000000"
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/service/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
+	"math/big"
 	"os"
 )
 
@@ -22,8 +23,6 @@ func RoundHandler(ctx context.Context, client *utils.Client) error {
 		return err
 	}
 
-	fmt.Printf("isOperator: %v\n", isOperator)
-
 	if !isOperator {
 		_, _, err := transactions.OperatorDepositAndActivate(ctx, client)
 		if err != nil {
@@ -31,6 +30,10 @@ func RoundHandler(ctx context.Context, client *utils.Client) error {
 			return err
 		}
 	}
+
+	transactions.Commit(ctx, big.NewInt(1), client)
+	//res, err := GetRoundInfos()
+	//fmt.Println("res: ", res)
 
 	//results, err := GetRandomWordRequested(pofClient)
 	//if err != nil {

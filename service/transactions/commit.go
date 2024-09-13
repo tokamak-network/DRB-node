@@ -15,7 +15,7 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-func Commit(ctx context.Context, round *big.Int, pofClient *utils.Client) (common.Address, []byte, error) {
+func Commit(ctx context.Context, round *big.Int, client *utils.Client) (common.Address, []byte, error) {
 	log := logger.Log.WithFields(logrus.Fields{
 		"round": round,
 	})
@@ -34,19 +34,22 @@ func Commit(ctx context.Context, round *big.Int, pofClient *utils.Client) (commo
 	}
 
 	commitData := struct {
-		Val    []byte
-		Bitlen *big.Int
+		Round *big.Int
+		Val   [32]byte
 	}{
-		Val:    byteData,
-		Bitlen: big.NewInt(int64(len(byteData) * 8)),
+		Round: round,
+		Val:   [32]byte{},
 	}
 
-	signedTx, auth, err := ExecuteTransaction(ctx, pofClient, "commit", round, commitData)
+	copy(commitData.Val[:], byteData)
+
+	signedTx, auth, err := ExecuteTransaction(ctx, client, "commit", big.NewInt(0), round, commitData.Val)
 	if err != nil {
+		log.Errorf("Failed to execute transaction: %v", err)
 		return common.Address{}, nil, err
 	}
 
-	receipt, err := bind.WaitMined(ctx, pofClient.Client, signedTx)
+	receipt, err := bind.WaitMined(ctx, client.Client, signedTx)
 	if err != nil {
 		log.Errorf("Failed to wait for transaction to be mined: %v", err)
 		return common.Address{}, nil, fmt.Errorf("failed to wait for transaction to be mined: %v", err)

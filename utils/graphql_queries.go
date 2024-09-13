@@ -71,6 +71,18 @@ const (
                 operatorsCount
             }
         }`
+
+	RoundInfosQuery = `
+		query MyQuery {
+		  roundInfos {
+			commitCount
+			id
+			isRefunded
+			requestedTimestamp
+			revealCount
+			round
+		  }
+		}`
 )
 
 // GetRandomWordsRequestedRequest returns a GraphQL request for fetching random words requested.
@@ -110,5 +122,10 @@ func GetFulfillRandomnessDataRequest(round string) *graphql.Request {
 // GetIsOperatorRequest returns a GraphQL request for checking if an address is an operator.
 func GetIsOperatorRequest() *graphql.Request {
 	req := graphql.NewRequest(IsOperatorQuery)
+	return req
+}
+
+func GetRoundInfos() *graphql.Request {
+	req := graphql.NewRequest(RoundInfosQuery)
 	return req
 }
