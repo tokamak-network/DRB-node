@@ -5,15 +5,13 @@ import "github.com/machinebox/graphql"
 const (
 	RandomWordsRequestedQuery = `
         query MyQuery {
-            randomWordsRequesteds(orderBy: blockTimestamp, orderDirection: desc, first: 50) {
-                blockTimestamp
-                roundInfo {
-                    commitCount
-                    validCommitCount
-                    isRecovered
-                    isFulfillExecuted
-                }
-                round
+            roundInfos(orderBy: requestedTimestamp, orderDirection: desc, first: 50){
+                id,
+                round,
+                commitCount,
+                revealCount,
+                requestedTimestamp,
+                isRefunded
             }
         }`
 
@@ -41,15 +39,23 @@ const (
 
 	CommitDataQuery = `
         query MyQuery($round: String!) {
-            commitCs(where: {round: $round}) {
-                round
-                msgSender
-                blockTimestamp
-                commitIndex
-                commitVal
-                id
-            }
+            commits(where: {round: $round}){
+            id
+            operator
+            blockTimestamp
+            round
+         }
         }`
+
+    RevealDataQuery = `
+        query MyQuery($round: String!) {
+            reveals(where: {round: $round}){
+            id
+            operator
+            blockTimestamp
+            round
+        }
+    }`
 
 	FulfillRandomnessDataQuery = `
         query GetFulfillRandomness($round: String!) {
@@ -108,6 +114,13 @@ func GetRecoveredDataRequest(round string) *graphql.Request {
 // GetCommitDataRequest returns a GraphQL request for fetching commit data.
 func GetCommitDataRequest(round string) *graphql.Request {
 	req := graphql.NewRequest(CommitDataQuery)
+	req.Var("round", round)
+	return req
+}
+
+// GetCommitDataRequest returns a GraphQL request for fetching commit data.
+func GetRevealDataRequest(round string) *graphql.Request {
+	req := graphql.NewRequest(RevealDataQuery)
 	req.Var("round", round)
 	return req
 }

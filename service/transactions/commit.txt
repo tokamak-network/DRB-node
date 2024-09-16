@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
-	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -14,12 +13,6 @@ import (
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/utils"
 	"golang.org/x/crypto/sha3"
-)
-
-// Global map to store random data
-var (
-	randomDataStore = make(map[string][32]byte)
-	mu              sync.Mutex
 )
 
 func Commit(ctx context.Context, round *big.Int, client *utils.Client) (common.Address, []byte, error) {
@@ -34,21 +27,16 @@ func Commit(ctx context.Context, round *big.Int, client *utils.Client) (common.A
 		return common.Address{}, nil, fmt.Errorf("failed to generate random data: %v", err)
 	}
 
-	// Keccak256 hash of the random data
+	// Keccak256(abi.encodePacked(randomData))
 	hash := sha3.NewLegacyKeccak256()
-	hash.Write(randomData)
+	hash.Write(randomData) // Hashes the raw randomData (equivalent to abi.encodePacked in Solidity)
 	keccakHash := hash.Sum(nil)
 
 	// Log random data and its hash
 	log.Printf("randomData (bytes32): %s", common.BytesToHash(randomData).Hex())
 	log.Printf("Keccak256 hash of randomData: %s", common.BytesToHash(keccakHash).Hex())
 
-	// Store the randomData using round as the key
-	mu.Lock()
-	randomDataStore[round.String()] = *(*[32]byte)(randomData)
-	mu.Unlock()
-
-	// Prepare commitData with the hashed value and round value
+	// Prepare commitData with the hashed value (encrypted form) and round value
 	commitData := struct {
 		Round *big.Int
 		Val   [32]byte
@@ -57,7 +45,7 @@ func Commit(ctx context.Context, round *big.Int, client *utils.Client) (common.A
 		Val:   [32]byte{},
 	}
 
-	// Copy the hashed value into commitData.Val
+	// Copy the hashed (encrypted) value into commitData.Val
 	copy(commitData.Val[:], keccakHash)
 
 	// Execute the transaction
@@ -84,5 +72,5 @@ func Commit(ctx context.Context, round *big.Int, client *utils.Client) (common.A
 
 	log.Infof("✅ Commit successful!!\n🔗 Tx Hash: %s\n", signedTx.Hash().Hex())
 
-	return auth.From, randomData, nil
+	return auth.From, keccakHash, nil
 }

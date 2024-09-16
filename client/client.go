@@ -4,7 +4,6 @@ package client
 
 import (
 	"fmt"
-	"math/big"
 	"os"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -55,7 +54,6 @@ func NewClient(config utils.Config) (*utils.Client, error) {
 		ContractAddress: contractAddress,
 		ContractABI:     contractABI,
 		PrivateKey:      privateKey,
-		LeaderRounds:    make(map[*big.Int]common.Address),
 		MyAddress:       myAddress,
 	}, nil
 }

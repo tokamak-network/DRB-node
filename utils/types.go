@@ -32,7 +32,6 @@ type Client struct {
 	PrivateKey      *ecdsa.PrivateKey
 	Mutex           sync.Mutex
 	WaitGroup       sync.WaitGroup
-	LeaderRounds    map[*big.Int]common.Address
 	MyAddress       common.Address
 }
 
@@ -55,14 +54,11 @@ type FulfillRandomnessData struct {
 
 // RandomWordRequestedStruct represents the structure for a requested random word.
 type RandomWordRequestedStruct struct {
-	BlockTimestamp string `json:"blockTimestamp"`
-	RoundInfo      struct {
-		CommitCount       string `json:"commitCount"`
-		ValidCommitCount  string `json:"validCommitCount"`
-		IsRecovered       bool   `json:"isRecovered"`
-		IsFulfillExecuted bool   `json:"isFulfillExecuted"`
-	} `json:"roundInfo"`
-	Round string `json:"round"`
+	RequestedTimestamp string `json:"requestedTimestamp"`
+	CommitCount        string `json:"commitCount"`
+	RevealCount  	   string `json:"revealCount"`
+	IsRefunded         bool   `json:"isRefunded"`
+	Round 			   string `json:"round"`
 }
 
 // CommitData represents the data structure for a commit.
@@ -77,14 +73,9 @@ type CommitData struct {
 
 // RoundResults contains various categories of rounds based on their status.
 type RoundResults struct {
-	RecoverableRounds           []string
-	CommittableRounds           []string
-	FulfillableRounds           []string
-	ReRequestableRounds         []string
-	RecoverDisputeableRounds    []string
-	LeadershipDisputeableRounds []string
-	CompleteRounds              []string
-	RecoveryData                []RecoveryResult
+	CommitRounds           []string
+	RevealRounds           []string
+	isRefunded             []bool
 }
 
 // SetupValues holds values used during setup, such as big integers and their respective lengths.
