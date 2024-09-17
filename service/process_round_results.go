@@ -26,7 +26,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
 		return err
 	}
 
-	// If wallet address is not an operator, return an error or take some action
+	// If wallet address is not an operator, deposit and activate
 	if !isOperator {
 		_, _, err := transactions.OperatorDepositAndActivate(ctx, pofClient)
 		if err != nil {
@@ -70,13 +70,41 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
 	committedRounds := make(map[string]bool)
 	revealedRounds := make(map[string]bool)
 
-	// Process commit rounds first
+	// Process reveal rounds first
+	for _, revealRound := range revealRounds {
+		roundStr := revealRound.String()
+
+		// Check if the reveal for this round has already been done
+		if revealedRounds[roundStr] {
+			continue
+		}
+
+		// Call the Reveal function
+		_, _, err := transactions.Reveal(ctx, revealRound, pofClient)
+		if err != nil {
+			logger.Log.Errorf("Error executing reveal for round %s: %v", roundStr, err)
+			return err
+		}
+
+		logger.Log.Infof("Reveal successful for round %s", roundStr)
+		revealedRounds[roundStr] = true
+	}
+
+	// Now process commit rounds
 	for _, commitRound := range commitRounds {
 		roundStr := commitRound.String()
 
 		// Check if the commit for this round has already been done
 		if committedRounds[roundStr] {
 			continue
+		}
+
+		// Check if there's a lower-numbered reveal round that hasn't been processed yet
+		for _, revealRound := range revealRounds {
+			if revealRound.Cmp(commitRound) < 0 && !revealedRounds[revealRound.String()] {
+				logger.Log.Infof("Skipping commit for round %s until reveal for round %s is processed", roundStr, revealRound.String())
+				break
+			}
 		}
 
 		// Call the Commit function
@@ -88,28 +116,6 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
 
 		logger.Log.Infof("Commit successful for round %s", roundStr)
 		committedRounds[roundStr] = true
-	}
-
-	// Now process reveal rounds
-	for _, revealRound := range revealRounds {
-		roundStr := revealRound.String()
-
-		// Check if the reveal has already been done
-		if revealedRounds[roundStr] {
-			continue
-		}
-
-		// Call the Reveal function only if commit for this round has already been done
-		if !committedRounds[roundStr] {
-			_, _, err := transactions.Reveal(ctx, revealRound, pofClient)
-			if err != nil {
-				logger.Log.Errorf("Error executing reveal for round %s: %v", roundStr, err)
-				return err
-			}
-
-			logger.Log.Infof("Reveal successful for round %s", roundStr)
-			revealedRounds[roundStr] = true
-		}
 	}
 
 	return nil

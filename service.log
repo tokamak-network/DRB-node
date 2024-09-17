@@ -973,3 +973,433 @@ time="2024-09-17T17:28:26+04:00" level=info msg=--------------------------------
 time="2024-09-17T17:28:26+04:00" level=info msg=---------------------------------------------------------------------------
 time="2024-09-17T17:28:26+04:00" level=info msg="Random words requested fetch completed successfully"
 time="2024-09-17T17:28:26+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:35:13+04:00" level=info msg="Service starting..."
+time="2024-09-17T18:35:13+04:00" level=info msg="Loaded configuration: {RpcURL:wss://rpc.thanos-sepolia.tokamak.network HttpURL:https://rpc.thanos-sepolia.tokamak.network ContractAddress:0xf5A79df75194DDd01a0C1a16d93D0dF5D78935A7 SubgraphURL:https://graph-node.thanos-sepolia.tokamak.network/subgraphs/name/drbcoordinator OperatorDepositFee:1000000000000000000}"
+time="2024-09-17T18:35:13+04:00" level=info msg="PRIVATE_KEY loaded"
+time="2024-09-17T18:35:13+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/DRBCoordinator.json"
+time="2024-09-17T18:35:13+04:00" level=info msg="Client created successfully"
+time="2024-09-17T18:35:13+04:00" level=info msg="Service is now running"
+time="2024-09-17T18:35:29+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:35:29+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:35:29+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:35:29+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:35:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:35:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:35:37+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:35:43+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:35:43+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:35:43+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:35:43+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:35:50+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:35:50+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:35:50+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:35:58+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:35:58+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:35:58+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:35:58+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:36:06+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:36:06+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:36:06+04:00" level=info msg="randomData (bytes32): 0xdb497af39c778ff56849e5b5fd807672af3156c578aa35cc4ee08a2fbd0e511d" round=27
+time="2024-09-17T18:36:06+04:00" level=info msg="Keccak256 hash of randomData: 0xf52d8542833ec4f2fae5224a70bef4e95fbf45d73eeb0ea6b8a585f1847644e3" round=27
+time="2024-09-17T18:36:06+04:00" level=info msg="Preparing to execute commit..." function=commit
+time="2024-09-17T18:36:12+04:00" level=info msg="✅ Commit successful!!\n🔗 Tx Hash: 0xa8b4d55400785b34b304ae6230aef8c9132ca9f53c21d6fc6f183694b488bb8f\n" round=27
+time="2024-09-17T18:36:12+04:00" level=info msg="Commit successful for round 27"
+time="2024-09-17T18:36:12+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:36:13+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:36:13+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:36:13+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:36:13+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:36:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:36:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:36:22+04:00" level=info msg="randomData (bytes32): 0x0077f69d48ae51f1f5ccf5c488811c207b2deb8c5f6527e1df28b8dde6173340" round=28
+time="2024-09-17T18:36:22+04:00" level=info msg="Keccak256 hash of randomData: 0xa475aba9621717871fed5591d4d0cb317a3724a95c0761b853212a31bf304499" round=28
+time="2024-09-17T18:36:22+04:00" level=info msg="Preparing to execute commit..." function=commit
+time="2024-09-17T18:36:36+04:00" level=info msg="✅ Commit successful!!\n🔗 Tx Hash: 0x26aad24c35879fa9c0ebe422c72a37835a0849d5189d0bf7d4abc224589adea1\n" round=28
+time="2024-09-17T18:36:36+04:00" level=info msg="Commit successful for round 28"
+time="2024-09-17T18:36:36+04:00" level=info msg="randomData (bytes32): 0x8a2ba40fbe64af4e48489b61c5ce3dafa79359952d451b0be06fba82982b97b9" round=29
+time="2024-09-17T18:36:36+04:00" level=info msg="Keccak256 hash of randomData: 0xc49d791c4d44ea597c167ef7c8f5a0a280b17c5f7afc6df46e4c0db14828a333" round=29
+time="2024-09-17T18:36:36+04:00" level=info msg="Preparing to execute commit..." function=commit
+time="2024-09-17T18:36:48+04:00" level=info msg="✅ Commit successful!!\n🔗 Tx Hash: 0xc302615c4ce6cbff8dd622d898cca2f8ae31c27ea1bdd405c6c2994a3b0e9b5a\n" round=29
+time="2024-09-17T18:36:48+04:00" level=info msg="Commit successful for round 29"
+time="2024-09-17T18:36:48+04:00" level=info msg="randomData (bytes32): 0xdb497af39c778ff56849e5b5fd807672af3156c578aa35cc4ee08a2fbd0e511d" round=27
+time="2024-09-17T18:36:48+04:00" level=info msg="Preparing to execute reveal..." function=reveal
+time="2024-09-17T18:36:59+04:00" level=info msg="✅ Reveal successful!!\n🔗 Tx Hash: 0x2bce4e7f147afb285852dc1620a8ddf55b1891179033614bdead556d976bc562\n" round=27
+time="2024-09-17T18:36:59+04:00" level=info msg="Reveal successful for round 27"
+time="2024-09-17T18:36:59+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:37:00+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:37:00+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:37:00+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:37:00+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:37:08+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:37:08+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:37:08+04:00" level=info msg="randomData (bytes32): 0x0077f69d48ae51f1f5ccf5c488811c207b2deb8c5f6527e1df28b8dde6173340" round=28
+time="2024-09-17T18:37:08+04:00" level=info msg="Preparing to execute reveal..." function=reveal
+time="2024-09-17T18:37:12+04:00" level=info msg="✅ Reveal successful!!\n🔗 Tx Hash: 0x65a005d1fdaefa619f0b9e9ba67ff3973e9d395acbb71fde68bee8e59f1fd320\n" round=28
+time="2024-09-17T18:37:12+04:00" level=info msg="Reveal successful for round 28"
+time="2024-09-17T18:37:12+04:00" level=info msg="randomData (bytes32): 0x8a2ba40fbe64af4e48489b61c5ce3dafa79359952d451b0be06fba82982b97b9" round=29
+time="2024-09-17T18:37:12+04:00" level=info msg="Preparing to execute reveal..." function=reveal
+time="2024-09-17T18:37:24+04:00" level=info msg="✅ Reveal successful!!\n🔗 Tx Hash: 0xe2360c83d836198463f7bc964dd307af6e167296310c149e676c17f452d3e562\n" round=29
+time="2024-09-17T18:37:24+04:00" level=info msg="Reveal successful for round 29"
+time="2024-09-17T18:37:24+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:37:24+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:37:24+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:37:24+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:37:24+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:37:33+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:37:33+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:37:33+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:37:33+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:37:33+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:37:33+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:37:33+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:37:41+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:37:41+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:37:41+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:37:43+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:37:43+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:37:43+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:37:43+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:37:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:37:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:37:52+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:37:58+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:37:58+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:37:58+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:37:58+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:38:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:38:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:38:07+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:38:13+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:38:13+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:38:13+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:38:13+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:38:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:38:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:38:22+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:38:28+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:38:28+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:38:28+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:38:28+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:38:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:38:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:38:37+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:38:43+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:38:43+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:38:43+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:38:43+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:38:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:38:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:38:52+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:38:58+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:38:58+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:38:58+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:38:58+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:39:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:39:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:39:07+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:39:13+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:39:13+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:39:13+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:39:13+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:39:23+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:39:23+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:39:23+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:39:28+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:39:28+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:39:28+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:39:28+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:39:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:39:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:39:37+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:39:43+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:39:43+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:39:43+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:39:43+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:39:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:39:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:39:52+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:39:58+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:39:58+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:39:58+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:39:58+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:40:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:40:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:40:07+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:40:13+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:40:13+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:40:13+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:40:13+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:40:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:40:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:40:22+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:40:28+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:40:28+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:40:28+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:40:28+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:40:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:40:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:40:37+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:40:43+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:40:43+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:40:43+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:40:43+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:40:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:40:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:40:52+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:40:58+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:40:58+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:40:58+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:40:58+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:41:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:41:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:41:07+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:41:13+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:41:13+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:41:13+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:41:13+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:41:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:41:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:41:22+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:41:28+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:41:28+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:41:28+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:41:28+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:41:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:41:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:41:37+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:41:44+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:41:44+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:41:44+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:41:44+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:41:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:41:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:41:52+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:41:58+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:41:58+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:41:58+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:41:58+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:42:08+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:42:08+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:42:08+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:42:13+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:42:13+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:42:13+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:42:13+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:42:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:42:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:42:22+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:42:28+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:42:28+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:42:28+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:42:28+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:42:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:42:37+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:42:37+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:42:43+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:42:43+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:42:43+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:42:43+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:42:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:42:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:42:52+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:42:58+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:42:58+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:42:58+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:42:58+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:43:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:43:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:43:07+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:43:13+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:43:13+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:43:13+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:43:13+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:43:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:43:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:43:22+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:43:28+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:43:28+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:43:28+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:43:28+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:43:38+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:43:38+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:43:38+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:43:43+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:43:43+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:43:43+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:43:43+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:43:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:43:52+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:43:52+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:43:58+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:43:58+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:43:58+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:43:58+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:44:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:44:07+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:44:07+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:44:13+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:44:13+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:44:13+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:44:13+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:44:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:44:22+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:44:22+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:45:14+04:00" level=info msg="Service starting..."
+time="2024-09-17T18:45:14+04:00" level=info msg="Loaded configuration: {RpcURL:wss://rpc.thanos-sepolia.tokamak.network HttpURL:https://rpc.thanos-sepolia.tokamak.network ContractAddress:0xf5A79df75194DDd01a0C1a16d93D0dF5D78935A7 SubgraphURL:https://graph-node.thanos-sepolia.tokamak.network/subgraphs/name/drbcoordinator OperatorDepositFee:1000000000000000000}"
+time="2024-09-17T18:45:14+04:00" level=info msg="PRIVATE_KEY loaded"
+time="2024-09-17T18:45:14+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/DRBCoordinator.json"
+time="2024-09-17T18:45:14+04:00" level=info msg="Client created successfully"
+time="2024-09-17T18:45:14+04:00" level=info msg="Service is now running"
+time="2024-09-17T18:45:30+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:45:30+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:45:30+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:45:30+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:45:39+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:45:39+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:45:39+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:45:44+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:45:44+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:45:44+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:45:44+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:45:53+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:45:53+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:45:53+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:45:59+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:45:59+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:45:59+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:45:59+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:46:09+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:46:09+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:46:09+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:46:14+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:46:14+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:46:14+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:46:14+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:46:24+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:46:24+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:46:24+04:00" level=info msg="randomData (bytes32): 0xaaf11aa306f5955a6635722e1de02b70a80d1bbfc2ec2a260e436df70a50c7eb" round=30
+time="2024-09-17T18:46:24+04:00" level=info msg="Keccak256 hash of randomData: 0xb00cf486030db4cac79e6052935545e646aeb6516a799a5e6f59e056a55681dd" round=30
+time="2024-09-17T18:46:24+04:00" level=info msg="Preparing to execute commit..." function=commit
+time="2024-09-17T18:46:35+04:00" level=info msg="✅ Commit successful!!\n🔗 Tx Hash: 0x8f7088da5263d6f89e5b8ecfdb4c9dd2c03c7ea0ee01efc00f0f400ccb30cb0f\n" round=30
+time="2024-09-17T18:46:36+04:00" level=info msg="Commit successful for round 30"
+time="2024-09-17T18:46:36+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:46:36+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:46:36+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:46:36+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:46:36+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:46:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:46:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:46:45+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:46:45+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:46:45+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:46:45+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:46:45+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:46:54+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:46:54+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:46:54+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:46:59+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:46:59+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:46:59+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:46:59+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:47:09+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:47:09+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:47:09+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:47:14+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:47:14+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:47:14+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:47:14+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:47:24+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:47:24+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:47:24+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:47:29+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:47:29+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:47:29+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:47:29+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:47:39+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:47:39+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:47:39+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:47:44+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:47:44+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:47:44+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:47:44+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:47:53+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:47:53+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:47:53+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:47:59+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:47:59+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:47:59+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:47:59+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:48:08+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:48:08+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:48:08+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:48:14+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:48:14+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:48:14+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:48:14+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:48:23+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:48:23+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:48:23+04:00" level=info msg="randomData (bytes32): 0xaaf11aa306f5955a6635722e1de02b70a80d1bbfc2ec2a260e436df70a50c7eb" round=30
+time="2024-09-17T18:48:23+04:00" level=info msg="Preparing to execute reveal..." function=reveal
+time="2024-09-17T18:48:36+04:00" level=info msg="✅ Reveal successful!!\n🔗 Tx Hash: 0xa22f74e09fc82649b30c42efe89c64c01ae99b0eff9722759ff4068bcaa4df99\n" round=30
+time="2024-09-17T18:48:36+04:00" level=info msg="Reveal successful for round 30"
+time="2024-09-17T18:48:36+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:48:37+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:48:37+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:48:37+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:48:37+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:48:46+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:48:46+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:48:46+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:48:46+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:48:46+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:48:46+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:48:46+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:48:55+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:48:55+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:48:55+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:49:00+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:49:00+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:49:00+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:49:00+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:49:09+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:49:09+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:49:09+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:49:14+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:49:14+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:49:14+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:49:14+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:49:24+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:49:24+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:49:24+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:49:29+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:49:29+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:49:29+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:49:29+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:49:39+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:49:39+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:49:39+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:49:44+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:49:44+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:49:44+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:49:44+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:49:54+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:49:54+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:49:54+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:49:59+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:49:59+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:49:59+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:49:59+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:50:09+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:50:09+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:50:09+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:50:14+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:50:14+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:50:14+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:50:14+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
+time="2024-09-17T18:50:24+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:50:24+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-17T18:50:24+04:00" level=info msg="Round results processed successfully"
+time="2024-09-17T18:50:29+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}] ActivatedOperators:{Operators:[0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266] OperatorsCount:2}}\n"
+time="2024-09-17T18:50:29+04:00" level=info msg="Operators received in activatedOperators_collection: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:50:29+04:00" level=info msg="Operators received in activatedOperators: [0x6fac2bfcc54c255de0dd8f36ff17b21fa1c2fab6 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266]"
+time="2024-09-17T18:50:29+04:00" level=info msg="Is operator 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266: true"
