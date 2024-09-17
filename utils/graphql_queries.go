@@ -118,7 +118,7 @@ func GetCommitDataRequest(round string) *graphql.Request {
 	return req
 }
 
-// GetCommitDataRequest returns a GraphQL request for fetching commit data.
+// GetRevealDataRequest returns a GraphQL request for fetching commit data.
 func GetRevealDataRequest(round string) *graphql.Request {
 	req := graphql.NewRequest(RevealDataQuery)
 	req.Var("round", round)
