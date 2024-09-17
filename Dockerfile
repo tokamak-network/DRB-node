@@ -38,7 +38,7 @@ COPY .env .
 COPY config.json .
 
 # Copy the ABI files
-COPY contract/abi/CRRNGCoordinatorPoF.json /root/contract/abi/CRRNGCoordinatorPoF.json
+COPY contract/abi/DRBCoordinator.json /root/contract/abi/DRBCoordinator.json
 
 # Ensure the binary is executable
 RUN chmod +x ./main

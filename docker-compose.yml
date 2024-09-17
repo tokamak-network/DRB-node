@@ -10,7 +10,7 @@ services:
       - CONFIG_BASE_PATH=/root/
     volumes:
       - ./config.json:/root/config.json
-      - ./contract/abi/CRRNGCoordinatorPoF.json:/root/contract/abi/CRRNGCoordinatorPoF.json
+      - ./contract/abi/DRBCoordinator.json:/root/contract/abi/DRBCoordinator.json
       - .env:/root/.env
     stdin_open: true
     tty: true

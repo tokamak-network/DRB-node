@@ -143,7 +143,7 @@ func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error
         if !hasCommitted && data.CommitCount < "2" {
             // If round is still waiting for commits and operator hasn't committed yet
             results.CommitRounds = append(results.CommitRounds, data.Round)
-        } else if !hasRevealed && data.RevealCount < "2" {
+        } else if !hasRevealed && data.RevealCount < "2" && data.CommitCount >= "2" {
             // If round is still waiting for reveals and operator hasn't revealed yet
             results.RevealRounds = append(results.RevealRounds, data.Round)
         }
