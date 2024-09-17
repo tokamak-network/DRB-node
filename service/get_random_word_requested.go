@@ -7,11 +7,9 @@ import (
 	"os"
 	"sort"
 	"strconv"
-	"strings"
 	"text/tabwriter"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/machinebox/graphql"
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -101,7 +99,7 @@ func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error
         }
     }
 
-    log.Printf("filteredRounds", filteredRounds)
+    logger.Log.Printf("filteredRounds", filteredRounds)
 
     sort.Slice(filteredRounds, func(i, j int) bool {
         return filteredRounds[i].RoundInt < filteredRounds[j].RoundInt
@@ -165,60 +163,3 @@ func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error
     return results, nil
 }
 
-// Helper function to check if the operator has already committed for the round
-func HasOperatorCommitted(round string, walletAddress string, client *graphql.Client) (bool, error) {
-	req := utils.GetCommitDataRequest(round)
-	var respData struct {
-		Commits []struct {
-			Operator string `json:"operator"`
-		} `json:"commits"`
-	}
-
-	ctx := context.Background()
-	if err := client.Run(ctx, req, &respData); err != nil {
-		return false, err
-	}
-
-	// Convert wallet address to the standard format (checksummed format)
-	walletAddr := common.HexToAddress(walletAddress)
-
-	for _, commit := range respData.Commits {
-		commitAddr := common.HexToAddress(commit.Operator)
-
-		// Compare the wallet address and operator address in checksummed format
-		if strings.EqualFold(commitAddr.Hex(), walletAddr.Hex()) {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
-// Helper function to check if the operator has already revealed for the round
-func HasOperatorRevealed(round string, walletAddress string, client *graphql.Client) (bool, error) {
-	req := utils.GetRevealDataRequest(round)
-	var respData struct {
-		Reveals []struct {
-			Operator string `json:"operator"`
-		} `json:"reveals"`
-	}
-
-	ctx := context.Background()
-	if err := client.Run(ctx, req, &respData); err != nil {
-		return false, err
-	}
-
-	// Convert wallet address to the standard format (checksummed format)
-	walletAddr := common.HexToAddress(walletAddress)
-
-	for _, reveal := range respData.Reveals {
-		revealAddr := common.HexToAddress(reveal.Operator)
-
-		// Compare the wallet address and operator address in checksummed format
-		if strings.EqualFold(revealAddr.Hex(), walletAddr.Hex()) {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}

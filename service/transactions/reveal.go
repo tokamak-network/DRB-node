@@ -32,20 +32,8 @@ func Reveal(ctx context.Context, round *big.Int, client *utils.Client) (common.A
 	// Log the revealed random data
 	log.Printf("randomData (bytes32): %s", common.BytesToHash(randomData[:]).Hex())
 
-	// Prepare revealData with the random value and round value
-	revealData := struct {
-		Round *big.Int
-		Val   [32]byte
-	}{
-		Round: round,
-		Val:   [32]byte{},
-	}
-
-	// Copy the revealed randomData into revealData.Val
-	copy(revealData.Val[:], randomData[:])
-
 	// Execute the transaction
-	signedTx, auth, err := ExecuteTransaction(ctx, client, "reveal", big.NewInt(0), round, revealData.Val)
+	signedTx, auth, err := ExecuteTransaction(ctx, client, "reveal", big.NewInt(0), round, randomData)
 	if err != nil {
 		log.Errorf("Failed to execute transaction: %v", err)
 		return common.Address{}, nil, err
