@@ -2,9 +2,14 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"math/big"
 	"os"
+	"strconv"
 	"strings"
+	"text/tabwriter"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/tokamak-network/DRB-node/logger"
@@ -171,4 +176,97 @@ func IsValidOperator(round string, pofClient *utils.Client) (bool, error) {
 
 	// Wallet is not a valid operator
 	return false, nil
+}
+
+// Helper function to update latest rounds
+func updateLatestRounds(data []utils.RandomWordRequestedStruct) map[string]utils.RandomWordRequestedStruct {
+    latestRounds := make(map[string]utils.RandomWordRequestedStruct)
+    for _, item := range data {
+        existing, ok := latestRounds[item.Round]
+        if !ok || isLaterTimestamp(item, existing) {
+            latestRounds[item.Round] = item
+        }
+    }
+    return latestRounds
+}
+
+// Helper function to check if timestamp is later
+func isLaterTimestamp(a, b utils.RandomWordRequestedStruct) bool {
+    existingTimestamp, _ := strconv.Atoi(b.RequestedTimestamp)
+    currentTimestamp, _ := strconv.Atoi(a.RequestedTimestamp)
+    return currentTimestamp > existingTimestamp
+}
+
+// Helper function to convert map to slice with round int
+func convertToRoundStruct(latestRounds map[string]utils.RandomWordRequestedStruct) []struct {
+    RoundInt int
+    Data     utils.RandomWordRequestedStruct
+} {
+    var rounds []struct {
+        RoundInt int
+        Data     utils.RandomWordRequestedStruct
+    }
+    for round, data := range latestRounds {
+        roundInt, err := strconv.Atoi(round)
+        if err != nil {
+            logger.Log.Errorf("Error converting round to int: %s, %v", round, err)
+            continue
+        }
+        rounds = append(rounds, struct {
+            RoundInt int
+            Data     utils.RandomWordRequestedStruct
+        }{RoundInt: roundInt, Data: data})
+    }
+    return rounds
+}
+
+// Helper function to filter valid rounds
+func filterRounds(rounds []struct {
+    RoundInt int
+    Data     utils.RandomWordRequestedStruct
+}) []struct {
+    RoundInt int
+    Data     utils.RandomWordRequestedStruct
+} {
+    currentTime := time.Now()
+    var filteredRounds []struct {
+        RoundInt int
+        Data     utils.RandomWordRequestedStruct
+    }
+
+    for _, round := range rounds {
+        data := round.Data
+        commitCount, _ := strconv.Atoi(data.CommitCount)
+        revealCount, _ := strconv.Atoi(data.RevealCount)
+        requestedTime := time.Unix(parseTimestamp(data.RequestedTimestamp), 0)
+
+        if commitExpired(commitCount, currentTime, requestedTime) || revealExpired(commitCount, revealCount, currentTime, requestedTime) {
+            continue
+        }
+        filteredRounds = append(filteredRounds, round)
+    }
+    return filteredRounds
+}
+
+func parseTimestamp(timestamp string) int64 {
+    t, _ := strconv.ParseInt(timestamp, 10, 64)
+    return t
+}
+
+func commitExpired(commitCount int, currentTime, requestedTime time.Time) bool {
+    return commitCount < 2 && currentTime.Sub(requestedTime) > 5*time.Minute
+}
+
+func revealExpired(commitCount, revealCount int, currentTime, requestedTime time.Time) bool {
+    return commitCount == 2 && revealCount < 2 && currentTime.Sub(requestedTime) > 10*time.Minute
+}
+
+func logResults(results *utils.RoundResults) {
+    logger.Log.Info("---------------------------------------------------------------------------")
+    w := tabwriter.NewWriter(log.Writer(), 0, 0, 1, ' ', tabwriter.Debug)
+    fmt.Fprintln(w, "Category\tRounds")
+    fmt.Fprintln(w, "RevealRounds\t", results.RevealRounds)
+    fmt.Fprintln(w, "CommitRounds\t", results.CommitRounds)
+    w.Flush()
+    logger.Log.Info("---------------------------------------------------------------------------")
 }

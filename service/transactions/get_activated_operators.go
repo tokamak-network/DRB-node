@@ -46,10 +46,5 @@ func GetActivatedOperatorsAtRound(ctx context.Context, round *big.Int, client *u
 		return nil, fmt.Errorf("failed to unpack result: %v", err)
 	}
 
-	// Log the activated operators
-	for _, operator := range activatedOperators {
-		log.Infof("Activated operator for round %s: %s", round.String(), operator.Hex())
-	}
-
 	return activatedOperators, nil
 }
