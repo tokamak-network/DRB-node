@@ -100,7 +100,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
 		}
 
 		// Call the Reveal function only if commit for this round has already been done
-		if committedRounds[roundStr] {
+		// if committedRounds[roundStr] {
 			_, _, err := transactions.Reveal(ctx, revealRound, pofClient)
 			if err != nil {
 				logger.Log.Errorf("Error executing reveal for round %s: %v", roundStr, err)
@@ -109,7 +109,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
 
 			logger.Log.Infof("Reveal successful for round %s", roundStr)
 			revealedRounds[roundStr] = true
-		}
+		// }
 	}
 
 	return nil

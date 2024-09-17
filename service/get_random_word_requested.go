@@ -7,9 +7,11 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/machinebox/graphql"
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -106,18 +108,45 @@ func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error
     })
 
     results := &utils.RoundResults{
-        RevealRounds:           []string{},
-        CommitRounds:           []string{},
+        RevealRounds: []string{},
+        CommitRounds: []string{},
     }
 
     // Add rounds that still need commits or reveals to the result
     for _, round := range filteredRounds {
         data := round.Data
-        if data.CommitCount < "2" {
-            // If round is still waiting for commits
+
+        // Check if the wallet is a valid operator for the round
+        isValid, err := IsValidOperator(data.Round, pofClient)
+        if err != nil {
+            logger.Log.Errorf("Error checking if operator is valid for round %s: %v", data.Round, err)
+            continue
+        }
+
+        if !isValid {
+            // If the operator is not valid for this round, skip it
+            continue
+        }
+
+        // Check if the operator already committed
+        hasCommitted, err := HasOperatorCommitted(data.Round, walletAddress, client)
+        if err != nil {
+            logger.Log.Errorf("Error checking if operator has committed for round %s: %v", data.Round, err)
+            continue
+        }
+
+        // Check if the operator already revealed
+        hasRevealed, err := HasOperatorRevealed(data.Round, walletAddress, client)
+        if err != nil {
+            logger.Log.Errorf("Error checking if operator has revealed for round %s: %v", data.Round, err)
+            continue
+        }
+
+        if !hasCommitted && data.CommitCount < "2" {
+            // If round is still waiting for commits and operator hasn't committed yet
             results.CommitRounds = append(results.CommitRounds, data.Round)
-        } else if data.RevealCount < "2" {
-            // If round is still waiting for reveals
+        } else if !hasRevealed && data.RevealCount < "2" {
+            // If round is still waiting for reveals and operator hasn't revealed yet
             results.RevealRounds = append(results.RevealRounds, data.Round)
         }
     }
@@ -136,4 +165,60 @@ func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error
     return results, nil
 }
 
+// Helper function to check if the operator has already committed for the round
+func HasOperatorCommitted(round string, walletAddress string, client *graphql.Client) (bool, error) {
+	req := utils.GetCommitDataRequest(round)
+	var respData struct {
+		Commits []struct {
+			Operator string `json:"operator"`
+		} `json:"commits"`
+	}
 
+	ctx := context.Background()
+	if err := client.Run(ctx, req, &respData); err != nil {
+		return false, err
+	}
+
+	// Convert wallet address to the standard format (checksummed format)
+	walletAddr := common.HexToAddress(walletAddress)
+
+	for _, commit := range respData.Commits {
+		commitAddr := common.HexToAddress(commit.Operator)
+
+		// Compare the wallet address and operator address in checksummed format
+		if strings.EqualFold(commitAddr.Hex(), walletAddr.Hex()) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// Helper function to check if the operator has already revealed for the round
+func HasOperatorRevealed(round string, walletAddress string, client *graphql.Client) (bool, error) {
+	req := utils.GetRevealDataRequest(round)
+	var respData struct {
+		Reveals []struct {
+			Operator string `json:"operator"`
+		} `json:"reveals"`
+	}
+
+	ctx := context.Background()
+	if err := client.Run(ctx, req, &respData); err != nil {
+		return false, err
+	}
+
+	// Convert wallet address to the standard format (checksummed format)
+	walletAddr := common.HexToAddress(walletAddress)
+
+	for _, reveal := range respData.Reveals {
+		revealAddr := common.HexToAddress(reveal.Operator)
+
+		// Compare the wallet address and operator address in checksummed format
+		if strings.EqualFold(revealAddr.Hex(), walletAddr.Hex()) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}

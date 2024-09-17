@@ -2,11 +2,58 @@ package service
 
 import (
 	"context"
+	"math/big"
+	"os"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/machinebox/graphql"
-	"github.com/tokamak-network/DRB-node/logger" // Use the custom logger package
+	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/service/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
 )
+
+// IsValidOperator checks if the given walletAddress is a valid operator for a specific round
+func IsValidOperator(round string, pofClient *utils.Client) (bool, error) {
+	// Get wallet address from environment variable
+	walletAddress := os.Getenv("WALLET_ADDRESS")
+	if walletAddress == "" {
+		logger.Log.Error("WALLET_ADDRESS environment variable is not set")
+		return false, nil
+	}
+
+	// Convert the wallet address to checksummed format
+	walletAddr := common.HexToAddress(walletAddress)
+
+	// Convert round to *big.Int
+	roundInt, ok := new(big.Int).SetString(round, 10)
+	if !ok {
+		logger.Log.Errorf("Invalid round value: %s", round)
+		return false, nil
+	}
+
+	// Fetch the activated operators for the specified round
+	activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, pofClient)
+	if err != nil {
+		logger.Log.Errorf("Error fetching activated operators for round %s: %v", round, err)
+		return false, err
+	}
+
+	// Compare the walletAddress with the list of activated operators (using normalized addresses)
+	for _, operator := range activatedOperators {
+		// Convert each operator address to checksummed format
+		operatorAddr := common.HexToAddress(operator.Hex())
+
+		// Compare the normalized wallet address and operator address
+		if operatorAddr.Hex() == walletAddr.Hex() {
+			// Wallet is a valid operator
+			return true, nil
+		}
+	}
+
+	// Wallet is not a valid operator
+	return false, nil
+}
+
 
 // GetRecoveredData fetches recovered data from a GraphQL endpoint
 func GetRecoveredData(round string) ([]utils.RecoveredData, error) {
