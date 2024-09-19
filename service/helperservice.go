@@ -220,11 +220,28 @@ func convertToRoundStruct(latestRounds map[string]utils.RandomWordRequestedStruc
     return rounds
 }
 
-// Helper function to filter valid rounds
+func GetOperatorCountByRound(round string, pofClient *utils.Client) (int, error) {
+    roundInt, ok := new(big.Int).SetString(round, 10)
+    if !ok {
+        return 0, fmt.Errorf("invalid round value: %s", round)
+    }
+
+    // Use the existing GetActivatedOperatorsAtRound function
+    activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, pofClient)
+    if err != nil {
+        logger.Log.Errorf("Error fetching activated operators for round %s: %v", round, err)
+        return 0, err
+    }
+
+    operatorCount := len(activatedOperators)
+    return operatorCount, nil
+}
+
+
 func filterRounds(rounds []struct {
     RoundInt int
     Data     utils.RandomWordRequestedStruct
-}) []struct {
+}, pofClient *utils.Client) []struct {
     RoundInt int
     Data     utils.RandomWordRequestedStruct
 } {
@@ -240,25 +257,36 @@ func filterRounds(rounds []struct {
         revealCount, _ := strconv.Atoi(data.RevealCount)
         requestedTime := time.Unix(parseTimestamp(data.RequestedTimestamp), 0)
 
-        if commitExpired(commitCount, currentTime, requestedTime) || revealExpired(commitCount, revealCount, currentTime, requestedTime) {
+        // Fetch operator count for the specific round
+        operatorCount, err := GetOperatorCountByRound(strconv.Itoa(round.RoundInt), pofClient)
+        if err != nil {
+            logger.Log.Errorf("Failed to fetch operator count for round %d: %v", round.RoundInt, err)
             continue
         }
+
+        // Use operatorCount in commitExpired and revealExpired functions
+        if commitExpired(commitCount, operatorCount, currentTime, requestedTime) || 
+           revealExpired(commitCount, revealCount, operatorCount, currentTime, requestedTime) {
+            continue
+        }
+
         filteredRounds = append(filteredRounds, round)
     }
     return filteredRounds
 }
+
 
 func parseTimestamp(timestamp string) int64 {
     t, _ := strconv.ParseInt(timestamp, 10, 64)
     return t
 }
 
-func commitExpired(commitCount int, currentTime, requestedTime time.Time) bool {
-    return commitCount < 2 && currentTime.Sub(requestedTime) > 5*time.Minute
+func commitExpired(commitCount, operatorCount int, currentTime, requestedTime time.Time) bool {
+    return commitCount < (operatorCount - 1) && currentTime.Sub(requestedTime) > 5*time.Minute
 }
 
-func revealExpired(commitCount, revealCount int, currentTime, requestedTime time.Time) bool {
-    return commitCount == 2 && revealCount < 2 && currentTime.Sub(requestedTime) > 10*time.Minute
+func revealExpired(commitCount, revealCount, operatorCount int, currentTime, requestedTime time.Time) bool {
+    return commitCount == (operatorCount - 1) && revealCount < (operatorCount - 1) && currentTime.Sub(requestedTime) > 10*time.Minute
 }
 
 func logResults(results *utils.RoundResults) {
