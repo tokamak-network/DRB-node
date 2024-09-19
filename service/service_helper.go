@@ -137,7 +137,7 @@ func HasOperatorRevealed(round string, walletAddress string, client *graphql.Cli
 }
 
 // IsValidOperator checks if the given walletAddress is a valid operator for a specific round
-func IsValidOperator(round string, pofClient *utils.Client) (bool, error) {
+func IsValidOperator(round string, client *utils.Client) (bool, error) {
 	// Get wallet address from environment variable
 	walletAddress := os.Getenv("WALLET_ADDRESS")
 	if walletAddress == "" {
@@ -156,7 +156,7 @@ func IsValidOperator(round string, pofClient *utils.Client) (bool, error) {
 	}
 
 	// Fetch the activated operators for the specified round
-	activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, pofClient)
+	activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, client)
 	if err != nil {
 		logger.Log.Errorf("Error fetching activated operators for round %s: %v", round, err)
 		return false, err
