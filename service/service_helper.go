@@ -47,7 +47,7 @@ func IsOperator(operator string) (bool, error) {
 	}
 
 	// logger.Log the raw response data
-	logger.Log.Printf("Raw GraphQL Response: %+v\n", respData)
+	logger.Log.Printf("Raw GraphQL Response: %+v", respData)
 
 	// Check if data is populated for both collections
 	if len(respData.ActivatedOperatorsCollection) == 0 {
@@ -180,121 +180,127 @@ func IsValidOperator(round string, pofClient *utils.Client) (bool, error) {
 
 // Helper function to update latest rounds
 func updateLatestRounds(data []utils.RandomWordRequestedStruct) map[string]utils.RandomWordRequestedStruct {
-    latestRounds := make(map[string]utils.RandomWordRequestedStruct)
-    for _, item := range data {
-        existing, ok := latestRounds[item.Round]
-        if !ok || isLaterTimestamp(item, existing) {
-            latestRounds[item.Round] = item
-        }
-    }
-    return latestRounds
+	latestRounds := make(map[string]utils.RandomWordRequestedStruct)
+	for _, item := range data {
+		existing, ok := latestRounds[item.Round]
+		if !ok || isLaterTimestamp(item, existing) {
+			latestRounds[item.Round] = item
+		}
+	}
+	return latestRounds
 }
 
 // Helper function to check if timestamp is later
 func isLaterTimestamp(a, b utils.RandomWordRequestedStruct) bool {
-    existingTimestamp, _ := strconv.Atoi(b.RequestedTimestamp)
-    currentTimestamp, _ := strconv.Atoi(a.RequestedTimestamp)
-    return currentTimestamp > existingTimestamp
+	existingTimestamp, _ := strconv.Atoi(b.RequestedTimestamp)
+	currentTimestamp, _ := strconv.Atoi(a.RequestedTimestamp)
+	return currentTimestamp > existingTimestamp
 }
 
 // Helper function to convert map to slice with round int
 func convertToRoundStruct(latestRounds map[string]utils.RandomWordRequestedStruct) []struct {
-    RoundInt int
-    Data     utils.RandomWordRequestedStruct
+	RoundInt int
+	Data     utils.RandomWordRequestedStruct
 } {
-    var rounds []struct {
-        RoundInt int
-        Data     utils.RandomWordRequestedStruct
-    }
-    for round, data := range latestRounds {
-        roundInt, err := strconv.Atoi(round)
-        if err != nil {
-            logger.Log.Errorf("Error converting round to int: %s, %v", round, err)
-            continue
-        }
-        rounds = append(rounds, struct {
-            RoundInt int
-            Data     utils.RandomWordRequestedStruct
-        }{RoundInt: roundInt, Data: data})
-    }
-    return rounds
+	var rounds []struct {
+		RoundInt int
+		Data     utils.RandomWordRequestedStruct
+	}
+	for round, data := range latestRounds {
+		roundInt, err := strconv.Atoi(round)
+		if err != nil {
+			logger.Log.Errorf("Error converting round to int: %s, %v", round, err)
+			continue
+		}
+		rounds = append(rounds, struct {
+			RoundInt int
+			Data     utils.RandomWordRequestedStruct
+		}{RoundInt: roundInt, Data: data})
+	}
+	return rounds
 }
 
 func GetOperatorCountByRound(round string, pofClient *utils.Client) (int, error) {
-    roundInt, ok := new(big.Int).SetString(round, 10)
-    if !ok {
-        return 0, fmt.Errorf("invalid round value: %s", round)
-    }
+	roundInt, ok := new(big.Int).SetString(round, 10)
+	if !ok {
+		return 0, fmt.Errorf("invalid round value: %s", round)
+	}
 
-    // Use the existing GetActivatedOperatorsAtRound function
-    activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, pofClient)
-    if err != nil {
-        logger.Log.Errorf("Error fetching activated operators for round %s: %v", round, err)
-        return 0, err
-    }
+	// Use the existing GetActivatedOperatorsAtRound function
+	activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, pofClient)
+	if err != nil {
+		logger.Log.Errorf("Error fetching activated operators for round %s: %v", round, err)
+		return 0, err
+	}
 
-    operatorCount := len(activatedOperators)
-    return operatorCount, nil
+	operatorCount := len(activatedOperators)
+	return operatorCount, nil
 }
-
 
 func filterRounds(rounds []struct {
-    RoundInt int
-    Data     utils.RandomWordRequestedStruct
+	RoundInt int
+	Data     utils.RandomWordRequestedStruct
 }, pofClient *utils.Client) []struct {
-    RoundInt int
-    Data     utils.RandomWordRequestedStruct
+	RoundInt int
+	Data     utils.RandomWordRequestedStruct
 } {
-    currentTime := time.Now()
-    var filteredRounds []struct {
-        RoundInt int
-        Data     utils.RandomWordRequestedStruct
-    }
+	currentTime := time.Now()
+	var filteredRounds []struct {
+		RoundInt int
+		Data     utils.RandomWordRequestedStruct
+	}
 
-    for _, round := range rounds {
-        data := round.Data
-        commitCount, _ := strconv.Atoi(data.CommitCount)
-        revealCount, _ := strconv.Atoi(data.RevealCount)
-        requestedTime := time.Unix(parseTimestamp(data.RequestedTimestamp), 0)
+	for _, round := range rounds {
+		data := round.Data
+		commitCount, _ := strconv.Atoi(data.CommitCount)
+		revealCount, _ := strconv.Atoi(data.RevealCount)
+		requestedTime := time.Unix(parseTimestamp(data.RequestedTimestamp), 0)
 
-        // Fetch operator count for the specific round
-        operatorCount, err := GetOperatorCountByRound(strconv.Itoa(round.RoundInt), pofClient)
-        if err != nil {
-            logger.Log.Errorf("Failed to fetch operator count for round %d: %v", round.RoundInt, err)
-            continue
-        }
+		// Fetch operator count for the specific round
+		operatorCount, err := GetOperatorCountByRound(strconv.Itoa(round.RoundInt), pofClient)
+		if err != nil {
+			logger.Log.Errorf("Failed to fetch operator count for round %d: %v", round.RoundInt, err)
+			continue
+		}
 
-        // Use operatorCount in commitExpired and revealExpired functions
-        if commitExpired(commitCount, operatorCount, currentTime, requestedTime) || 
-           revealExpired(commitCount, revealCount, operatorCount, currentTime, requestedTime) {
-            continue
-        }
+		// Use operatorCount in commitExpired and revealExpired functions
+		if commitExpired(commitCount, operatorCount, currentTime, requestedTime) ||
+			revealExpired(commitCount, revealCount, operatorCount, currentTime, requestedTime) {
+			continue
+		}
 
-        filteredRounds = append(filteredRounds, round)
-    }
-    return filteredRounds
+		filteredRounds = append(filteredRounds, round)
+	}
+	return filteredRounds
 }
-
 
 func parseTimestamp(timestamp string) int64 {
-    t, _ := strconv.ParseInt(timestamp, 10, 64)
-    return t
+	t, _ := strconv.ParseInt(timestamp, 10, 64)
+	return t
 }
 
+//func commitExpired(commitCount, operatorCount int, currentTime, requestedTime time.Time) bool {
+//	return commitCount < (operatorCount-1) && currentTime.Sub(requestedTime) > 5*time.Minute
+//}
+//
+//func revealExpired(commitCount, revealCount, operatorCount int, currentTime, requestedTime time.Time) bool {
+//	return commitCount == (operatorCount-1) && revealCount < (operatorCount-1) && currentTime.Sub(requestedTime) > 10*time.Minute
+//}
+
 func commitExpired(commitCount, operatorCount int, currentTime, requestedTime time.Time) bool {
-    return commitCount < (operatorCount - 1) && currentTime.Sub(requestedTime) > 5*time.Minute
+	return currentTime.Sub(requestedTime) > 5*time.Minute
 }
 
 func revealExpired(commitCount, revealCount, operatorCount int, currentTime, requestedTime time.Time) bool {
-    return commitCount == (operatorCount - 1) && revealCount < (operatorCount - 1) && currentTime.Sub(requestedTime) > 10*time.Minute
+	return currentTime.Sub(requestedTime) > 10*time.Minute
 }
 
 func logResults(results *utils.RoundResults) {
-    logger.Log.Info("---------------------------------------------------------------------------")
-    w := tabwriter.NewWriter(log.Writer(), 0, 0, 1, ' ', tabwriter.Debug)
-    fmt.Fprintln(w, "Category\tRounds")
-    fmt.Fprintln(w, "RevealRounds\t", results.RevealRounds)
-    fmt.Fprintln(w, "CommitRounds\t", results.CommitRounds)
-    w.Flush()
-    logger.Log.Info("---------------------------------------------------------------------------")
+	logger.Log.Info("---------------------------------------------------------------------------")
+	w := tabwriter.NewWriter(log.Writer(), 0, 0, 1, ' ', tabwriter.Debug)
+	fmt.Fprintln(w, "Category\tRounds")
+	fmt.Fprintln(w, "RevealRounds\t", results.RevealRounds)
+	fmt.Fprintln(w, "CommitRounds\t", results.CommitRounds)
+	w.Flush()
+	logger.Log.Info("---------------------------------------------------------------------------")
 }

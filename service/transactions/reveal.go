@@ -54,7 +54,7 @@ func Reveal(ctx context.Context, round *big.Int, client *utils.Client) (common.A
 
 	roundStatus.Store(round.String(), "Revealed")
 
-	log.Infof("✅ Reveal successful!!\n🔗 Tx Hash: %s\n", signedTx.Hash().Hex())
+	log.Infof("✅ Reveal successful!! 🔗 Tx Hash: %s", signedTx.Hash().Hex())
 
 	return auth.From, randomData[:], nil
 }
