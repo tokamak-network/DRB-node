@@ -279,20 +279,12 @@ func parseTimestamp(timestamp string) int64 {
 	return t
 }
 
-//func commitExpired(commitCount, operatorCount int, currentTime, requestedTime time.Time) bool {
-//	return commitCount < (operatorCount-1) && currentTime.Sub(requestedTime) > 5*time.Minute
-//}
-//
-//func revealExpired(commitCount, revealCount, operatorCount int, currentTime, requestedTime time.Time) bool {
-//	return commitCount == (operatorCount-1) && revealCount < (operatorCount-1) && currentTime.Sub(requestedTime) > 10*time.Minute
-//}
-
 func commitExpired(commitCount, operatorCount int, currentTime, requestedTime time.Time) bool {
-	return currentTime.Sub(requestedTime) > 5*time.Minute
+	return commitCount < (operatorCount-1) && currentTime.Sub(requestedTime) > 5*time.Minute
 }
 
-func revealExpired(commitCount, revealCount, operatorCount int, currentTime, requestedTime time.Time) bool {
-	return currentTime.Sub(requestedTime) > 10*time.Minute
+func revealExpired(revealCount, operatorCount int, currentTime, requestedTime time.Time) bool {
+	return revealCount < (operatorCount-1) && currentTime.Sub(requestedTime) > 10*time.Minute
 }
 
 func logResults(results *utils.RoundResults) {
