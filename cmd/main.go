@@ -2,9 +2,8 @@ package main
 
 import (
 	"context"
-	"time"
-
 	"os"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/joho/godotenv"
@@ -43,6 +42,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
+				// Process round results and check if there's a pending transaction
 				if err := service.ProcessRoundResults(context.Background(), client); err != nil {
 					logger.Log.Errorf("Processing round results failed: %v", err)
 				} else {
@@ -53,6 +53,6 @@ func main() {
 	}()
 
 	logger.Log.Info("Service is now running")
-	// Use os.Stdout to keep the service running
+	// Keep the service running
 	_, _ = os.Stdout.Read(make([]byte, 1))
 }

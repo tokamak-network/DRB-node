@@ -25,7 +25,7 @@ const (
          }
         }`
 
-    RevealDataQuery = `
+	RevealDataQuery = `
         query MyQuery($round: String!) {
             reveals(where: {round: $round}){
             id
@@ -37,10 +37,6 @@ const (
 
 	IsOperatorQuery = `
 		query MyQuery {
-            activatedOperators_collection {
-                operators
-                operatorsCount
-            }
             activatedOperators(id: "activatedOperators") {
                 operators
                 operatorsCount

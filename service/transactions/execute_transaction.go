@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -68,10 +69,38 @@ func ExecuteTransaction(
 		return nil, nil, fmt.Errorf("failed to sign the transaction: %v", err)
 	}
 
+	// Send the transaction
 	if err := client.Client.SendTransaction(ctx, signedTx); err != nil {
 		log.Errorf("Failed to send the signed transaction: %v", err)
 		return nil, nil, fmt.Errorf("failed to send the signed transaction: %v", err)
 	}
 
+	// Wait for the transaction to be mined
+	receipt, err := waitForTransactionSuccess(ctx, client, signedTx)
+	if err != nil {
+		log.Errorf("Transaction failed: %v", err)
+		return nil, nil, err
+	}
+
+	log.Infof("Transaction %s confirmed in block %v", signedTx.Hash().Hex(), receipt.BlockNumber)
 	return signedTx, auth, nil
+}
+
+// waitForTransactionSuccess waits for the transaction to be mined and returns the receipt
+func waitForTransactionSuccess(ctx context.Context, client *utils.Client, tx *types.Transaction) (*types.Receipt, error) {
+	for {
+		receipt, err := client.Client.TransactionReceipt(ctx, tx.Hash())
+		if err != nil {
+			// Check if it's just waiting for confirmation (receipt not yet available)
+			if err.Error() == "not found" {
+				time.Sleep(3 * time.Second) // Wait and try again
+				continue
+			}
+			return nil, fmt.Errorf("failed to get transaction receipt: %v", err)
+		}
+		if receipt.Status == types.ReceiptStatusSuccessful {
+			return receipt, nil
+		}
+		return nil, fmt.Errorf("transaction failed with status: %v", receipt.Status)
+	}
 }
