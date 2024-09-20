@@ -137,7 +137,7 @@ func HasOperatorRevealed(round string, walletAddress string, client *graphql.Cli
 }
 
 // IsValidOperator checks if the given walletAddress is a valid operator for a specific round
-func IsValidOperator(round string, pofClient *utils.Client) (bool, error) {
+func IsValidOperator(round string, client *utils.Client) (bool, error) {
 	// Get wallet address from environment variable
 	walletAddress := os.Getenv("WALLET_ADDRESS")
 	if walletAddress == "" {
@@ -156,7 +156,7 @@ func IsValidOperator(round string, pofClient *utils.Client) (bool, error) {
 	}
 
 	// Fetch the activated operators for the specified round
-	activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, pofClient)
+	activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, client)
 	if err != nil {
 		logger.Log.Errorf("Error fetching activated operators for round %s: %v", round, err)
 		return false, err
@@ -220,14 +220,14 @@ func convertToRoundStruct(latestRounds map[string]utils.RandomWordRequestedStruc
 	return rounds
 }
 
-func GetOperatorCountByRound(round string, pofClient *utils.Client) (int, error) {
+func GetOperatorCountByRound(round string, client *utils.Client) (int, error) {
 	roundInt, ok := new(big.Int).SetString(round, 10)
 	if !ok {
 		return 0, fmt.Errorf("invalid round value: %s", round)
 	}
 
 	// Use the existing GetActivatedOperatorsAtRound function
-	activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, pofClient)
+	activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, client)
 	if err != nil {
 		logger.Log.Errorf("Error fetching activated operators for round %s: %v", round, err)
 		return 0, err
@@ -240,7 +240,7 @@ func GetOperatorCountByRound(round string, pofClient *utils.Client) (int, error)
 func filterRounds(rounds []struct {
 	RoundInt int
 	Data     utils.RandomWordRequestedStruct
-}, pofClient *utils.Client) []struct {
+}, client *utils.Client) []struct {
 	RoundInt int
 	Data     utils.RandomWordRequestedStruct
 } {
@@ -257,7 +257,7 @@ func filterRounds(rounds []struct {
 		requestedTime := time.Unix(parseTimestamp(data.RequestedTimestamp), 0)
 
 		// Fetch operator count for the specific round
-		operatorCount, err := GetOperatorCountByRound(strconv.Itoa(round.RoundInt), pofClient)
+		operatorCount, err := GetOperatorCountByRound(strconv.Itoa(round.RoundInt), client)
 		if err != nil {
 			logger.Log.Errorf("Failed to fetch operator count for round %d: %v", round.RoundInt, err)
 			continue
@@ -294,12 +294,12 @@ func revealExpired(revealCount, operatorCount int, currentTime, requestedTime ti
 }
 
 func commitDurationOver(requestedTimestamp string) bool {
-    // Parse the requested timestamp into a Unix time
-    requestedTime := time.Unix(parseTimestamp(requestedTimestamp), 0)
-    currentTime := time.Now()
-    
-    // Check if more than 5 minutes have passed
-    return currentTime.Sub(requestedTime) > 5*time.Minute
+	// Parse the requested timestamp into a Unix time
+	requestedTime := time.Unix(parseTimestamp(requestedTimestamp), 0)
+	currentTime := time.Now()
+
+	// Check if more than 5 minutes have passed
+	return currentTime.Sub(requestedTime) > 5*time.Minute
 }
 
 func logResults(results *utils.RoundResults) {

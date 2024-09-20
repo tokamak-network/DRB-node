@@ -12,9 +12,9 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error) {
+func GetRandomWordRequested(client *utils.Client) (*utils.RoundResults, error) {
 	config := utils.GetConfig()
-	client := graphql.NewClient(config.SubgraphURL)
+	subClient := graphql.NewClient(config.SubgraphURL)
 
 	walletAddress := os.Getenv("WALLET_ADDRESS")
 	if walletAddress == "" {
@@ -28,14 +28,14 @@ func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error
 		RandomWordsRequested []utils.RandomWordRequestedStruct `json:"roundInfos"`
 	}
 
-	if err := client.Run(ctx, req, &respData); err != nil {
+	if err := subClient.Run(ctx, req, &respData); err != nil {
 		return nil, fmt.Errorf("error fetching random words requested: %v", err)
 	}
 
 	latestRounds := updateLatestRounds(respData.RandomWordsRequested)
 
 	rounds := convertToRoundStruct(latestRounds)
-	filteredRounds := filterRounds(rounds, pofClient)
+	filteredRounds := filterRounds(rounds, client)
 
 	results := &utils.RoundResults{
 		RevealRounds: []string{},
@@ -45,18 +45,18 @@ func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error
 	for _, round := range filteredRounds {
 		data := round.Data
 
-		isValid, err := IsValidOperator(data.Round, pofClient)
+		isValid, err := IsValidOperator(data.Round, client)
 		if err != nil || !isValid {
 			continue
 		}
 
-		hasCommitted, err := HasOperatorCommitted(data.Round, walletAddress, client)
+		hasCommitted, err := HasOperatorCommitted(data.Round, walletAddress, subClient)
 		if err != nil {
 			logger.Log.Errorf("Error checking if operator has committed for round %s: %v", data.Round, err)
 			continue
 		}
 
-		hasRevealed, err := HasOperatorRevealed(data.Round, walletAddress, client)
+		hasRevealed, err := HasOperatorRevealed(data.Round, walletAddress, subClient)
 		if err != nil {
 			logger.Log.Errorf("Error checking if operator has revealed for round %s: %v", data.Round, err)
 			continue
@@ -70,8 +70,8 @@ func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error
 			return nil, fmt.Errorf("invalid round value: %s", data.Round)
 		}
 
-		// Assume ctx and pofClient are already available in your function scope.
-		activatedOperators, err := transactions.GetActivatedOperatorsAtRound(ctx, roundInt, pofClient)
+		// Assume ctx and client are already available in your function scope.
+		activatedOperators, err := transactions.GetActivatedOperatorsAtRound(ctx, roundInt, client)
 		if err != nil {
 			logger.Log.Errorf("Error fetching activated operators: %v", err)
 			return nil, err
@@ -83,7 +83,7 @@ func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error
 		// Now replace the static "2" with operatorCount in your conditions
 		if !hasCommitted && data.CommitCount < fmt.Sprintf("%d", operatorCount) {
 			results.CommitRounds = append(results.CommitRounds, data.Round)
-		} else if !hasRevealed && data.CommitCount >= "2" &&  data.RevealCount < fmt.Sprintf("%d", operatorCount) && (data.CommitCount >= fmt.Sprintf("%d", operatorCount) || commitDurationOver(data.RequestedTimestamp)) {
+		} else if !hasRevealed && data.CommitCount >= "2" && data.RevealCount < fmt.Sprintf("%d", operatorCount) && (data.CommitCount >= fmt.Sprintf("%d", operatorCount) || commitDurationOver(data.RequestedTimestamp)) {
 			results.RevealRounds = append(results.RevealRounds, data.Round)
 		}
 	}

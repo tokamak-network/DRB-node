@@ -13,7 +13,7 @@ import (
 )
 
 // ProcessRoundResults handles committing and revealing rounds based on fetched results
-func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
+func ProcessRoundResults(ctx context.Context, client *utils.Client) error {
 	walletAddress := os.Getenv("WALLET_ADDRESS")
 	if walletAddress == "" {
 		logger.Log.Error("WALLET_ADDRESS environment variable is not set")
@@ -28,7 +28,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
 
 	// If wallet address is not an operator, deposit and activate
 	if !isOperator {
-		_, _, err := transactions.OperatorDepositAndActivate(ctx, pofClient)
+		_, _, err := transactions.OperatorDepositAndActivate(ctx, client)
 		if err != nil {
 			logger.Log.Errorf("Error during OperatorDeposit: %v", err)
 			return err
@@ -36,7 +36,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
 	}
 
 	// Fetch rounds for commit/reveal
-	results, err := GetRandomWordRequested(pofClient)
+	results, err := GetRandomWordRequested(client)
 	if err != nil {
 		logger.Log.Errorf("Error fetching round results: %v", err)
 		return err
@@ -80,7 +80,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
 		}
 
 		// Call the Reveal function
-		_, _, err := transactions.Reveal(ctx, revealRound, pofClient)
+		_, _, err := transactions.Reveal(ctx, revealRound, client)
 		if err != nil {
 			logger.Log.Errorf("Error executing reveal for round %s: %v", roundStr, err)
 			return err
@@ -108,7 +108,7 @@ func ProcessRoundResults(ctx context.Context, pofClient *utils.Client) error {
 		}
 
 		// Call the Commit function
-		_, _, err := transactions.Commit(ctx, commitRound, pofClient)
+		_, _, err := transactions.Commit(ctx, commitRound, client)
 		if err != nil {
 			logger.Log.Errorf("Error executing commit for round %s: %v", roundStr, err)
 			return err
