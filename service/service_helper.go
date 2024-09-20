@@ -298,8 +298,8 @@ func commitDurationOver(requestedTimestamp string) bool {
 	requestedTime := time.Unix(parseTimestamp(requestedTimestamp), 0)
 	currentTime := time.Now()
 
-	// Check if more than 5 minutes have passed
-	return currentTime.Sub(requestedTime) > 5*time.Minute
+	// Check if more than 5 minutes and 10 seconds have passed
+	return currentTime.Sub(requestedTime) > (5*time.Minute + 10*time.Second)
 }
 
 func logResults(results *utils.RoundResults) {
