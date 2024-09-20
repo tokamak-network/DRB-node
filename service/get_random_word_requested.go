@@ -3,14 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"math/big"
+	"os"
+
 	"github.com/machinebox/graphql"
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/service/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
-	"math/big"
-	"os"
-	"strconv"
-	"time"
 )
 
 func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error) {
@@ -84,15 +83,7 @@ func GetRandomWordRequested(pofClient *utils.Client) (*utils.RoundResults, error
 		// Now replace the static "2" with operatorCount in your conditions
 		if !hasCommitted && data.CommitCount < fmt.Sprintf("%d", operatorCount) {
 			results.CommitRounds = append(results.CommitRounds, data.Round)
-		} else if !hasRevealed && data.RevealCount < fmt.Sprintf("%d", operatorCount) && data.CommitCount >= fmt.Sprintf("%d", operatorCount) {
-			results.RevealRounds = append(results.RevealRounds, data.Round)
-		}
-
-		currentTime := time.Now()
-		requestedTime, err := strconv.ParseInt(data.RequestedTimestamp, 10, 64)
-		requestedTimestamp := time.Unix(requestedTime, 0)
-
-		if hasCommitted && data.CommitCount > "2" && !hasRevealed && currentTime.Sub(requestedTimestamp) > 5*time.Minute+30*time.Second {
+		} else if !hasRevealed && data.CommitCount >= "2" &&  data.RevealCount < fmt.Sprintf("%d", operatorCount) && (data.CommitCount >= fmt.Sprintf("%d", operatorCount) || commitDurationOver(data.RequestedTimestamp)) {
 			results.RevealRounds = append(results.RevealRounds, data.Round)
 		}
 	}

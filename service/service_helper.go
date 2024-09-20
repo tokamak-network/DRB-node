@@ -293,6 +293,15 @@ func revealExpired(revealCount, operatorCount int, currentTime, requestedTime ti
 	return false
 }
 
+func commitDurationOver(requestedTimestamp string) bool {
+    // Parse the requested timestamp into a Unix time
+    requestedTime := time.Unix(parseTimestamp(requestedTimestamp), 0)
+    currentTime := time.Now()
+    
+    // Check if more than 5 minutes have passed
+    return currentTime.Sub(requestedTime) > 5*time.Minute
+}
+
 func logResults(results *utils.RoundResults) {
 	logger.Log.Info("---------------------------------------------------------------------------")
 	w := tabwriter.NewWriter(log.Writer(), 0, 0, 1, ' ', tabwriter.Debug)
