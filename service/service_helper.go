@@ -265,7 +265,7 @@ func filterRounds(rounds []struct {
 
 		// Use operatorCount in commitExpired and revealExpired functions
 		if commitExpired(commitCount, operatorCount, currentTime, requestedTime) ||
-			revealExpired(commitCount, revealCount, operatorCount, currentTime, requestedTime) {
+			revealExpired(revealCount, operatorCount, currentTime, requestedTime) {
 			continue
 		}
 
