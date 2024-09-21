@@ -8,7 +8,6 @@ import (
 
 	"github.com/machinebox/graphql"
 	"github.com/tokamak-network/DRB-node/logger"
-	"github.com/tokamak-network/DRB-node/service/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -71,7 +70,7 @@ func GetRandomWordRequested(client *utils.Client) (*utils.RoundResults, error) {
 		}
 
 		// Assume ctx and client are already available in your function scope.
-		activatedOperators, err := transactions.GetActivatedOperatorsAtRound(ctx, roundInt, client)
+		activatedOperators, err := GetActivatedOperatorsAtRound(roundInt)
 		if err != nil {
 			logger.Log.Errorf("Error fetching activated operators: %v", err)
 			return nil, err

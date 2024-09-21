@@ -1662,3 +1662,793 @@ time="2024-09-19T11:51:40+04:00" level=info msg="PRIVATE_KEY loaded"
 time="2024-09-19T11:51:40+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/DRBCoordinator.json"
 time="2024-09-19T11:51:40+04:00" level=info msg="Client created successfully"
 time="2024-09-19T11:51:40+04:00" level=info msg="Service is now running"
+time="2024-09-21T15:03:24+04:00" level=info msg="Service starting..."
+time="2024-09-21T15:03:24+04:00" level=info msg="Loaded configuration: {RpcURL:wss://rpc.titan-sepolia.tokamak.network/ws HttpURL:https://rpc.titan-sepolia.tokamak.network ContractAddress:0x2c9B09aD3Fd4f97a42A95cc91e9CA3F6C3AD9A6d SubgraphURL:https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drbcoordinator OperatorDepositFee:15000003481729}"
+time="2024-09-21T15:03:24+04:00" level=info msg="PRIVATE_KEY loaded"
+time="2024-09-21T15:03:24+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/DRBCoordinator.json"
+time="2024-09-21T15:03:24+04:00" level=info msg="Client created successfully"
+time="2024-09-21T15:03:24+04:00" level=info msg="Service is now running"
+time="2024-09-21T15:03:41+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:03:41+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:03:41+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:03:41+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:04:12+04:00" level=error msg="Failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout" round=1
+time="2024-09-21T15:04:12+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:04:12+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:04:42+04:00" level=error msg="Failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout" round=0
+time="2024-09-21T15:04:42+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:04:42+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:04:42+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:04:42+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:04:42+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:04:42+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:04:42+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:04:42+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:04:42+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:05:12+04:00" level=error msg="Failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout" round=1
+time="2024-09-21T15:05:12+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:05:12+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:05:32+04:00" level=info msg="Service starting..."
+time="2024-09-21T15:05:32+04:00" level=info msg="Loaded configuration: {RpcURL:wss://rpc.titan-sepolia.tokamak.network/ws HttpURL:https://rpc.titan-sepolia.tokamak.network ContractAddress:0x2c9B09aD3Fd4f97a42A95cc91e9CA3F6C3AD9A6d SubgraphURL:https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drbcoordinator OperatorDepositFee:15000003481729}"
+time="2024-09-21T15:05:32+04:00" level=info msg="PRIVATE_KEY loaded"
+time="2024-09-21T15:05:32+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/DRBCoordinator.json"
+time="2024-09-21T15:05:32+04:00" level=info msg="Client created successfully"
+time="2024-09-21T15:05:32+04:00" level=info msg="Service is now running"
+time="2024-09-21T15:05:49+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:05:49+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:05:49+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:05:49+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:06:19+04:00" level=error msg="Failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout" round=1
+time="2024-09-21T15:06:19+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:06:19+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:06:49+04:00" level=error msg="Failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout" round=0
+time="2024-09-21T15:06:49+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:06:49+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:06:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:06:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:06:49+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:06:49+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:06:49+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:06:49+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:06:49+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:07:13+04:00" level=info msg="Service starting..."
+time="2024-09-21T15:07:13+04:00" level=info msg="Loaded configuration: {RpcURL:wss://rpc.titan-sepolia.tokamak.network/ws HttpURL:https://rpc.titan-sepolia.tokamak.network ContractAddress:0x2c9B09aD3Fd4f97a42A95cc91e9CA3F6C3AD9A6d SubgraphURL:https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drbcoordinator OperatorDepositFee:15000003481729}"
+time="2024-09-21T15:07:13+04:00" level=info msg="PRIVATE_KEY loaded"
+time="2024-09-21T15:07:13+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/DRBCoordinator.json"
+time="2024-09-21T15:07:13+04:00" level=info msg="Client created successfully"
+time="2024-09-21T15:07:13+04:00" level=info msg="Service is now running"
+time="2024-09-21T15:07:30+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:07:30+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:07:30+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:07:30+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:07:31+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:07:31+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:07:31+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:07:31+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:07:31+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:07:31+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:07:31+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:07:31+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:07:31+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:07:44+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:07:44+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:07:44+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:07:44+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:07:45+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:07:45+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:07:45+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:07:45+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:07:45+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:07:45+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:07:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:07:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:07:45+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:07:59+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:07:59+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:07:59+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:07:59+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:08:00+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:08:00+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:00+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:00+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:08:00+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:00+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:00+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:08:00+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:08:00+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:08:14+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:08:14+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:08:14+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:08:14+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:08:15+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:08:15+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:15+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:15+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:08:15+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:15+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:15+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:08:15+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:08:15+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:08:29+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:08:29+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:08:29+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:08:29+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:08:30+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:08:30+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:30+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:30+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:08:30+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:30+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:30+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:08:30+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:08:30+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:08:44+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:08:44+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:08:44+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:08:44+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:08:45+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:08:45+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:45+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:45+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:08:45+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:45+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:08:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:08:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:08:45+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:08:59+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:08:59+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:08:59+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:08:59+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:09:00+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:09:00+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:00+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:00+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:09:00+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:00+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:00+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:09:00+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:09:00+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:09:14+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:09:14+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:09:14+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:09:14+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:09:15+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:09:15+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:15+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:15+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:09:15+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:15+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:15+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:09:15+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:09:15+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:09:29+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:09:29+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:09:29+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:09:29+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:09:30+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:09:30+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:30+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:30+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:09:30+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:30+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:30+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:09:30+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:09:30+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:09:44+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:09:44+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:09:44+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:09:44+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:09:45+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:09:45+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:45+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:45+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:09:45+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:45+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:09:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:09:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:09:45+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:09:59+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:09:59+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:09:59+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:09:59+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:10:00+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:10:00+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:00+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:00+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:10:00+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:00+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:00+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:10:00+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:10:00+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:10:14+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:10:14+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:10:14+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:10:14+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:10:15+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:10:15+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:15+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:15+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:10:15+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:15+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:15+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:10:15+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:10:15+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:10:29+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:10:29+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:10:29+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:10:29+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:10:30+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:10:30+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:30+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:30+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:10:30+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:30+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:30+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:10:30+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:10:30+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:10:44+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:10:44+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:10:44+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:10:44+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:10:45+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:10:45+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:45+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:45+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:10:45+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:45+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:10:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:10:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:10:45+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:10:59+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:10:59+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:10:59+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:10:59+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:11:00+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:11:00+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:00+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:00+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:11:00+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:00+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:00+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:11:00+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:11:00+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:11:14+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:11:14+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:11:14+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:11:14+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:11:15+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:11:15+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:15+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:15+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:11:15+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:15+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:15+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:11:15+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:11:15+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:11:29+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:11:29+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:11:29+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:11:29+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:11:30+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:11:30+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:30+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:30+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:11:30+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:30+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:30+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:11:30+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:11:30+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:11:44+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:11:44+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:11:44+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:11:44+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:11:45+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:11:45+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:45+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:45+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:11:45+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:45+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:11:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:11:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:11:45+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:11:59+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:11:59+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:11:59+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:11:59+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:12:00+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:12:00+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:00+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:00+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:12:00+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:00+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:00+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:12:00+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:12:00+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:12:14+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:12:14+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:12:14+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:12:14+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:12:15+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:12:15+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:15+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:15+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:12:15+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:15+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:15+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:12:15+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:12:15+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:12:29+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:12:29+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:12:29+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:12:29+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:12:30+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=0
+time="2024-09-21T15:12:30+04:00" level=error msg="Error fetching activated operators for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:30+04:00" level=error msg="Failed to fetch operator count for round 0: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:30+04:00" level=error msg="Failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64" round=1
+time="2024-09-21T15:12:30+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:30+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: decoding response: json: cannot unmarshal string into Go struct field .Data.randomNumberRequesteds.round of type uint64"
+time="2024-09-21T15:12:30+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:12:30+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:12:30+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:12:46+04:00" level=info msg="Service starting..."
+time="2024-09-21T15:12:46+04:00" level=info msg="Loaded configuration: {RpcURL:wss://rpc.titan-sepolia.tokamak.network/ws HttpURL:https://rpc.titan-sepolia.tokamak.network ContractAddress:0x2c9B09aD3Fd4f97a42A95cc91e9CA3F6C3AD9A6d SubgraphURL:https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drbcoordinator OperatorDepositFee:15000003481729}"
+time="2024-09-21T15:12:46+04:00" level=info msg="PRIVATE_KEY loaded"
+time="2024-09-21T15:12:46+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/DRBCoordinator.json"
+time="2024-09-21T15:12:46+04:00" level=info msg="Client created successfully"
+time="2024-09-21T15:12:46+04:00" level=info msg="Service is now running"
+time="2024-09-21T15:13:02+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:13:02+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:13:02+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:13:02+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:13:33+04:00" level=error msg="Failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout" round=1
+time="2024-09-21T15:13:33+04:00" level=error msg="Error fetching activated operators for round 1: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:13:33+04:00" level=error msg="Failed to fetch operator count for round 1: failed to fetch data from GraphQL API: Post \"https://your-graphql-endpoint.com/graphql\": dial tcp 162.255.119.167:443: i/o timeout"
+time="2024-09-21T15:14:02+04:00" level=info msg="Service starting..."
+time="2024-09-21T15:14:02+04:00" level=info msg="Loaded configuration: {RpcURL:wss://rpc.titan-sepolia.tokamak.network/ws HttpURL:https://rpc.titan-sepolia.tokamak.network ContractAddress:0x2c9B09aD3Fd4f97a42A95cc91e9CA3F6C3AD9A6d SubgraphURL:https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drbcoordinator OperatorDepositFee:15000003481729}"
+time="2024-09-21T15:14:02+04:00" level=info msg="PRIVATE_KEY loaded"
+time="2024-09-21T15:14:02+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/DRBCoordinator.json"
+time="2024-09-21T15:14:02+04:00" level=info msg="Client created successfully"
+time="2024-09-21T15:14:02+04:00" level=info msg="Service is now running"
+time="2024-09-21T15:14:19+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:14:19+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:14:19+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:14:19+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:14:20+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:14:21+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:14:21+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:14:21+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:14:21+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:14:33+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:14:33+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:14:33+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:14:33+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:14:34+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:14:34+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:14:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:14:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:14:34+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:14:48+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:14:48+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:14:48+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:14:48+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:14:49+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:14:49+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:14:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:14:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:14:49+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:15:03+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:15:03+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:15:03+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:15:03+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:15:04+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:15:04+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:15:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:15:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:15:04+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:15:18+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:15:18+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:15:18+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:15:18+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:15:19+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:15:19+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:15:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:15:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:15:19+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:15:33+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:15:33+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:15:33+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:15:33+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:15:34+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:15:34+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:15:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:15:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:15:34+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:15:48+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:15:48+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:15:48+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:15:48+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:15:49+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:15:49+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:15:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:15:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:15:49+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:16:03+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:16:03+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:16:03+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:16:03+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:16:04+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:16:04+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:16:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:16:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:16:04+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:16:18+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:16:18+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:16:18+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:16:18+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:16:19+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:16:19+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:16:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:16:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:16:19+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:16:33+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:16:33+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:16:33+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:16:33+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:16:34+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:16:34+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:16:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:16:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:16:34+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:16:48+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:16:48+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:16:48+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:16:48+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:16:49+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:16:49+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:16:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:16:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:16:49+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:17:03+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:17:03+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:17:03+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:17:03+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:17:03+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:17:04+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:17:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:17:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:17:04+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:17:18+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:17:18+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:17:18+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:17:18+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:17:19+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:17:19+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:17:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:17:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:17:19+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:17:33+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:17:33+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:17:33+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:17:33+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:17:33+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:17:34+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:17:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:17:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:17:34+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:17:48+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:17:48+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:17:48+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:17:48+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:17:48+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:17:49+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:17:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:17:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:17:49+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:18:03+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:18:03+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:18:03+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:18:03+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:18:03+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:18:04+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:18:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:18:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:18:04+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:18:18+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:18:18+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:18:18+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:18:18+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:18:19+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:18:19+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:18:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:18:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:18:19+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:18:33+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:18:33+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:18:33+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:18:33+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:18:34+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:18:34+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:18:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:18:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:18:34+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:18:48+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:18:48+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:18:48+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:18:48+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:18:49+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:18:49+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:18:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:18:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:18:49+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:19:03+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:19:03+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:19:03+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:19:03+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:19:04+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:19:04+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:19:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:19:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:19:04+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:19:18+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:19:18+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:19:18+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:19:18+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:19:19+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:19:19+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:19:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:19:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:19:19+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:19:33+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:19:33+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:19:33+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:19:33+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:19:34+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:19:34+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:19:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:19:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:19:34+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:19:48+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:19:48+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:19:48+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:19:48+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:19:49+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:19:49+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:19:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:19:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:19:49+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:20:03+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:20:03+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:20:03+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:20:03+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:20:04+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:20:04+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:20:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:20:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:20:04+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:20:18+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:20:18+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:20:18+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:20:18+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:20:19+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:20:19+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:20:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:20:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:20:19+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:20:33+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:20:33+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:20:33+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:20:33+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:20:34+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:20:34+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:20:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:20:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:20:34+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:20:48+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:20:48+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:20:48+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:20:48+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:20:49+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:20:49+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:20:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:20:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:20:49+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:21:03+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:21:03+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:21:03+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:21:03+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:21:03+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:21:04+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:21:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:21:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:21:04+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:21:18+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:21:18+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:21:18+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:21:18+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:21:19+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:21:19+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:21:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:21:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:21:19+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:21:33+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:21:33+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:21:33+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:21:33+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:21:34+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:21:34+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:21:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:21:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:21:34+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:21:48+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:21:48+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:21:48+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:21:48+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:21:49+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:21:49+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:21:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:21:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:21:49+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:22:03+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:22:03+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:22:03+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:22:03+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:22:03+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:22:04+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:22:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:22:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:22:04+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:22:18+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:22:18+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:22:18+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:22:18+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:22:18+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:22:19+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:22:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:22:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:22:19+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:22:33+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:22:33+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:22:33+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:22:33+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:22:33+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:22:34+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:22:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:22:34+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:22:34+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:22:48+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:22:48+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:22:48+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:22:48+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:22:49+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:22:49+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:22:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:22:49+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:22:49+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:23:03+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:23:03+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:23:03+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:23:03+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:23:04+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:23:04+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:23:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:23:04+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:23:04+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:23:18+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:23:18+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:23:18+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:23:18+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:23:19+04:00" level=info msg="Fetched activated operators for round 1: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=1
+time="2024-09-21T15:23:19+04:00" level=info msg="Fetched activated operators for round 0: [0x0000000000000000000000000000000000000000 0x1723C153e86D589ce1c7478295bba783a2df9dd7 0x337c4394d75D2a9F019Ec1d1A5a9Fca0b0fc7eFD]" round=0
+time="2024-09-21T15:23:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:23:19+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:23:19+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:23:27+04:00" level=info msg="Service starting..."
+time="2024-09-21T15:23:27+04:00" level=info msg="Loaded configuration: {RpcURL:wss://rpc.titan-sepolia.tokamak.network/ws HttpURL:https://rpc.titan-sepolia.tokamak.network ContractAddress:0x2c9B09aD3Fd4f97a42A95cc91e9CA3F6C3AD9A6d SubgraphURL:https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drbcoordinator OperatorDepositFee:15000003481729}"
+time="2024-09-21T15:23:27+04:00" level=info msg="PRIVATE_KEY loaded"
+time="2024-09-21T15:23:27+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/DRBCoordinator.json"
+time="2024-09-21T15:23:27+04:00" level=info msg="Client created successfully"
+time="2024-09-21T15:23:27+04:00" level=info msg="Service is now running"
+time="2024-09-21T15:23:44+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:23:44+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:23:44+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:23:44+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:23:45+04:00" level=error msg="Error fetching activated operators for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:23:45+04:00" level=error msg="Failed to fetch operator count for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:23:45+04:00" level=error msg="Error fetching activated operators for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:23:45+04:00" level=error msg="Failed to fetch operator count for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:23:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:23:45+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:23:45+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:23:57+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:23:57+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:23:57+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:23:57+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:23:58+04:00" level=error msg="Error fetching activated operators for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:23:58+04:00" level=error msg="Failed to fetch operator count for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:23:59+04:00" level=error msg="Error fetching activated operators for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:23:59+04:00" level=error msg="Failed to fetch operator count for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:23:59+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:23:59+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:23:59+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:24:13+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:24:13+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:24:13+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:24:13+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:24:13+04:00" level=error msg="Error fetching activated operators for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:13+04:00" level=error msg="Failed to fetch operator count for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:14+04:00" level=error msg="Error fetching activated operators for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:14+04:00" level=error msg="Failed to fetch operator count for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:14+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:24:14+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:24:14+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:24:27+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:24:27+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:24:27+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:24:27+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:24:28+04:00" level=error msg="Error fetching activated operators for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:28+04:00" level=error msg="Failed to fetch operator count for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:29+04:00" level=error msg="Error fetching activated operators for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:29+04:00" level=error msg="Failed to fetch operator count for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:29+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:24:29+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:24:29+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:24:42+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:24:42+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:24:42+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:24:42+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:24:43+04:00" level=error msg="Error fetching activated operators for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:43+04:00" level=error msg="Failed to fetch operator count for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:44+04:00" level=error msg="Error fetching activated operators for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:44+04:00" level=error msg="Failed to fetch operator count for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:44+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:24:44+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:24:44+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:24:58+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:24:58+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:24:58+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:24:58+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:24:58+04:00" level=error msg="Error fetching activated operators for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:58+04:00" level=error msg="Failed to fetch operator count for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:59+04:00" level=error msg="Error fetching activated operators for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:59+04:00" level=error msg="Failed to fetch operator count for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:24:59+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:24:59+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:24:59+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:25:13+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:25:13+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:25:13+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:25:13+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:25:13+04:00" level=error msg="Error fetching activated operators for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:25:13+04:00" level=error msg="Failed to fetch operator count for round 1: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:25:14+04:00" level=error msg="Error fetching activated operators for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:25:14+04:00" level=error msg="Failed to fetch operator count for round 0: graphql: Unexpected `end of input`\nExpected `}`"
+time="2024-09-21T15:25:14+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:25:14+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:25:14+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:25:24+04:00" level=info msg="Service starting..."
+time="2024-09-21T15:25:24+04:00" level=info msg="Loaded configuration: {RpcURL:wss://rpc.titan-sepolia.tokamak.network/ws HttpURL:https://rpc.titan-sepolia.tokamak.network ContractAddress:0x2c9B09aD3Fd4f97a42A95cc91e9CA3F6C3AD9A6d SubgraphURL:https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drbcoordinator OperatorDepositFee:15000003481729}"
+time="2024-09-21T15:25:24+04:00" level=info msg="PRIVATE_KEY loaded"
+time="2024-09-21T15:25:24+04:00" level=info msg="Successfully loaded contract ABI from ./contract/abi/DRBCoordinator.json"
+time="2024-09-21T15:25:24+04:00" level=info msg="Client created successfully"
+time="2024-09-21T15:25:24+04:00" level=info msg="Service is now running"
+time="2024-09-21T15:25:41+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:25:41+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:25:41+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:25:41+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:25:43+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:25:43+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:25:43+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:25:55+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:25:55+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:25:55+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:25:55+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:25:56+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:25:56+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:25:56+04:00" level=info msg="Round results processed successfully"
+time="2024-09-21T15:26:10+04:00" level=info msg="Raw GraphQL Response: {ActivatedOperatorsCollection:[] ActivatedOperators:{Operators:[0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7] OperatorsCount:2}}"
+time="2024-09-21T15:26:10+04:00" level=info msg="No operators received in activatedOperators_collection"
+time="2024-09-21T15:26:10+04:00" level=info msg="Operators received in activatedOperators: [0x337c4394d75d2a9f019ec1d1a5a9fca0b0fc7efd 0x1723c153e86d589ce1c7478295bba783a2df9dd7]"
+time="2024-09-21T15:26:10+04:00" level=info msg="Is operator 0x1723C153e86D589ce1c7478295bba783a2df9dd7: true"
+time="2024-09-21T15:26:11+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:26:11+04:00" level=info msg=---------------------------------------------------------------------------
+time="2024-09-21T15:26:11+04:00" level=info msg="Round results processed successfully"
