@@ -13,7 +13,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/tokamak-network/DRB-node/logger"
-	"github.com/tokamak-network/DRB-node/service/transactions"
 
 	"github.com/machinebox/graphql"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -136,6 +135,34 @@ func HasOperatorRevealed(round string, walletAddress string, client *graphql.Cli
 	return false, nil
 }
 
+func GetActivatedOperatorsAtRound(round *big.Int) ([]common.Address, error) {
+	// Convert *big.Int to int (assuming it can safely fit)
+	config := utils.GetConfig()
+	client := graphql.NewClient(config.SubgraphURL)
+
+	// Pass the converted int value to the GraphQL request
+	req := utils.GetActivatedOperatorsAtRoundRequest(round.String())
+
+	var respData struct {
+		RandomNumberRequesteds []struct {
+			ActivatedOperators []string `json:"activatedOperators"`
+			Round              string   `json:"round"`
+		} `json:"randomNumberRequesteds"`
+	}
+
+	err := client.Run(context.Background(), req, &respData)
+	if err != nil {
+		return nil, err
+	}
+
+	var activatedOperators []common.Address
+	for _, operator := range respData.RandomNumberRequesteds[0].ActivatedOperators {
+		activatedOperators = append(activatedOperators, common.HexToAddress(operator))
+	}
+
+	return activatedOperators, nil
+}
+
 // IsValidOperator checks if the given walletAddress is a valid operator for a specific round
 func IsValidOperator(round string, client *utils.Client) (bool, error) {
 	// Get wallet address from environment variable
@@ -156,7 +183,7 @@ func IsValidOperator(round string, client *utils.Client) (bool, error) {
 	}
 
 	// Fetch the activated operators for the specified round
-	activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, client)
+	activatedOperators, err := GetActivatedOperatorsAtRound(roundInt)
 	if err != nil {
 		logger.Log.Errorf("Error fetching activated operators for round %s: %v", round, err)
 		return false, err
@@ -227,7 +254,7 @@ func GetOperatorCountByRound(round string, client *utils.Client) (int, error) {
 	}
 
 	// Use the existing GetActivatedOperatorsAtRound function
-	activatedOperators, err := transactions.GetActivatedOperatorsAtRound(context.Background(), roundInt, client)
+	activatedOperators, err := GetActivatedOperatorsAtRound(roundInt)
 	if err != nil {
 		logger.Log.Errorf("Error fetching activated operators for round %s: %v", round, err)
 		return 0, err

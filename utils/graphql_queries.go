@@ -54,6 +54,14 @@ const (
 			round
 		  }
 		}`
+
+    GetActivatedOperatorsAtRoundQuery = `
+        query MyQuery($round: Int!) {
+            randomNumberRequesteds(where: {round: $round}) {
+                activatedOperators
+                round
+        }
+    `
 )
 
 // GetRandomWordsRequestedRequest returns a GraphQL request for fetching random words requested.
@@ -83,5 +91,19 @@ func GetIsOperatorRequest() *graphql.Request {
 
 func GetRoundInfos() *graphql.Request {
 	req := graphql.NewRequest(RoundInfosQuery)
+	return req
+}
+
+// GetActivatedOperatorsAtRoundRequest returns a GraphQL request for fetching activated operators at a specific round.
+func GetActivatedOperatorsAtRoundRequest(round string) *graphql.Request {
+	const query = `
+        query MyQuery($round: String!) {
+            randomNumberRequesteds (where: {round: $round}) {
+                activatedOperators
+                round
+            }
+        }`
+	req := graphql.NewRequest(query)
+	req.Var("round", round)
 	return req
 }
