@@ -35,7 +35,7 @@ func main() {
 	}
 	logger.Log.Info("Client created successfully")
 
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	go func() {

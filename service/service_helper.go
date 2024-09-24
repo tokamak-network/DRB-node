@@ -279,45 +279,34 @@ func filterRounds(rounds []struct {
 
 	for _, round := range rounds {
 		data := round.Data
-		commitCount, _ := strconv.Atoi(data.CommitCount)
-		revealCount, _ := strconv.Atoi(data.RevealCount)
 		requestedTime := time.Unix(parseTimestamp(data.RequestedTimestamp), 0)
 
-		// Fetch operator count for the specific round
-		operatorCount, err := GetOperatorCountByRound(strconv.Itoa(round.RoundInt), client)
-		if err != nil {
-			logger.Log.Errorf("Failed to fetch operator count for round %d: %v", round.RoundInt, err)
+		// Check if both commit and reveal are expired
+		if commitExpired(currentTime, requestedTime) && revealExpired(currentTime, requestedTime) {
+			// If both commit and reveal phases are expired, skip this round
 			continue
 		}
 
-		// Use operatorCount in commitExpired and revealExpired functions
-		if commitExpired(commitCount, operatorCount, currentTime, requestedTime) ||
-			revealExpired(revealCount, operatorCount, currentTime, requestedTime) {
-			continue
-		}
-
+		// If either phase is not expired, append the round
 		filteredRounds = append(filteredRounds, round)
 	}
 	return filteredRounds
 }
+
 
 func parseTimestamp(timestamp string) int64 {
 	t, _ := strconv.ParseInt(timestamp, 10, 64)
 	return t
 }
 
-func commitExpired(commitCount, operatorCount int, currentTime, requestedTime time.Time) bool {
-	if commitCount <= (operatorCount - 1) {
-		return currentTime.Sub(requestedTime) > 5*time.Minute+30*time.Second
-	}
-	return false
+func commitExpired(currentTime, requestedTime time.Time) bool {
+    // Commit phase is expired if the current time is more than 5 minutes after the requested time
+    return currentTime.Sub(requestedTime) > 5*time.Minute
 }
 
-func revealExpired(revealCount, operatorCount int, currentTime, requestedTime time.Time) bool {
-	if revealCount <= (operatorCount - 1) {
-		return currentTime.Sub(requestedTime) > 15*time.Minute+30*time.Second
-	}
-	return false
+func revealExpired(currentTime, requestedTime time.Time) bool {
+    // Reveal phase is expired if the current time is more than 15 minutes after the requested time
+    return currentTime.Sub(requestedTime) > 15*time.Minute
 }
 
 func commitDurationOver(requestedTimestamp string) bool {
