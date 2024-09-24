@@ -301,12 +301,12 @@ func parseTimestamp(timestamp string) int64 {
 
 func commitExpired(currentTime, requestedTime time.Time) bool {
     // Commit phase is expired if the current time is more than 5 minutes after the requested time
-    return currentTime.Sub(requestedTime) > 5*time.Minute
+    return currentTime.Sub(requestedTime) > (5*time.Minute + 10*time.Second)
 }
 
 func revealExpired(currentTime, requestedTime time.Time) bool {
     // Reveal phase is expired if the current time is more than 15 minutes after the requested time
-    return currentTime.Sub(requestedTime) > 15*time.Minute
+    return currentTime.Sub(requestedTime) > (15*time.Minute + 10*time.Second)
 }
 
 func commitDurationOver(requestedTimestamp string) bool {
