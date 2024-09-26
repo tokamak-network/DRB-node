@@ -16,11 +16,11 @@ Create a config.json file with network-specific details. Adjust the values as pe
 }
 ```
 
-`<RpcURL>`: WebSocket URL for connecting to your desired Ethereum network.
-`<HttpURL>`: HTTP URL for interacting with the network.
-`<ContractAddress>`: Address of the DRB Coordinator contract deployed on the network.
-`<SubgraphURL>`: URL for querying data through a subgraph, if applicable.
-`<OperatorDepositFee>`: Fee required for operators to deposit (in wei or other relevant unit).
+`<RpcURL>`: WebSocket URL for connecting to your desired Ethereum network.\n
+`<HttpURL>`: HTTP URL for interacting with the network.\n
+`<ContractAddress>`: Address of the DRB Coordinator contract deployed on the network.\n
+`<SubgraphURL>`: URL for querying data through a subgraph, if applicable.\n
+`<OperatorDepositFee>`: Fee required for operators to deposit (in wei or other relevant unit).\n
 
 You can replace the placeholders (`<YOUR_NETWORK_RPC>`, `<YOUR_CONTRACT_ADDRESS>`, etc.) with the specific values for your setup.
 
@@ -35,8 +35,8 @@ PRIVATE_KEY="YOUR_PRIVATE_KEY"
 WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
 ```
 
-`<PRIVATE_KEY>`: Your Ethereum private key for signing transactions.
-`<WALLET_ADDRESS>`: Ethereum wallet address linked to the private key.
+`<PRIVATE_KEY>`: Your Ethereum private key for signing transactions.\n
+`<WALLET_ADDRESS>`: Ethereum wallet address linked to the private key.\n
 
 Important: Keep the .env file secure and avoid sharing your private key publicly.
 
@@ -50,11 +50,11 @@ You can run the node in three different ways: using Go, Docker, or Docker Compos
 
 To run the node directly using Go, execute the following command:
 
-<Without Build>
+`<Without Build>`\n
 go run cmd/main.go
 
-<With Build>
-go run cmd/main.go
+`<With Build>`\n
+go build cmd/main.go
 
 ./main
 
@@ -62,20 +62,20 @@ go run cmd/main.go
 
 For Docker users:
 
-`<Build the Docker image:>`
+`<Build the Docker image:>`\n
 docker build -t drb-node .
 
-`<Run the Docker container:>`
+`<Run the Docker container:>`\n
 docker run --rm -it drb-node
 
 3. With Docker Compose
 
 For using Docker Compose:
 
-`<Build and start the node:>`
+`<Build and start the node:>`\n
 docker-compose up --build
 
-`<To run in detached mode:>`
+`<To run in detached mode:>`\n
 docker-compose up -d
 
 -------------------------------------------------------------------------------------------------------
