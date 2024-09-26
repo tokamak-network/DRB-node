@@ -16,13 +16,13 @@ Create a config.json file with network-specific details. Adjust the values as pe
 }
 ```
 
-<RpcURL>: WebSocket URL for connecting to your desired Ethereum network.
-<HttpURL>: HTTP URL for interacting with the network.
-<ContractAddress>: Address of the DRB Coordinator contract deployed on the network.
-<SubgraphURL>: URL for querying data through a subgraph, if applicable.
-<OperatorDepositFee>: Fee required for operators to deposit (in wei or other relevant unit).
+`<RpcURL>`: WebSocket URL for connecting to your desired Ethereum network.
+`<HttpURL>`: HTTP URL for interacting with the network.
+`<ContractAddress>`: Address of the DRB Coordinator contract deployed on the network.
+`<SubgraphURL>`: URL for querying data through a subgraph, if applicable.
+`<OperatorDepositFee>`: Fee required for operators to deposit (in wei or other relevant unit).
 
-You can replace the placeholders (<YOUR_NETWORK_RPC>, <YOUR_CONTRACT_ADDRESS>, etc.) with the specific values for your setup.
+You can replace the placeholders (`<YOUR_NETWORK_RPC>`, `<YOUR_CONTRACT_ADDRESS>`, etc.) with the specific values for your setup.
 
 -------------------------------------------------------------------------------------------------------
 
@@ -35,8 +35,8 @@ PRIVATE_KEY="YOUR_PRIVATE_KEY"
 WALLET_ADDRESS="YOUR_WALLET_ADDRESS"
 ```
 
-<PRIVATE_KEY>: Your Ethereum private key for signing transactions.
-<WALLET_ADDRESS>: Ethereum wallet address linked to the private key.
+`<PRIVATE_KEY>`: Your Ethereum private key for signing transactions.
+`<WALLET_ADDRESS>`: Ethereum wallet address linked to the private key.
 
 Important: Keep the .env file secure and avoid sharing your private key publicly.
 
@@ -62,28 +62,28 @@ go run cmd/main.go
 
 For Docker users:
 
-<Build the Docker image:>
+`<Build the Docker image:>`
 docker build -t drb-node .
 
-<Run the Docker container:>
+`<Run the Docker container:>`
 docker run --rm -it drb-node
 
 3. With Docker Compose
 
 For using Docker Compose:
 
-<Build and start the node:>
+`<Build and start the node:>`
 docker-compose up --build
 
-<To run in detached mode:>
+`<To run in detached mode:>`
 docker-compose up -d
 
 -------------------------------------------------------------------------------------------------------
 
 # Additional Notes
-<Network Flexibility:> The values in config.json can be adjusted to connect to any Ethereum-based network (e.g., Sepolia, Mainnet, Rinkeby, etc.).
+`<Network Flexibility:>` The values in config.json can be adjusted to connect to any Ethereum-based network (e.g., Sepolia, Mainnet, Rinkeby, etc.).
 
-<Environment Security:> Always keep your .env file safe, especially when sharing the project or pushing it to repositories.
+`<Environment Security:>` Always keep your .env file safe, especially when sharing the project or pushing it to repositories.
 
 
 
