@@ -68,7 +68,7 @@ docker build -t drb-node .
 `<Run the Docker container:>`<br>
 docker run --rm -it drb-node
 
-3. With Docker Compose
+# 3. With Docker Compose
 
 For using Docker Compose:
 
