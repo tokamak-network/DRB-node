@@ -8,29 +8,25 @@ import {OptimismL1Fees} from "./OptimismL1Fees.sol";
 import {DRBConsumerBase} from "./DRBConsumerBase.sol";
 import {IDRBCoordinator} from "./interfaces/IDRBCoordinator.sol";
 
-import {console2} from "forge-std/Test.sol";
-
 /// @title DRBCoordinator, distributed random beacon coordinator, using commit-reveal scheme
 /// @author Justin G
 
 contract DRBCoordinator is
-    Ownable,
-    ReentrancyGuardTransient,
-    IDRBCoordinator,
-    DRBCoordinatorStorage,
-    OptimismL1Fees
+Ownable,
+ReentrancyGuardTransient,
+IDRBCoordinator,
+DRBCoordinatorStorage,
+OptimismL1Fees
 {
     /// *** Functions ***
     constructor(
         uint256 activationThreshold,
         uint256 flatFee,
-        uint256[3] memory compensations
+        uint256 compensateAmount
     ) Ownable(msg.sender) {
         s_activationThreshold = activationThreshold;
         s_flatFee = flatFee;
-        s_compensations = compensations;
-        s_returnAmountForOperators[0] = compensations[2] - compensations[0];
-        s_returnAmountForOperators[1] = compensations[2] - compensations[1];
+        s_compensateAmount = compensateAmount;
         s_activatedOperators.push(address(0)); // dummy data
     }
 
@@ -39,6 +35,10 @@ contract DRBCoordinator is
     function requestRandomNumber(
         uint32 callbackGasLimit
     ) external payable nonReentrant returns (uint256 round) {
+        require(
+            callbackGasLimit <= MAX_CALLBACK_GAS_LIMIT,
+            ExceedCallbackGasLimit()
+        );
         require(s_activatedOperators.length > 2, NotEnoughActivatedOperators());
         require(
             msg.value >= _calculateRequestPrice(callbackGasLimit, tx.gasprice),
@@ -47,32 +47,39 @@ contract DRBCoordinator is
         unchecked {
             round = s_nextRound++;
         }
-        uint256 refundCost = _calculateGetRefundCost(tx.gasprice);
+        uint256 requestAndRefundCost = _calculateGetRequestAndRefundCost(
+            tx.gasprice
+        );
         uint256 minDepositForThisRound = _calculateMinDepositForOneRound(
             callbackGasLimit,
             tx.gasprice
-        ) + refundCost;
+        ) + requestAndRefundCost;
         s_requestInfo[round] = RequestInfo({
             consumer: msg.sender,
             requestedTime: block.timestamp,
             cost: msg.value,
             callbackGasLimit: callbackGasLimit,
             minDepositForOperator: minDepositForThisRound,
-            refundCost: refundCost
+            requestAndRefundCost: requestAndRefundCost
         });
         address[] memory activatedOperators;
         s_activatedOperatorsAtRound[
-            round
+        round
         ] = activatedOperators = s_activatedOperators;
         uint256 activatedOperatorsLength = activatedOperators.length;
         uint256 i = 1;
+        mapping(address => uint256)
+        storage activatedOperatorOrderAtRound = s_activatedOperatorOrderAtRound[
+                    round
+            ];
+        uint256 activationThreshold = s_activationThreshold;
         do {
             address operator = activatedOperators[i];
-            s_activatedOperatorOrderAtRound[round][operator] = i;
+            activatedOperatorOrderAtRound[operator] = i;
             uint256 activatedOperatorIndex = s_activatedOperatorOrder[operator];
             if (
                 (s_depositAmount[operator] -= minDepositForThisRound) <
-                s_activationThreshold
+                activationThreshold
             ) _deactivate(activatedOperatorIndex, operator);
             unchecked {
                 ++i;
@@ -108,69 +115,52 @@ contract DRBCoordinator is
         require(ruleNum != 3, NotRefundable());
 
         uint256 activatedOperatorsAtRoundLength = s_activatedOperatorsAtRound[
-            round
-        ].length - 1;
+                    round
+            ].length - 1;
 
         if (ruleNum == 0) {
-            uint256 operatorReturnAmount = s_returnAmountForOperators[0];
             uint256 totalSlashAmount = activatedOperatorsAtRoundLength *
-                (s_requestInfo[round].minDepositForOperator -
-                    operatorReturnAmount);
-            for (
-                uint256 i = 1;
-                i <= activatedOperatorsAtRoundLength;
-                i = _unchecked_inc(i)
-            ) {
-                address operator = s_activatedOperatorsAtRound[round][i];
-                _checkAndActivateIfNotForceDeactivated(
-                    s_activatedOperatorOrder[operator],
-                    s_depositAmount[operator] += operatorReturnAmount,
-                    s_activationThreshold,
-                    operator
-                );
-            }
+                                s_requestInfo[round].minDepositForOperator;
             payable(msg.sender).transfer(
                 totalSlashAmount + s_requestInfo[round].cost
             );
         } else {
-            uint256 refundTxCostAndCompensateAmount = s_requestInfo[round]
-                .refundCost + s_compensations[ruleNum];
+            uint256 requestRefundTxCostAndCompensateAmount = s_requestInfo[
+                        round
+                ].requestAndRefundCost + s_compensateAmount;
             uint256 refundAmount = s_requestInfo[round].cost +
-                refundTxCostAndCompensateAmount;
+                        requestRefundTxCostAndCompensateAmount;
             uint256 minDepositAtRound = s_requestInfo[round]
                 .minDepositForOperator;
+            uint256 activationThreshold = s_activationThreshold;
 
             if (ruleNum == 1) {
-                uint256 returnAmountForUncommitted = s_returnAmountForOperators[
-                    1
-                ];
                 uint256 returnAmountForCommitted = minDepositAtRound +
                     (((activatedOperatorsAtRoundLength - commitLength) *
-                        (minDepositAtRound - returnAmountForUncommitted) -
-                        refundTxCostAndCompensateAmount) / commitLength);
+                    minDepositAtRound -
+                        requestRefundTxCostAndCompensateAmount) / commitLength);
                 for (
                     uint256 i = 1;
                     i <= activatedOperatorsAtRoundLength;
                     i = _unchecked_inc(i)
                 ) {
                     address operator = s_activatedOperatorsAtRound[round][i];
-                    uint256 operatorReturnAmount = s_commitOrder[round][
-                        operator
-                    ] != 0
-                        ? returnAmountForCommitted
-                        : returnAmountForUncommitted;
-                    _checkAndActivateIfNotForceDeactivated(
-                        s_activatedOperatorOrder[operator],
-                        s_depositAmount[operator] += operatorReturnAmount,
-                        s_activationThreshold,
-                        operator
-                    );
+                    if (s_commitOrder[round][operator] != 0) {
+                        _checkAndActivateIfNotForceDeactivated(
+                            s_activatedOperatorOrder[operator],
+                            s_depositAmount[
+                            operator
+                            ] += returnAmountForCommitted,
+                            activationThreshold,
+                            operator
+                        );
+                    }
                 }
             } else {
                 uint256 returnAmountForRevealed = minDepositAtRound +
                     (((commitLength - revealLength) *
-                        minDepositAtRound -
-                        refundTxCostAndCompensateAmount) / revealLength);
+                    minDepositAtRound -
+                        requestRefundTxCostAndCompensateAmount) / revealLength);
                 for (
                     uint256 i = 1;
                     i <= activatedOperatorsAtRoundLength;
@@ -181,9 +171,9 @@ contract DRBCoordinator is
                         _checkAndActivateIfNotForceDeactivated(
                             s_activatedOperatorOrder[operator],
                             s_depositAmount[
-                                operator
+                            operator
                             ] += returnAmountForRevealed,
-                            s_activationThreshold,
+                            activationThreshold,
                             operator
                         );
                     }
@@ -213,7 +203,7 @@ contract DRBCoordinator is
     ) external view returns (uint256) {
         return
             _calculateMinDepositForOneRound(callbackGasLimit, gasPrice) +
-            _calculateGetRefundCost(gasPrice);
+            _calculateGetRequestAndRefundCost(gasPrice);
     }
 
     function _checkAndActivateIfNotForceDeactivated(
@@ -241,7 +231,7 @@ contract DRBCoordinator is
                 (s_premiumPercentage + 100)) / 100) +
             s_flatFee +
             _getL1CostWeiForCalldataSize(
-                TWOCOMMIT_TWOREVEAL_CALLDATA_SIZE_BYTES
+                TWOCOMMIT_TWOREVEAL_CALLDATA_BYTES_SIZE
             );
     }
 
@@ -254,45 +244,54 @@ contract DRBCoordinator is
                 (s_premiumPercentage + 100)) / 100) +
             s_flatFee +
             _getL1CostWeiForCalldataSize(
-                ONECOMMIT_ONEREVEAL_CALLDATA_SIZE_BYTES
+                ONECOMMIT_ONEREVEAL_CALLDATA_BYTES_SIZE
             ) +
-            s_compensations[2];
+            s_compensateAmount;
     }
 
-    function _calculateGetRefundCost(
+    function _calculateGetRequestAndRefundCost(
         uint256 gasPrice
     ) private view returns (uint256) {
         return
-            (((gasPrice * REFUND_GASUSED) * (s_premiumPercentage + 100)) /
-                100) + _getL1CostWeiForCalldataSize(REFUND_CALLDATA_SIZE_BYTES);
+            (((gasPrice * MAX_REQUEST_REFUND_GASUSED) *
+                (s_premiumPercentage + 100)) / 100) +
+            _getL1CostWeiForCalldataSize(REQUEST_REFUND_CALLDATA_BYTES_SIZE);
     }
 
     /// ***
     /// ** Operator(Node) Interface **
 
     function commit(uint256 round, bytes32 a) external {
+        address[]
+        storage activatedOperatorsAtRound = s_activatedOperatorsAtRound[
+                    round
+            ];
         require(
-            s_activatedOperatorsAtRound[round][
-                s_activatedOperatorOrderAtRound[round][msg.sender]
+            activatedOperatorsAtRound[
+            s_activatedOperatorOrderAtRound[round][msg.sender]
             ] == msg.sender,
             WasNotActivated()
         );
-        if (s_commits[round].length == 0) {
-            s_roundInfo[round].commitEndTime =
-                block.timestamp +
-                COMMIT_DURATION;
+        bytes32[] storage commits = s_commits[round];
+        RoundInfo storage roundInfo = s_roundInfo[round];
+        mapping(address => uint256) storage commitOrder = s_commitOrder[round];
+        uint256 commitLength = commits.length;
+        if (commitLength == 0) {
+            roundInfo.commitEndTime = block.timestamp + COMMIT_DURATION;
         } else {
             require(
-                block.timestamp <= s_roundInfo[round].commitEndTime,
+                block.timestamp <= roundInfo.commitEndTime,
                 CommitPhaseOver()
             );
-            require(s_commitOrder[round][msg.sender] == 0, AlreadyCommitted());
+            require(commitOrder[msg.sender] == 0, AlreadyCommitted());
         }
-        s_commits[round].push(a);
-        uint256 commitLength = s_commits[round].length;
-        s_commitOrder[round][msg.sender] = commitLength;
-        if (commitLength == s_activatedOperatorsAtRound[round].length - 1) {
-            s_roundInfo[round].commitEndTime = block.timestamp;
+        commits.push(a);
+        unchecked {
+            ++commitLength;
+        }
+        commitOrder[msg.sender] = commitLength;
+        if (commitLength == activatedOperatorsAtRound.length - 1) {
+            roundInfo.commitEndTime = block.timestamp;
         }
         emit Commit(msg.sender, round);
     }
@@ -300,46 +299,61 @@ contract DRBCoordinator is
     function reveal(uint256 round, bytes32 s) external {
         uint256 commitOrder = s_commitOrder[round][msg.sender];
         require(commitOrder != 0, NotCommitted());
-        require(s_revealOrder[round][msg.sender] == 0, AlreadyRevealed());
-        uint256 commitEndTime = s_roundInfo[round].commitEndTime;
-        uint256 commitLength = s_commits[round].length;
+        mapping(address => uint256) storage revealOrder = s_revealOrder[round];
+        require(revealOrder[msg.sender] == 0, AlreadyRevealed());
+        RoundInfo storage roundInfo = s_roundInfo[round];
+        bytes32[] storage commits = s_commits[round];
+        bytes32[] storage reveals = s_reveals[round];
+        uint256 commitEndTime = roundInfo.commitEndTime;
+        uint256 commitLength = commits.length;
         require(
             (block.timestamp > commitEndTime &&
                 block.timestamp <= commitEndTime + REVEAL_DURATION),
             NotRevealPhase()
         );
         require(
-            keccak256(abi.encodePacked(s)) == s_commits[round][commitOrder - 1],
+            keccak256(abi.encodePacked(s)) == commits[commitOrder - 1],
             RevealValueMismatch()
         );
-        s_reveals[round].push(s);
-        uint256 revealLength = s_revealOrder[round][msg.sender] = s_reveals[
-            round
-        ].length;
+        reveals.push(s);
+        uint256 revealLength = revealOrder[msg.sender] = reveals.length;
         if (revealLength == commitLength) {
             uint256 randomNumber = uint256(
-                keccak256(abi.encodePacked(s_reveals[round]))
+                keccak256(abi.encodePacked(reveals))
             );
-            s_roundInfo[round].randomNumber = randomNumber;
+            roundInfo.randomNumber = randomNumber;
+            RequestInfo storage requestInfo = s_requestInfo[round];
             bool success = _call(
-                s_requestInfo[round].consumer,
+                requestInfo.consumer,
                 abi.encodeWithSelector(
                     DRBConsumerBase.rawFulfillRandomWords.selector,
                     round,
                     randomNumber
                 ),
-                s_requestInfo[round].callbackGasLimit
+                requestInfo.callbackGasLimit
             );
-            s_roundInfo[round].fulfillSucceeded = success;
-            uint256 dividedReward = s_requestInfo[round].cost /
-                revealLength +
-                s_requestInfo[round].minDepositForOperator;
+            roundInfo.fulfillSucceeded = success;
+            uint256 minDepositForThisRound = requestInfo.minDepositForOperator;
+            uint256 minDepositWithReward = requestInfo.cost /
+                        revealLength +
+                        minDepositForThisRound;
             uint256 activationThreshold = s_activationThreshold;
-            for (uint256 i = 1; i <= revealLength; i = _unchecked_inc(i)) {
+            uint256 activatedOperatorsAtRoundLength = s_activatedOperatorsAtRound[
+                        round
+                ].length - 1;
+            for (
+                uint256 i = 1;
+                i <= activatedOperatorsAtRoundLength;
+                i = _unchecked_inc(i)
+            ) {
                 address operator = s_activatedOperatorsAtRound[round][i];
                 _checkAndActivateIfNotForceDeactivated(
                     s_activatedOperatorOrder[operator],
-                    s_depositAmount[operator] += dividedReward,
+                    s_depositAmount[operator] += (
+                        revealOrder[operator] != 0
+                            ? minDepositWithReward
+                            : minDepositForThisRound
+                    ),
                     activationThreshold,
                     operator
                 );
@@ -412,7 +426,7 @@ contract DRBCoordinator is
     ) private {
         address lastOperator = s_activatedOperators[
             s_activatedOperators.length - 1
-        ];
+            ];
         s_activatedOperators[activatedOperatorIndex] = lastOperator;
         s_activatedOperators.pop();
         s_activatedOperatorOrder[lastOperator] = activatedOperatorIndex;
@@ -427,28 +441,28 @@ contract DRBCoordinator is
     ) private returns (bool success) {
         assembly {
             let g := gas()
-            // Compute g -= GAS_FOR_CALL_EXACT_CHECK and check for underflow
-            // The gas actually passed to the callee is min(gasAmount, 63//64*gas available)
-            // We want to ensure that we revert if gasAmount > 63//64*gas available
-            // as we do not want to provide them with less, however that check itself costs
-            // gas. GAS_FOR_CALL_EXACT_CHECK ensures we have at least enough gas to be able to revert
-            // if gasAmount > 63//64*gas available.
+        // Compute g -= GAS_FOR_CALL_EXACT_CHECK and check for underflow
+        // The gas actually passed to the callee is min(gasAmount, 63//64*gas available)
+        // We want to ensure that we revert if gasAmount > 63//64*gas available
+        // as we do not want to provide them with less, however that check itself costs
+        // gas. GAS_FOR_CALL_EXACT_CHECK ensures we have at least enough gas to be able to revert
+        // if gasAmount > 63//64*gas available.
             if lt(g, GAS_FOR_CALL_EXACT_CHECK) {
                 revert(0, 0)
             }
             g := sub(g, GAS_FOR_CALL_EXACT_CHECK)
-            // if g - g//64 <= gas
-            // we subtract g//64 because of EIP-150
+        // if g - g//64 <= gas
+        // we subtract g//64 because of EIP-150
             g := sub(g, div(g, 64))
             if iszero(gt(sub(g, div(g, 64)), callbackGasLimit)) {
                 revert(0, 0)
             }
-            // solidity calls check that a contract actually exists at the destination, so we do the same
+        // solidity calls check that a contract actually exists at the destination, so we do the same
             if iszero(extcodesize(target)) {
                 revert(0, 0)
             }
-            // call and return whether we succeeded. ignore return data
-            // call(gas, addr, value, argsOffset,argsLength,retOffset,retLength)
+        // call and return whether we succeeded. ignore return data
+        // call(gas, addr, value, argsOffset,argsLength,retOffset,retLength)
             success := call(
                 callbackGasLimit,
                 target,
@@ -486,9 +500,7 @@ contract DRBCoordinator is
         s_activationThreshold = activationThreshold;
     }
 
-    function setCompensations(
-        uint256[3] memory compensations
-    ) external onlyOwner {
-        s_compensations = compensations;
+    function setCompensations(uint256 compensateAmount) external onlyOwner {
+        s_compensateAmount = compensateAmount;
     }
 }

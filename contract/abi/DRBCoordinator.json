@@ -1,10 +1,15 @@
 {
-  "abi" : [
+  "abi": [
     {
       "type": "constructor",
       "inputs": [
         {
-          "name": "minDeposit",
+          "name": "activationThreshold",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "flatFee",
           "type": "uint256",
           "internalType": "uint256"
         },
@@ -80,6 +85,30 @@
       "inputs": [],
       "outputs": [],
       "stateMutability": "payable"
+    },
+    {
+      "type": "function",
+      "name": "estimateMinDepositForOneRound",
+      "inputs": [
+        {
+          "name": "callbackGasLimit",
+          "type": "uint256",
+          "internalType": "uint256"
+        },
+        {
+          "name": "gasPrice",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "stateMutability": "view"
     },
     {
       "type": "function",
@@ -371,6 +400,11 @@
               "name": "minDepositForOperator",
               "type": "uint256",
               "internalType": "uint256"
+            },
+            {
+              "name": "refundCost",
+              "type": "uint256",
+              "internalType": "uint256"
             }
           ]
         }
@@ -560,6 +594,19 @@
     },
     {
       "type": "function",
+      "name": "setActivationThreshold",
+      "inputs": [
+        {
+          "name": "activationThreshold",
+          "type": "uint256",
+          "internalType": "uint256"
+        }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "function",
       "name": "setCompensations",
       "inputs": [
         {
@@ -597,19 +644,6 @@
           "name": "coefficient",
           "type": "uint8",
           "internalType": "uint8"
-        }
-      ],
-      "outputs": [],
-      "stateMutability": "nonpayable"
-    },
-    {
-      "type": "function",
-      "name": "setMinDeposit",
-      "inputs": [
-        {
-          "name": "minDeposit",
-          "type": "uint256",
-          "internalType": "uint256"
         }
       ],
       "outputs": [],
@@ -790,6 +824,11 @@
     },
     {
       "type": "error",
+      "name": "ACTIVATED_OPERATORS_LIMIT_REACHED",
+      "inputs": []
+    },
+    {
+      "type": "error",
       "name": "AlreadyActivated",
       "inputs": []
     },
@@ -800,7 +839,7 @@
     },
     {
       "type": "error",
-      "name": "AlreadyDeactivated",
+      "name": "AlreadyForceDeactivated",
       "inputs": []
     },
     {
