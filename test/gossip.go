@@ -100,7 +100,7 @@ func (n *Node) handleConnection(conn net.Conn) {
 
 // parseMessage converts a string to a Message
 func parseMessage(s string) (Message, error) {
-	s = strings.TrimSpace(s) // 개행 문자 및 공백 제거
+	s = strings.TrimSpace(s)
 	parts := strings.Split(s, "|")
 	if len(parts) != 3 {
 		return Message{}, fmt.Errorf("invalid message format")
