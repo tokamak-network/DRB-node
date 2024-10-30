@@ -85,13 +85,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to sign data: %v", err)
 	}
-	fmt.Printf("Signature: %x\n", signature)
+	fmt.Printf("✅  Signature: %x\n", signature)
 
 	// Recover the public key from the signature
 	recoveredPubKey, err := recoverPublicKey(ipData, signature)
 	if err != nil {
 		log.Fatalf("Failed to recover public key: %v", err)
 	}
+	fmt.Println("🔗 Recovered public key:", *recoveredPubKey)
 
 	// Convert the recovered public key to wallet address
 	recoveredAddress := getAddressFromPublicKey(recoveredPubKey)
@@ -103,8 +104,8 @@ func main() {
 
 	// Verify if the recovered address matches the original
 	if recoveredAddress == originalAddress {
-		fmt.Println("Address successfully recovered and verified!")
+		fmt.Println("✅  Address successfully recovered and verified!")
 	} else {
-		fmt.Println("Address recovery failed.")
+		fmt.Println("⛔  Address recovery failed.")
 	}
 }
