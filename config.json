@@ -1,7 +1,0 @@
-{
-  "RpcURL": "wss://rpc.titan-sepolia.tokamak.network/ws",
-  "HttpURL": "https://rpc.titan-sepolia.tokamak.network",
-  "ContractAddress": "0x66A4855a3020B94Ec910BfdC114f77d2596bA433",
-  "SubgraphURL": "https://graph-node.titan-sepolia.tokamak.network/subgraphs/name/drbcoordinator",
-  "OperatorDepositFee": "15000003481729"
-}
