@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,7 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/joho/godotenv"
 	libp2p "github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 )
 
 type RegistrationRequest struct {
@@ -25,6 +29,18 @@ func init() {
 }
 
 func main() {
+	nodeType := os.Getenv("NODE_TYPE") // Expecting 'leader' or 'regular'
+
+	if nodeType == "leader" {
+		runLeaderNode()
+	} else if nodeType == "regular" {
+		runRegularNode()
+	} else {
+		log.Fatal("NODE_TYPE must be set to either 'leader' or 'regular'")
+	}
+}
+
+func runLeaderNode() {
 	port := os.Getenv("LEADER_PORT")
 	if port == "" {
 		log.Fatal("LEADER_PORT not set in environment variables.")
@@ -70,4 +86,72 @@ func verifySignature(req RegistrationRequest) bool {
 
 	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
 	return recoveredAddress == req.EOAAddress
+}
+
+func runRegularNode() {
+	ctx := context.Background()
+
+	leaderIP := os.Getenv("LEADER_IP")
+	leaderPort := os.Getenv("LEADER_PORT")
+	leaderPeerID := os.Getenv("LEADER_PEER_ID")
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Fatalf("Failed to decode Ethereum private key: %v", err)
+	}
+
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+	data := crypto.Keccak256([]byte(eoaAddress))
+	signature, err := crypto.Sign(data, privateKey)
+	if err != nil {
+		log.Fatalf("Failed to sign data: %v", err)
+	}
+
+	h, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"),
+	)
+	if err != nil {
+		log.Fatalf("Failed to create libp2p host: %v", err)
+	}
+	defer h.Close()
+
+	leaderAddrString := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
+	leaderAddr, err := multiaddr.NewMultiaddr(leaderAddrString)
+	if err != nil {
+		log.Fatalf("Failed to parse leader multiaddr: %v", err)
+	}
+
+	leaderInfo, err := peer.AddrInfoFromP2pAddr(leaderAddr)
+	if err != nil {
+		log.Fatalf("Failed to create peer info from leader multiaddr: %v", err)
+	}
+
+	if err := h.Connect(ctx, *leaderInfo); err != nil {
+		log.Fatalf("Failed to connect to leader: %v", err)
+	}
+
+	req := RegistrationRequest{
+		EOAAddress: eoaAddress,
+		Signature:  signature,
+		PeerID:     h.ID().String(),
+	}
+
+	if err := sendRegistrationRequest(ctx, h, leaderInfo.ID, req); err != nil {
+		log.Fatalf("Failed to send registration request: %v", err)
+	}
+
+	log.Println("Registration request sent successfully. Listening for further instructions...")
+
+	select {}
+}
+
+func sendRegistrationRequest(ctx context.Context, h core.Host, leaderID peer.ID, req RegistrationRequest) error {
+	s, err := h.NewStream(ctx, leaderID, "/register")
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	return json.NewEncoder(s).Encode(req)
 }

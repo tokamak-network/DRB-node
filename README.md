@@ -1,7 +1,5 @@
-Replace PeerID in .env
-PEER_ID=node1/node2/node3
-PORT=61292
-
+# ENVIRONMENT
+Set the environment variables properly
 
 # node-1
 go run node.go node1
