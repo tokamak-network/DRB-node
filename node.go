@@ -13,9 +13,7 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/joho/godotenv"
@@ -25,6 +23,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/transactions"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 const abiFilePath = "contract/abi/Commit2RevealDRB.json"
@@ -42,6 +43,9 @@ func init() {
 }
 
 func main() {
+	logger.InitLogger()
+	defer logger.CloseLogger()
+	
 	nodeType := os.Getenv("NODE_TYPE") // Expecting 'leader' or 'regular'
 
 	switch nodeType {
@@ -56,30 +60,29 @@ func main() {
 
 // Leader Node
 func runLeaderNode() {
-    port := os.Getenv("LEADER_PORT")
-    if port == "" {
-        log.Fatal("LEADER_PORT not set in environment variables.")
-    }
+	port := os.Getenv("LEADER_PORT")
+	if port == "" {
+		log.Fatal("LEADER_PORT not set in environment variables.")
+	}
 
-    h, err := libp2p.New(
-        libp2p.DefaultTransports,
-        libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)),
-    )
-    if err != nil {
-        log.Fatalf("Failed to create libp2p host: %v", err)
-    }
-    defer h.Close()
+	h, err := libp2p.New(
+		libp2p.DefaultTransports,
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)),
+	)
+	if err != nil {
+		log.Fatalf("Failed to create libp2p host: %v", err)
+	}
+	defer h.Close()
 
-    h.SetStreamHandler("/register", func(s network.Stream) {
-        handleRegistrationRequest(s)
-    })
+	h.SetStreamHandler("/register", func(s network.Stream) {
+		handleRegistrationRequest(s)
+	})
 
-    log.Printf("Leader node is running on addresses: %s\n", h.Addrs())
-    log.Printf("Leader node PeerID: %s\n", h.ID().String())
+	log.Printf("Leader node is running on addresses: %s\n", h.Addrs())
+	log.Printf("Leader node PeerID: %s\n", h.ID().String())
 
-    select {}
+	select {}
 }
-
 
 func handleRegistrationRequest(s network.Stream) {
 	defer s.Close()
@@ -149,29 +152,33 @@ func handleRegistrationRequest(s network.Stream) {
 		return
 	}
 
+	// Prepare for transaction execution using ExecuteTransaction from transactions package
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Fatalf("Failed to decode leader private key: %v", err)
 	}
 
-	chainID, err := client.NetworkID(context.Background())
-	if err != nil {
-		log.Fatalf("Failed to get network chain ID: %v", err)
+	clientUtils := &utils.Client{
+		Client:       client,
+		ContractAddress: contractAddress,
+		PrivateKey:   privateKey,
+		ContractABI:  parsedABI,
 	}
 
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
-	if err != nil {
-		log.Fatalf("Failed to create transaction authorizer: %v", err)
-	}
-
-	tx, err := bind.NewBoundContract(contractAddress, parsedABI, client, client, client).Transact(auth, "activate", operatorAddress)
+	_, _, err = transactions.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		"activate",
+		big.NewInt(0),
+		operatorAddress,
+	)
 	if err != nil {
 		log.Printf("Failed to activate operator: %v", err)
 		return
 	}
 
-	log.Printf("Operator activated successfully. Transaction hash: %s", tx.Hash().Hex())
+	log.Println("Operator activated successfully.")
 }
 
 // Verify the signature of a registration request
@@ -188,102 +195,109 @@ func verifySignature(req RegistrationRequest) bool {
 }
 
 func runRegularNode() {
-    ctx := context.Background()
+	ctx := context.Background()
 
-    h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", os.Getenv("PORT"))))
-    if err != nil {
-        log.Fatalf("Failed to create libp2p host: %v", err)
-    }
-    defer h.Close()
+	h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", os.Getenv("PORT"))))
+	if err != nil {
+		log.Fatalf("Failed to create libp2p host: %v", err)
+	}
+	defer h.Close()
 
-    leaderIP := os.Getenv("LEADER_IP")
-    leaderPort := os.Getenv("LEADER_PORT")
-    leaderPeerID := os.Getenv("LEADER_PEER_ID")
+	leaderIP := os.Getenv("LEADER_IP")
+	leaderPort := os.Getenv("LEADER_PORT")
+	leaderPeerID := os.Getenv("LEADER_PEER_ID")
 
-    privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
-    if privateKeyHex == "" {
-        log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
-    }
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
 
-    privateKey, err := crypto.HexToECDSA(privateKeyHex)
-    if err != nil {
-        log.Fatalf("Failed to decode Ethereum private key: %v", err)
-    }
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Fatalf("Failed to decode Ethereum private key: %v", err)
+	}
 
-    eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-    log.Printf("EOA Address: %s", eoaAddress)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+	log.Printf("EOA Address: %s", eoaAddress)
 
-    leaderAddrString := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
-    log.Printf("Leader multiaddress: %s", leaderAddrString)
+	leaderAddrString := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
+	log.Printf("Leader multiaddress: %s", leaderAddrString)
 
-    leaderAddr, err := multiaddr.NewMultiaddr(leaderAddrString)
-    if err != nil {
-        log.Fatalf("Failed to parse leader multiaddress: %v", err)
-    }
+	leaderAddr, err := multiaddr.NewMultiaddr(leaderAddrString)
+	if err != nil {
+		log.Fatalf("Failed to parse leader multiaddress: %v", err)
+	}
 
-    leaderInfo, err := peer.AddrInfoFromP2pAddr(leaderAddr)
-    if err != nil {
-        log.Fatalf("Failed to create peer info from leader multiaddress: %v", err)
-    }
+	leaderInfo, err := peer.AddrInfoFromP2pAddr(leaderAddr)
+	if err != nil {
+		log.Fatalf("Failed to create peer info from leader multiaddress: %v", err)
+	}
 
-    h.Peerstore().AddAddrs(leaderInfo.ID, leaderInfo.Addrs, peerstore.PermanentAddrTTL)
+	h.Peerstore().AddAddrs(leaderInfo.ID, leaderInfo.Addrs, peerstore.PermanentAddrTTL)
 
-    client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
-    if err != nil {
-        log.Fatalf("Failed to connect to Ethereum client: %v", err)
-    }
+	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+	if err != nil {
+		log.Fatalf("Failed to connect to Ethereum client: %v", err)
+	}
 
-    contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
-    parsedABI, err := loadContractABI(abiFilePath)
-    if err != nil {
-        log.Fatalf("Failed to load contract ABI: %v", err)
-    }
+	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+	parsedABI, err := loadContractABI(abiFilePath)
+	if err != nil {
+		log.Fatalf("Failed to load contract ABI: %v", err)
+	}
 
-    for {
-        // Check activation status
-        isActivated := checkActivationStatus(client, parsedABI, contractAddress, eoaAddress)
-        if isActivated {
-            log.Println("Node is activated. No further action required.")
-            time.Sleep(30 * time.Second)
-            continue
-        }
+	clientUtils := &utils.Client{
+		Client:       client,
+		ContractAddress: contractAddress,
+		PrivateKey:   privateKey,
+		ContractABI:  parsedABI,
+	}
 
-        log.Println("Node is not activated. Checking deposit amount...")
+	for {
+		// Check activation status
+		isActivated := checkActivationStatus(clientUtils, eoaAddress)
+		if isActivated {
+			log.Println("Node is activated. No further action required.")
+			time.Sleep(30 * time.Second)
+			continue
+		}
 
-        // Check and ensure deposit is sufficient
-        depositSufficient, err := checkDepositAmount(client, parsedABI, contractAddress, eoaAddress)
-        if err != nil {
-            log.Printf("Error checking deposit amount: %v", err)
-            time.Sleep(30 * time.Second)
-            continue
-        }
+		log.Println("Node is not activated. Checking deposit amount...")
 
-        if !depositSufficient {
-            log.Println("Deposit insufficient. Initiating deposit transaction...")
-            txSent, err := depositAndCheckActivation(ctx, eoaAddress, privateKey)
-            if err != nil {
-                log.Printf("Error during deposit transaction: %v", err)
-                time.Sleep(30 * time.Second)
-                continue
-            }
-            if txSent {
-                log.Println("Deposit transaction sent. Waiting for confirmation...")
-                time.Sleep(30 * time.Second)
-                continue
-            }
-        }
+		// Check and ensure deposit is sufficient
+		depositSufficient, err := checkDepositAmount(clientUtils, eoaAddress)
+		if err != nil {
+			log.Printf("Error checking deposit amount: %v", err)
+			time.Sleep(30 * time.Second)
+			continue
+		}
 
-        // Send registration request to leader
-        log.Println("Deposit sufficient. Sending registration request to leader...")
-        sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
+		if !depositSufficient {
+			log.Println("Deposit insufficient. Initiating deposit transaction...")
+			txSent, err := depositAndCheckActivation(ctx, eoaAddress, privateKey)
+			if err != nil {
+				log.Printf("Error during deposit transaction: %v", err)
+				time.Sleep(30 * time.Second)
+				continue
+			}
+			if txSent {
+				log.Println("Deposit transaction sent. Waiting for confirmation...")
+				time.Sleep(30 * time.Second)
+				continue
+			}
+		}
 
-        // Wait before rechecking activation status
-        time.Sleep(30 * time.Second)
-    }
+		// Send registration request to leader
+		log.Println("Deposit sufficient. Sending registration request to leader...")
+		sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
+
+		// Wait before rechecking activation status
+		time.Sleep(30 * time.Second)
+	}
 }
 
-func checkActivationStatus(client *ethclient.Client, parsedABI abi.ABI, contractAddress common.Address, eoaAddress string) bool {
-	activatedOperatorsResult, err := callSmartContract(client, parsedABI, "getActivatedOperators", contractAddress)
+func checkActivationStatus(client *utils.Client, eoaAddress string) bool {
+	activatedOperatorsResult, err := callSmartContract(client.Client, client.ContractABI, "getActivatedOperators", client.ContractAddress)
 	if err != nil {
 		log.Printf("Failed to call getActivatedOperators: %v", err)
 		return false
@@ -299,16 +313,16 @@ func checkActivationStatus(client *ethclient.Client, parsedABI abi.ABI, contract
 	return false
 }
 
-func checkDepositAmount(client *ethclient.Client, parsedABI abi.ABI, contractAddress common.Address, eoaAddress string) (bool, error) {
+func checkDepositAmount(client *utils.Client, eoaAddress string) (bool, error) {
 	// Fetch deposit amount
-	depositAmountResult, err := callSmartContract(client, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := callSmartContract(client.Client, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := callSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
+	activationThresholdResult, err := callSmartContract(client.Client, client.ContractABI, "s_activationThreshold", client.ContractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -322,47 +336,6 @@ func checkDepositAmount(client *ethclient.Client, parsedABI abi.ABI, contractAdd
 	}
 
 	return false, nil
-}
-
-func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID peer.ID, eoaAddress string, privateKey *ecdsa.PrivateKey) {
-    req := RegistrationRequest{
-        EOAAddress: eoaAddress,
-        Signature:  signData(eoaAddress, privateKey),
-        PeerID:     h.ID().String(),
-    }
-
-    s, err := h.NewStream(ctx, leaderID, "/register")
-    if err != nil {
-        log.Printf("Failed to create stream to leader: %v", err)
-        h.Peerstore().AddAddrs(leaderID, h.Peerstore().Addrs(leaderID), peerstore.PermanentAddrTTL)
-        return
-    }
-    defer s.Close()
-
-    if err := json.NewEncoder(s).Encode(req); err != nil {
-        log.Printf("Failed to send registration request: %v", err)
-    } else {
-        log.Println("Registration request sent to leader.")
-    }
-}
-
-// Function to wait for the transaction to be mined and confirmed
-func waitForTransactionSuccess(ctx context.Context, client *ethclient.Client, tx *types.Transaction) (*types.Receipt, error) {
-	for {
-		receipt, err := client.TransactionReceipt(ctx, tx.Hash())
-		if err != nil {
-			if err == ethereum.NotFound {
-				// Transaction is not yet mined
-				time.Sleep(3 * time.Second)
-				continue
-			}
-			// Return any other error
-			return nil, err
-		}
-
-		// Receipt found; return it
-		return receipt, nil
-	}
 }
 
 func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
@@ -391,9 +364,7 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 	}
 	activationThreshold := activationThresholdResult.(*big.Int)
 
-	log.Printf("Deposit amount: %s, Activation threshold: %s", depositAmount.String(), activationThreshold.String())
-
-	// Calculate remaining amount if deposit is insufficient
+	// If deposit is insufficient, we calculate the remaining amount and proceed with the deposit
 	if depositAmount.Cmp(activationThreshold) < 0 {
 		remaining := new(big.Int).Sub(activationThreshold, depositAmount)
 		log.Printf("Deposit insufficient. Adding remaining: %s", remaining.String())
@@ -410,46 +381,22 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 		}
 
 		// Create and send deposit transaction
-		nonce, err := client.PendingNonceAt(ctx, common.HexToAddress(eoaAddress))
-		if err != nil {
-			return false, fmt.Errorf("failed to fetch nonce: %v", err)
-		}
-
-		chainID, err := client.NetworkID(ctx)
-		if err != nil {
-			return false, fmt.Errorf("failed to fetch chain ID: %v", err)
-		}
-
-		auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
-		if err != nil {
-			return false, fmt.Errorf("failed to create transaction authorizer: %v", err)
-		}
-
-		auth.Nonce = big.NewInt(int64(nonce))
-		auth.Value = remaining
-		auth.GasLimit = uint64(300000)
-		auth.GasPrice, err = client.SuggestGasPrice(ctx)
-		if err != nil {
-			return false, fmt.Errorf("failed to suggest gas price: %v", err)
-		}
-
-		tx, err := bind.NewBoundContract(contractAddress, parsedABI, client, client, client).Transact(auth, "deposit")
+		_, _, err = transactions.ExecuteTransaction(
+			ctx,
+			&utils.Client{
+				Client:       client,
+				ContractAddress: contractAddress,
+				PrivateKey:   privateKey,
+				ContractABI:  parsedABI,
+			},
+			"deposit",
+			remaining,
+		)
 		if err != nil {
 			return false, fmt.Errorf("failed to send deposit transaction: %v", err)
 		}
-		log.Printf("Deposit transaction sent, tx hash: %s", tx.Hash().Hex())
 
-		// Wait for transaction confirmation
-		receipt, err := waitForTransactionSuccess(ctx, client, tx)
-		if err != nil {
-			return false, fmt.Errorf("failed to confirm deposit transaction: %v", err)
-		}
-
-		if receipt.Status != 1 {
-			return false, fmt.Errorf("deposit transaction failed, tx hash: %s", tx.Hash().Hex())
-		}
-
-		log.Printf("Deposit transaction confirmed, tx hash: %s", tx.Hash().Hex())
+		log.Println("Deposit transaction sent.")
 		return true, nil
 	}
 
@@ -457,30 +404,29 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 	return false, nil
 }
 
-// Helper Functions
-func callSmartContract(client *ethclient.Client, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
-	data, err := parsedABI.Pack(method, params...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to pack data for %s: %v", method, err)
+func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID peer.ID, eoaAddress string, privateKey *ecdsa.PrivateKey) {
+	req := RegistrationRequest{
+		EOAAddress: eoaAddress,
+		Signature:  signData(eoaAddress, privateKey),
+		PeerID:     h.ID().String(),
 	}
 
-	result, err := client.CallContract(context.Background(), ethereum.CallMsg{
-		To:   &contractAddress,
-		Data: data,
-	}, nil)
+	s, err := h.NewStream(ctx, leaderID, "/register")
 	if err != nil {
-		return nil, fmt.Errorf("failed to call contract method %s: %v", method, err)
+		log.Printf("Failed to create stream to leader: %v", err)
+		h.Peerstore().AddAddrs(leaderID, h.Peerstore().Addrs(leaderID), peerstore.PermanentAddrTTL)
+		return
 	}
+	defer s.Close()
 
-	var unpackedResult interface{}
-	err = parsedABI.UnpackIntoInterface(&unpackedResult, method, result)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unpack result for %s: %v", method, err)
+	if err := json.NewEncoder(s).Encode(req); err != nil {
+		log.Printf("Failed to send registration request: %v", err)
+	} else {
+		log.Println("Registration request sent to leader.")
 	}
-
-	return unpackedResult, nil
 }
 
+// Helper Functions
 func signData(data string, privateKey *ecdsa.PrivateKey) []byte {
 	hash := crypto.Keccak256Hash([]byte(data))
 	signature, err := crypto.Sign(hash.Bytes(), privateKey)
@@ -511,4 +457,28 @@ func loadContractABI(filename string) (abi.ABI, error) {
 	}
 
 	return parsedABI, nil
+}
+
+// Smart contract call helper function
+func callSmartContract(client *ethclient.Client, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
+	data, err := parsedABI.Pack(method, params...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack data for %s: %v", method, err)
+	}
+
+	result, err := client.CallContract(context.Background(), ethereum.CallMsg{
+		To:   &contractAddress,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call contract method %s: %v", method, err)
+	}
+
+	var unpackedResult interface{}
+	err = parsedABI.UnpackIntoInterface(&unpackedResult, method, result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unpack result for %s: %v", method, err)
+	}
+
+	return unpackedResult, nil
 }

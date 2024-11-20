@@ -1,10 +1,12 @@
 package utils
 
 import (
-	"context"
 	"crypto/ecdsa"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -17,22 +19,25 @@ type Client struct {
 	PrivateKey      *ecdsa.PrivateKey // Explicitly use *ecdsa.PrivateKey
 }
 
-// CallReadOnlyFunction executes a read-only call on the smart contract.
-func (c *Client) CallReadOnlyFunction(ctx context.Context, functionName string, params ...interface{}) ([]byte, error) {
-	callData, err := c.ContractABI.Pack(functionName, params...)
+func LoadContractABI(filename string) (abi.ABI, error) {
+	abiBytes, err := os.ReadFile(filename)
 	if err != nil {
-		return nil, err
+		return abi.ABI{}, fmt.Errorf("failed to read ABI file: %v", err)
 	}
 
-	msg := ethereum.CallMsg{
-		To:   &c.ContractAddress,
-		Data: callData,
+	var abiObject struct {
+		ABI json.RawMessage `json:"abi"`
 	}
 
-	result, err := c.Client.CallContract(ctx, msg, nil)
+	err = json.Unmarshal(abiBytes, &abiObject)
 	if err != nil {
-		return nil, err
+		return abi.ABI{}, fmt.Errorf("failed to unmarshal ABI JSON: %v", err)
 	}
 
-	return result, nil
+	parsedABI, err := abi.JSON(strings.NewReader(string(abiObject.ABI)))
+	if err != nil {
+		return abi.ABI{}, fmt.Errorf("failed to parse contract ABI: %v", err)
+	}
+
+	return parsedABI, nil
 }
