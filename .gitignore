@@ -27,3 +27,6 @@ config.json
 service.log
 
 ./cmd/service.log
+
+node_info.json
+peer_id.json

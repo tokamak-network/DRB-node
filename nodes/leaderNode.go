@@ -9,27 +9,50 @@ import (
 	"os"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto" // Ethereum crypto
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto" // Libp2p crypto (aliased)
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/tokamak-network/DRB-node/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-const abiFilePath = "contract/abi/Commit2RevealDRB.json"
-
-// Leader Node
+// RunLeaderNode starts the leader node and listens for registration requests
 func RunLeaderNode() {
 	port := os.Getenv("LEADER_PORT")
 	if port == "" {
 		log.Fatal("LEADER_PORT not set in environment variables.")
 	}
 
-	h, err := libp2p.New(
-		libp2p.DefaultTransports,
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)),
-	)
+	// Check if PeerID already exists, if not create and save it
+	privKey, peerID, err := utils.LoadPeerID() // Correctly handle the three return values (privKey, peerID, error)
+	if err != nil {
+		log.Println("PeerID not found, generating new one.")
+		// Generate a new deterministic libp2p private key (for example, from a fixed seed)
+		privKey, _, err = libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 0)
+		if err != nil {
+			log.Fatalf("Failed to generate libp2p private key: %v", err)
+		}
+
+		// Save the generated PeerID for future restarts
+		err = utils.SavePeerID(privKey)
+		if err != nil {
+			log.Fatalf("Failed to save PeerID: %v", err)
+		}
+
+		// After saving the new private key, get the PeerID
+		peerID, err = peer.IDFromPrivateKey(privKey)
+		if err != nil {
+			log.Fatalf("Failed to get PeerID from private key: %v", err)
+		}
+	}
+
+	log.Printf("Loaded or generated PeerID: %s", peerID.String())
+
+	// Create the libp2p host with the loaded or generated PeerID
+	h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)), libp2p.Identity(privKey))
 	if err != nil {
 		log.Fatalf("Failed to create libp2p host: %v", err)
 	}
@@ -40,7 +63,7 @@ func RunLeaderNode() {
 	})
 
 	log.Printf("Leader node is running on addresses: %s\n", h.Addrs())
-	log.Printf("Leader node PeerID: %s\n", h.ID().String())
+	log.Printf("Leader node PeerID: %s\n", peerID.String())
 
 	select {}
 }
@@ -74,6 +97,7 @@ func handleRegistrationRequest(s network.Stream) {
 
 	operatorAddress := common.HexToAddress(req.EOAAddress)
 
+	// Verify if the operator is activated
 	activatedOperatorsResult, err := transactions.CallSmartContract(client, parsedABI, "getActivatedOperators", contractAddress)
 	if err != nil {
 		log.Printf("Failed to call getActivatedOperators: %v", err)
@@ -94,6 +118,7 @@ func handleRegistrationRequest(s network.Stream) {
 		return
 	}
 
+	// Continue with contract interaction for activation
 	depositAmountResult, err := transactions.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, operatorAddress)
 	if err != nil {
 		log.Printf("Failed to call s_depositAmount: %v", err)
@@ -121,10 +146,10 @@ func handleRegistrationRequest(s network.Stream) {
 	}
 
 	clientUtils := &utils.Client{
-		Client:       client,
+		Client:          client,
 		ContractAddress: contractAddress,
-		PrivateKey:   privateKey,
-		ContractABI:  parsedABI,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
 	}
 
 	_, _, err = transactions.ExecuteTransaction(

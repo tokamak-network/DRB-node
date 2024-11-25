@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p"
 	core "github.com/libp2p/go-libp2p/core"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/multiformats/go-multiaddr"
@@ -22,15 +23,43 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+const abiFilePath = "contract/abi/Commit2RevealDRB.json"
+
+// RunRegularNode handles the behavior for a regular node
 func RunRegularNode() {
 	ctx := context.Background()
 
-	h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", os.Getenv("PORT"))))
+	// Check if PeerID already exists, if not create and save it
+	privKey, peerID, err := utils.LoadPeerID()
+	if err != nil {
+		log.Println("PeerID not found, generating new one.")
+
+		// Generate a new deterministic libp2p private key (for example, from a fixed seed)
+		privKey, _, err = libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 0)
+		if err != nil {
+			log.Fatalf("Failed to generate libp2p private key: %v", err)
+		}
+
+		// Save the generated PeerID for future restarts
+		err = utils.SavePeerID(privKey)
+		if err != nil {
+			log.Fatalf("Failed to save PeerID: %v", err)
+		}
+
+		peerID, err = peer.IDFromPrivateKey(privKey)
+		if err != nil {
+			log.Fatalf("Failed to get PeerID from private key: %v", err)
+		}
+	}
+
+	// Create the libp2p host with the loaded or generated PeerID
+	h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", os.Getenv("PORT"))), libp2p.Identity(privKey))
 	if err != nil {
 		log.Fatalf("Failed to create libp2p host: %v", err)
 	}
 	defer h.Close()
 
+	// Get leader's multiaddress
 	leaderIP := os.Getenv("LEADER_IP")
 	leaderPort := os.Getenv("LEADER_PORT")
 	leaderPeerID := os.Getenv("LEADER_PEER_ID")
@@ -40,6 +69,7 @@ func RunRegularNode() {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}
 
+	// The Ethereum private key is used separately for Ethereum transactions
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Fatalf("Failed to decode Ethereum private key: %v", err)
@@ -48,6 +78,23 @@ func RunRegularNode() {
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 	log.Printf("EOA Address: %s", eoaAddress)
 
+	// Get the local IP address of the node
+	ip := utils.GetLocalIP() // Use dynamic IP retrieval
+	port := os.Getenv("PORT")
+
+	// Save the node's information (IP, Port, PeerID, EOA address)
+	nodeInfo := utils.NodeInfo{
+		IP:         ip,
+		Port:       port,
+		PeerID:     peerID.String(),
+		EOAAddress: eoaAddress,
+	}
+
+	if err := utils.SaveNodeInfo([]utils.NodeInfo{nodeInfo}); err != nil {
+		log.Printf("Failed to save node info: %v", err)
+	}
+
+	// Connect to the leader
 	leaderAddrString := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
 	log.Printf("Leader multiaddress: %s", leaderAddrString)
 
@@ -75,10 +122,10 @@ func RunRegularNode() {
 	}
 
 	clientUtils := &utils.Client{
-		Client:       client,
+		Client:          client,
 		ContractAddress: contractAddress,
-		PrivateKey:   privateKey,
-		ContractABI:  parsedABI,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
 	}
 
 	for {
@@ -141,6 +188,7 @@ func checkActivationStatus(client *utils.Client, eoaAddress string) bool {
 	return false
 }
 
+// sendRegistrationRequestToLeader sends the registration request to the leader node
 func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID peer.ID, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	req := utils.RegistrationRequest{
 		EOAAddress: eoaAddress,
