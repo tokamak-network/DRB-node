@@ -25,6 +25,7 @@ const (
             randomNumberRequesteds(where: {round: $round}) {
                 activatedOperators
         }
+	}
     `
 )
 
@@ -33,7 +34,7 @@ func GetRoundsRequest() * graphql.Request {
     return graphql.NewRequest(RoundsQuery)
 }
 
-func GetActivatedOperatorsAtRoundRequest(round string) *graphql.Request {
+func GetActivatedOperatorsAtRoundRequest(round int) *graphql.Request {
 	req := graphql.NewRequest(GetActivatedOperatorsAtRoundQuery)
 	req.Var("round", round)
 	return req

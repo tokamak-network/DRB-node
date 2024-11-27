@@ -15,6 +15,12 @@ type CommitRequest struct {
 	SignedRound string `json:"signed_round"`
 }
 
+type CosRequest struct {
+    Round      string    `json:"round"`
+    Cos        [32]byte `json:"cos"`
+    EOAAddress string    `json:"eoa_address"`
+}
+
 // CommitData defines the structure for storing commit data for the regular node.
 type CommitData struct {
 	Round        string    `json:"round"`
