@@ -19,6 +19,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/multiformats/go-multiaddr"
+	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -186,10 +187,23 @@ func RunRegularNode() {
 					continue
 				}
 
+				// Check if this round has already been committed (store it locally)
+				commitData, err := utils.LOAD_COMMIT_DATA(roundNum)
+				if err != nil && err.Error() != "commit not found" {
+					log.Printf("Error loading commit data: %v", err)
+					continue
+				}
+
+				// If commit data exists, skip this round
+				if commitData != nil {
+					log.Printf("Commit already sent for round %s, skipping commit generation.", roundNum)
+					continue
+				}
+
 				// Check if Merkle Root and Random Number are nil
 				if round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
 					// Generate commit
-					secretValue, cos, cvs, err := utils.GENERATE_COMMIT(roundNum, eoaAddress)
+					secretValue, cos, cvs, err := commitreveal2.GENERATE_COMMIT(roundNum, eoaAddress)
 					if err != nil {
 						log.Printf("Error generating commit: %v", err)
 						continue
@@ -202,6 +216,13 @@ func RunRegularNode() {
 						Cos:         cos,
 						Cvs:         cvs,
 						SendToLeader: true, // Mark commit to be sent to leader
+					}
+
+					// Save commit data locally to prevent resending
+					err = utils.SAVE_COMMIT_DATA(commitData)
+					if err != nil {
+						log.Printf("Error saving commit data: %v", err)
+						continue
 					}
 
 					// Send commit to leader
@@ -376,7 +397,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	}
 
 	// Sign the request (just the round value here)
-	signedRequest, err := utils.SignCommitRequest(req.Round, eoaAddress)
+	signedRequest, err := commitreveal2.SignCommitRequest(req.Round, eoaAddress)
 	if err != nil {
 		log.Printf("Failed to sign commit request: %v", err)
 		return
