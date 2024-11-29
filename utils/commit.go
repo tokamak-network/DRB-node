@@ -19,6 +19,7 @@ type CosRequest struct {
     Round      string    `json:"round"`
     Cos        [32]byte `json:"cos"`
     EOAAddress string    `json:"eoa_address"`
+	SignedRound string `json:"signed_round"`
 }
 
 // CommitData defines the structure for storing commit data for the regular node.
@@ -28,6 +29,7 @@ type CommitData struct {
 	Cos          [32]byte `json:"cos"`
 	Cvs          [32]byte `json:"cvs"`
 	SendToLeader bool   `json:"send_to_leader"`
+	SendCosToLeader bool `json:"send_cos_to_leader"`
 }
 
 // loadCommitData loads the commit data for a given round number

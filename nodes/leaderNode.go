@@ -1,6 +1,7 @@
 package nodes
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -256,48 +257,38 @@ func handleCommitRequest(s network.Stream) {
     log.Printf("CVS (bytes32): 0x%x\n", req.Cvs)
     log.Printf("EOA Address: %s", eoaAddress.Hex())
 
-    // Check if the EOA address is activated for the current round using the new GraphQL query
+    // Check if the EOA address is activated for the current round
     if !isEOAActivatedForRound(roundNum, eoaAddress) {
         log.Printf("EOA address %s is NOT activated for round %s. Skipping commit.", eoaAddress.Hex(), roundNum)
         return
     }
 
-    // Proceed with storing the commit data if the EOA is activated for the round
+    // Load existing commit data or initialize a new one
     commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddress.Hex())
     if err != nil {
-        // If no data exists, initialize a new LeaderCommitData
         commitData = &utils.LeaderCommitData{
             Round:      roundNum,
             EOAAddress: eoaAddress.Hex(),
         }
     }
 
-    // Phase 1: Store CVS if not already set
+    // Save the CVS value
     if commitData.Cvs == [32]byte{} {
         commitData.Cvs = req.Cvs
         log.Printf("Storing CVS for round %s from %s", roundNum, eoaAddress.Hex())
     }
 
-    // Convert the CVS byte array to a hex string and store it in CvsHex
-    commitData.CvsHex = hex.EncodeToString(commitData.Cvs[:]) // Convert the byte array to hex string
-
-    // Save the updated commit data to the file
+    // Persist commit data
     if err := utils.SaveLeaderCommitData(*commitData); err != nil {
         log.Printf("Failed to save commit data: %v", err)
         return
     }
 
-    // Now, populate the committedNodes map with LeaderCommitData
+    // Optionally update the in-memory map
     if _, exists := committedNodes[roundNum]; !exists {
         committedNodes[roundNum] = make(map[common.Address]utils.LeaderCommitData)
     }
-    committedNodes[roundNum][eoaAddress] = *commitData // Store LeaderCommitData
-
-    // After all CVS commits are received, generate the Merkle tree
-    if allCommitsReceived(roundNum, "CVS") {
-        log.Printf("All CVS commits received for round %s. Generating Merkle tree...", roundNum)
-        generateMerkleRoot(roundNum)
-    }
+    committedNodes[roundNum][eoaAddress] = *commitData
 }
 
 // Handle COS commit request from regular nodes
@@ -325,12 +316,19 @@ func handleCOSRequest(s network.Stream) {
 
 	// Load the leader commit data for the round and EOA
 	commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddress.Hex())
-	if err != nil {
-		// If no data exists, initialize a new LeaderCommitData
-		commitData = &utils.LeaderCommitData{
-			Round:      roundNum,
-			EOAAddress: eoaAddress.Hex(),
-		}
+	if err != nil || commitData.Cvs == [32]byte{} {
+		// Reject the COS request if no CVS exists for this round and EOA
+		log.Printf("No existing CVS found for EOA address %s in round %s. Rejecting COS commit.", eoaAddress.Hex(), roundNum)
+		return
+	}
+
+	// Recalculate the CVS by hashing the received COS value
+	recalculatedCvs := commitreveal2.Keccak256(req.Cos[:])
+
+	// Compare recalculated CVS with the stored CVS
+	if !bytes.Equal(recalculatedCvs, commitData.Cvs[:]) {
+		log.Printf("COS hash does not match CVS for EOA address %s in round %s. Rejecting COS commit.", eoaAddress.Hex(), roundNum)
+		return
 	}
 
 	// Check if COS is already stored for this round and EOA
@@ -363,30 +361,43 @@ func handleCOSRequest(s network.Stream) {
 	log.Printf("COS stored for round %s from %s", roundNum, eoaAddress.Hex())
 }
 
-
 func generateMerkleRoot(roundNum string) {
-    // Log the contents of committedNodes for debugging
-    log.Printf("committedNodes for round %s: %v", roundNum, committedNodes[roundNum])
+    log.Printf("Generating Merkle root for round %s...", roundNum)
+
+    // Ensure activated operators exist for the round
+    operators, exists := activatedOperators[roundNum]
+    if !exists || len(operators) == 0 {
+        log.Printf("No activated operators found for round %s. Cannot generate Merkle root.", roundNum)
+        return
+    }
 
     var leaves [][]byte
-    for eoaAddress, commitData := range committedNodes[roundNum] {
-        // Use CVS for Merkle tree generation
-        leaves = append(leaves, commitData.Cvs[:]) // Add CVS byte array to leaves
-        log.Printf("Added CVS from %s for round %s", eoaAddress.Hex(), roundNum) // Log each commit added
+    for eoaAddress := range operators {
+        // Load commit data from file for each operator
+        commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddress.Hex())
+        if err != nil {
+            log.Printf("Failed to load CVS for operator %s in round %s: %v", eoaAddress.Hex(), roundNum, err)
+            continue
+        }
+
+        if commitData.Cvs == [32]byte{} {
+            log.Printf("Missing CVS for operator %s in round %s", eoaAddress.Hex(), roundNum)
+            continue
+        }
+
+        leaves = append(leaves, commitData.Cvs[:])
+        log.Printf("Added CVS from operator %s for round %s", eoaAddress.Hex(), roundNum)
     }
 
-    // If no leaves are collected, log the error and return early
     if len(leaves) == 0 {
         log.Printf("Error: No CVS commits found for round %s. Cannot generate Merkle root.", roundNum)
-        return // Early exit if there are no valid leaves to generate the Merkle tree
+        return
     }
-
-    log.Printf("Leaves for round %s: %v", roundNum, leaves)
 
     // Create Merkle tree with CVS values
     merkleRoot, err := commitreveal2.CREATE_MERKLE_TREE(leaves)
     if err != nil {
-        log.Printf("Failed to create Merkle tree: %v", err)
+        log.Printf("Failed to create Merkle tree for round %s: %v", roundNum, err)
         return
     }
 
@@ -479,13 +490,6 @@ func updateCommitDataAfterSubmit(roundNum string) {
     }
 }
 
-// Check if the EOA address has already sent a commit for the round
-func isCommitReceived(roundNum string, eoaAddress common.Address) bool {
-	_, exists := committedNodes[roundNum][eoaAddress]
-	return exists
-}
-
-// Check if the EOA address is activated for the specific round
 // Check if the EOA address is activated for the specific round
 func isEOAActivatedForRound(roundNum string, eoaAddress common.Address) bool {
 	// Convert roundNum to integer
@@ -559,30 +563,44 @@ func processRounds(roundsData *GraphQLResponse) {
 
 		// Check if Merkle Root and Random Number are still nil
 		if round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
-			// Only log the round status, no commits should be stored here
 			log.Printf("Round %s is still waiting for commits", roundNum)
+
+			// Check leader_commits.json to verify if all CVS are received
+			if allCommitsReceived(roundNum, "CVS") {
+				log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
+				generateMerkleRoot(roundNum) // Generate and submit Merkle root
+			} else {
+				log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
+			}
 		}
 	}
 }
 
 // Check if all commits for a round have been received (CVS, COS, Secret)
 func allCommitsReceived(roundNum string, phase string) bool {
-    // Check if all activated operators have committed for the given phase (CVS)
-    for eoaAddress := range activatedOperators[roundNum] {
-        commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddress.Hex())
-        if err != nil {
-            log.Printf("Commit data not found for %s in round %s", eoaAddress.Hex(), roundNum)
-            return false
-        }
+    log.Printf("Checking if all commits are received for round %s, phase: %s", roundNum, phase)
 
-        // Check the phase condition (CVS)
-        switch phase {
-        case "CVS":
-            if commitData.Cvs == [32]byte{} {
-                return false
-            }
+    // Ensure activated operators exist for the round
+    operators, exists := activatedOperators[roundNum]
+    if !exists || len(operators) == 0 {
+        log.Printf("No activated operators found for round %s", roundNum)
+        return false
+    }
+
+    missingOperators := []string{}
+    for eoaAddress := range operators {
+        // Load commit data from file for each operator
+        commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddress.Hex())
+        if err != nil || commitData.Cvs == [32]byte{} {
+            missingOperators = append(missingOperators, eoaAddress.Hex())
         }
     }
 
+    if len(missingOperators) > 0 {
+        log.Printf("Missing CVS for round %s from operators: %v", roundNum, missingOperators)
+        return false
+    }
+
+    log.Printf("All CVS received for round %s", roundNum)
     return true
 }

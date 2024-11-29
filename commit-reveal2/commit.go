@@ -16,13 +16,13 @@ func GENERATE_COMMIT(round string, operator string) ([32]byte, [32]byte, [32]byt
 	timestamp := time.Now().Unix()
 
 	// Generate secret value using keccak256 (SHA3) for the given round, operator, and timestamp
-	secretValue := keccak256([]byte(fmt.Sprintf("%d%d%d", round, operator, timestamp)))
+	secretValue := Keccak256([]byte(fmt.Sprintf("%d%d%d", round, operator, timestamp)))
 
 	// Generate cos by hashing secretValue
-	cos := keccak256(secretValue)
+	cos := Keccak256(secretValue)
 
 	// Generate cvs by hashing cos
-	cvs := keccak256(cos)
+	cvs := Keccak256(cos)
 
 	// Convert the results into [32]byte format (bytes32 in Solidity)
 	var secretValueBytes32 [32]byte
@@ -43,7 +43,7 @@ func GENERATE_COMMIT(round string, operator string) ([32]byte, [32]byte, [32]byt
 }
 
 // keccak256 performs a Keccak-256 hash on the input data and returns the result.
-func keccak256(data []byte) []byte {
+func Keccak256(data []byte) []byte {
 	hash := sha3.NewLegacyKeccak256()
 	hash.Write(data)
 	return hash.Sum(nil)

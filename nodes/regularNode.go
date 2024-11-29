@@ -173,62 +173,93 @@ func RunRegularNode() {
 			sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
 		}
 
-		// Now we check if the node is activated and generate a commit if necessary
 		for _, round := range roundsData.Rounds {
-			log.Printf("here.........................")
-			// Check if this node's EOA is in the activated operators for the round
-			if isEOAActivated(round, eoaAddress) {
-				log.Printf("EOA %s is activated in this round, generating commit...", eoaAddress)
+			log.Printf("Checking round...")
 
-				// Type assertion to extract round number as an int
-				roundNum, ok := round.Round.(string) // Round is a string in the response
-				if !ok {
-					log.Println("Error: Round is not of type string.")
-					continue
-				}
-
-				// Check if this round has already been committed (store it locally)
-				commitData, err := utils.LOAD_COMMIT_DATA(roundNum)
-				if err != nil && err.Error() != "commit not found" {
-					log.Printf("Error loading commit data: %v", err)
-					continue
-				}
-
-				// If commit data exists, skip this round
-				if commitData != nil {
-					log.Printf("Commit already sent for round %s, skipping commit generation.", roundNum)
-					continue
-				}
-
-				// Check if Merkle Root and Random Number are nil
-				if round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
-					// Generate commit
-					secretValue, cos, cvs, err := commitreveal2.GENERATE_COMMIT(roundNum, eoaAddress)
-					if err != nil {
-						log.Printf("Error generating commit: %v", err)
-						continue
-					}
-
-					// Prepare commit data
-					commitData := utils.CommitData{
-						Round:       roundNum,
-						SecretValue: secretValue,
-						Cos:         cos,
-						Cvs:         cvs,
-						SendToLeader: true, // Mark commit to be sent to leader
-					}
-
-					// Save commit data locally to prevent resending
-					err = utils.SAVE_COMMIT_DATA(commitData)
-					if err != nil {
-						log.Printf("Error saving commit data: %v", err)
-						continue
-					}
-
-					// Send commit to leader
-					sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, eoaAddress)
-				}
+			// Check if Merkle Root and Random Number are already generated (not nil)
+			if round.MerkleRootSubmitted.MerkleRoot != nil && round.RandomNumberGenerated.RandomNumber != nil {
+				// If both MerkleRoot and RandomNumber are generated, skip this round
+				log.Printf("Round %s already has Merkle Root AND Random Number generated. Skipping commit generation.", round.Round)
+				continue
 			}
+
+			// Check if this node's EOA is in the activated operators for the round
+			// Check if this node's EOA is in the activated operators for the round
+// Check if this node's EOA is in the activated operators for the round
+if isEOAActivated(round, eoaAddress) {
+	log.Printf("EOA %s is activated in this round, generating commit...", eoaAddress)
+
+	// Type assertion to extract round number as a string
+	roundNum, ok := round.Round.(string) // Round is a string in the response
+	if !ok {
+		log.Println("Error: Round is not of type string.")
+		continue
+	}
+
+	// Check if this round has already been committed (store it locally)
+	commitData, err := utils.LOAD_COMMIT_DATA(roundNum)
+	if err != nil && err.Error() != "commit not found" {
+		log.Printf("Error loading commit data: %v", err)
+		continue
+	}
+
+	// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil
+	if commitData != nil && round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
+		log.Printf("Commit data already exists for round %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", roundNum)
+		continue
+	}
+
+	// If Merkle Root and Random Number are nil, generate commit
+	if round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
+		// Generate commit
+		secretValue, cos, cvs, err := commitreveal2.GENERATE_COMMIT(roundNum, eoaAddress)
+		if err != nil {
+			log.Printf("Error generating commit: %v", err)
+			continue
+		}
+
+		// Prepare commit data
+		commitData := utils.CommitData{
+			Round:          roundNum,
+			SecretValue:    secretValue,
+			Cos:            cos,
+			Cvs:            cvs,
+			SendToLeader:   true,  // Mark commit to be sent to leader
+			SendCosToLeader: false, // Initially false, to allow sending COS
+		}
+
+		// Save commit data locally to prevent resending
+		err = utils.SAVE_COMMIT_DATA(commitData)
+		if err != nil {
+			log.Printf("Error saving commit data: %v", err)
+			continue
+		}
+
+		// Send commit to leader
+		sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, eoaAddress)
+	}
+
+	// If commit data exists and SendCosToLeader is false, send COS to leader
+	if commitData != nil && !commitData.SendCosToLeader {
+		// If Merkle Root is set but Random Number is nil, check and send COS
+		if round.MerkleRootSubmitted.MerkleRoot != nil && round.RandomNumberGenerated.RandomNumber == nil {
+			log.Printf("Merkle Root is set but Random Number is not. Sending COS for round %s.", roundNum)
+
+			// Send COS to leader
+			sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress)
+
+			// Update SendCosToLeader flag
+			commitData.SendCosToLeader = true
+
+			// Save updated commit data to prevent re-sending COS
+			err := utils.SAVE_COMMIT_DATA(*commitData)
+			if err != nil {
+				log.Printf("Error saving updated commit data after sending COS: %v", err)
+			}
+		}
+		continue
+	}
+}			
 		}
 
 		// Wait before rechecking activation status
@@ -236,8 +267,42 @@ func RunRegularNode() {
 	}
 }
 
-// isEOAActivated checks if the current regular node's EOA address is in the activated operators list for the round
+// sendCOSToLeader sends the COS to the leader node
+func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
+	// Create commit request structure with signed COS and round data
+	req := utils.CosRequest{
+		Round:     commitData.Round,
+		Cos:       commitData.Cos,
+		EOAAddress: eoaAddress, // Include EOA address to verify
+	}
 
+	// Sign the request (just the round value here)
+	signedRequest, err := commitreveal2.SignCommitRequest(req.Round, eoaAddress)
+	if err != nil {
+		log.Printf("Failed to sign COS commit request: %v", err)
+		return
+	}
+
+	// Send the COS commit to leader with the signed request
+	req.SignedRound = signedRequest
+
+	// Send the commit to leader
+	s, err := h.NewStream(ctx, leaderID, "/cos")
+	if err != nil {
+		log.Printf("Failed to create stream to leader: %v", err)
+		return
+	}
+	defer s.Close()
+
+	// Encode and send the commit request
+	if err := json.NewEncoder(s).Encode(req); err != nil {
+		log.Printf("Failed to send COS commit to leader: %v", err)
+	} else {
+		log.Printf("COS commit sent to leader for round %s", commitData.Round)
+	}
+}
+
+// isEOAActivated checks if the current regular node's EOA address is in the activated operators list for the round
 func isEOAActivated(round RoundData, eoaAddress string) bool {
 	// Convert eoaAddress string to common.Address
 	eoaAddr := common.HexToAddress(eoaAddress)
