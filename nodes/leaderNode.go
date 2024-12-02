@@ -21,6 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/machinebox/graphql"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
 	"github.com/tokamak-network/DRB-node/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -141,103 +142,21 @@ func fetchRoundsData() (*GraphQLResponse, error) {
 	return &resp, nil
 }
 
+
 func handleRegistrationRequest(s network.Stream) {
 	defer s.Close()
 
-	var req utils.RegistrationRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
-		log.Printf("Failed to decode registration request: %v", err)
-		return
-	}
+	// Path to the JSON file where registered nodes are stored
+	filePath := "registered_nodes.json"
 
-	if !utils.VerifySignature(req) {
-		log.Printf("Failed to verify signature for PeerID: %s", req.PeerID)
-		return
-	}
-
-	log.Printf("Verified registration for PeerID: %s", req.PeerID)
-
-	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+	// Use the helper function to handle the registration
+	err := leaderNode_helper.RegisterNode(s, filePath, abiFilePath)
 	if err != nil {
-		log.Fatalf("Failed to connect to Ethereum client: %v", err)
-	}
-
-	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		log.Fatalf("Failed to load contract ABI: %v", err)
-	}
-
-	operatorAddress := common.HexToAddress(req.EOAAddress)
-
-	// Verify if the operator is activated
-	activatedOperatorsResult, err := transactions.CallSmartContract(client, parsedABI, "getActivatedOperators", contractAddress)
-	if err != nil {
-		log.Printf("Failed to call getActivatedOperators: %v", err)
+		log.Printf("Failed to handle registration request: %v", err)
 		return
 	}
 
-	activatedOperators := activatedOperatorsResult.([]common.Address)
-	isActivated := false
-	for _, operator := range activatedOperators {
-		if operator == operatorAddress {
-			isActivated = true
-			break
-		}
-	}
-
-	if isActivated {
-		log.Println("Operator is already activated.")
-		return
-	}
-
-	// Continue with contract interaction for activation
-	depositAmountResult, err := transactions.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, operatorAddress)
-	if err != nil {
-		log.Printf("Failed to call s_depositAmount: %v", err)
-		return
-	}
-	depositAmount := depositAmountResult.(*big.Int)
-
-	activationThresholdResult, err := transactions.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
-	if err != nil {
-		log.Printf("Failed to call s_activationThreshold: %v", err)
-		return
-	}
-	activationThreshold := activationThresholdResult.(*big.Int)
-
-	if depositAmount.Cmp(activationThreshold) < 0 {
-		log.Printf("Deposit amount is insufficient. Deposit: %s, Threshold: %s", depositAmount, activationThreshold)
-		return
-	}
-
-	// Prepare for transaction execution using ExecuteTransaction from transactions package
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Fatalf("Failed to decode leader private key: %v", err)
-	}
-
-	clientUtils := &utils.Client{
-		Client:          client,
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
-	}
-
-	_, _, err = transactions.ExecuteTransaction(
-		context.Background(),
-		clientUtils,
-		"activate",
-		big.NewInt(0),
-		operatorAddress,
-	)
-	if err != nil {
-		log.Printf("Failed to activate operator: %v", err)
-		return
-	}
-
-	log.Println("Operator activated successfully.")
+	log.Println("Node registration and activation completed successfully.")
 }
 
 // Handle commit request from regular nodes
@@ -359,6 +278,18 @@ func handleCOSRequest(s network.Stream) {
 
 	// Log the COS has been stored successfully
 	log.Printf("COS stored for round %s from %s", roundNum, eoaAddress.Hex())
+
+	// Check if all COS values are received for this round
+	if allCommitsReceived(roundNum, "COS") {
+		log.Printf("All COS received for round %s. Determining reveal order...", roundNum)
+		// Determine the reveal order and save it
+		err := commitreveal2.DetermineRevealOrder(roundNum, activatedOperators)
+		if err != nil {
+			log.Printf("Failed to determine reveal order for round %s: %v", roundNum, err)
+		} else {
+			log.Printf("Reveal order successfully determined and stored for round %s.", roundNum)
+		}
+	}
 }
 
 func generateMerkleRoot(roundNum string) {
