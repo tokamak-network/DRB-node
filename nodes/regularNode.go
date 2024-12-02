@@ -19,6 +19,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/multiformats/go-multiaddr"
+	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -129,46 +130,194 @@ func RunRegularNode() {
 	}
 
 	for {
+		// Fetch round data
+		roundsData, err := fetchRoundsData()
+		if err != nil {
+			log.Printf("Error fetching rounds data: %v", err)
+			time.Sleep(30 * time.Second)
+			continue
+		}
+
 		// Check activation status
 		isActivated := checkActivationStatus(clientUtils, eoaAddress)
 		if isActivated {
 			log.Println("Node is activated. No further action required.")
-			time.Sleep(30 * time.Second)
-			continue
-		}
+		} else {
+			log.Println("Node is not activated. Checking deposit amount...")
 
-		log.Println("Node is not activated. Checking deposit amount...")
-
-		// Check and ensure deposit is sufficient
-		depositSufficient, err := checkDepositAmount(clientUtils, eoaAddress)
-		if err != nil {
-			log.Printf("Error checking deposit amount: %v", err)
-			time.Sleep(30 * time.Second)
-			continue
-		}
-
-		if !depositSufficient {
-			log.Println("Deposit insufficient. Initiating deposit transaction...")
-			txSent, err := depositAndCheckActivation(ctx, eoaAddress, privateKey)
+			// Check and ensure deposit is sufficient
+			depositSufficient, err := checkDepositAmount(clientUtils, eoaAddress)
 			if err != nil {
-				log.Printf("Error during deposit transaction: %v", err)
+				log.Printf("Error checking deposit amount: %v", err)
 				time.Sleep(30 * time.Second)
 				continue
 			}
-			if txSent {
-				log.Println("Deposit transaction sent. Waiting for confirmation...")
-				time.Sleep(30 * time.Second)
-				continue
+
+			if !depositSufficient {
+				log.Println("Deposit insufficient. Initiating deposit transaction...")
+				txSent, err := depositAndCheckActivation(ctx, eoaAddress, privateKey)
+				if err != nil {
+					log.Printf("Error during deposit transaction: %v", err)
+					time.Sleep(30 * time.Second)
+					continue
+				}
+				if txSent {
+					log.Println("Deposit transaction sent. Waiting for confirmation...")
+					time.Sleep(30 * time.Second)
+					continue
+				}
 			}
+
+			// Send registration request to leader
+			log.Println("Deposit sufficient. Sending registration request to leader...")
+			sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
 		}
 
-		// Send registration request to leader
-		log.Println("Deposit sufficient. Sending registration request to leader...")
-		sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
+		for _, round := range roundsData.Rounds {
+			log.Printf("Checking round...")
+
+			// Check if Merkle Root and Random Number are already generated (not nil)
+			if round.MerkleRootSubmitted.MerkleRoot != nil && round.RandomNumberGenerated.RandomNumber != nil {
+				// If both MerkleRoot and RandomNumber are generated, skip this round
+				log.Printf("Round %s already has Merkle Root AND Random Number generated. Skipping commit generation.", round.Round)
+				continue
+			}
+
+			// Check if this node's EOA is in the activated operators for the round
+			// Check if this node's EOA is in the activated operators for the round
+// Check if this node's EOA is in the activated operators for the round
+if isEOAActivated(round, eoaAddress) {
+	log.Printf("EOA %s is activated in this round, generating commit...", eoaAddress)
+
+	// Type assertion to extract round number as a string
+	roundNum, ok := round.Round.(string) // Round is a string in the response
+	if !ok {
+		log.Println("Error: Round is not of type string.")
+		continue
+	}
+
+	// Check if this round has already been committed (store it locally)
+	commitData, err := utils.LOAD_COMMIT_DATA(roundNum)
+	if err != nil && err.Error() != "commit not found" {
+		log.Printf("Error loading commit data: %v", err)
+		continue
+	}
+
+	// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil
+	if commitData != nil && round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
+		log.Printf("Commit data already exists for round %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", roundNum)
+		continue
+	}
+
+	// If Merkle Root and Random Number are nil, generate commit
+	if round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
+		// Generate commit
+		secretValue, cos, cvs, err := commitreveal2.GENERATE_COMMIT(roundNum, eoaAddress)
+		if err != nil {
+			log.Printf("Error generating commit: %v", err)
+			continue
+		}
+
+		// Prepare commit data
+		commitData := utils.CommitData{
+			Round:          roundNum,
+			SecretValue:    secretValue,
+			Cos:            cos,
+			Cvs:            cvs,
+			SendToLeader:   true,  // Mark commit to be sent to leader
+			SendCosToLeader: false, // Initially false, to allow sending COS
+		}
+
+		// Save commit data locally to prevent resending
+		err = utils.SAVE_COMMIT_DATA(commitData)
+		if err != nil {
+			log.Printf("Error saving commit data: %v", err)
+			continue
+		}
+
+		// Send commit to leader
+		sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, eoaAddress)
+	}
+
+	// If commit data exists and SendCosToLeader is false, send COS to leader
+	if commitData != nil && !commitData.SendCosToLeader {
+		// If Merkle Root is set but Random Number is nil, check and send COS
+		if round.MerkleRootSubmitted.MerkleRoot != nil && round.RandomNumberGenerated.RandomNumber == nil {
+			log.Printf("Merkle Root is set but Random Number is not. Sending COS for round %s.", roundNum)
+
+			// Send COS to leader
+			sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress)
+
+			// Update SendCosToLeader flag
+			commitData.SendCosToLeader = true
+
+			// Save updated commit data to prevent re-sending COS
+			err := utils.SAVE_COMMIT_DATA(*commitData)
+			if err != nil {
+				log.Printf("Error saving updated commit data after sending COS: %v", err)
+			}
+		}
+		continue
+	}
+}			
+		}
 
 		// Wait before rechecking activation status
 		time.Sleep(30 * time.Second)
 	}
+}
+
+// sendCOSToLeader sends the COS to the leader node
+func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
+	// Create commit request structure with signed COS and round data
+	req := utils.CosRequest{
+		Round:     commitData.Round,
+		Cos:       commitData.Cos,
+		EOAAddress: eoaAddress, // Include EOA address to verify
+	}
+
+	// Sign the request (just the round value here)
+	signedRequest, err := commitreveal2.SignCommitRequest(req.Round, eoaAddress)
+	if err != nil {
+		log.Printf("Failed to sign COS commit request: %v", err)
+		return
+	}
+
+	// Send the COS commit to leader with the signed request
+	req.SignedRound = signedRequest
+
+	// Send the commit to leader
+	s, err := h.NewStream(ctx, leaderID, "/cos")
+	if err != nil {
+		log.Printf("Failed to create stream to leader: %v", err)
+		return
+	}
+	defer s.Close()
+
+	// Encode and send the commit request
+	if err := json.NewEncoder(s).Encode(req); err != nil {
+		log.Printf("Failed to send COS commit to leader: %v", err)
+	} else {
+		log.Printf("COS commit sent to leader for round %s", commitData.Round)
+	}
+}
+
+// isEOAActivated checks if the current regular node's EOA address is in the activated operators list for the round
+func isEOAActivated(round RoundData, eoaAddress string) bool {
+	// Convert eoaAddress string to common.Address
+	eoaAddr := common.HexToAddress(eoaAddress)
+
+	// Compare with activated operators
+	for _, operator := range round.RandomNumberRequested.ActivatedOperators {
+		// Convert operator (string) to common.Address
+		operatorAddr := common.HexToAddress(operator)
+
+		// Compare operatorAddr with eoaAddr
+		if operatorAddr == eoaAddr {
+			return true
+		}
+	}
+	return false
 }
 
 func checkActivationStatus(client *utils.Client, eoaAddress string) bool {
@@ -300,4 +449,40 @@ func checkDepositAmount(client *utils.Client, eoaAddress string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+
+// sendCommitToLeader sends the generated commit to the leader node
+func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
+	// Create commit request structure with signed round value and CVS
+	req := utils.CommitRequest{
+		Round:    commitData.Round,
+		Cvs:      commitData.Cvs,
+		EOAAddress: eoaAddress, // Include EOA address to verify
+	}
+
+	// Sign the request (just the round value here)
+	signedRequest, err := commitreveal2.SignCommitRequest(req.Round, eoaAddress)
+	if err != nil {
+		log.Printf("Failed to sign commit request: %v", err)
+		return
+	}
+
+	// Send the commit to leader with the signed request
+	req.SignedRound = signedRequest
+
+	// Send the commit to leader
+	s, err := h.NewStream(ctx, leaderID, "/commit")
+	if err != nil {
+		log.Printf("Failed to create stream to leader: %v", err)
+		return
+	}
+	defer s.Close()
+
+	// Encode and send the commit request
+	if err := json.NewEncoder(s).Encode(req); err != nil {
+		log.Printf("Failed to send commit to leader: %v", err)
+	} else {
+		log.Printf("Commit sent to leader for round %s", commitData.Round)
+	}
 }
