@@ -102,6 +102,10 @@ func RunLeaderNode() {
 		handleCOSRequest(h, s) // New stream handler for COS
 	})
 
+	h.SetStreamHandler("/secretValue", func(s network.Stream) {
+		leaderNode_helper.AcceptSecretValue(h, s) // New stream handler for COS
+	})
+
 	log.Printf("Leader node is running on addresses: %s\n", h.Addrs())
 	log.Printf("Leader node PeerID: %s\n", peerID.String())
 
@@ -142,7 +146,6 @@ func fetchRoundsData() (*GraphQLResponse, error) {
 	// Return the response containing round data
 	return &resp, nil
 }
-
 
 func handleRegistrationRequest(s network.Stream) {
 	defer s.Close()

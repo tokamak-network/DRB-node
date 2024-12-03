@@ -63,7 +63,7 @@ func RunRegularNode() {
 	defer h.Close()
 
 	h.SetStreamHandler("/sendSecretValue", func(s network.Stream) {
-		regularNode_helper.HandleSecretValueRequest(s)
+		regularNode_helper.HandleSecretValueRequest(h, s)
 	})
 
 	// Get leader's multiaddress

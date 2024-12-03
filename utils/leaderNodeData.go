@@ -18,7 +18,8 @@ type LeaderCommitData struct {
     CvsHex                string   `json:"cvs_hex,omitempty"`  // Add the CvsHex field to store the hex string
     Cos                   [32]byte `json:"cos"`
     CosHex                string   `json:"cos_hex"`
-    Secret                string   `json:"secret"`
+    SecretValue           [32]byte  `json:"secret_value"`
+    SecretValueHex        string   `json:"secret_value_hex"`
     SubmitMerkleRootDone  bool     `json:"submit_merkle_root_done"`
     RandomNumberGenerated bool     `json:"random_number_generated"`
 }
