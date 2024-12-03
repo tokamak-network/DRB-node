@@ -56,7 +56,7 @@ func DetermineOrder(rv [32]byte, cosValues [][]byte) []int {
 }
 
 // SaveRevealOrder stores the RV and reveal order in a file
-func saveRevealOrders(filePath string, data map[string]interface{}) error {
+func SaveRevealOrders(filePath string, data map[string]interface{}) error {
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create reveal order file: %v", err)
@@ -72,7 +72,7 @@ func saveRevealOrders(filePath string, data map[string]interface{}) error {
 	return nil
 }
 
-func loadRevealOrders(filePath string) (map[string]interface{}, error) {
+func LoadRevealOrders(filePath string) (map[string]interface{}, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -97,7 +97,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators map[string]map[com
 	filePath := "reveal_orders.json"
 
 	// Load existing data
-	data, err := loadRevealOrders(filePath)
+	data, err := LoadRevealOrders(filePath)
 	if err != nil {
 		log.Printf("Failed to load existing reveal orders: %v", err)
 		return err
@@ -156,7 +156,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators map[string]map[com
 	}
 
 	// Save the updated data back to the file
-	err = saveRevealOrders(filePath, data)
+	err = SaveRevealOrders(filePath, data)
 	if err != nil {
 		log.Printf("Failed to save reveal order for round %s: %v", roundNum, err)
 		return fmt.Errorf("failed to save reveal order for round %s", roundNum)

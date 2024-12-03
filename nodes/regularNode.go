@@ -16,10 +16,12 @@ import (
 	"github.com/libp2p/go-libp2p"
 	core "github.com/libp2p/go-libp2p/core"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/multiformats/go-multiaddr"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/nodes/regularNode_helper"
 	"github.com/tokamak-network/DRB-node/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -59,6 +61,10 @@ func RunRegularNode() {
 		log.Fatalf("Failed to create libp2p host: %v", err)
 	}
 	defer h.Close()
+
+	h.SetStreamHandler("/sendSecretValue", func(s network.Stream) {
+		regularNode_helper.HandleSecretValueRequest(s)
+	})
 
 	// Get leader's multiaddress
 	leaderIP := os.Getenv("LEADER_IP")

@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/machinebox/graphql"
@@ -98,7 +99,7 @@ func RunLeaderNode() {
 	})
 
 	h.SetStreamHandler("/cos", func(s network.Stream) {
-		handleCOSRequest(s) // New stream handler for COS
+		handleCOSRequest(h, s) // New stream handler for COS
 	})
 
 	log.Printf("Leader node is running on addresses: %s\n", h.Addrs())
@@ -211,7 +212,7 @@ func handleCommitRequest(s network.Stream) {
 }
 
 // Handle COS commit request from regular nodes
-func handleCOSRequest(s network.Stream) {
+func handleCOSRequest(h host.Host, s network.Stream) {
 	defer s.Close()
 
 	var req utils.CosRequest
@@ -286,9 +287,13 @@ func handleCOSRequest(s network.Stream) {
 		err := commitreveal2.DetermineRevealOrder(roundNum, activatedOperators)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s: %v", roundNum, err)
-		} else {
-			log.Printf("Reveal order successfully determined and stored for round %s.", roundNum)
+			return
 		}
+
+		log.Printf("Reveal order successfully determined and stored for round %s.", roundNum)
+
+		// Start requesting secret values sequentially
+		leaderNode_helper.StartSecretValueRequests(h, roundNum)
 	}
 }
 
