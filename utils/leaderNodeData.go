@@ -12,16 +12,17 @@ const leaderCommitDataFile = "leader_commits.json"
 
 // LeaderCommitData defines the structure for storing commit data in the leader node.
 type LeaderCommitData struct {
-    Round                 string    `json:"round"`
-    EOAAddress            string    `json:"eoa_address"`
-    Cvs                   [32]byte `json:"cvs"`
-    CvsHex                string   `json:"cvs_hex,omitempty"`  // Add the CvsHex field to store the hex string
-    Cos                   [32]byte `json:"cos"`
-    CosHex                string   `json:"cos_hex"`
-    SecretValue           [32]byte  `json:"secret_value"`
-    SecretValueHex        string   `json:"secret_value_hex"`
-    SubmitMerkleRootDone  bool     `json:"submit_merkle_root_done"`
-    RandomNumberGenerated bool     `json:"random_number_generated"`
+	Round                 string            `json:"round"`
+	EOAAddress            string            `json:"eoa_address"`
+	Cvs                   [32]byte          `json:"cvs"`
+	CvsHex                string            `json:"cvs_hex,omitempty"`
+	Cos                   [32]byte          `json:"cos"`
+	CosHex                string            `json:"cos_hex"`
+	SecretValue           [32]byte          `json:"secret_value"`
+	SecretValueHex        string            `json:"secret_value_hex"`
+	Sign                  map[string]string `json:"sign"` // New field for v, r, s
+	SubmitMerkleRootDone  bool              `json:"submit_merkle_root_done"`
+	RandomNumberGenerated bool              `json:"random_number_generated"`
 }
 
 // LoadLeaderCommitData should load data from the file and return the commit data for a specific round and EOA

@@ -12,7 +12,8 @@ type CommitRequest struct {
 	Round       string    `json:"round"`
 	Cvs         [32]byte `json:"cvs"`
 	EOAAddress  string `json:"eoa_address"`
-	SignedRound string `json:"signed_round"`
+	SignedRound []byte `json:"signed_round"`
+	Sign        map[string]string `json:"sign"` // New field for v, r, s
 }
 
 type CosRequest struct {
@@ -30,6 +31,7 @@ type CommitData struct {
 	Cvs          [32]byte `json:"cvs"`
 	SendToLeader bool   `json:"send_to_leader"`
 	SendCosToLeader bool `json:"send_cos_to_leader"`
+	Sign                  map[string]string `json:"sign"` // New field for v, r, s
 }
 
 // loadCommitData loads the commit data for a given round number
