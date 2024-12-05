@@ -6,7 +6,7 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-// CreateMerkleTree creates a Merkle tree root from the provided leaves (similar to Solidity behavior)
+// CreateMerkleTree creates a Merkle tree root from the provided leaves
 // It now returns the Merkle root as bytes32 instead of a string
 func CREATE_MERKLE_TREE(leaves [][]byte) ([]byte, error) {
 	// Ensure that each leaf is 32 bytes long (padding if necessary)

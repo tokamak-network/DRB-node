@@ -2,12 +2,12 @@ package leaderNode_helper
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -26,10 +26,11 @@ func MonitorCommits() {
 }
 
 func checkRoundsForCompletion() {
+	// Fetch EOAs for each round
 	eoasForRounds := getEOAsForRounds()
 
 	for round, eoas := range eoasForRounds {
-		// Load the reveal orders and leader commits for the round
+		// Load the leader commits for the round
 		leaderCommits, err := loadLeaderCommits("leader_commits.json")
 		if err != nil {
 			log.Printf("Failed to load leader commits: %v", err)
@@ -38,7 +39,6 @@ func checkRoundsForCompletion() {
 
 		// Check if the round has already generated a random number
 		if isRoundCompleted(leaderCommits, round) {
-			// log.Printf("Round %s is already completed. Skipping.", round)
 			continue
 		}
 
@@ -64,8 +64,17 @@ func checkRoundsForCompletion() {
 				break
 			}
 
+			// Parse and validate signature components
+			vStr := commitData.Sign["v"]
+			vValue, err := strconv.ParseUint(vStr, 10, 8)
+			if err != nil {
+				log.Printf("Error parsing v value for EOA %s in round %s: %v", eoa.Hex(), round, err)
+				allEOAsSubmitted = false
+				break
+			}
+
 			secrets = append(secrets, commitData.SecretValue[:])
-			vs = append(vs, commitData.Sign["v"][0])
+			vs = append(vs, uint8(vValue))
 			rs = append(rs, common.HexToHash(commitData.Sign["r"]))
 			ss = append(ss, common.HexToHash(commitData.Sign["s"]))
 		}
@@ -73,7 +82,7 @@ func checkRoundsForCompletion() {
 		// If all EOAs have submitted, trigger the random number generation transaction
 		if allEOAsSubmitted {
 			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
-			err := generateRandomNumberTransaction(round, secrets, vs, rs, ss)
+			err := generateRandomNumberTransaction(round, secrets, vs, rs, ss, eoas)
 			if err != nil {
 				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
 			} else {
@@ -84,7 +93,7 @@ func checkRoundsForCompletion() {
 }
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
-func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
+func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash, eoas []common.Address) error {
 	log.Printf("Preparing to execute generateRandomNumber...")
 
 	// Convert `secrets` from [][]byte to []common.Hash
@@ -92,10 +101,12 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 	for _, secret := range secrets {
 		var secretHash common.Hash
 		copy(secretHash[:], secret)
-
-		// Add "0x" prefix for logs
-		log.Printf("Adding secret hash: 0x%s", hex.EncodeToString(secretHash[:]))
 		secretsHashes = append(secretsHashes, secretHash)
+	}
+
+	// Debugging: Log EOA order
+	for i, eoa := range eoas {
+		log.Printf("EOA Position %d: %s", i+1, eoa.Hex())
 	}
 
 	// Prepare the round number
@@ -128,6 +139,12 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
+
+	// Debugging: Log all inputs before executing the transaction
+	log.Printf("Secrets: %v", secretsHashes)
+	log.Printf("VS: %v", vs)
+	log.Printf("RS: %v", rs)
+	log.Printf("SS: %v", ss)
 
 	// Prepare the function call to generateRandomNumber
 	tx, receipt, err := transactions.ExecuteTransaction(
@@ -176,15 +193,9 @@ func isRoundCompleted(leaderCommits map[string]utils.LeaderCommitData, round str
 	return false
 }
 
-// getEOAsForRounds fetches all EOAs for each round from reveal_orders.json and leader_commits.json.
+// getEOAsForRounds fetches all EOAs for each round from leader_commits.json.
 func getEOAsForRounds() map[string][]common.Address {
 	eoasForRounds := make(map[string][]common.Address)
-
-	revealOrders, err := loadRevealOrders("reveal_orders.json")
-	if err != nil {
-		log.Printf("Failed to load reveal orders: %v", err)
-		return eoasForRounds
-	}
 
 	leaderCommits, err := loadLeaderCommits("leader_commits.json")
 	if err != nil {
@@ -192,24 +203,7 @@ func getEOAsForRounds() map[string][]common.Address {
 		return eoasForRounds
 	}
 
-	// Fetch EOAs from reveal orders
-	for round, roundData := range revealOrders {
-		orderedNodes, ok := roundData["ordered_nodes"].([]interface{})
-		if !ok {
-			log.Printf("Invalid ordered_nodes format in round %s", round)
-			continue
-		}
-
-		for _, eoa := range orderedNodes {
-			eoaStr, ok := eoa.(string)
-			if !ok {
-				continue
-			}
-			eoasForRounds[round] = append(eoasForRounds[round], common.HexToAddress(eoaStr))
-		}
-	}
-
-	// Add any additional EOAs from leader commits
+	// Populate EOAs from leader commits
 	for key := range leaderCommits {
 		round, eoa := parseLeaderCommitKey(key)
 		if round == "" || eoa == "" {
@@ -244,26 +238,6 @@ func appendIfNotExists(slice []common.Address, eoa common.Address) []common.Addr
 		}
 	}
 	return append(slice, eoa)
-}
-
-// Helper: Load reveal orders
-func loadRevealOrders(filePath string) (map[string]map[string]interface{}, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("reveal order file not found")
-		}
-		return nil, fmt.Errorf("failed to open reveal order file: %v", err)
-	}
-	defer file.Close()
-
-	var data map[string]map[string]interface{}
-	err = json.NewDecoder(file).Decode(&data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode reveal order file: %v", err)
-	}
-
-	return data, nil
 }
 
 // Helper: Load leader commits
