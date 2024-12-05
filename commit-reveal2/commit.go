@@ -1,43 +1,52 @@
 package commitreveal2
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
+	"math/big"
 	"os"
 	"time"
 
-	"github.com/tokamak-network/DRB-node/utils"
+	"github.com/ethereum/go-ethereum/common"
 	"golang.org/x/crypto/sha3"
 )
 
 // GenerateCommit generates the secret value, cos, and cvs for a single regular node.
 func GENERATE_COMMIT(round string, operator string) ([32]byte, [32]byte, [32]byte, error) {
-	// Current timestamp to simulate block timestamp in Solidity
-	timestamp := time.Now().Unix()
+	// Current timestamp to simulate block.timestamp in Solidity
+	timestamp := big.NewInt(time.Now().Unix())
 
-	// Generate secret value using keccak256 (SHA3) for the given round, operator, and timestamp
-	secretValue := Keccak256([]byte(fmt.Sprintf("%d%d%d", round, operator, timestamp)))
+	// Convert round to big.Int
+	roundInt := new(big.Int)
+	_, ok := roundInt.SetString(round, 10)
+	if !ok {
+		return [32]byte{}, [32]byte{}, [32]byte{}, fmt.Errorf("invalid round: %s", round)
+	}
 
-	// Generate cos by hashing secretValue
-	cos := Keccak256(secretValue)
+	// Convert operator to Ethereum address
+	operatorAddress := common.HexToAddress(operator)
 
-	// Generate cvs by hashing cos
-	cvs := Keccak256(cos)
+	// Generate secret value using keccak256(abi.encodePacked(round, operator, timestamp))
+	secretValue := Keccak256(abiEncodePacked(intToBytes(roundInt), operatorAddress.Bytes(), intToBytes(timestamp)))
 
-	// Convert the results into [32]byte format (bytes32 in Solidity)
-	var secretValueBytes32 [32]byte
+	// Generate cos by hashing the secretValue using abi.encode
+	cos := Keccak256(abiEncode(secretValue))
+
+	// Generate cvs by hashing the cos using abi.encode
+	cvs := Keccak256(abiEncode(cos))
+
+	// Convert results into [32]byte format (Solidity's bytes32)
+	var secretValueBytes32, cosBytes32, cvsBytes32 [32]byte
 	copy(secretValueBytes32[:], secretValue)
-
-	var cosBytes32 [32]byte
 	copy(cosBytes32[:], cos)
-
-	var cvsBytes32 [32]byte
 	copy(cvsBytes32[:], cvs)
 
-	// Print the results in bytes32 (hexadecimal with 0x prefix) format
-	fmt.Printf("Secret Value (bytes32): 0x%x\n", secretValueBytes32)
-	fmt.Printf("COS (bytes32): 0x%x\n", cosBytes32)
-	fmt.Printf("CVS (bytes32): 0x%x\n", cvsBytes32)
+	// Print results
+	log.Printf("Secret Value (bytes32): 0x%s", hex.EncodeToString(secretValue))
+	log.Printf("COS (bytes32): 0x%s", hex.EncodeToString(cos))
+	log.Printf("CVS (bytes32): 0x%s", hex.EncodeToString(cvs))
 
 	return secretValueBytes32, cosBytes32, cvsBytes32, nil
 }
@@ -49,15 +58,37 @@ func Keccak256(data []byte) []byte {
 	return hash.Sum(nil)
 }
 
+// abiEncode replicates Solidity's abi.encode behavior with 32-byte padding.
+func abiEncode(elements ...[]byte) []byte {
+	var encoded []byte
+	for _, e := range elements {
+		encoded = append(encoded, common.LeftPadBytes(e, 32)...)
+	}
+	return encoded
+}
+
+// abiEncodePacked replicates Solidity's abi.encodePacked behavior.
+func abiEncodePacked(elements ...[]byte) []byte {
+	var packed []byte
+	for _, e := range elements {
+		packed = append(packed, e...)
+	}
+	return packed
+}
+
+// intToBytes converts a *big.Int to its padded big-endian byte representation.
+func intToBytes(n *big.Int) []byte {
+	return common.LeftPadBytes(n.Bytes(), 32)
+}
+
 // SaveCommitData saves the commit data to a JSON file.
-func SaveCommitData(commitData utils.CommitData) error {
+func SaveCommitData(commitData map[string]interface{}) error {
 	file, err := os.OpenFile("commit_data.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	// Encoding and writing commit data to file
 	encoder := json.NewEncoder(file)
 	err = encoder.Encode(commitData)
 	if err != nil {

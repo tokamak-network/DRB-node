@@ -90,6 +90,8 @@ func RunLeaderNode() {
 	}
 	defer h.Close()
 
+
+
 	h.SetStreamHandler("/register", func(s network.Stream) {
 		handleRegistrationRequest(s)
 	})
@@ -102,8 +104,14 @@ func RunLeaderNode() {
 		handleCOSRequest(h, s) // New stream handler for COS
 	})
 
+	h.SetStreamHandler("/secretValue", func(s network.Stream) {
+		leaderNode_helper.AcceptSecretValue(h, s) // New stream handler for COS
+	})
+
 	log.Printf("Leader node is running on addresses: %s\n", h.Addrs())
 	log.Printf("Leader node PeerID: %s\n", peerID.String())
+
+	go leaderNode_helper.MonitorCommits()
 
 	// Continuously call fetchRoundsData() every 30 seconds
 	for {
@@ -143,7 +151,6 @@ func fetchRoundsData() (*GraphQLResponse, error) {
 	return &resp, nil
 }
 
-
 func handleRegistrationRequest(s network.Stream) {
 	defer s.Close()
 
@@ -162,53 +169,69 @@ func handleRegistrationRequest(s network.Stream) {
 
 // Handle commit request from regular nodes
 func handleCommitRequest(s network.Stream) {
-    defer s.Close()
+	defer s.Close()
 
-    var req utils.CommitRequest
-    if err := json.NewDecoder(s).Decode(&req); err != nil {
-        log.Printf("Failed to decode commit request: %v", err)
-        return
-    }
+	var req utils.CommitRequest
+	if err := json.NewDecoder(s).Decode(&req); err != nil {
+		log.Printf("Failed to decode commit request: %v", err)
+		return
+	}
 
-    roundNum := req.Round
-    eoaAddress := common.HexToAddress(req.EOAAddress)
+	// Verify the EOA signature for the round
+	verifyReq := utils.RegistrationRequest{
+		EOAAddress: req.EOAAddress,
+		Signature:  req.SignedRound,
+	}
 
-    log.Printf("Received commit for Round: %s", roundNum)
-    log.Printf("CVS (bytes32): 0x%x\n", req.Cvs)
-    log.Printf("EOA Address: %s", eoaAddress.Hex())
+	if !utils.VerifySignature(verifyReq) {
+		log.Printf("Failed to verify signature for round %s from EOA %s", req.Round, req.EOAAddress)
+		return
+	}
 
-    // Check if the EOA address is activated for the current round
-    if !isEOAActivatedForRound(roundNum, eoaAddress) {
-        log.Printf("EOA address %s is NOT activated for round %s. Skipping commit.", eoaAddress.Hex(), roundNum)
-        return
-    }
+	roundNum := req.Round
+	eoaAddress := common.HexToAddress(req.EOAAddress)
 
-    // Load existing commit data or initialize a new one
-    commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddress.Hex())
-    if err != nil {
-        commitData = &utils.LeaderCommitData{
-            Round:      roundNum,
-            EOAAddress: eoaAddress.Hex(),
-        }
-    }
+	log.Printf("Received commit for Round: %s", roundNum)
+	log.Printf("CVS (bytes32): 0x%x", req.Cvs)
+	log.Printf("EOA Address: %s", eoaAddress.Hex())
 
-    // Save the CVS value
-    if commitData.Cvs == [32]byte{} {
-        commitData.Cvs = req.Cvs
-        log.Printf("Storing CVS for round %s from %s", roundNum, eoaAddress.Hex())
-    }
+	// Check if the EOA address is activated for the current round
+	if !isEOAActivatedForRound(roundNum, eoaAddress) {
+		log.Printf("EOA address %s is NOT activated for round %s. Skipping commit.", eoaAddress.Hex(), roundNum)
+		return
+	}
 
-    // Persist commit data
-    if err := utils.SaveLeaderCommitData(*commitData); err != nil {
-        log.Printf("Failed to save commit data: %v", err)
-        return
-    }
+	// Load existing commit data or initialize a new one
+	commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddress.Hex())
+	if err != nil {
+		log.Printf("Initializing new commit data for round %s and EOA %s", roundNum, eoaAddress.Hex())
+		commitData = &utils.LeaderCommitData{
+			Round:      roundNum,
+			EOAAddress: eoaAddress.Hex(),
+		}
+	}
 
-    // Optionally update the in-memory map
-    if _, exists := committedNodes[roundNum]; !exists {
-        committedNodes[roundNum] = make(map[common.Address]utils.LeaderCommitData)
-    }
-    committedNodes[roundNum][eoaAddress] = *commitData
+	// Save the CVS and signature values
+	if commitData.Cvs == [32]byte{} {
+		commitData.Cvs = req.Cvs
+		commitData.CvsHex = hex.EncodeToString(req.Cvs[:])
+		commitData.Sign = req.Sign // Store v, r, s
+		log.Printf("Storing CVS and signature for round %s from EOA %s", roundNum, eoaAddress.Hex())
+	}
+
+	// Persist commit data
+	if err := utils.SaveLeaderCommitData(*commitData); err != nil {
+		log.Printf("Failed to save commit data for round %s and EOA %s: %v", roundNum, eoaAddress.Hex(), err)
+		return
+	}
+
+	// Optionally update the in-memory map
+	if _, exists := committedNodes[roundNum]; !exists {
+		committedNodes[roundNum] = make(map[common.Address]utils.LeaderCommitData)
+	}
+	committedNodes[roundNum][eoaAddress] = *commitData
+
+	log.Printf("Successfully handled commit for round %s from EOA %s", roundNum, eoaAddress.Hex())
 }
 
 // Handle COS commit request from regular nodes
@@ -323,6 +346,7 @@ func generateMerkleRoot(roundNum string) {
 
         leaves = append(leaves, commitData.Cvs[:])
         log.Printf("Added CVS from operator %s for round %s", eoaAddress.Hex(), roundNum)
+		log.Printf("CVS for round %s is %s", roundNum, commitData.Cvs[:])
     }
 
     if len(leaves) == 0 {

@@ -63,7 +63,7 @@ func RunRegularNode() {
 	defer h.Close()
 
 	h.SetStreamHandler("/sendSecretValue", func(s network.Stream) {
-		regularNode_helper.HandleSecretValueRequest(s)
+		regularNode_helper.HandleSecretValueRequest(h, s)
 	})
 
 	// Get leader's multiaddress
@@ -189,8 +189,6 @@ func RunRegularNode() {
 				continue
 			}
 
-			// Check if this node's EOA is in the activated operators for the round
-			// Check if this node's EOA is in the activated operators for the round
 // Check if this node's EOA is in the activated operators for the round
 if isEOAActivated(round, eoaAddress) {
 	log.Printf("EOA %s is activated in this round, generating commit...", eoaAddress)
@@ -462,33 +460,56 @@ func checkDepositAmount(client *utils.Client, eoaAddress string) (bool, error) {
 func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
 	// Create commit request structure with signed round value and CVS
 	req := utils.CommitRequest{
-		Round:    commitData.Round,
-		Cvs:      commitData.Cvs,
-		EOAAddress: eoaAddress, // Include EOA address to verify
+		Round:      commitData.Round,
+		Cvs:        commitData.Cvs,
+		EOAAddress: eoaAddress,
 	}
 
-	// Sign the request (just the round value here)
-	signedRequest, err := commitreveal2.SignCommitRequest(req.Round, eoaAddress)
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
-		log.Printf("Failed to sign commit request: %v", err)
+		log.Printf("Failed to decode leader private key: %v", err)
 		return
 	}
 
-	// Send the commit to leader with the signed request
+	// Sign the request (round + EOA address)
+	signedRequest := utils.SignData(eoaAddress, privateKey)
+
 	req.SignedRound = signedRequest
 
-	// Send the commit to leader
-	s, err := h.NewStream(ctx, leaderID, "/commit")
+	// Generate v, r, s for the CVS using the helper function
+	v, r, s, err := regularNode_helper.GenerateCvsSignature(req.Round, req.Cvs)
+	if err != nil {
+		log.Printf("Failed to generate v, r, s for CVS: %v", err)
+		return
+	}
+
+	// Add signature values to the commit request
+	req.Sign = map[string]string{
+		"v": fmt.Sprintf("%d", v),
+		"r": r,
+		"s": s,
+	}
+
+	// Save commit data locally with v, r, s
+	commitData.Sign = req.Sign
+	if err := utils.SAVE_COMMIT_DATA(commitData); err != nil {
+		log.Printf("Failed to save commit data locally: %v", err)
+		return
+	}
+
+	// Send the commit to the leader
+	send, err := h.NewStream(ctx, leaderID, "/commit")
 	if err != nil {
 		log.Printf("Failed to create stream to leader: %v", err)
 		return
 	}
-	defer s.Close()
+	defer send.Close()
 
 	// Encode and send the commit request
-	if err := json.NewEncoder(s).Encode(req); err != nil {
-		log.Printf("Failed to send commit to leader: %v", err)
+	if err := json.NewEncoder(send).Encode(req); err != nil {
+		log.Printf("Failed to send commit to leader for round %s: %v", req.Round, err)
 	} else {
-		log.Printf("Commit sent to leader for round %s", commitData.Round)
+		log.Printf("Commit successfully sent to leader for round %s", req.Round)
 	}
 }
