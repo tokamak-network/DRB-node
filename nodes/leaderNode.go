@@ -111,7 +111,7 @@ func RunLeaderNode() {
 	log.Printf("Leader node is running on addresses: %s\n", h.Addrs())
 	log.Printf("Leader node PeerID: %s\n", peerID.String())
 
-	go leaderNode_helper.MonitorCommits()
+	go leaderNode_helper.MonitorCommits(h)
 
 	// Continuously call fetchRoundsData() every 30 seconds
 	for {
@@ -323,15 +323,31 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 func generateMerkleRoot(roundNum string) {
     log.Printf("Generating Merkle root for round %s...", roundNum)
 
-    // Ensure activated operators exist for the round
-    operators, exists := activatedOperators[roundNum]
-    if !exists || len(operators) == 0 {
-        log.Printf("No activated operators found for round %s. Cannot generate Merkle root.", roundNum)
+    // Fetch activated operators for the round
+    activatedOperatorsList, err := leaderNode_helper.FetchActivatedOperators(roundNum)
+    if err != nil {
+        log.Printf("Failed to fetch activated operators for round %s: %v", roundNum, err)
+        return
+    }
+
+    // Filter out the zero address
+    var filteredOperators []string
+    for _, operator := range activatedOperatorsList {
+        if operator != "0x0000000000000000000000000000000000000000" {
+            filteredOperators = append(filteredOperators, operator)
+        }
+    }
+
+    // Ensure there are activated operators left
+    if len(filteredOperators) == 0 {
+        log.Printf("No valid activated operators found for round %s. Cannot generate Merkle root.", roundNum)
         return
     }
 
     var leaves [][]byte
-    for eoaAddress := range operators {
+    for _, operator := range filteredOperators {
+        eoaAddress := common.HexToAddress(operator)
+
         // Load commit data from file for each operator
         commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddress.Hex())
         if err != nil {
@@ -346,7 +362,7 @@ func generateMerkleRoot(roundNum string) {
 
         leaves = append(leaves, commitData.Cvs[:])
         log.Printf("Added CVS from operator %s for round %s", eoaAddress.Hex(), roundNum)
-		log.Printf("CVS for round %s is %s", roundNum, commitData.Cvs[:])
+        log.Printf("CVS for round %s is %x", roundNum, commitData.Cvs[:])
     }
 
     if len(leaves) == 0 {
