@@ -13,84 +13,169 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/machinebox/graphql"
 	"github.com/tokamak-network/DRB-node/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
-func MonitorCommits() {
-	for {
-		checkRoundsForCompletion()
-		time.Sleep(10 * time.Second) // Adjust the interval as needed
-	}
+func MonitorCommits(h host.Host) {
+    for {
+        checkRoundsForCompletion(h)
+        time.Sleep(10 * time.Second) // Adjust the interval as needed
+    }
 }
 
-func checkRoundsForCompletion() {
-	// Fetch EOAs for each round
-	eoasForRounds := getEOAsForRounds()
+func checkRoundsForCompletion(h host.Host) {
+    // Fetch EOAs for each round
+    eoasForRounds := getEOAsForRounds()
 
-	for round, eoas := range eoasForRounds {
-		// Load the leader commits for the round
-		leaderCommits, err := loadLeaderCommits("leader_commits.json")
-		if err != nil {
-			log.Printf("Failed to load leader commits: %v", err)
-			continue
-		}
+    for round, _ := range eoasForRounds {
+        // Load the leader commits for the round
+        leaderCommits, err := loadLeaderCommits("leader_commits.json")
+        if err != nil {
+            log.Printf("Failed to load leader commits: %v", err)
+            continue
+        }
 
-		// Check if the round has already generated a random number
-		if isRoundCompleted(leaderCommits, round) {
-			continue
-		}
+        // Check if the round has already generated a random number
+        if isRoundCompleted(leaderCommits, round) {
+            continue
+        }
 
-		// Collect secret values, signatures (v, r, s), and round info
-		var secrets [][]byte
-		var vs []uint8
-		var rs []common.Hash
-		var ss []common.Hash
+        // Fetch activated operators for the round
+        activatedOperators, err := FetchActivatedOperators(round)
+        if err != nil {
+            log.Printf("Failed to fetch activated operators for round %s: %v", round, err)
+            continue
+        }
 
-		allEOAsSubmitted := true
-		for _, eoa := range eoas {
-			commitData, exists := leaderCommits[round+"+"+eoa.Hex()]
-			if !exists || commitData.SecretValue == [32]byte{} {
-				log.Printf("EOA %s has not submitted a secret value for round %s", eoa.Hex(), round)
-				allEOAsSubmitted = false
-				break
-			}
+        // Filter out the `0x0000000000000000000000000000000000000000` address
+        filteredOperators := filterOperators(activatedOperators)
 
-			// Ensure the signature map contains valid data
-			if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
-				log.Printf("Incomplete signature for EOA %s in round %s", eoa.Hex(), round)
-				allEOAsSubmitted = false
-				break
-			}
+        // Convert filteredOperators from []string to []common.Address
+        var operatorAddresses []common.Address
+        for _, operator := range filteredOperators {
+            operatorAddresses = append(operatorAddresses, common.HexToAddress(operator))
+        }
 
-			// Parse and validate signature components
-			vStr := commitData.Sign["v"]
-			vValue, err := strconv.ParseUint(vStr, 10, 8)
-			if err != nil {
-				log.Printf("Error parsing v value for EOA %s in round %s: %v", eoa.Hex(), round, err)
-				allEOAsSubmitted = false
-				break
-			}
+        // Collect secret values, signatures (v, r, s), and round info in the order of activated operators
+        var secrets [][]byte
+        var vs []uint8
+        var rs []common.Hash
+        var ss []common.Hash
 
-			secrets = append(secrets, commitData.SecretValue[:])
-			vs = append(vs, uint8(vValue))
-			rs = append(rs, common.HexToHash(commitData.Sign["r"]))
-			ss = append(ss, common.HexToHash(commitData.Sign["s"]))
-		}
+        allEOAsSubmitted := true
+        for _, operator := range operatorAddresses {
+            commitData, exists := leaderCommits[round+"+"+operator.Hex()]
+            if !exists || commitData.SecretValue == [32]byte{} {
+                log.Printf("EOA %s has not submitted a secret value for round %s. Initiating request.", operator.Hex(), round)
 
-		// If all EOAs have submitted, trigger the random number generation transaction
-		if allEOAsSubmitted {
-			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
-			err := generateRandomNumberTransaction(round, secrets, vs, rs, ss, eoas)
-			if err != nil {
-				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
-			} else {
-				markRoundCompleted(leaderCommits, round)
-			}
+                // Initiate a request for the missing secret value
+                nodeInfo, err := fetchNodeInfo(operator.Hex())
+                if err != nil {
+                    log.Printf("Failed to fetch node info for EOA %s: %v", operator.Hex(), err)
+                    continue
+                }
+
+                sendSecretValueRequestToNode(h, round, operator.Hex(), nodeInfo)
+                allEOAsSubmitted = false
+                break
+            }
+
+            // Ensure the signature map contains valid data
+            if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
+                log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
+                allEOAsSubmitted = false
+                break
+            }
+
+            // Parse and validate signature components
+            vStr := commitData.Sign["v"]
+            vValue, err := strconv.ParseUint(vStr, 10, 8)
+            if err != nil {
+                log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
+                allEOAsSubmitted = false
+                break
+            }
+
+            secrets = append(secrets, commitData.SecretValue[:])
+            vs = append(vs, uint8(vValue))
+            rs = append(rs, common.HexToHash(commitData.Sign["r"]))
+            ss = append(ss, common.HexToHash(commitData.Sign["s"]))
+        }
+
+        // If all EOAs have submitted, trigger the random number generation transaction
+        if allEOAsSubmitted {
+            log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
+            err := generateRandomNumberTransaction(round, secrets, vs, rs, ss, operatorAddresses)
+            if err != nil {
+                log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
+            } else {
+                markRoundCompleted(leaderCommits, round)
+            }
+        }
+    }
+}
+
+func fetchNodeInfo(eoa string) (NodeInfo, error) {
+    filePath := "registered_nodes.json"
+    nodes, err := LoadRegisteredNodes(filePath)
+    if err != nil {
+        return NodeInfo{}, fmt.Errorf("failed to load registered nodes: %v", err)
+    }
+
+    nodeInfo, exists := nodes[eoa]
+    if !exists {
+        return NodeInfo{}, fmt.Errorf("node info for EOA %s not found", eoa)
+    }
+
+    return nodeInfo, nil
+}
+
+
+// Helper: Filter out `0x0000000000000000000000000000000000000000` from the list of operators.
+func filterOperators(operators []string) []string {
+	var filtered []string
+	for _, operator := range operators {
+		if operator != "0x0000000000000000000000000000000000000000" {
+			filtered = append(filtered, operator)
 		}
 	}
+	return filtered
 }
+
+// Fetch activated operators for a specific round
+func FetchActivatedOperators(round string) ([]string, error) {
+	client := graphql.NewClient(os.Getenv("SUBGRAPH_URL"))
+	req := utils.GetActivatedOperatorsAtRoundRequest(roundToInt(round))
+
+	var resp struct {
+		RandomNumberRequesteds []struct {
+			ActivatedOperators []string `json:"activatedOperators"`
+		} `json:"randomNumberRequesteds"`
+	}
+
+	err := client.Run(context.Background(), req, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch activated operators: %v", err)
+	}
+
+	if len(resp.RandomNumberRequesteds) == 0 {
+		return nil, fmt.Errorf("no activated operators found for round %s", round)
+	}
+
+	return resp.RandomNumberRequesteds[0].ActivatedOperators, nil
+}
+
+// Helper: Convert round string to int
+func roundToInt(round string) int {
+	roundInt, _ := strconv.Atoi(round)
+	return roundInt
+}
+
+// Other existing functions remain unchanged...
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
 func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash, eoas []common.Address) error {
