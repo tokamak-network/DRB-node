@@ -1,52 +1,71 @@
 package commitreveal2
 
 import (
+	"errors"
 	"fmt"
 
 	"golang.org/x/crypto/sha3"
 )
 
-// CreateMerkleTree creates a Merkle tree root from the provided leaves
-// It now returns the Merkle root as bytes32 instead of a string
+// CREATE_MERKLE_TREE generates a Merkle root using the provided leaves.
+// The leaves are expected to be byte slices of length 32 (bytes32 in Solidity).
 func CREATE_MERKLE_TREE(leaves [][]byte) ([]byte, error) {
-	// Ensure that each leaf is 32 bytes long (padding if necessary)
-	for i, leaf := range leaves {
-		// If the leaf is not 32 bytes, pad it to the right size
-		if len(leaf) != 32 {
+	leavesLen := len(leaves)
+
+	// Ensure there are at least two leaves
+	if leavesLen < 2 {
+		return nil, errors.New("not enough leaves to generate a Merkle root")
+	}
+
+	// Ensure all leaves are padded to 32 bytes (mimicking bytes32 in Solidity)
+	for i := range leaves {
+		if len(leaves[i]) != 32 {
 			paddedLeaf := make([]byte, 32)
-			copy(paddedLeaf, leaf)
+			copy(paddedLeaf, leaves[i])
 			leaves[i] = paddedLeaf
 		}
 	}
 
-	// Continue hashing the pairs of leaves until one root remains
-	for len(leaves) > 1 {
-		var newHashes [][]byte
-		// Hash pairs of leaves (or previously calculated hashes)
-		for i := 0; i < len(leaves)-1; i += 2 {
-			// Efficiently hash pairs
-			a := leaves[i]
-			b := leaves[i+1]
-			newHashes = append(newHashes, _efficientKeccak256(a, b))
+	// Calculate the total number of hashes needed
+	hashCount := leavesLen - 1
+	hashes := make([][]byte, hashCount)
+
+	leafPos := 0
+	hashPos := 0
+
+	for i := 0; i < hashCount; i++ {
+		var a, b []byte
+
+		// Assign 'a' and 'b' based on the current position in leaves or hashes
+		if leafPos < leavesLen {
+			a = leaves[leafPos]
+			leafPos++
+		} else {
+			a = hashes[hashPos]
+			hashPos++
 		}
-		// Handle odd number of elements, pair the last element with itself
-		if len(leaves)%2 != 0 {
-			last := leaves[len(leaves)-1]
-			newHashes = append(newHashes, _efficientKeccak256(last, last))
+
+		if leafPos < leavesLen {
+			b = leaves[leafPos]
+			leafPos++
+		} else {
+			b = hashes[hashPos]
+			hashPos++
 		}
-		leaves = newHashes
+
+		// Compute the hash for the pair (a, b)
+		hashes[i] = _efficientKeccak256(a, b)
 	}
 
-	// The remaining single hash is the Merkle root (as bytes32)
-	merkleRoot := leaves[0] // This is the bytes32 Merkle root
-
-	// Print the Merkle root in bytes32 format
+	// The last element in the hashes array is the Merkle root
+	merkleRoot := hashes[hashCount-1]
 	fmt.Printf("Merkle Root: 0x%x\n", merkleRoot)
 
 	return merkleRoot, nil
 }
 
-// _efficientKeccak256 hashes two bytes32 together using Keccak-256 (mimicking Solidity's assembly approach)
+// _efficientKeccak256 hashes two bytes32 using Keccak256.
+// Mimics Solidity's _efficientKeccak256 function.
 func _efficientKeccak256(a, b []byte) []byte {
 	hash := sha3.NewLegacyKeccak256()
 	hash.Write(a)

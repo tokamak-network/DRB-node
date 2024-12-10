@@ -383,6 +383,9 @@ func generateMerkleRoot(roundNum string) {
         return
     }
 
+	// Log the collected leaves
+    log.Printf("Leaves for Merkle tree for round %s: %v", roundNum, leaves)
+
     // Create Merkle tree with CVS values
     merkleRoot, err := commitreveal2.CREATE_MERKLE_TREE(leaves)
     if err != nil {
