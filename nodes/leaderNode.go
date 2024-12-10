@@ -96,8 +96,8 @@ func RunLeaderNode() {
 		handleRegistrationRequest(s)
 	})
 
-	h.SetStreamHandler("/commit", func(s network.Stream) {
-		handleCommitRequest(s)
+	h.SetStreamHandler("/cvs", func(s network.Stream) {
+		handleCommitRequest(s) // New stream handler for CVS
 	})
 
 	h.SetStreamHandler("/cos", func(s network.Stream) {
@@ -180,7 +180,7 @@ func handleCommitRequest(s network.Stream) {
 	// Verify the EOA signature for the round
 	verifyReq := utils.RegistrationRequest{
 		EOAAddress: req.EOAAddress,
-		Signature:  req.SignedRound,
+		Signature:  req.Signature,
 	}
 
 	if !utils.VerifySignature(verifyReq) {
@@ -241,6 +241,17 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	var req utils.CosRequest
 	if err := json.NewDecoder(s).Decode(&req); err != nil {
 		log.Printf("Failed to decode COS commit request: %v", err)
+		return
+	}
+
+	// Verify the EOA signature for the round
+	verifyReq := utils.RegistrationRequest{
+		EOAAddress: req.EOAAddress,
+		Signature:  req.Signature,
+	}
+
+	if !utils.VerifySignature(verifyReq) {
+		log.Printf("Failed to verify signature for round %s from EOA %s", req.Round, req.EOAAddress)
 		return
 	}
 
@@ -337,6 +348,8 @@ func generateMerkleRoot(roundNum string) {
             filteredOperators = append(filteredOperators, operator)
         }
     }
+
+	log.Printf("Activated operators for round %s in order: %v", roundNum, filteredOperators)
 
     // Ensure there are activated operators left
     if len(filteredOperators) == 0 {
