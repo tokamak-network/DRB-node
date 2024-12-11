@@ -250,7 +250,7 @@ if isEOAActivated(round, eoaAddress) {
 			log.Printf("Merkle Root is set but Random Number is not. Sending COS for round %s.", roundNum)
 
 			// Send COS to leader
-			sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress)
+			sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress, privateKey)
 
 			// Update SendCosToLeader flag
 			commitData.SendCosToLeader = true
@@ -272,7 +272,7 @@ if isEOAActivated(round, eoaAddress) {
 }
 
 // sendCOSToLeader sends the COS to the leader node
-func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
+func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	// Create commit request structure with signed COS and round data
 	req := utils.CosRequest{
 		Round:     commitData.Round,
@@ -281,14 +281,10 @@ func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitD
 	}
 
 	// Sign the request (just the round value here)
-	signedRequest, err := commitreveal2.SignCommitRequest(req.Round, eoaAddress)
-	if err != nil {
-		log.Printf("Failed to sign COS commit request: %v", err)
-		return
-	}
+	signedRequest := utils.SignData(eoaAddress, privateKey)
 
 	// Send the COS commit to leader with the signed request
-	req.SignedRound = signedRequest
+	req.Signature = signedRequest
 
 	// Send the commit to leader
 	s, err := h.NewStream(ctx, leaderID, "/cos")
@@ -475,7 +471,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	// Sign the request (round + EOA address)
 	signedRequest := utils.SignData(eoaAddress, privateKey)
 
-	req.SignedRound = signedRequest
+	req.Signature = signedRequest
 
 	// Generate v, r, s for the CVS using the helper function
 	v, r, s, err := regularNode_helper.GenerateCvsSignature(req.Round, req.Cvs)
@@ -499,7 +495,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	}
 
 	// Send the commit to the leader
-	send, err := h.NewStream(ctx, leaderID, "/commit")
+	send, err := h.NewStream(ctx, leaderID, "/cvs")
 	if err != nil {
 		log.Printf("Failed to create stream to leader: %v", err)
 		return

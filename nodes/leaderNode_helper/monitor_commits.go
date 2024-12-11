@@ -44,6 +44,12 @@ func checkRoundsForCompletion(h host.Host) {
             continue
         }
 
+        // Check if the Merkle root has been submitted
+        if !isMerkleRootSubmitted(leaderCommits, round) {
+            log.Printf("Merkle root not submitted for round %s. Skipping random number generation.", round)
+            continue
+        }
+
         // Fetch activated operators for the round
         activatedOperators, err := FetchActivatedOperators(round)
         if err != nil {
@@ -119,6 +125,16 @@ func checkRoundsForCompletion(h host.Host) {
     }
 }
 
+// isMerkleRootSubmitted checks if the Merkle root has been submitted for a given round.
+func isMerkleRootSubmitted(leaderCommits map[string]utils.LeaderCommitData, round string) bool {
+    for _, commitData := range leaderCommits {
+        if commitData.Round == round {
+            return commitData.SubmitMerkleRootDone
+        }
+    }
+    return false
+}
+
 func fetchNodeInfo(eoa string) (NodeInfo, error) {
     filePath := "registered_nodes.json"
     nodes, err := LoadRegisteredNodes(filePath)
@@ -174,8 +190,6 @@ func roundToInt(round string) int {
 	roundInt, _ := strconv.Atoi(round)
 	return roundInt
 }
-
-// Other existing functions remain unchanged...
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
 func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash, eoas []common.Address) error {

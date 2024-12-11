@@ -12,7 +12,7 @@ type CommitRequest struct {
 	Round       string    `json:"round"`
 	Cvs         [32]byte `json:"cvs"`
 	EOAAddress  string `json:"eoa_address"`
-	SignedRound []byte `json:"signed_round"`
+	Signature []byte `json:"signed_round"`
 	Sign        map[string]string `json:"sign"` // New field for v, r, s
 }
 
@@ -20,7 +20,7 @@ type CosRequest struct {
     Round      string    `json:"round"`
     Cos        [32]byte `json:"cos"`
     EOAAddress string    `json:"eoa_address"`
-	SignedRound string `json:"signed_round"`
+	Signature []byte `json:"signed_round"`
 }
 
 // CommitData defines the structure for storing commit data for the regular node.
