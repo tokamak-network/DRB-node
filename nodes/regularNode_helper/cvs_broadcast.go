@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -22,9 +23,19 @@ func GenerateCvsSignature(roundNum string, cvs [32]byte) (uint8, string, string,
 	name := "Tokamak DRB"
 	version := "1"
 
-	// Fetch contract address and chain ID dynamically
-	contractAddress := common.HexToAddress("31BCECA13c5be57b3677Ec116FB38fEde7Fe1217")
-	chainID := big.NewInt(111551119090)
+	// Fetch contract address and chain ID dynamically from the .env file
+	contractAddressEnv := os.Getenv("CONTRACT_ADDRESS")
+	chainIDEnv := os.Getenv("CHAIN_ID")
+
+	contractAddressEnv = strings.TrimPrefix(contractAddressEnv, "0x")
+	contractAddress := common.HexToAddress(contractAddressEnv)
+
+
+	chainID := new(big.Int)
+	chainID, okays := chainID.SetString(chainIDEnv, 10)
+	if !okays {
+		return 0, "", "", fmt.Errorf("invalid chain ID: %s", chainIDEnv)
+	}
 
 	// Parse roundNum as *big.Int
 	round := new(big.Int)
