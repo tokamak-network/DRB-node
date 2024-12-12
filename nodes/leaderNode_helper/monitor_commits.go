@@ -193,78 +193,83 @@ func roundToInt(round string) int {
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
 func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash, eoas []common.Address) error {
-	log.Printf("Preparing to execute generateRandomNumber...")
+    log.Printf("Preparing to execute generateRandomNumber...")
 
-	// Convert `secrets` from [][]byte to []common.Hash
-	var secretsHashes []common.Hash
-	for _, secret := range secrets {
-		var secretHash common.Hash
-		copy(secretHash[:], secret)
-		secretsHashes = append(secretsHashes, secretHash)
-	}
+    // Convert `secrets` from [][]byte to []common.Hash
+    var secretsHashes []common.Hash
+    for _, secret := range secrets {
+        var secretHash common.Hash
+        copy(secretHash[:], secret)
+        secretsHashes = append(secretsHashes, secretHash)
+    }
 
-	// Debugging: Log EOA order
-	for i, eoa := range eoas {
-		log.Printf("EOA Position %d: %s", i+1, eoa.Hex())
-	}
+    // Check if secretsHashes, vs, rs, or ss are empty
+    if len(secretsHashes) == 0 || len(vs) == 0 || len(rs) == 0 || len(ss) == 0 {
+        return fmt.Errorf("one or more of the required arrays (secretsHashes, vs, rs, ss) are empty")
+    }
 
-	// Prepare the round number
-	roundNum, ok := new(big.Int).SetString(round, 10)
-	if !ok {
-		return fmt.Errorf("invalid round number: %s", round)
-	}
+    // Debugging: Log EOA order
+    for i, eoa := range eoas {
+        log.Printf("EOA Position %d: %s", i+1, eoa.Hex())
+    }
 
-	// Load Ethereum client and private key
-	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
-	if err != nil {
-		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
-	}
-	defer client.Close()
+    // Prepare the round number
+    roundNum, ok := new(big.Int).SetString(round, 10)
+    if !ok {
+        return fmt.Errorf("invalid round number: %s", round)
+    }
 
-	privateKey, err := crypto.HexToECDSA(os.Getenv("LEADER_PRIVATE_KEY"))
-	if err != nil {
-		return fmt.Errorf("failed to load leader private key: %v", err)
-	}
+    // Load Ethereum client and private key
+    client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+    if err != nil {
+        return fmt.Errorf("failed to connect to Ethereum client: %v", err)
+    }
+    defer client.Close()
 
-	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to load contract ABI: %v", err)
-	}
+    privateKey, err := crypto.HexToECDSA(os.Getenv("LEADER_PRIVATE_KEY"))
+    if err != nil {
+        return fmt.Errorf("failed to load leader private key: %v", err)
+    }
 
-	clientUtils := &utils.Client{
-		Client:          client,
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
-	}
+    contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+    parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+    if err != nil {
+        return fmt.Errorf("failed to load contract ABI: %v", err)
+    }
 
-	// Debugging: Log all inputs before executing the transaction
-	log.Printf("Secrets: %v", secretsHashes)
-	log.Printf("VS: %v", vs)
-	log.Printf("RS: %v", rs)
-	log.Printf("SS: %v", ss)
+    clientUtils := &utils.Client{
+        Client:          client,
+        ContractAddress: contractAddress,
+        PrivateKey:      privateKey,
+        ContractABI:     parsedABI,
+    }
 
-	// Prepare the function call to generateRandomNumber
-	tx, receipt, err := transactions.ExecuteTransaction(
-		context.Background(),
-		clientUtils,
-		"generateRandomNumber",
-		big.NewInt(0),        // No Ether value
-		roundNum,             // uint256 round
-		secretsHashes,        // bytes32[] secrets
-		vs,                   // uint8[] vs
-		rs,                   // bytes32[] rs
-		ss,                   // bytes32[] ss
-	)
+    // Debugging: Log all inputs before executing the transaction
+    log.Printf("Secrets: %v", secretsHashes)
+    log.Printf("VS: %v", vs)
+    log.Printf("RS: %v", rs)
+    log.Printf("SS: %v", ss)
 
-	if err != nil {
-		return fmt.Errorf("failed to execute generateRandomNumber transaction: %v", err)
-	}
+    // Prepare the function call to generateRandomNumber
+    tx, receipt, err := transactions.ExecuteTransaction(
+        context.Background(),
+        clientUtils,
+        "generateRandomNumber",
+        big.NewInt(0),        // No Ether value
+        roundNum,             // uint256 round
+        secretsHashes,        // bytes32[] secrets
+        vs,                   // uint8[] vs
+        rs,                   // bytes32[] rs
+        ss,                   // bytes32[] ss
+    )
 
-	log.Printf("Transaction submitted. TX Hash: %s", tx.Hash().Hex())
-	log.Printf("Transaction receipt: %+v", receipt)
-	return nil
+    if err != nil {
+        return fmt.Errorf("failed to execute generateRandomNumber transaction: %v", err)
+    }
+
+    log.Printf("Transaction submitted. TX Hash: %s", tx.Hash().Hex())
+    log.Printf("Transaction receipt: %+v", receipt)
+    return nil
 }
 
 // markRoundCompleted updates the leader_commits.json file to mark a round as completed.
