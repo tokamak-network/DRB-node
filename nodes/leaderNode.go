@@ -175,13 +175,12 @@ func handleCommitRequest(s network.Stream) {
 	log.Printf("Commit data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	// Check if all commits are ready after this update
-	if allCommitsReceivedUnlocked(roundNum, "CVS") {
-		log.Printf("All CVS received for round %s after commit, generating Merkle root immediately...", roundNum)
-		// Unlock before calling generateMerkleRoot
-		commitMu.Unlock()
-		generateMerkleRoot(roundNum)
-		commitMu.Lock()
-	}
+	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum, "CVS") {
+        log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
+        commitMu.Unlock() // Unlock before calling generateMerkleRoot
+        generateMerkleRoot(roundNum)
+        commitMu.Lock()   // Re-lock if needed
+    }
 }
 
 func handleCOSRequest(h host.Host, s network.Stream) {
@@ -239,12 +238,12 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	// Check if all commits are ready after this COS
-	if allCommitsReceivedUnlocked(roundNum, "CVS") {
-		log.Printf("All CVS received for round %s after COS, generating Merkle root immediately...", roundNum)
-		commitMu.Unlock()
-		generateMerkleRoot(roundNum)
-		commitMu.Lock()
-	}
+	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum, "CVS") {
+        log.Printf("All CVS received for round %s after COS, generating Merkle root...", roundNum)
+        commitMu.Unlock()
+        generateMerkleRoot(roundNum)
+        commitMu.Lock()
+    }
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if allCommitsReceivedUnlocked(roundNum, "COS") {
@@ -257,6 +256,22 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 		log.Printf("Reveal order determined for round %s.", roundNum)
 		leaderNode_helper.StartSecretValueRequests(h, roundNum)
 	}
+}
+
+func isMerkleRootSubmitted(roundNum string) bool {
+    // Call with commitMu locked or ensure commitMu is locked outside
+    roundMap, exists := committedNodes[roundNum]
+    if !exists || len(roundMap) == 0 {
+        return false
+    }
+
+    // Check any operator to see if SubmitMerkleRootDone is set
+    for _, data := range roundMap {
+        if data.SubmitMerkleRootDone {
+            return true
+        }
+    }
+    return false
 }
 
 // allCommitsReceivedUnlocked checks if all operators have CVS in-memory.
@@ -311,6 +326,15 @@ func updateInMemoryData(roundNum string, eoaAddress common.Address, commitData u
 
 // generateMerkleRoot doesn't lock; it locks inside to read from memory
 func generateMerkleRoot(roundNum string) {
+	commitMu.Lock()
+    // Check if merkle root is already done before proceeding
+    if isMerkleRootSubmitted(roundNum) {
+        log.Printf("Merkle root already submitted for round %s, skipping.", roundNum)
+        commitMu.Unlock()
+        return
+    }
+    commitMu.Unlock()
+	
 	log.Printf("Generating Merkle root for round %s...", roundNum)
 
 	activatedOperatorsList, err := leaderNode_helper.FetchActivatedOperators(roundNum)
