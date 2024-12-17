@@ -251,7 +251,7 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
     log.Printf("SS: %v", ss)
 
     // Prepare the function call to generateRandomNumber
-    tx, receipt, err := transactions.ExecuteTransaction(
+    tx, _, err := transactions.ExecuteTransaction(
         context.Background(),
         clientUtils,
         "generateRandomNumber",
@@ -268,7 +268,6 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
     }
 
     log.Printf("Transaction submitted. TX Hash: %s", tx.Hash().Hex())
-    log.Printf("Transaction receipt: %+v", receipt)
     return nil
 }
 
