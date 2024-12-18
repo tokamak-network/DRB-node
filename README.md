@@ -28,6 +28,7 @@ The `.env` file is required for node configuration. Below are the settings for e
 
 ### Leader Node Configuration
 
+```bash
 # Leader Node Configuration
 PEER_ID=leadernode
 LEADER_PORT=61280
@@ -35,7 +36,8 @@ LEADER_PRIVATE_KEY=<Your Leader Node Private Key>
 LEADER_EOA=<Your Leader Ethereum Address>
 NODE_TYPE=leader
 
-# Shared Configurations
+
+#### Shared Configurations
 ETH_RPC_URL=<Your Ethereum RPC URL>
 CONTRACT_ADDRESS=<Deployed DRB Contract Address>
 SUBGRAPH_URL=<Your Subgraph URL>
