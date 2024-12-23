@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  my-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: drb-node
+    environment:
+      - CONFIG_BASE_PATH=/root/
+    volumes:
+      - ./contract/abi/Commit2RevealDRB.json:/root/contract/abi/Commit2RevealDRB.json
+      - .env:/root/.env
+    ports:
+      - "61280:61280"
+    stdin_open: true
+    tty: true
