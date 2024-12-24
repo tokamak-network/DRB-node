@@ -9,16 +9,23 @@ This document provides comprehensive instructions for configuring and running a 
 Before setting up the DRB node, ensure the following requirements are met:
 
 1. **Install Go**:  
-   Ensure Go is installed on your system. [Refer to the Go installation guide](https://go.dev/doc/install) for details.
+   Ensure Go is installed on your system. **Go version 1.23.3 or greater** is required. [Refer to the Go installation guide](https://go.dev/doc/install) for details.
 
 2. **Install Docker (optional)**:  
-   Docker is required if you prefer running the node in a containerized environment.
+   Docker is required if you prefer running the node in a containerized environment. [Refer to Docker installation guide](https://docs.docker.com/get-docker/) for details.
 
 3. **Smart Contract Deployment**:  
-   Deploy the DRB smart contract and obtain its address.
+   Deploy the DRB smart contract and obtain its address.  
+   You can get the DRB smart contract from [here](https://github.com/tokamak-network/Commit-Reveal-DRB/tree/commit-reveal-with-unpredictability-titan-sepolia).
 
 4. **Graph Node**:  
-   A running Subgraph instance is required for monitoring on-chain events.
+   A running Subgraph instance is required for monitoring on-chain events.  
+   The Subgraph repository is available [here](https://github.com/tokamak-network/DRB-subgraph).
+
+5. **Ethereum Account Balance**:  
+   Ensure the Leader Node and Regular Node accounts have sufficient balance to perform transactions.  
+   - The **Leader Node** must have enough ETH to interact with the Ethereum network, such as submitting Merkle roots and generating random numbers.
+   - The **Regular Node** must have enough ETH to cover the deposit requirements set by the contract.
 
 ---
 
@@ -28,7 +35,7 @@ The `.env` file is required for node configuration. Below are the settings for e
 
 ### Leader Node Configuration
 
-```
+```bash
 # Leader Node Configuration
 PEER_ID=leadernode
 LEADER_PORT=61280
@@ -40,7 +47,7 @@ NODE_TYPE=leader
 ETH_RPC_URL=<Your Ethereum RPC URL>
 CONTRACT_ADDRESS=<Deployed DRB Contract Address>
 SUBGRAPH_URL=<Your Subgraph URL>
-Regular Node Configuration
+
 
 
 # Regular Node Configuration
@@ -58,14 +65,43 @@ CHAIN_ID=111551119090
 ETH_RPC_URL=<Your Ethereum RPC URL>
 CONTRACT_ADDRESS=<Deployed DRB Contract Address>
 SUBGRAPH_URL=<Your Subgraph URL>
-Running the Node
+```
+
+### Running the Node
+
+## 1. Deploy the Smart Contract and Set Up Graph Node
+Before running the DRB Node, follow these steps:
+
+Deploy the Smart Contract:
+
+Clone the repository for the DRB smart contract.
+Deploy the contract to your preferred Ethereum network and obtain the contract address.
+Run the Graph Node and Deploy Subgraph:
+
+Clone the DRB Subgraph repository.
+Deploy the Subgraph and ensure it is running to track on-chain events for your smart contract.
+
+## 2. Run the Nodes
+After deploying the smart contract and running the Subgraph, you can proceed to run the nodes.
+
+- **Step-by-Step Node Execution**
+Note: Always run the Leader Node first, and then start at least 2 Regular Nodes for proper network setup.
+
+- **1. Leader Node**
+The Leader Node should be started first:
+
+go run cmd/main.go --nodeType leader
+
+- **2. Regular Nodes**
+After the Leader Node is running, start at least 2 Regular Nodes:
+
+go run cmd/main.go --nodeType regular
+You can repeat the above command to run additional Regular Nodes if necessary.
+
+## 3. Other Ways to Run Node
 You can run the DRB Node using one of the following methods:
 
-1. Direct Execution
-Run the node directly with Go:
-
-go run cmd/main.go
-2. Build and Execute
+- **1. Build and Execute**
 Generate a binary file and execute it:
 
 Build the node:
@@ -74,13 +110,53 @@ go build -o drb-node cmd/main.go
 Run the executable:
 
 ./drb-node
-3. Using Docker
+
+- **2. Using Docker**
 Build and run the node in a containerized environment:
 
 Ensure Docker is installed, and the .env file is correctly configured.
 
 docker-compose up --build
-```
+
+### Troubleshooting Tips
+Here are some common issues you might encounter and their solutions:
+
+- **Issue**: Unable to connect to Ethereum RPC.
+- **Solution**: Check if your Ethereum RPC URL is correctly configured in the .env file. Ensure that the Ethereum node is running and accessible.
+
+- **Issue**: Node not connecting to Leader Node.
+- **Solution**: Ensure that the IP, port, and Peer ID of the Leader Node are correctly set in the Regular Node's .env configuration. Check the service.log file for error messages related to peer connections.
+
+- **Issue**: Insufficient balance for transaction.
+- **Solution**: Ensure that the Leader Node and Regular Node Ethereum accounts have enough balance to perform transactions and make the required deposit.
+
+--------------------------------------------------------------------------------------------------------
+
+### Verifying the Setup
+After running the node, you can verify the setup using the following methods:
+
+- **Logs**
+Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
+
+- **Example log message**:
+Successfully connected to Leader Node at <Leader IP>:61280
+
+- **Regular Node Connections**
+Ensure that the Regular Nodes are connected to the Leader Node. You can check this in the logs or by inspecting the peer connections.
+
+- **On-Chain Interactions**
+Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
+
+Example log message:
+
+Successfully submitted Merkle root for round <round number>
+
+- **Service Logs**
+Check the service.log file for connection status, errors, and other critical messages related to the node operation.
+
+Example log message:
+
+Connected to regular node at <node IP> on port <port>
 
 ### Repository Structure
 The repository is organized into several directories based on functionality. Here is a breakdown of the main folders and files:
