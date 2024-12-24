@@ -128,16 +128,17 @@ The repository is organized into several directories based on functionality. Her
 ```
 
 ### nodes/ Folder
-The nodes/ folder contains the core logic for managing node operations, including registration, activation, communication, and interaction between leader and regular nodes.
+The `nodes/` folder contains the core logic for managing node operations, including registration, activation, communication, and interaction between leader and regular nodes.
 
-leaderNode.go: Implements the behavior of the Leader Node, including the registration of nodes, processing of commitments, generating Merkle roots, and submitting data to Ethereum.
-regularNode.go: Implements the behavior of the Regular Node, handling peer-to-peer communication, deposit checks, and commitment submissions to the Leader Node.
-leaderNode_helper/: Contains helper functions for Leader Node operations such as registration, commitment monitoring, and handling secret values.
-secret_value_handler.go: Handles the secret value submission from regular nodes.
-registration_helper.go: Manages the registration of nodes.
-monitorCommits.go: Monitors commitments, generates Merkle roots, and manages random number generation for rounds.
-reveal_requests.go: Manages sending and receiving secret value requests from regular nodes.
-regularNode_helper/: Contains helper functions specific to the regular node, such as generating CVS signatures and handling commit requests from the leader node.
+- **`leaderNode.go`**: Implements the behavior of the Leader Node, including the registration of nodes, processing of commitments, generating Merkle roots, and submitting data to Ethereum.
+- **`regularNode.go`**: Implements the behavior of the Regular Node, handling peer-to-peer communication, deposit checks, and commitment submissions to the Leader Node.
+- **`leaderNode_helper/`**: Contains helper functions for Leader Node operations such as registration, commitment monitoring, and handling secret values.
+  - **`secret_value_handler.go`**: Handles the secret value submission from regular nodes.
+  - **`registration_helper.go`**: Manages the registration of nodes.
+  - **`monitorCommits.go`**: Monitors commitments, generates Merkle roots, and manages random number generation for rounds.
+  - **`reveal_requests.go`**: Manages sending and receiving secret value requests from regular nodes.
+- **`regularNode_helper/`**: Contains helper functions specific to the regular node, such as generating CVS signatures and handling commit requests from the leader node.
+
 
 ### Core Functions
 Below are the core functions and their responsibilities across different components:
