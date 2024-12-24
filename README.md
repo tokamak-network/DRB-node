@@ -143,28 +143,32 @@ The `nodes/` folder contains the core logic for managing node operations, includ
 ### Core Functions
 Below are the core functions and their responsibilities across different components:
 
-## Leader Node (leaderNode.go)
-RunLeaderNode: Initializes the Leader Node, processes incoming commit data, and generates Merkle roots when all commitments are received.
-handleCommitRequest: Processes CVS commit data from regular nodes.
-generateMerkleRoot: Generates the Merkle Root from the collected CVS values.
-submitMerkleRoot: Submits the Merkle Root to Ethereum.
-monitorCommits: Monitors the status of commitments from regular nodes, checks for completed rounds, and triggers necessary actions such as generating random numbers.
+### Leader Node (leaderNode.go)
 
-## Regular Node (regularNode.go)
-RunRegularNode: Initializes the Regular Node, checks deposits, and sends commitments to the Leader Node.
-sendCommitToLeader: Sends the generated commit (CVS) to the Leader Node.
-sendCosToLeader: Sends the Commitment Output (COS) to the Leader Node after verification.
-generateRandomNumber: Generates a random number after all commitments have been received and processed.
-checkActivationStatus: Checks if the Regular Node's Ethereum Address (EOA) is activated for a given round.
+- **RunLeaderNode**: Initializes the Leader Node, processes incoming commit data, and generates Merkle roots when all commitments are received.
+- **handleCommitRequest**: Processes CVS commit data from regular nodes.
+- **generateMerkleRoot**: Generates the Merkle Root from the collected CVS values.
+- **submitMerkleRoot**: Submits the Merkle Root to Ethereum.
+- **monitorCommits**: Monitors the status of commitments from regular nodes, checks for completed rounds, and triggers necessary actions such as generating random numbers.
 
-## Helper Functions for Leader Node (leaderNode_helper/)
-StartSecretValueRequests: Initiates the process of requesting secret values from regular nodes according to the reveal order.
-sendSecretValueRequestToNode: Sends the secret value request to a specific regular node, signing the round number and ensuring the correct node is targeted.
-HandleSecretValueResponse: Handles responses to secret value requests and continues sending requests to the next node in the reveal order.
+### Regular Node (regularNode.go)
 
-## Helper Functions for Regular Node (regularNode_helper/)
-generateCvsSignature: Generates the CVS (Commitment Value Signature) for verifying the commitment.
-handleCommitRequest: Handles incoming commitment requests from the leader and processes the CVS (Commitment Value Signature).
+- **RunRegularNode**: Initializes the Regular Node, checks deposits, and sends commitments to the Leader Node.
+- **sendCommitToLeader**: Sends the generated commit (CVS) to the Leader Node.
+- **sendCosToLeader**: Sends the Commitment Output (COS) to the Leader Node after verification.
+- **generateRandomNumber**: Generates a random number after all commitments have been received and processed.
+- **checkActivationStatus**: Checks if the Regular Node's Ethereum Address (EOA) is activated for a given round.
+
+### Helper Functions for Leader Node (leaderNode_helper/)
+
+- **StartSecretValueRequests**: Initiates the process of requesting secret values from regular nodes according to the reveal order.
+- **sendSecretValueRequestToNode**: Sends the secret value request to a specific regular node, signing the round number and ensuring the correct node is targeted.
+- **HandleSecretValueResponse**: Handles responses to secret value requests and continues sending requests to the next node in the reveal order.
+
+### Helper Functions for Regular Node (regularNode_helper/)
+
+- **generateCvsSignature**: Generates the CVS (Commitment Value Signature) for verifying the commitment.
+- **handleCommitRequest**: Handles incoming commitment requests from the leader and processes the CVS (Commitment Value Signature).
 
 ### Verifying the Setup
 After running the node, you can verify the setup using the following methods:
@@ -181,10 +185,12 @@ Use your Ethereum RPC provider to monitor and verify on-chain interactions, such
 ### Contributing to the Project
 To contribute to the project, follow these steps:
 
-Fork the repository: Create a personal fork of the repository.
-Clone the repository: Clone your fork to your local machine.
+
+1. **Fork the repository**: Create a personal fork of the repository.
+2. **Clone the repository**: Clone your fork to your local machine.
 
 ``` git clone https://github.com/tokamak-network/DRB-node ```
-branch: main
-Make your changes: Modify or add new features as needed.
-Submit a Pull Request: Once your changes are ready, submit a pull request with a description of your changes.
+
+3. **branch**: main
+4. **Make your changes**: Modify or add new features as needed.
+5. **Submit a Pull Request**: Once your changes are ready, submit a pull request with a description of your changes.
