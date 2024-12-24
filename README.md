@@ -90,12 +90,15 @@ Note: Always run the Leader Node first, and then start at least 2 Regular Nodes 
 - **1. Leader Node**
 The Leader Node should be started first:
 
+```bash
 go run cmd/main.go --nodeType leader
+```
 
 - **2. Regular Nodes**
 After the Leader Node is running, start at least 2 Regular Nodes:
-
+```bash
 go run cmd/main.go --nodeType regular
+```
 You can repeat the above command to run additional Regular Nodes if necessary.
 
 ## 3. Other Ways to Run Node
@@ -105,18 +108,18 @@ You can run the DRB Node using one of the following methods:
 Generate a binary file and execute it:
 
 Build the node:
-
+```bash
 go build -o drb-node cmd/main.go
-Run the executable:
-
 ./drb-node
+```
 
 - **2. Using Docker**
 Build and run the node in a containerized environment:
 
 Ensure Docker is installed, and the .env file is correctly configured.
-
+```bash
 docker-compose up --build
+```
 
 ### Troubleshooting Tips
 Here are some common issues you might encounter and their solutions:
