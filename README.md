@@ -128,7 +128,6 @@ The repository is organized into several directories based on functionality. Her
 ```
 
 ### nodes/ Folder
-```
 The nodes/ folder contains the core logic for managing node operations, including registration, activation, communication, and interaction between leader and regular nodes.
 
 leaderNode.go: Implements the behavior of the Leader Node, including the registration of nodes, processing of commitments, generating Merkle roots, and submitting data to Ethereum.
@@ -139,46 +138,34 @@ registration_helper.go: Manages the registration of nodes.
 monitorCommits.go: Monitors commitments, generates Merkle roots, and manages random number generation for rounds.
 reveal_requests.go: Manages sending and receiving secret value requests from regular nodes.
 regularNode_helper/: Contains helper functions specific to the regular node, such as generating CVS signatures and handling commit requests from the leader node.
-```
 
 ### Core Functions
-```
 Below are the core functions and their responsibilities across different components:
-```
 
 ## Leader Node (leaderNode.go)
-```
 RunLeaderNode: Initializes the Leader Node, processes incoming commit data, and generates Merkle roots when all commitments are received.
 handleCommitRequest: Processes CVS commit data from regular nodes.
 generateMerkleRoot: Generates the Merkle Root from the collected CVS values.
 submitMerkleRoot: Submits the Merkle Root to Ethereum.
 monitorCommits: Monitors the status of commitments from regular nodes, checks for completed rounds, and triggers necessary actions such as generating random numbers.
-```
 
 ## Regular Node (regularNode.go)
-```
 RunRegularNode: Initializes the Regular Node, checks deposits, and sends commitments to the Leader Node.
 sendCommitToLeader: Sends the generated commit (CVS) to the Leader Node.
 sendCosToLeader: Sends the Commitment Output (COS) to the Leader Node after verification.
 generateRandomNumber: Generates a random number after all commitments have been received and processed.
 checkActivationStatus: Checks if the Regular Node's Ethereum Address (EOA) is activated for a given round.
-```
 
 ## Helper Functions for Leader Node (leaderNode_helper/)
-```
 StartSecretValueRequests: Initiates the process of requesting secret values from regular nodes according to the reveal order.
 sendSecretValueRequestToNode: Sends the secret value request to a specific regular node, signing the round number and ensuring the correct node is targeted.
 HandleSecretValueResponse: Handles responses to secret value requests and continues sending requests to the next node in the reveal order.
-```
 
 ## Helper Functions for Regular Node (regularNode_helper/)
-```
 generateCvsSignature: Generates the CVS (Commitment Value Signature) for verifying the commitment.
 handleCommitRequest: Handles incoming commitment requests from the leader and processes the CVS (Commitment Value Signature).
-```
 
 ### Verifying the Setup
-```
 After running the node, you can verify the setup using the following methods:
 
 Logs:
@@ -189,17 +176,14 @@ Ensure that the Regular Nodes are connected to the Leader Node. You can check th
 
 On-Chain Interactions:
 Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
-```
 
 ### Contributing to the Project
-```
 To contribute to the project, follow these steps:
 
 Fork the repository: Create a personal fork of the repository.
 Clone the repository: Clone your fork to your local machine.
 
-git clone https://github.com/tokamak-network/DRB-node
+``` git clone https://github.com/tokamak-network/DRB-node ```
 branch: main
 Make your changes: Modify or add new features as needed.
 Submit a Pull Request: Once your changes are ready, submit a pull request with a description of your changes.
-```
