@@ -173,13 +173,13 @@ Below are the core functions and their responsibilities across different compone
 ### Verifying the Setup
 After running the node, you can verify the setup using the following methods:
 
-Logs:
+- **Logs**:
 Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
 
-Regular Node Connections:
+- **Regular Node Connections**:
 Ensure that the Regular Nodes are connected to the Leader Node. You can check this in the logs or by inspecting the peer connections.
 
-On-Chain Interactions:
+- **On-Chain Interactions**:
 Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
 
 ### Contributing to the Project
