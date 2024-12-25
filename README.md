@@ -48,6 +48,7 @@ CONTRACT_ADDRESS=<Deployed DRB Contract Address>
 SUBGRAPH_URL=<Your Subgraph URL>
 ```
 
+### Regular Node Configuration
 ```bash
 # Regular Node Configuration
 LEADER_IP=<Leader Node IP Address>
