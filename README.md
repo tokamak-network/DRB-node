@@ -43,13 +43,12 @@ LEADER_PRIVATE_KEY=<Your Leader Node Private Key>
 LEADER_EOA=<Your Leader Ethereum Address>
 NODE_TYPE=leader
 
-#### Shared Configurations
 ETH_RPC_URL=<Your Ethereum RPC URL>
 CONTRACT_ADDRESS=<Deployed DRB Contract Address>
 SUBGRAPH_URL=<Your Subgraph URL>
+```
 
-
-
+```bash
 # Regular Node Configuration
 LEADER_IP=<Leader Node IP Address>
 LEADER_PORT=61280
@@ -61,7 +60,6 @@ NODE_TYPE=regular
 PORT=61281
 CHAIN_ID=111551119090
 
-# Shared Configurations
 ETH_RPC_URL=<Your Ethereum RPC URL>
 CONTRACT_ADDRESS=<Deployed DRB Contract Address>
 SUBGRAPH_URL=<Your Subgraph URL>
