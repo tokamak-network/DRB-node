@@ -95,10 +95,18 @@ go run cmd/main.go --nodeType leader
 
 - **2. Regular Nodes**
 After the Leader Node is running, start at least 2 Regular Nodes:
+
+Regular Node with Leader Node's Private Key
+One Regular Node must be run with the same private key as the Leader Node:
+```bash
+go run cmd/main.go --nodeType regular --privateKey <Your Leader Node Private Key>
+```
+
+Additional Regular Nodes
+You can run additional Regular Nodes with their respective private keys:
 ```bash
 go run cmd/main.go --nodeType regular
 ```
-You can repeat the above command to run additional Regular Nodes if necessary.
 
 ## 3. Other Ways to Run Node
 You can run the DRB Node using one of the following methods:
@@ -140,8 +148,11 @@ After running the node, you can verify the setup using the following methods:
 - **Logs**
 Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
 
-- **Example log message**:
-Successfully connected to Leader Node at <Leader IP>:61280
+For Regular Node registration, the logs should show something like:
+Registration request sent to leader.
+
+For Leader Node registration, ensure the logs display:
+Node registration and activation completed.
 
 - **Regular Node Connections**
 Ensure that the Regular Nodes are connected to the Leader Node. You can check this in the logs or by inspecting the peer connections.
@@ -150,15 +161,15 @@ Ensure that the Regular Nodes are connected to the Leader Node. You can check th
 Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
 
 Example log message:
-
 Successfully submitted Merkle root for round <round number>
 
 - **Service Logs**
 Check the service.log file for connection status, errors, and other critical messages related to the node operation.
 
 Example log message:
-
 Connected to regular node at <node IP> on port <port>
+
+--------------------------------------------------------------------------------------------------------
 
 ### Repository Structure
 The repository is organized into several directories based on functionality. Here is a breakdown of the main folders and files:
