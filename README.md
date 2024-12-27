@@ -172,10 +172,10 @@ After running the node, you can verify the setup using the following methods:
 #### **1. Logs**
 Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
 
-- **For Regular Node Registration**, the logs should show something like:
+- **For Regular Node Registration**, the logs should show like:
 Registration request sent to leader.
 
-- **For Leader Node Registration**, after storing or updating data in the Leader Node file, the console should display a message similar to:
+- **For Leader Node Registration**, after storing or updating data in the Leader Node file, the console should display a message:
 
 Successfully registered or updated EOA 0x1123123123123123123123 with NodeInfo: IP=203.0.113.45, Port=30303, PeerID=16Uiu2HAmWY8f56cVGe6n6iV6Xg75GV7WqvG9zmNwe1t8H1JqV2fb.
 
@@ -195,7 +195,7 @@ Successfully submitted Merkle root for round <round number>
 - **Service Logs**
 Check the service.log file for connection status, errors, and other critical messages related to the node operation.
 
-Example log message:
+log message:
 Connected to regular node at <node IP> on port <port>
 
 --------------------------------------------------------------------------------------------------------
