@@ -16,7 +16,7 @@ Before setting up the DRB node, ensure the following requirements are met:
 
 3. **Smart Contract Deployment**:  
    Deploy the DRB smart contract and obtain its address.  
-   You can get the DRB smart contract from [here](https://github.com/tokamak-network/Commit-Reveal2/tree/layer2).
+   You can get the DRB smart contract from [here](https://github.com/tokamak-network/Commit-Reveal2/tree/service).
 
 4. **Graph Node**:  
    A running Subgraph instance is required for monitoring on-chain events.  
