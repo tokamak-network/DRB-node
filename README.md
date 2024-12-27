@@ -175,17 +175,21 @@ Check the logs to confirm successful peer connections. Look for entries indicati
 - **For Regular Node Registration**, the logs should show like:
 
 - **Success Case**:
+
 "Registration request sent to leader"
 
 - **Failure Case**:
+
 "Failed to send registration request: <error>"
 
 - **For Leader Node Registration**, after storing or updating data in the Leader Node file, the console should display a message:
 
 - **Success Case**:
+
 "Successfully registered or updated EOA 0x1123123123123123123123 with NodeInfo: IP=203.0.113.45, Port=30303, PeerID=16Uiu2HAmWY8f56cVGe6n6iV6Xg75GV7WqvG9zmNwe1t8H1JqV2fb"
 
 - **Failure Case**:
+
 "failed to save registered nodes: <error>"
 
 "failed to activate EOA <EOA Address> on-chain: <error>"
@@ -202,22 +206,26 @@ Use your Ethereum RPC provider to monitor and verify on-chain interactions, such
 
 log message for executing merkle root onchain (leader node):
 - **Success Case**:
+
 "Successfully submitted Merkle root for round <round number>"
 
 "Transaction <hash> confirmed in block <block number>"
 
 - **Failure Case**:
+
 "Failed to submit Merkle root for round <round number>: <error>"
 
 
 log message for execuitng generate random number onchain (leader node):
 
 - **Success Case**:
+
 "All EOAs have submitted for round <round number>. Initiating random number generation."
 
 "Transaction submitted. TX Hash: <hash>"
 
 - **Failure Case**:
+
 "failed to execute generateRandomNumber transaction: <error>"
 
 --------------------------------------------------------------------------------------------------------
