@@ -32,7 +32,8 @@ node_info.json
 peer_id.json
 commits.json
 leader_commits.json
-registered_nodes.json
-reveal_orders.json
-reveal_orders.json
 drb-node
+leader_peer_id.json
+regular_peer_id.json
+reveal_orders.json
+registered_nodes.json
