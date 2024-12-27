@@ -173,15 +173,17 @@ After running the node, you can verify the setup using the following methods:
 Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
 
 - **For Regular Node Registration**, the logs should show like:
-Registration request sent to leader.
+
+"Registration request sent to leader"
 
 - **For Leader Node Registration**, after storing or updating data in the Leader Node file, the console should display a message:
 
-Successfully registered or updated EOA 0x1123123123123123123123 with NodeInfo: IP=203.0.113.45, Port=30303, PeerID=16Uiu2HAmWY8f56cVGe6n6iV6Xg75GV7WqvG9zmNwe1t8H1JqV2fb.
+"Successfully registered or updated EOA 0x1123123123123123123123 with NodeInfo: IP=203.0.113.45, Port=30303, PeerID=16Uiu2HAmWY8f56cVGe6n6iV6Xg75GV7WqvG9zmNwe1t8H1JqV2fb"
 
 
-- After on-chain activation, the log should confirm that the node registration and activation were completed with a message like:
-Node registration and activation completed.
+- After on-chain activation, the log should confirm that the node registration and activation were completed with a message:
+
+"Node registration and activation completed"
 
 - **Regular Node Connections**
 Ensure that the Regular Nodes are connected to the Leader Node. You can check this in the logs or by inspecting the peer connections.
