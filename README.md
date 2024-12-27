@@ -287,18 +287,6 @@ Below are the core functions and their responsibilities across different compone
 - **generateCvsSignature**: Generates the CVS (Commitment Value Signature) for verifying the commitment.
 - **handleCommitRequest**: Handles incoming commitment requests from the leader and processes the CVS (Commitment Value Signature).
 
-### Verifying the Setup
-After running the node, you can verify the setup using the following methods:
-
-- **Logs**:
-Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
-
-- **Regular Node Connections**:
-Ensure that the Regular Nodes are connected to the Leader Node. You can check this in the logs or by inspecting the peer connections.
-
-- **On-Chain Interactions**:
-Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
-
 ### Contributing to the Project
 To contribute to the project, follow these steps:
 
