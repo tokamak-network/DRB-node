@@ -169,7 +169,7 @@ Here are some common issues you might encounter and their solutions:
 
 After running the node, you can verify the setup using the following methods:
 
-#### **1. Logs**
+#### **1. Node Registration Logs**
 Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
 
 - **For Regular Node Registration**, the logs should show like:
@@ -191,14 +191,9 @@ Ensure that the Regular Nodes are connected to the Leader Node. You can check th
 - **On-Chain Interactions**
 Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
 
-Example log message:
-Successfully submitted Merkle root for round <round number>
-
-- **Service Logs**
-Check the service.log file for connection status, errors, and other critical messages related to the node operation.
-
 log message:
-Connected to regular node at <node IP> on port <port>
+
+"Successfully submitted Merkle root for round <round number>"
 
 --------------------------------------------------------------------------------------------------------
 
