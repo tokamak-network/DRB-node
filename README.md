@@ -216,7 +216,6 @@ log message for executing merkle root onchain (leader node):
 "Failed to submit Merkle root for round <round number>: <error>"
 
 
-
 log message for execuitng generate random number onchain (leader node):
 
 - **Success Case**:
