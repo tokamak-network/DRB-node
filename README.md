@@ -177,7 +177,7 @@ Registration request sent to leader.
 
 - **For Leader Node Registration**, after storing or updating data in the Leader Node file, the console should display a message similar to:
 
-Successfully registered or updated EOA 0x1723C153e86D589ce1c7478295bba783a2df9dd7 with NodeInfo: IP=203.0.113.45, Port=30303, PeerID=16Uiu2HAmWY8f56cVGe6n6iV6Xg75GV7WqvG9zmNwe1t8H1JqV2fb.
+Successfully registered or updated EOA 0x1123123123123123123123 with NodeInfo: IP=203.0.113.45, Port=30303, PeerID=16Uiu2HAmWY8f56cVGe6n6iV6Xg75GV7WqvG9zmNwe1t8H1JqV2fb.
 
 
 - After on-chain activation, the log should confirm that the node registration and activation were completed with a message like:
