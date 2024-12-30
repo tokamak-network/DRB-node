@@ -37,7 +37,6 @@ The `.env` file is required for node configuration. Below are the settings for e
 
 ```bash
 # Leader Node Configuration
-PEER_ID=leadernode
 LEADER_PORT=61280
 LEADER_PRIVATE_KEY=<Your Leader Node Private Key>
 LEADER_EOA=<Your Leader Ethereum Address>
@@ -56,7 +55,6 @@ LEADER_IP=<Leader Node IP Address>
 LEADER_PORT=61280
 LEADER_PEER_ID=<Leader Node Peer ID>
 LEADER_EOA=<Leader Ethereum Address>
-PEER_ID=regularNode
 EOA_PRIVATE_KEY=<Your Regular Node Private Key>
 NODE_TYPE=regular
 PORT=61281
