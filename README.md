@@ -16,14 +16,14 @@ Before setting up the DRB node, ensure the following requirements are met:
 
 3. **Smart Contract Deployment**:  
    Deploy the DRB smart contract and obtain its address.  
-   You can get the DRB smart contract from [here](https://github.com/tokamak-network/Commit-Reveal-DRB/tree/commit-reveal-with-unpredictability-titan-sepolia).
+   You can get the DRB smart contract from [here](https://github.com/tokamak-network/Commit-Reveal2/tree/service).
 
 4. **Graph Node**:  
    A running Subgraph instance is required for monitoring on-chain events.  
    The Subgraph repository is available [here](https://github.com/tokamak-network/DRB-subgraph).
 
 5. **Ethereum Account Balance**:  
-   Ensure the Leader Node and Regular Node accounts have sufficient balance to perform transactions.  
+   Ensure the Leader Node and Regular Node accounts have sufficient balance to perform transactions.
    - The **Leader Node** must have enough ETH to interact with the Ethereum network, such as submitting Merkle roots and generating random numbers.
    - The **Regular Node** must have enough ETH to cover the deposit requirements set by the contract.
 
@@ -49,6 +49,7 @@ SUBGRAPH_URL=<Your Subgraph URL>
 ```
 
 ### Regular Node Configuration
+
 ```bash
 # Regular Node Configuration
 LEADER_IP=<Leader Node IP Address>
@@ -69,6 +70,7 @@ SUBGRAPH_URL=<Your Subgraph URL>
 ### Running the Node
 
 ## 1. Deploy the Smart Contract and Set Up Graph Node
+
 Before running the DRB Node, follow these steps:
 
 Deploy the Smart Contract:
@@ -81,10 +83,11 @@ Clone the DRB Subgraph repository.
 Deploy the Subgraph and ensure it is running to track on-chain events for your smart contract.
 
 ## 2. Run the Nodes
+
 After deploying the smart contract and running the Subgraph, you can proceed to run the nodes.
 
 - **Step-by-Step Node Execution**
-Note: Always run the Leader Node first, and then start at least 2 Regular Nodes for proper network setup.
+  Note: Always run the Leader Node first, and then start at least 2 Regular Nodes for proper network setup.
 
 - **1. Leader Node**
 To run the Leader Node individually, use the following script:
@@ -107,6 +110,7 @@ Set the environment variables first in regular bash file.
 The Regular Node will use the Leader's private key as required. You can also start multiple Regular Nodes by running the script multiple times.
 
 ## 3. Other Ways to Run Node
+
 You can run the DRB Node using one of the following methods:
 
 - **1. Using the Combined Start Script**
@@ -127,7 +131,9 @@ go run cmd/main.go --nodeType leader
 - **3. Build and Execute**
 Generate a binary file and execute it:
 
+
 Build the node:
+
 ```bash
 go build -o drb-node cmd/main.go
 ./drb-node
@@ -137,6 +143,7 @@ go build -o drb-node cmd/main.go
 Build and run the node in a containerized environment:
 
 Ensure Docker is installed, and the .env file is correctly configured.
+
 ```bash
 docker-compose up --build
 ```
@@ -152,6 +159,7 @@ This will stop any processes running on the specified ports.
 
 
 ### Troubleshooting Tips
+
 Here are some common issues you might encounter and their solutions:
 
 - **Issue**: Unable to connect to Ethereum RPC.
@@ -163,7 +171,7 @@ Here are some common issues you might encounter and their solutions:
 - **Issue**: Insufficient balance for transaction.
 - **Solution**: Ensure that the Leader Node and Regular Node Ethereum accounts have enough balance to perform transactions and make the required deposit.
 
---------------------------------------------------------------------------------------------------------
+---
 
 ### Verifying the Setup
 
@@ -199,10 +207,10 @@ Check the logs to confirm successful peer connections. Look for entries indicati
 "Node registration and activation completed"
 
 - **Regular Node Connections**
-Ensure that the Regular Nodes are connected to the Leader Node. You can check this in the logs or by inspecting the peer connections.
+  Ensure that the Regular Nodes are connected to the Leader Node. You can check this in the logs or by inspecting the peer connections.
 
 - **On-Chain Interactions**
-Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
+  Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
 
 log message for executing merkle root onchain (leader node):
 - **Success Case**:
@@ -228,9 +236,10 @@ log message for execuitng generate random number onchain (leader node):
 
 "failed to execute generateRandomNumber transaction: <error>"
 
---------------------------------------------------------------------------------------------------------
+---
 
 ### Repository Structure
+
 The repository is organized into several directories based on functionality. Here is a breakdown of the main folders and files:
 
 ```
@@ -276,6 +285,7 @@ The repository is organized into several directories based on functionality. Her
 ```
 
 ### nodes/ Folder
+
 The `nodes/` folder contains the core logic for managing node operations, including registration, activation, communication, and interaction between leader and regular nodes.
 
 - **`leaderNode.go`**: Implements the behavior of the Leader Node, including the registration of nodes, processing of commitments, generating Merkle roots, and submitting data to Ethereum.
@@ -288,6 +298,7 @@ The `nodes/` folder contains the core logic for managing node operations, includ
 - **`regularNode_helper/`**: Contains helper functions specific to the regular node, such as generating CVS signatures and handling commit requests from the leader node.
 
 ### Core Functions
+
 Below are the core functions and their responsibilities across different components:
 
 ### Leader Node (leaderNode.go)
@@ -318,13 +329,13 @@ Below are the core functions and their responsibilities across different compone
 - **handleCommitRequest**: Handles incoming commitment requests from the leader and processes the CVS (Commitment Value Signature).
 
 ### Contributing to the Project
-To contribute to the project, follow these steps:
 
+To contribute to the project, follow these steps:
 
 1. **Fork the repository**: Create a personal fork of the repository.
 2. **Clone the repository**: Clone your fork to your local machine.
 
-``` git clone https://github.com/tokamak-network/DRB-node ```
+`git clone https://github.com/tokamak-network/DRB-node`
 
 3. **branch**: main
 4. **Make your changes**: Modify or add new features as needed.
