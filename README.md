@@ -90,35 +90,47 @@ After deploying the smart contract and running the Subgraph, you can proceed to 
   Note: Always run the Leader Node first, and then start at least 2 Regular Nodes for proper network setup.
 
 - **1. Leader Node**
-  The Leader Node should be started first:
+To run the Leader Node individually, use the following script:
+
+Set the environment variables first in leader bash file.
 
 ```bash
-go run cmd/main.go --nodeType leader
+./run_leader.sh
 ```
 
 - **2. Regular Nodes**
-  After the Leader Node is running, start at least 2 Regular Nodes:
+After the Leader Node is running, you can run the Regular Node with the following script separately:
 
-Regular Node with Leader Node's Private Key
-One Regular Node must be run with the same private key as the Leader Node:
-
-```bash
-go run cmd/main.go --nodeType regular --privateKey <Your Leader Node Private Key>
-```
-
-Additional Regular Nodes
-You can run additional Regular Nodes with their respective private keys:
+Set the environment variables first in regular bash file.
 
 ```bash
-go run cmd/main.go --nodeType regular
+./run_regular.sh
 ```
+
+The Regular Node will use the Leader's private key as required. You can also start multiple Regular Nodes by running the script multiple times.
 
 ## 3. Other Ways to Run Node
 
 You can run the DRB Node using one of the following methods:
 
-- **1. Build and Execute**
-  Generate a binary file and execute it:
+- **1. Using the Combined Start Script**
+If you prefer to run both Leader and Regular Nodes in one go, use the combined start script:
+
+Set the environment variables first in leader and regular bash file to avoid any conflicts.
+
+```bash
+./start_drb_nodes.sh
+```
+
+- **2. Run Directly**
+
+```bash
+go run cmd/main.go --nodeType leader
+```
+
+- **3. Build and Execute**
+Generate a binary file and execute it:
+
 
 Build the node:
 
@@ -127,14 +139,24 @@ go build -o drb-node cmd/main.go
 ./drb-node
 ```
 
-- **2. Using Docker**
-  Build and run the node in a containerized environment:
+- **4. Using Docker**
+Build and run the node in a containerized environment:
 
 Ensure Docker is installed, and the .env file is correctly configured.
 
 ```bash
 docker-compose up --build
 ```
+
+## 3. Stopping the Nodes
+To stop the nodes, use the following script:
+
+```bash
+./stop_drb_nodes.sh
+```
+
+This will stop any processes running on the specified ports.
+
 
 ### Troubleshooting Tips
 
@@ -155,14 +177,34 @@ Here are some common issues you might encounter and their solutions:
 
 After running the node, you can verify the setup using the following methods:
 
-- **Logs**
-  Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
+#### **1. Node Registration Logs**
+Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
 
-For Regular Node registration, the logs should show something like:
-Registration request sent to leader.
+- **For Regular Node Registration**, the logs should show like:
 
-For Leader Node registration, ensure the logs display:
-Node registration and activation completed.
+- **Success Case**:
+
+"Registration request sent to leader"
+
+- **Failure Case**:
+
+"Failed to send registration request: <error>"
+
+- **For Leader Node Registration**, after storing or updating data in the Leader Node file, the console should display a message:
+
+- **Success Case**:
+
+"Successfully registered or updated EOA 0x1123123123123123123123 with NodeInfo: IP=203.0.113.45, Port=30303, PeerID=16Uiu2HAmWY8f56cVGe6n6iV6Xg75GV7WqvG9zmNwe1t8H1JqV2fb"
+
+- **Failure Case**:
+
+"failed to save registered nodes: <error>"
+
+"failed to activate EOA <EOA Address> on-chain: <error>"
+
+- After on-chain activation, the log should confirm that the node registration and activation were completed with a message:
+
+"Node registration and activation completed"
 
 - **Regular Node Connections**
   Ensure that the Regular Nodes are connected to the Leader Node. You can check this in the logs or by inspecting the peer connections.
@@ -170,14 +212,29 @@ Node registration and activation completed.
 - **On-Chain Interactions**
   Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
 
-Example log message:
-Successfully submitted Merkle root for round <round number>
+log message for executing merkle root onchain (leader node):
+- **Success Case**:
 
-- **Service Logs**
-  Check the service.log file for connection status, errors, and other critical messages related to the node operation.
+"Successfully submitted Merkle root for round <round number>"
 
-Example log message:
-Connected to regular node at <node IP> on port <port>
+"Transaction <hash> confirmed in block <block number>"
+
+- **Failure Case**:
+
+"Failed to submit Merkle root for round <round number>: <error>"
+
+
+log message for execuitng generate random number onchain (leader node):
+
+- **Success Case**:
+
+"All EOAs have submitted for round <round number>. Initiating random number generation."
+
+"Transaction submitted. TX Hash: <hash>"
+
+- **Failure Case**:
+
+"failed to execute generateRandomNumber transaction: <error>"
 
 ---
 
@@ -271,19 +328,6 @@ Below are the core functions and their responsibilities across different compone
 - **generateCvsSignature**: Generates the CVS (Commitment Value Signature) for verifying the commitment.
 - **handleCommitRequest**: Handles incoming commitment requests from the leader and processes the CVS (Commitment Value Signature).
 
-### Verifying the Setup
-
-After running the node, you can verify the setup using the following methods:
-
-- **Logs**:
-  Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
-
-- **Regular Node Connections**:
-  Ensure that the Regular Nodes are connected to the Leader Node. You can check this in the logs or by inspecting the peer connections.
-
-- **On-Chain Interactions**:
-  Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
-
 ### Contributing to the Project
 
 To contribute to the project, follow these steps:
@@ -296,3 +340,34 @@ To contribute to the project, follow these steps:
 3. **branch**: main
 4. **Make your changes**: Modify or add new features as needed.
 5. **Submit a Pull Request**: Once your changes are ready, submit a pull request with a description of your changes.
+
+
+### **Bugs/Error s**
+
+**Observed Issue:**
+
+- When the leader node receives a high volume of commit/reveal values from regular nodes simultaneously, it sometimes fails to store one or more values due to file I/O contention or other concurrency issues.
+
+**Potential Causes:**
+
+- High concurrency: too many simultaneous writes leading to missed file entries.
+- Lack of a retry or confirmation mechanism.
+
+**Suggested Improvements:**
+
+1. **Post-Wait Retry Mechanism (Leader-Initiated):**
+    - **Process:**
+        1. Leader waits after receiving the bulk of CVS/COS/secret values.
+        2. If any value is missing, leader requests that specific regular node to resend it.
+        3. Upon receiving the missing value, the leader stores it.
+        4. If missing values aren’t received after multiple retries, the leader may omit the node from the round, abort the round, or use another fallback.
+2. **Rate Limiting at Regular Nodes (Regular Node-Initiated):**
+    - **Process:**
+        - Implement a brief waiting period (e.g., 5–10 seconds) before a regular node sends another value (CVS, COS, or secret) to the leader node.
+        - This reduces the risk of overwhelming the leader node’s I/O operations and ensures more orderly handling of incoming data.
+
+**Benefits:**
+
+- **Data Integrity:** Both approaches help ensure that all values are accurately stored.
+- **System Reliability:** Introducing waiting periods and retry mechanisms improves fault tolerance and system stability.
+- **Scalability:** As the network grows and more regular nodes become active, these measures help maintain system responsiveness and correctness.

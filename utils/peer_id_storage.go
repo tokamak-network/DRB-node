@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"log"
+	"os"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -13,6 +14,23 @@ import (
 // PeerIDStorage structure to store PeerID's private key as bytes
 type PeerIDStorage struct {
 	PrivateKeyBytes []byte `json:"private_key_bytes"`
+}
+
+// GetPeerIDFileName returns the appropriate file name based on the node type
+func GetPeerIDFileName() string {
+	// Read NODE_TYPE from the environment variable
+	nodeType := os.Getenv("NODE_TYPE")
+
+	// Default to "regular" if NODE_TYPE is not set
+	if nodeType == "" {
+		nodeType = "regular"
+	}
+
+	// Return the corresponding file name based on the node type
+	if nodeType == "leader" {
+		return "leader_peer_id.json"
+	}
+	return "regular_peer_id.json"
 }
 
 // SavePeerID saves the libp2p PeerID's private key to a file as bytes
@@ -27,30 +45,34 @@ func SavePeerID(privKey crypto.PrivKey) error {
 	// Create the storage object
 	peerIDStorage := PeerIDStorage{PrivateKeyBytes: privKeyBytes}
 
-	// Marshal and save to file
+	// Marshal and save to the correct file based on the node type
+	fileName := GetPeerIDFileName()
 	data, err := json.MarshalIndent(peerIDStorage, "", "  ")
 	if err != nil {
 		log.Printf("Failed to marshal private key bytes: %v", err)
 		return err
 	}
 
-	err = ioutil.WriteFile("peer_id.json", data, 0644)
+	err = ioutil.WriteFile(fileName, data, 0644)
 	if err != nil {
-		log.Printf("Failed to write private key bytes to peer_id.json: %v", err)
+		log.Printf("Failed to write private key bytes to %s: %v", fileName, err)
 		return err
 	}
 
-	log.Printf("Private key saved to peer_id.json")
+	log.Printf("Private key saved to %s", fileName)
 	return nil
 }
 
 // LoadPeerID loads the libp2p PeerID's private key from a file
 func LoadPeerID() (crypto.PrivKey, peer.ID, error) {
+	// Get the correct file name based on the node type
+	fileName := GetPeerIDFileName()
+
 	// Attempt to read the file containing the private key bytes
-	data, err := ioutil.ReadFile("peer_id.json")
+	data, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		// If the file does not exist, return an error
-		log.Printf("Failed to read peer_id.json: %v", err)
+		log.Printf("Failed to read %s: %v", fileName, err)
 		return nil, "", err
 	}
 
@@ -58,7 +80,7 @@ func LoadPeerID() (crypto.PrivKey, peer.ID, error) {
 	var peerIDStorage PeerIDStorage
 	err = json.Unmarshal(data, &peerIDStorage)
 	if err != nil {
-		log.Printf("Failed to unmarshal private key bytes from peer_id.json: %v", err)
+		log.Printf("Failed to unmarshal private key bytes from %s: %v", fileName, err)
 		return nil, "", err
 	}
 
@@ -82,6 +104,6 @@ func LoadPeerID() (crypto.PrivKey, peer.ID, error) {
 		return nil, "", err
 	}
 
-	log.Printf("Loaded private key and PeerID successfully from peer_id.json")
+	log.Printf("Loaded private key and PeerID successfully from %s", fileName)
 	return privKey, peerID, nil
 }
