@@ -13,8 +13,8 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-// CalculateRV hashes all COS values into a single RV value
-func CalculateRV(cosValues [][]byte) [32]byte {
+// calculateRV hashes all COS values into a single RV value
+func calculateRV(cosValues [][]byte) [32]byte {
 	var concatenated []byte
 	for _, cos := range cosValues {
 		concatenated = append(concatenated, cos...)
@@ -139,7 +139,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators map[string]map[com
 	}
 
 	// Calculate the RV and determine the reveal order
-	rv := CalculateRV(cosValues)
+	rv := calculateRV(cosValues)
 	revealOrder := DetermineOrder(rv, cosValues)
 
 	// Reorder addresses based on reveal order
