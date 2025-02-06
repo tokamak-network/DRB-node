@@ -26,8 +26,8 @@ func calculateRV(cosValues [][]byte) [32]byte {
 	return rv
 }
 
-// DetermineOrder calculates the reveal order by comparing COS values with RV
-func DetermineOrder(rv [32]byte, cosValues [][]byte) []int {
+// determineOrder calculates the reveal order by comparing COS values with RV
+func determineOrder(rv [32]byte, cosValues [][]byte) []int {
 	type revealOrderEntry struct {
 		index int
 		value *big.Int
@@ -140,7 +140,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators map[string]map[com
 
 	// Calculate the RV and determine the reveal order
 	rv := calculateRV(cosValues)
-	revealOrder := DetermineOrder(rv, cosValues)
+	revealOrder := determineOrder(rv, cosValues)
 
 	// Reorder addresses based on reveal order
 	orderedAddresses := make([]string, len(addresses))
