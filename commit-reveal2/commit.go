@@ -2,11 +2,9 @@ package commitreveal2
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -79,21 +77,4 @@ func abiEncodePacked(elements ...[]byte) []byte {
 // intToBytes converts a *big.Int to its padded big-endian byte representation.
 func intToBytes(n *big.Int) []byte {
 	return common.LeftPadBytes(n.Bytes(), 32)
-}
-
-// SaveCommitData saves the commit data to a JSON file.
-func SaveCommitData(commitData map[string]interface{}) error {
-	file, err := os.OpenFile("commit_data.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	err = encoder.Encode(commitData)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
