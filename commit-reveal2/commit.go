@@ -14,7 +14,7 @@ import (
 )
 
 // GenerateCommit generates the secret value, cos, and cvs for a single regular node.
-func GENERATE_COMMIT(round string, operator string) ([32]byte, [32]byte, [32]byte, error) {
+func GenerateCommit(round string, operator string) ([32]byte, [32]byte, [32]byte, error) {
 	// Current timestamp to simulate block.timestamp in Solidity
 	timestamp := big.NewInt(time.Now().Unix())
 

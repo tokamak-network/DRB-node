@@ -216,7 +216,7 @@ if isEOAActivated(round, eoaAddress) {
 	// If Merkle Root and Random Number are nil, generate commit
 	if round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
 		// Generate commit
-		secretValue, cos, cvs, err := commitreveal2.GENERATE_COMMIT(roundNum, eoaAddress)
+		secretValue, cos, cvs, err := commitreveal2.GenerateCommit(roundNum, eoaAddress)
 		if err != nil {
 			log.Printf("Error generating commit: %v", err)
 			continue
