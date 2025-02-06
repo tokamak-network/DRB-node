@@ -55,8 +55,8 @@ func DetermineOrder(rv [32]byte, cosValues [][]byte) []int {
 	return order
 }
 
-// SaveRevealOrder stores the RV and reveal order in a file
-func SaveRevealOrders(filePath string, data map[string]interface{}) error {
+// saveRevealOrder stores the RV and reveal order in a file
+func saveRevealOrders(filePath string, data map[string]interface{}) error {
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create reveal order file: %v", err)
@@ -156,7 +156,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators map[string]map[com
 	}
 
 	// Save the updated data back to the file
-	err = SaveRevealOrders(filePath, data)
+	err = saveRevealOrders(filePath, data)
 	if err != nil {
 		log.Printf("Failed to save reveal order for round %s: %v", roundNum, err)
 		return fmt.Errorf("failed to save reveal order for round %s", roundNum)
