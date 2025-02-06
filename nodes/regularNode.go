@@ -233,7 +233,7 @@ if isEOAActivated(round, eoaAddress) {
 		}
 
 		// Save commit data locally to prevent resending
-		err = utils.SAVE_COMMIT_DATA(commitData)
+		err = utils.SaveCommitData(commitData)
 		if err != nil {
 			log.Printf("Error saving commit data: %v", err)
 			continue
@@ -256,7 +256,7 @@ if isEOAActivated(round, eoaAddress) {
 			commitData.SendCosToLeader = true
 
 			// Save updated commit data to prevent re-sending COS
-			err := utils.SAVE_COMMIT_DATA(*commitData)
+			err := utils.SaveCommitData(*commitData)
 			if err != nil {
 				log.Printf("Error saving updated commit data after sending COS: %v", err)
 			}
@@ -489,7 +489,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 
 	// Save commit data locally with v, r, s
 	commitData.Sign = req.Sign
-	if err := utils.SAVE_COMMIT_DATA(commitData); err != nil {
+	if err := utils.SaveCommitData(commitData); err != nil {
 		log.Printf("Failed to save commit data locally: %v", err)
 		return
 	}

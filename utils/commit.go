@@ -64,7 +64,7 @@ func LoadCommitData(roundNum string) (*CommitData, error) {
 }
 
 // saveCommitData saves the commit data to a file
-func SAVE_COMMIT_DATA(commitData CommitData) error {
+func SaveCommitData(commitData CommitData) error {
 	// Open the commit file (create if doesn't exist)
 	file, err := os.OpenFile(commitDataFile, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
