@@ -34,8 +34,8 @@ type CommitData struct {
 	Sign                  map[string]string `json:"sign"` // New field for v, r, s
 }
 
-// loadCommitData loads the commit data for a given round number
-func LOAD_COMMIT_DATA(roundNum string) (*CommitData, error) {
+// LoadCommitData loads the commit data for a given round number
+func LoadCommitData(roundNum string) (*CommitData, error) {
 	// Open the commit file
 	file, err := os.Open(commitDataFile)
 	if err != nil {

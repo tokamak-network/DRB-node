@@ -201,7 +201,7 @@ if isEOAActivated(round, eoaAddress) {
 	}
 
 	// Check if this round has already been committed (store it locally)
-	commitData, err := utils.LOAD_COMMIT_DATA(roundNum)
+	commitData, err := utils.LoadCommitData(roundNum)
 	if err != nil && err.Error() != "commit not found" {
 		log.Printf("Error loading commit data: %v", err)
 		continue
