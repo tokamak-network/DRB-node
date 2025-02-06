@@ -29,20 +29,3 @@ func SaveNodeInfo(nodeInfos []NodeInfo) error {
 	log.Printf("Node info saved to %s", fileName)
 	return nil
 }
-
-// LoadNodeInfo loads the node information from a file
-func LoadNodeInfo() ([]NodeInfo, error) {
-	fileName := "node_info.json"
-	data, err := ioutil.ReadFile(fileName)
-	if err != nil {
-		return nil, err
-	}
-
-	var nodeInfos []NodeInfo
-	err = json.Unmarshal(data, &nodeInfos)
-	if err != nil {
-		return nil, err
-	}
-
-	return nodeInfos, nil
-}
