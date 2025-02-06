@@ -97,15 +97,3 @@ func SaveCommitData(commitData map[string]interface{}) error {
 
 	return nil
 }
-
-// SignCommitRequest signs the commit request with the EOA address and round.
-func SignCommitRequest(round string, eoaAddress string) (string, error) {
-	// This is a mock function, replace it with actual signing logic (e.g., using ECDSA or other methods)
-	if eoaAddress == "" {
-		return "", fmt.Errorf("EOA address cannot be empty")
-	}
-
-	// Just return a mock "signed" string for now
-	signedRound := fmt.Sprintf("signed-%d-%s", round, eoaAddress)
-	return signedRound, nil
-}
