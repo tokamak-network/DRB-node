@@ -54,7 +54,7 @@ func CreateMerkleTree(leaves [][]byte) ([]byte, error) {
 		}
 
 		// Compute the hash for the pair (a, b)
-		hashes[i] = _efficientKeccak256(a, b)
+		hashes[i] = efficientKeccak256(a, b)
 	}
 
 	// The last element in the hashes array is the Merkle root
@@ -64,9 +64,9 @@ func CreateMerkleTree(leaves [][]byte) ([]byte, error) {
 	return merkleRoot, nil
 }
 
-// _efficientKeccak256 hashes two bytes32 using Keccak256.
-// Mimics Solidity's _efficientKeccak256 function.
-func _efficientKeccak256(a, b []byte) []byte {
+// efficientKeccak256 hashes two bytes32 using Keccak256.
+// Mimics Solidity's efficientKeccak256 function.
+func efficientKeccak256(a, b []byte) []byte {
 	hash := sha3.NewLegacyKeccak256()
 	hash.Write(a)
 	hash.Write(b)
