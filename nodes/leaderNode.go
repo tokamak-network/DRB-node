@@ -386,7 +386,7 @@ func generateMerkleRoot(roundNum string) {
 
 	log.Printf("Leaves for Merkle tree for round %s: %v", roundNum, leaves)
 
-	merkleRoot, err := commitreveal2.CREATE_MERKLE_TREE(leaves)
+	merkleRoot, err := commitreveal2.CreateMerkleTree(leaves)
 	if err != nil {
 		log.Printf("Failed to create Merkle tree for round %s: %v", roundNum, err)
 		return

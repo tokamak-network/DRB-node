@@ -7,9 +7,9 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-// CREATE_MERKLE_TREE generates a Merkle root using the provided leaves.
+// CreateMerkleTree generates a Merkle root using the provided leaves.
 // The leaves are expected to be byte slices of length 32 (bytes32 in Solidity).
-func CREATE_MERKLE_TREE(leaves [][]byte) ([]byte, error) {
+func CreateMerkleTree(leaves [][]byte) ([]byte, error) {
 	leavesLen := len(leaves)
 
 	// Ensure there are at least two leaves
