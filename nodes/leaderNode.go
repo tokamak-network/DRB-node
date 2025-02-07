@@ -175,7 +175,7 @@ func handleCommitRequest(s network.Stream) {
 	log.Printf("Commit data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	// Check if all commits are ready after this update
-	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum, "CVS") {
+	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
         log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
         commitMu.Unlock() // Unlock before calling generateMerkleRoot
         generateMerkleRoot(roundNum)
@@ -238,7 +238,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	// Check if all commits are ready after this COS
-	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum, "CVS") {
+	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
         log.Printf("All CVS received for round %s after COS, generating Merkle root...", roundNum)
         commitMu.Unlock()
         generateMerkleRoot(roundNum)
@@ -246,7 +246,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
     }
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
-	if allCommitsReceivedUnlocked(roundNum, "COS") {
+	if allCommitsReceivedUnlocked(roundNum) {
 		log.Printf("All COS received for round %s. Determining reveal order...", roundNum)
 		err := commitreveal2.DetermineRevealOrder(roundNum, activatedOperators)
 		if err != nil {
@@ -276,7 +276,7 @@ func isMerkleRootSubmitted(roundNum string) bool {
 
 // allCommitsReceivedUnlocked checks if all operators have CVS in-memory.
 // Called with commitMu locked.
-func allCommitsReceivedUnlocked(roundNum string, phase string) bool {
+func allCommitsReceivedUnlocked(roundNum string) bool {
 	ops, exists := activatedOperators[roundNum]
 	if !exists || len(ops) == 0 {
 		return false
@@ -534,7 +534,7 @@ func processRounds(roundsData *GraphQLResponse) {
 			log.Printf("Round %s is still waiting for commits", roundNum)
 
 			commitMu.Lock()
-			ready := allCommitsReceivedUnlocked(roundNum, "CVS")
+			ready := allCommitsReceivedUnlocked(roundNum)
 			commitMu.Unlock()
 
 			if ready {
