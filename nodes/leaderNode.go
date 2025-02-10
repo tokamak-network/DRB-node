@@ -118,19 +118,14 @@ func handleCommitRequest(s network.Stream) {
 		return
 	}
 
-	verifyReq := utils.RegistrationRequest{EOAAddress: req.EOAAddress, Signature: req.Signature}
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
+	commitVerificationRequest := utils.Request{Round: req.Round, EOAAddress: req.EOAAddress, Signature: req.Signature}
+
+	if !VerifySignatureAndCheckActivation(commitVerificationRequest, "commit") {
 		return
 	}
-
+	
 	roundNum := req.Round
 	eoaAddress := common.HexToAddress(req.EOAAddress)
-
-	if !isEOAActivatedForRound(roundNum, eoaAddress) {
-		log.Printf("EOA %s not activated for round %s, skipping commit.", eoaAddress.Hex(), roundNum)
-		return
-	}
 
 	commitMu.Lock()
 	defer commitMu.Unlock()
@@ -168,20 +163,15 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 		return
 	}
 
-	verifyReq := utils.RegistrationRequest{EOAAddress: req.EOAAddress, Signature: req.Signature}
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
+	cosVerificationRequest := utils.Request{Round: req.Round, EOAAddress: req.EOAAddress, Signature: req.Signature}
+
+	if !VerifySignatureAndCheckActivation(cosVerificationRequest, "COS") {
 		return
 	}
 
 	roundNum := req.Round
 	eoaAddress := common.HexToAddress(req.EOAAddress)
-
-	if !isEOAActivatedForRound(roundNum, eoaAddress) {
-		log.Printf("EOA %s not activated for round %s, skipping COS.", eoaAddress.Hex(), roundNum)
-		return
-	}
-
+		
 	commitMu.Lock()
 	defer commitMu.Unlock()
 
@@ -248,6 +238,23 @@ func isMerkleRootSubmitted(roundNum string) bool {
 		}
 	}
 	return false
+}
+
+func VerifySignatureAndCheckActivation(temp utils.Request, reqType string, ) bool {
+	verifyReq := utils.RegistrationRequest{EOAAddress: temp.EOAAddress, Signature: temp.Signature}
+	if !utils.VerifySignature(verifyReq) {
+		log.Printf("Signature verification failed for round %s EOA %s", temp.Round, temp.EOAAddress)
+		return false
+	}
+
+	roundNum := temp.Round
+	eoaAddress := common.HexToAddress(temp.EOAAddress)
+
+	if !isEOAActivatedForRound(roundNum, eoaAddress) {
+		log.Printf("EOA %s not activated for round %s, skipping %s.", eoaAddress.Hex(), roundNum, reqType)
+		return false
+	}
+	return true
 }
 
 // allCommitsReceivedUnlocked checks if all operators have CVS in-memory.
