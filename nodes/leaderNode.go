@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/big"
 	"os"
@@ -16,13 +15,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/libp2p/go-libp2p"
-	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/machinebox/graphql"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
 	"github.com/tokamak-network/DRB-node/transactions"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -34,7 +31,7 @@ type RoundData struct {
 	MerkleRootSubmitted struct {
 		MerkleRoot interface{} `json:"merkleRoot"`
 	} `json:"merkleRootSubmitted"`
-	Round interface{} `json:"round"`
+	Round                 interface{} `json:"round"`
 	RandomNumberGenerated struct {
 		RandomNumber interface{} `json:"randomNumber"`
 	} `json:"randomNumberGenerated"`
@@ -57,30 +54,9 @@ func RunLeaderNode() {
 		log.Fatal("LEADER_PORT not set in environment variables.")
 	}
 
-	privKey, peerID, err := utils.LoadPeerID()
+	h, peerID, err := libp2putils.CreateHost(port)
 	if err != nil {
-		log.Println("PeerID not found, generating a new one.")
-		privKey, _, err = libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 0)
-		if err != nil {
-			log.Fatalf("Failed to generate private key: %v", err)
-		}
-
-		err = utils.SavePeerID(privKey)
-		if err != nil {
-			log.Fatalf("Failed to save PeerID: %v", err)
-		}
-
-		peerID, err = peer.IDFromPrivateKey(privKey)
-		if err != nil {
-			log.Fatalf("Failed to get PeerID from private key: %v", err)
-		}
-	}
-
-	log.Printf("Loaded or generated PeerID: %s", peerID.String())
-
-	h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)), libp2p.Identity(privKey))
-	if err != nil {
-		log.Fatalf("Failed to create libp2p host: %v", err)
+		log.Fatalf("Error creating host: %v", err)
 	}
 	defer h.Close()
 
@@ -176,11 +152,11 @@ func handleCommitRequest(s network.Stream) {
 
 	// Check if all commits are ready after this update
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
-        log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
-        commitMu.Unlock() // Unlock before calling generateMerkleRoot
-        generateMerkleRoot(roundNum)
-        commitMu.Lock()   // Re-lock if needed
-    }
+		log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
+		commitMu.Unlock() // Unlock before calling generateMerkleRoot
+		generateMerkleRoot(roundNum)
+		commitMu.Lock() // Re-lock if needed
+	}
 }
 
 func handleCOSRequest(h host.Host, s network.Stream) {
@@ -239,11 +215,11 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 
 	// Check if all commits are ready after this COS
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
-        log.Printf("All CVS received for round %s after COS, generating Merkle root...", roundNum)
-        commitMu.Unlock()
-        generateMerkleRoot(roundNum)
-        commitMu.Lock()
-    }
+		log.Printf("All CVS received for round %s after COS, generating Merkle root...", roundNum)
+		commitMu.Unlock()
+		generateMerkleRoot(roundNum)
+		commitMu.Lock()
+	}
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if allCommitsReceivedUnlocked(roundNum) {
@@ -259,19 +235,19 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 }
 
 func isMerkleRootSubmitted(roundNum string) bool {
-    // Call with commitMu locked or ensure commitMu is locked outside
-    roundMap, exists := committedNodes[roundNum]
-    if !exists || len(roundMap) == 0 {
-        return false
-    }
+	// Call with commitMu locked or ensure commitMu is locked outside
+	roundMap, exists := committedNodes[roundNum]
+	if !exists || len(roundMap) == 0 {
+		return false
+	}
 
-    // Check any operator to see if SubmitMerkleRootDone is set
-    for _, data := range roundMap {
-        if data.SubmitMerkleRootDone {
-            return true
-        }
-    }
-    return false
+	// Check any operator to see if SubmitMerkleRootDone is set
+	for _, data := range roundMap {
+		if data.SubmitMerkleRootDone {
+			return true
+		}
+	}
+	return false
 }
 
 // allCommitsReceivedUnlocked checks if all operators have CVS in-memory.
@@ -327,14 +303,14 @@ func updateInMemoryData(roundNum string, eoaAddress common.Address, commitData u
 // generateMerkleRoot doesn't lock; it locks inside to read from memory
 func generateMerkleRoot(roundNum string) {
 	commitMu.Lock()
-    // Check if merkle root is already done before proceeding
-    if isMerkleRootSubmitted(roundNum) {
-        log.Printf("Merkle root already submitted for round %s, skipping.", roundNum)
-        commitMu.Unlock()
-        return
-    }
-    commitMu.Unlock()
-	
+	// Check if merkle root is already done before proceeding
+	if isMerkleRootSubmitted(roundNum) {
+		log.Printf("Merkle root already submitted for round %s, skipping.", roundNum)
+		commitMu.Unlock()
+		return
+	}
+	commitMu.Unlock()
+
 	log.Printf("Generating Merkle root for round %s...", roundNum)
 
 	activatedOperatorsList, err := leaderNode_helper.FetchActivatedOperators(roundNum)
