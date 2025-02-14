@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/tokamak-network/DRB-node/transactions"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -132,7 +132,7 @@ func ActivateOnChain(eoaAddress, abiFilePath string) error {
 	operatorAddress := common.HexToAddress(eoaAddress)
 
 	// Verify if the operator is activated
-	activatedOperatorsResult, err := transactions.CallSmartContract(client, parsedABI, "getActivatedOperators", contractAddress)
+	activatedOperatorsResult, err := eth.CallSmartContract(client, parsedABI, "getActivatedOperators", contractAddress)
 	if err != nil {
 		return fmt.Errorf("failed to call getActivatedOperators: %v", err)
 	}
@@ -146,13 +146,13 @@ func ActivateOnChain(eoaAddress, abiFilePath string) error {
 	}
 
 	// Check deposit amount and activation threshold
-	depositAmountResult, err := transactions.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, operatorAddress)
+	depositAmountResult, err := eth.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, operatorAddress)
 	if err != nil {
 		return fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
-	activationThresholdResult, err := transactions.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
 	if err != nil {
 		return fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -176,7 +176,7 @@ func ActivateOnChain(eoaAddress, abiFilePath string) error {
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = transactions.ExecuteTransaction(
+	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
 		"activate",
