@@ -13,8 +13,8 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-// CalculateRV hashes all COS values into a single RV value
-func CalculateRV(cosValues [][]byte) [32]byte {
+// calculateRV hashes all COS values into a single RV value
+func calculateRV(cosValues [][]byte) [32]byte {
 	var concatenated []byte
 	for _, cos := range cosValues {
 		concatenated = append(concatenated, cos...)
@@ -26,8 +26,8 @@ func CalculateRV(cosValues [][]byte) [32]byte {
 	return rv
 }
 
-// DetermineOrder calculates the reveal order by comparing COS values with RV
-func DetermineOrder(rv [32]byte, cosValues [][]byte) []int {
+// determineOrder calculates the reveal order by comparing COS values with RV
+func determineOrder(rv [32]byte, cosValues [][]byte) []int {
 	type revealOrderEntry struct {
 		index int
 		value *big.Int
@@ -55,8 +55,8 @@ func DetermineOrder(rv [32]byte, cosValues [][]byte) []int {
 	return order
 }
 
-// SaveRevealOrder stores the RV and reveal order in a file
-func SaveRevealOrders(filePath string, data map[string]interface{}) error {
+// saveRevealOrder stores the RV and reveal order in a file
+func saveRevealOrders(filePath string, data map[string]interface{}) error {
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create reveal order file: %v", err)
@@ -139,8 +139,8 @@ func DetermineRevealOrder(roundNum string, activatedOperators map[string]map[com
 	}
 
 	// Calculate the RV and determine the reveal order
-	rv := CalculateRV(cosValues)
-	revealOrder := DetermineOrder(rv, cosValues)
+	rv := calculateRV(cosValues)
+	revealOrder := determineOrder(rv, cosValues)
 
 	// Reorder addresses based on reveal order
 	orderedAddresses := make([]string, len(addresses))
@@ -156,7 +156,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators map[string]map[com
 	}
 
 	// Save the updated data back to the file
-	err = SaveRevealOrders(filePath, data)
+	err = saveRevealOrders(filePath, data)
 	if err != nil {
 		log.Printf("Failed to save reveal order for round %s: %v", roundNum, err)
 		return fmt.Errorf("failed to save reveal order for round %s", roundNum)

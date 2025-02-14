@@ -30,8 +30,8 @@ func VerifySignature(req RegistrationRequest) bool {
 	}
 
 	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
-	log.Printf("recoveredAddress........:", recoveredAddress)
-	log.Printf("req.EOAAddress........:", req.EOAAddress)
+	log.Printf("recoveredAddress........:%s", recoveredAddress)
+	log.Printf("req.EOAAddress........:%s", req.EOAAddress)
 
 	return recoveredAddress == req.EOAAddress
 }
