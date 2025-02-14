@@ -164,7 +164,11 @@ func filterOperators(operators []string) []string {
 
 // Fetch activated operators for a specific round
 func FetchActivatedOperators(round string) ([]string, error) {
-	client := graphql.NewClient(os.Getenv("SUBGRAPH_URL"))
+    subGraphURL := os.Getenv("SUBGRAPH_URL")
+	if subGraphURL == "" {
+		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
+	}
+	client := graphql.NewClient(subGraphURL)
 	req := utils.GetActivatedOperatorsAtRoundRequest(roundToInt(round))
 
 	var resp struct {
@@ -220,18 +224,30 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
     }
 
     // Load Ethereum client and private key
-    client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+    subGraphURL := os.Getenv("SUBGRAPH_URL")
+	if subGraphURL == "" {
+		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
+	}
+    client, err := ethclient.Dial(subGraphURL)
     if err != nil {
         return fmt.Errorf("failed to connect to Ethereum client: %v", err)
     }
     defer client.Close()
 
-    privateKey, err := crypto.HexToECDSA(os.Getenv("LEADER_PRIVATE_KEY"))
+    privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+    privateKey, err := crypto.HexToECDSA(privateKeyHex)
     if err != nil {
         return fmt.Errorf("failed to load leader private key: %v", err)
     }
 
-    contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+    contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+    contractAddress := common.HexToAddress(contractAddressStr)
     parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
     if err != nil {
         return fmt.Errorf("failed to load contract ABI: %v", err)

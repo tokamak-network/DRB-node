@@ -51,7 +51,7 @@ var activatedOperators = make(map[string]map[common.Address]bool)
 func RunLeaderNode() {
 	port := os.Getenv("LEADER_PORT")
 	if port == "" {
-		log.Fatal("LEADER_PORT not set in environment variables.")
+		log.Fatal("LEADER_PORT is not set in environment variables.")
 	}
 
 	h, peerID, err := libp2putils.CreateHost(port)
@@ -88,7 +88,11 @@ func RunLeaderNode() {
 }
 
 func fetchRoundsData() (*GraphQLResponse, error) {
-	client := graphql.NewClient(os.Getenv("SUBGRAPH_URL"))
+	subGraphURL := os.Getenv("SUBGRAPH_URL")
+	if subGraphURL == "" {
+		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
+	}
+	client := graphql.NewClient(subGraphURL)
 	ctx := context.Background()
 	req := utils.GetRoundsRequest()
 
@@ -382,13 +386,23 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 	var merkleRootBytes32 [32]byte
 	copy(merkleRootBytes32[:], merkleRoot)
 
-	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in environment variables.")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {
 		log.Printf("Failed to connect to Ethereum client: %v", err)
 		return
 	}
 
-	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
 		log.Printf("Failed to load contract ABI: %v", err)
@@ -402,6 +416,10 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 	}
 
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Printf("Failed to decode leader private key: %v", err)
@@ -460,7 +478,12 @@ func isEOAActivatedForRound(roundNum string, eoaAddress common.Address) bool {
 		return false
 	}
 
-	client := graphql.NewClient(os.Getenv("SUBGRAPH_URL"))
+	subGraphURL := os.Getenv("SUBGRAPH_URL")
+	if subGraphURL == "" {
+		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
+	}
+
+	client := graphql.NewClient(subGraphURL)
 	req := utils.GetActivatedOperatorsAtRoundRequest(roundInt)
 
 	var resp map[string]interface{}

@@ -47,8 +47,19 @@ func RunRegularNode() {
 
 	// Get leader's multiaddress
 	leaderIP := os.Getenv("LEADER_IP")
+	if leaderIP == "" {
+		log.Fatal("LEADER_IP is not set in environment variables.")
+	}
+
 	leaderPort := os.Getenv("LEADER_PORT")
+	if leaderPort == "" {
+		log.Fatal("LEADER_PORT is not set in environment variables.")
+	}
+
 	leaderPeerID := os.Getenv("LEADER_PEER_ID")
+	if leaderPeerID == "" {
+		log.Fatal("LEADER_PEER_ID is not set in environment variables.")
+	}
 
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -85,12 +96,22 @@ func RunRegularNode() {
 		log.Fatalf("Error connecting to leader: %v", err)
 	}
 
-	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in the environment variables")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to Ethereum client: %v", err)
 	}
 
-	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
 		log.Fatalf("Failed to load contract ABI: %v", err)
@@ -329,12 +350,23 @@ func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID 
 }
 
 func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
-	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in environment variables.")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {
 		return false, fmt.Errorf("failed to connect to Ethereum client: %v", err)
 	}
 
-	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
 		return false, fmt.Errorf("failed to load contract ABI: %v", err)
@@ -429,6 +461,10 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	}
 
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
+	
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Printf("Failed to decode leader private key: %v", err)

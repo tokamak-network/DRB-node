@@ -60,7 +60,11 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 
 	// Send the secret value back to the leader
-	leaderPeerID, err := peer.Decode(os.Getenv("LEADER_PEER_ID"))
+	leaderPeerIDStr := os.Getenv("LEADER_PEER_ID")
+	if leaderPeerIDStr == "" {
+		log.Fatal("LEADER_PEER_ID is not set in environment variables.")
+	}
+	leaderPeerID, err := peer.Decode(leaderPeerIDStr)
 	if err != nil {
 		log.Printf("Failed to decode leader peer ID: %v", err)
 		return
@@ -80,6 +84,9 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 
 	// Fetch the regular node's private key
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Printf("Failed to decode regular node private key: %v", err)

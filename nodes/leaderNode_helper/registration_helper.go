@@ -118,12 +118,22 @@ func RegisterNode(s network.Stream, filePath, abiFilePath string) error {
 
 // ActivateOnChain handles the on-chain activation of the node.
 func ActivateOnChain(eoaAddress, abiFilePath string) error {
-	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in the environment variables")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
 	}
 
-	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to load contract ABI: %v", err)
@@ -164,6 +174,9 @@ func ActivateOnChain(eoaAddress, abiFilePath string) error {
 
 	// Activate the operator
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return fmt.Errorf("failed to decode leader private key: %v", err)

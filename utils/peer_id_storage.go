@@ -24,10 +24,7 @@ func getPeerIDFileName() string {
 	// Default to "regular" if NODE_TYPE is not set
 	if nodeType == "" {
 		nodeType = "regular"
-	}
-
-	// Return the corresponding file name based on the node type
-	if nodeType == "leader" {
+	} else if nodeType == "leader" {
 		return "leader_peer_id.json"
 	}
 	return "regular_peer_id.json"
