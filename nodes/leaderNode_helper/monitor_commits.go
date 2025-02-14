@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/machinebox/graphql"
-	"github.com/tokamak-network/DRB-node/transactions"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -251,7 +251,7 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
     log.Printf("SS: %v", ss)
 
     // Prepare the function call to generateRandomNumber
-    tx, _, err := transactions.ExecuteTransaction(
+    tx, _, err := eth.ExecuteTransaction(
         context.Background(),
         clientUtils,
         "generateRandomNumber",
