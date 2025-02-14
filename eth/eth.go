@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/big"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -17,8 +16,6 @@ import (
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/utils"
 )
-
-var roundStatus sync.Map
 
 // Smart contract call helper function
 func CallSmartContract(client *ethclient.Client, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {

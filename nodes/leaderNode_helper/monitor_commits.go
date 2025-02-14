@@ -31,7 +31,7 @@ func checkRoundsForCompletion(h host.Host) {
     // Fetch EOAs for each round
     eoasForRounds := getEOAsForRounds()
 
-    for round, _ := range eoasForRounds {
+    for round := range eoasForRounds {
         // Load the leader commits for the round
         leaderCommits, err := loadLeaderCommits("leader_commits.json")
         if err != nil {
