@@ -21,7 +21,7 @@ import (
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
-	"github.com/tokamak-network/DRB-node/transactions"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -415,7 +415,7 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = transactions.ExecuteTransaction(
+	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
 		"submitMerkleRoot",
