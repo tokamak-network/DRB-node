@@ -20,7 +20,7 @@ import (
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/regularNode_helper"
-	"github.com/tokamak-network/DRB-node/transactions"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -289,7 +289,7 @@ func isEOAActivated(round RoundData, eoaAddress string) bool {
 }
 
 func checkActivationStatus(client *utils.Client, eoaAddress string) bool {
-	activatedOperatorsResult, err := transactions.CallSmartContract(client.Client, client.ContractABI, "getActivatedOperators", client.ContractAddress)
+	activatedOperatorsResult, err := eth.CallSmartContract(client.Client, client.ContractABI, "getActivatedOperators", client.ContractAddress)
 	if err != nil {
 		log.Printf("Failed to call getActivatedOperators: %v", err)
 		return false
@@ -341,14 +341,14 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 	}
 
 	// Fetch deposit amount
-	depositAmountResult, err := transactions.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := transactions.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -371,7 +371,7 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 		}
 
 		// Create and send deposit transaction
-		_, _, err = transactions.ExecuteTransaction(
+		_, _, err = eth.ExecuteTransaction(
 			ctx,
 			&utils.Client{
 				Client:          client,
@@ -396,14 +396,14 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 
 func checkDepositAmount(client *utils.Client, eoaAddress string) (bool, error) {
 	// Fetch deposit amount
-	depositAmountResult, err := transactions.CallSmartContract(client.Client, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.CallSmartContract(client.Client, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := transactions.CallSmartContract(client.Client, client.ContractABI, "s_activationThreshold", client.ContractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(client.Client, client.ContractABI, "s_activationThreshold", client.ContractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
