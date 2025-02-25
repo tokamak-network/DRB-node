@@ -280,7 +280,7 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
     )
 
     if err != nil {
-        return fmt.Errorf("failed to execute generateRandomNumber transaction: %v", err)
+        return err
     }
 
     log.Printf("Transaction submitted. TX Hash: %s", tx.Hash().Hex())
