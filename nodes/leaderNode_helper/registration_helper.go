@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/tokamak-network/DRB-node/transactions"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -118,12 +118,22 @@ func RegisterNode(s network.Stream, filePath, abiFilePath string) error {
 
 // ActivateOnChain handles the on-chain activation of the node.
 func ActivateOnChain(eoaAddress, abiFilePath string) error {
-	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in the environment variables")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
 	}
 
-	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to load contract ABI: %v", err)
@@ -132,7 +142,7 @@ func ActivateOnChain(eoaAddress, abiFilePath string) error {
 	operatorAddress := common.HexToAddress(eoaAddress)
 
 	// Verify if the operator is activated
-	activatedOperatorsResult, err := transactions.CallSmartContract(client, parsedABI, "getActivatedOperators", contractAddress)
+	activatedOperatorsResult, err := eth.CallSmartContract(client, parsedABI, "getActivatedOperators", contractAddress)
 	if err != nil {
 		return fmt.Errorf("failed to call getActivatedOperators: %v", err)
 	}
@@ -146,13 +156,13 @@ func ActivateOnChain(eoaAddress, abiFilePath string) error {
 	}
 
 	// Check deposit amount and activation threshold
-	depositAmountResult, err := transactions.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, operatorAddress)
+	depositAmountResult, err := eth.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, operatorAddress)
 	if err != nil {
 		return fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
-	activationThresholdResult, err := transactions.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
 	if err != nil {
 		return fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -164,6 +174,9 @@ func ActivateOnChain(eoaAddress, abiFilePath string) error {
 
 	// Activate the operator
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return fmt.Errorf("failed to decode leader private key: %v", err)
@@ -176,7 +189,7 @@ func ActivateOnChain(eoaAddress, abiFilePath string) error {
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = transactions.ExecuteTransaction(
+	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
 		"activate",

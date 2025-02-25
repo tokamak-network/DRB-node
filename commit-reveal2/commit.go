@@ -2,11 +2,9 @@ package commitreveal2
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -14,7 +12,7 @@ import (
 )
 
 // GenerateCommit generates the secret value, cos, and cvs for a single regular node.
-func GENERATE_COMMIT(round string, operator string) ([32]byte, [32]byte, [32]byte, error) {
+func GenerateCommit(round string, operator string) ([32]byte, [32]byte, [32]byte, error) {
 	// Current timestamp to simulate block.timestamp in Solidity
 	timestamp := big.NewInt(time.Now().Unix())
 
@@ -79,33 +77,4 @@ func abiEncodePacked(elements ...[]byte) []byte {
 // intToBytes converts a *big.Int to its padded big-endian byte representation.
 func intToBytes(n *big.Int) []byte {
 	return common.LeftPadBytes(n.Bytes(), 32)
-}
-
-// SaveCommitData saves the commit data to a JSON file.
-func SaveCommitData(commitData map[string]interface{}) error {
-	file, err := os.OpenFile("commit_data.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	err = encoder.Encode(commitData)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// SignCommitRequest signs the commit request with the EOA address and round.
-func SignCommitRequest(round string, eoaAddress string) (string, error) {
-	// This is a mock function, replace it with actual signing logic (e.g., using ECDSA or other methods)
-	if eoaAddress == "" {
-		return "", fmt.Errorf("EOA address cannot be empty")
-	}
-
-	// Just return a mock "signed" string for now
-	signedRound := fmt.Sprintf("signed-%d-%s", round, eoaAddress)
-	return signedRound, nil
 }

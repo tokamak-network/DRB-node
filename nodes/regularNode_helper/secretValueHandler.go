@@ -47,7 +47,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	log.Printf("Verified secret value request for round %s from leader %s", req.Round, req.EOAAddress)
 
 	// Fetch the secret value for the specified round
-	commitData, err := utils.LOAD_COMMIT_DATA(req.Round)
+	commitData, err := utils.LoadCommitData(req.Round)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s: %v", req.Round, err)
 		return
@@ -60,7 +60,11 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 
 	// Send the secret value back to the leader
-	leaderPeerID, err := peer.Decode(os.Getenv("LEADER_PEER_ID"))
+	leaderPeerIDStr := os.Getenv("LEADER_PEER_ID")
+	if leaderPeerIDStr == "" {
+		log.Fatal("LEADER_PEER_ID is not set in environment variables.")
+	}
+	leaderPeerID, err := peer.Decode(leaderPeerIDStr)
 	if err != nil {
 		log.Printf("Failed to decode leader peer ID: %v", err)
 		return
@@ -72,7 +76,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 // SendSecretValue sends the secret value for a round to the leader node
 func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 	// Load the commit data for the specified round
-	commitData, err := utils.LOAD_COMMIT_DATA(roundNum)
+	commitData, err := utils.LoadCommitData(roundNum)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s: %v", roundNum, err)
 		return
@@ -80,6 +84,9 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 
 	// Fetch the regular node's private key
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Printf("Failed to decode regular node private key: %v", err)
