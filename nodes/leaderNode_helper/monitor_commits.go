@@ -224,11 +224,11 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
     }
 
     // Load Ethereum client and private key
-    subGraphURL := os.Getenv("SUBGRAPH_URL")
-	if subGraphURL == "" {
-		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
+    ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in environment variables.")
 	}
-    client, err := ethclient.Dial(subGraphURL)
+    client, err := ethclient.Dial(ethRPCURL)
     if err != nil {
         return fmt.Errorf("failed to connect to Ethereum client: %v", err)
     }
