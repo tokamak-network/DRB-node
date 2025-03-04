@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/big"
 	"os"
@@ -16,15 +15,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/libp2p/go-libp2p"
-	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/machinebox/graphql"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
-	"github.com/tokamak-network/DRB-node/transactions"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -34,7 +31,7 @@ type RoundData struct {
 	MerkleRootSubmitted struct {
 		MerkleRoot interface{} `json:"merkleRoot"`
 	} `json:"merkleRootSubmitted"`
-	Round interface{} `json:"round"`
+	Round                 interface{} `json:"round"`
 	RandomNumberGenerated struct {
 		RandomNumber interface{} `json:"randomNumber"`
 	} `json:"randomNumberGenerated"`
@@ -54,33 +51,12 @@ var activatedOperators = make(map[string]map[common.Address]bool)
 func RunLeaderNode() {
 	port := os.Getenv("LEADER_PORT")
 	if port == "" {
-		log.Fatal("LEADER_PORT not set in environment variables.")
+		log.Fatal("LEADER_PORT is not set in environment variables.")
 	}
 
-	privKey, peerID, err := utils.LoadPeerID()
+	h, peerID, err := libp2putils.CreateHost(port)
 	if err != nil {
-		log.Println("PeerID not found, generating a new one.")
-		privKey, _, err = libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 0)
-		if err != nil {
-			log.Fatalf("Failed to generate private key: %v", err)
-		}
-
-		err = utils.SavePeerID(privKey)
-		if err != nil {
-			log.Fatalf("Failed to save PeerID: %v", err)
-		}
-
-		peerID, err = peer.IDFromPrivateKey(privKey)
-		if err != nil {
-			log.Fatalf("Failed to get PeerID from private key: %v", err)
-		}
-	}
-
-	log.Printf("Loaded or generated PeerID: %s", peerID.String())
-
-	h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)), libp2p.Identity(privKey))
-	if err != nil {
-		log.Fatalf("Failed to create libp2p host: %v", err)
+		log.Fatalf("Error creating host: %v", err)
 	}
 	defer h.Close()
 
@@ -112,7 +88,11 @@ func RunLeaderNode() {
 }
 
 func fetchRoundsData() (*GraphQLResponse, error) {
-	client := graphql.NewClient(os.Getenv("SUBGRAPH_URL"))
+	subGraphURL := os.Getenv("SUBGRAPH_URL")
+	if subGraphURL == "" {
+		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
+	}
+	client := graphql.NewClient(subGraphURL)
 	ctx := context.Background()
 	req := utils.GetRoundsRequest()
 
@@ -142,19 +122,14 @@ func handleCommitRequest(s network.Stream) {
 		return
 	}
 
-	verifyReq := utils.RegistrationRequest{EOAAddress: req.EOAAddress, Signature: req.Signature}
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
+	commitVerificationRequest := utils.Request{Round: req.Round, EOAAddress: req.EOAAddress, Signature: req.Signature}
+
+	if !VerifySignatureAndCheckActivation(commitVerificationRequest, "commit") {
 		return
 	}
-
+	
 	roundNum := req.Round
 	eoaAddress := common.HexToAddress(req.EOAAddress)
-
-	if !isEOAActivatedForRound(roundNum, eoaAddress) {
-		log.Printf("EOA %s not activated for round %s, skipping commit.", eoaAddress.Hex(), roundNum)
-		return
-	}
 
 	commitMu.Lock()
 	defer commitMu.Unlock()
@@ -175,12 +150,12 @@ func handleCommitRequest(s network.Stream) {
 	log.Printf("Commit data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	// Check if all commits are ready after this update
-	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum, "CVS") {
-        log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
-        commitMu.Unlock() // Unlock before calling generateMerkleRoot
-        generateMerkleRoot(roundNum)
-        commitMu.Lock()   // Re-lock if needed
-    }
+	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
+		log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
+		commitMu.Unlock() // Unlock before calling generateMerkleRoot
+		generateMerkleRoot(roundNum)
+		commitMu.Lock() // Re-lock if needed
+	}
 }
 
 func handleCOSRequest(h host.Host, s network.Stream) {
@@ -192,20 +167,15 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 		return
 	}
 
-	verifyReq := utils.RegistrationRequest{EOAAddress: req.EOAAddress, Signature: req.Signature}
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
+	cosVerificationRequest := utils.Request{Round: req.Round, EOAAddress: req.EOAAddress, Signature: req.Signature}
+
+	if !VerifySignatureAndCheckActivation(cosVerificationRequest, "COS") {
 		return
 	}
 
 	roundNum := req.Round
 	eoaAddress := common.HexToAddress(req.EOAAddress)
-
-	if !isEOAActivatedForRound(roundNum, eoaAddress) {
-		log.Printf("EOA %s not activated for round %s, skipping COS.", eoaAddress.Hex(), roundNum)
-		return
-	}
-
+		
 	commitMu.Lock()
 	defer commitMu.Unlock()
 
@@ -238,15 +208,15 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	// Check if all commits are ready after this COS
-	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum, "CVS") {
-        log.Printf("All CVS received for round %s after COS, generating Merkle root...", roundNum)
-        commitMu.Unlock()
-        generateMerkleRoot(roundNum)
-        commitMu.Lock()
-    }
+	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
+		log.Printf("All CVS received for round %s after COS, generating Merkle root...", roundNum)
+		commitMu.Unlock()
+		generateMerkleRoot(roundNum)
+		commitMu.Lock()
+	}
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
-	if allCommitsReceivedUnlocked(roundNum, "COS") {
+	if allCommitsReceivedUnlocked(roundNum) {
 		log.Printf("All COS received for round %s. Determining reveal order...", roundNum)
 		err := commitreveal2.DetermineRevealOrder(roundNum, activatedOperators)
 		if err != nil {
@@ -259,24 +229,41 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 }
 
 func isMerkleRootSubmitted(roundNum string) bool {
-    // Call with commitMu locked or ensure commitMu is locked outside
-    roundMap, exists := committedNodes[roundNum]
-    if !exists || len(roundMap) == 0 {
-        return false
-    }
+	// Call with commitMu locked or ensure commitMu is locked outside
+	roundMap, exists := committedNodes[roundNum]
+	if !exists || len(roundMap) == 0 {
+		return false
+	}
 
-    // Check any operator to see if SubmitMerkleRootDone is set
-    for _, data := range roundMap {
-        if data.SubmitMerkleRootDone {
-            return true
-        }
-    }
-    return false
+	// Check any operator to see if SubmitMerkleRootDone is set
+	for _, data := range roundMap {
+		if data.SubmitMerkleRootDone {
+			return true
+		}
+	}
+	return false
+}
+
+func VerifySignatureAndCheckActivation(temp utils.Request, reqType string, ) bool {
+	verifyReq := utils.RegistrationRequest{EOAAddress: temp.EOAAddress, Signature: temp.Signature}
+	if !utils.VerifySignature(verifyReq) {
+		log.Printf("Signature verification failed for round %s EOA %s", temp.Round, temp.EOAAddress)
+		return false
+	}
+
+	roundNum := temp.Round
+	eoaAddress := common.HexToAddress(temp.EOAAddress)
+
+	if !isEOAActivatedForRound(roundNum, eoaAddress) {
+		log.Printf("EOA %s not activated for round %s, skipping %s.", eoaAddress.Hex(), roundNum, reqType)
+		return false
+	}
+	return true
 }
 
 // allCommitsReceivedUnlocked checks if all operators have CVS in-memory.
 // Called with commitMu locked.
-func allCommitsReceivedUnlocked(roundNum string, phase string) bool {
+func allCommitsReceivedUnlocked(roundNum string) bool {
 	ops, exists := activatedOperators[roundNum]
 	if !exists || len(ops) == 0 {
 		return false
@@ -327,14 +314,14 @@ func updateInMemoryData(roundNum string, eoaAddress common.Address, commitData u
 // generateMerkleRoot doesn't lock; it locks inside to read from memory
 func generateMerkleRoot(roundNum string) {
 	commitMu.Lock()
-    // Check if merkle root is already done before proceeding
-    if isMerkleRootSubmitted(roundNum) {
-        log.Printf("Merkle root already submitted for round %s, skipping.", roundNum)
-        commitMu.Unlock()
-        return
-    }
-    commitMu.Unlock()
-	
+	// Check if merkle root is already done before proceeding
+	if isMerkleRootSubmitted(roundNum) {
+		log.Printf("Merkle root already submitted for round %s, skipping.", roundNum)
+		commitMu.Unlock()
+		return
+	}
+	commitMu.Unlock()
+
 	log.Printf("Generating Merkle root for round %s...", roundNum)
 
 	activatedOperatorsList, err := leaderNode_helper.FetchActivatedOperators(roundNum)
@@ -386,7 +373,7 @@ func generateMerkleRoot(roundNum string) {
 
 	log.Printf("Leaves for Merkle tree for round %s: %v", roundNum, leaves)
 
-	merkleRoot, err := commitreveal2.CREATE_MERKLE_TREE(leaves)
+	merkleRoot, err := commitreveal2.CreateMerkleTree(leaves)
 	if err != nil {
 		log.Printf("Failed to create Merkle tree for round %s: %v", roundNum, err)
 		return
@@ -399,13 +386,23 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 	var merkleRootBytes32 [32]byte
 	copy(merkleRootBytes32[:], merkleRoot)
 
-	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in environment variables.")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {
 		log.Printf("Failed to connect to Ethereum client: %v", err)
 		return
 	}
 
-	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
 		log.Printf("Failed to load contract ABI: %v", err)
@@ -419,6 +416,10 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 	}
 
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Printf("Failed to decode leader private key: %v", err)
@@ -432,7 +433,7 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = transactions.ExecuteTransaction(
+	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
 		"submitMerkleRoot",
@@ -477,7 +478,12 @@ func isEOAActivatedForRound(roundNum string, eoaAddress common.Address) bool {
 		return false
 	}
 
-	client := graphql.NewClient(os.Getenv("SUBGRAPH_URL"))
+	subGraphURL := os.Getenv("SUBGRAPH_URL")
+	if subGraphURL == "" {
+		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
+	}
+
+	client := graphql.NewClient(subGraphURL)
 	req := utils.GetActivatedOperatorsAtRoundRequest(roundInt)
 
 	var resp map[string]interface{}
@@ -534,7 +540,7 @@ func processRounds(roundsData *GraphQLResponse) {
 			log.Printf("Round %s is still waiting for commits", roundNum)
 
 			commitMu.Lock()
-			ready := allCommitsReceivedUnlocked(roundNum, "CVS")
+			ready := allCommitsReceivedUnlocked(roundNum)
 			commitMu.Unlock()
 
 			if ready {

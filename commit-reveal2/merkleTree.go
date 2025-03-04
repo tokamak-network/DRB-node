@@ -7,9 +7,9 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-// CREATE_MERKLE_TREE generates a Merkle root using the provided leaves.
+// CreateMerkleTree generates a Merkle root using the provided leaves.
 // The leaves are expected to be byte slices of length 32 (bytes32 in Solidity).
-func CREATE_MERKLE_TREE(leaves [][]byte) ([]byte, error) {
+func CreateMerkleTree(leaves [][]byte) ([]byte, error) {
 	leavesLen := len(leaves)
 
 	// Ensure there are at least two leaves
@@ -54,7 +54,7 @@ func CREATE_MERKLE_TREE(leaves [][]byte) ([]byte, error) {
 		}
 
 		// Compute the hash for the pair (a, b)
-		hashes[i] = _efficientKeccak256(a, b)
+		hashes[i] = efficientKeccak256(a, b)
 	}
 
 	// The last element in the hashes array is the Merkle root
@@ -64,9 +64,9 @@ func CREATE_MERKLE_TREE(leaves [][]byte) ([]byte, error) {
 	return merkleRoot, nil
 }
 
-// _efficientKeccak256 hashes two bytes32 using Keccak256.
-// Mimics Solidity's _efficientKeccak256 function.
-func _efficientKeccak256(a, b []byte) []byte {
+// efficientKeccak256 hashes two bytes32 using Keccak256.
+// Mimics Solidity's efficientKeccak256 function.
+func efficientKeccak256(a, b []byte) []byte {
 	hash := sha3.NewLegacyKeccak256()
 	hash.Write(a)
 	hash.Write(b)

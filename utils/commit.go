@@ -9,33 +9,39 @@ import (
 const commitDataFile = "commits.json"
 
 type CommitRequest struct {
-	Round       string    `json:"round"`
-	Cvs         [32]byte `json:"cvs"`
-	EOAAddress  string `json:"eoa_address"`
-	Signature []byte `json:"signed_round"`
-	Sign        map[string]string `json:"sign"` // New field for v, r, s
+	Round      string            `json:"round"`
+	Cvs        [32]byte          `json:"cvs"`
+	EOAAddress string            `json:"eoa_address"`
+	Signature  []byte            `json:"signed_round"`
+	Sign       map[string]string `json:"sign"` // New field for v, r, s
 }
 
 type CosRequest struct {
-    Round      string    `json:"round"`
-    Cos        [32]byte `json:"cos"`
-    EOAAddress string    `json:"eoa_address"`
-	Signature []byte `json:"signed_round"`
+	Round      string   `json:"round"`
+	Cos        [32]byte `json:"cos"`
+	EOAAddress string   `json:"eoa_address"`
+	Signature  []byte   `json:"signed_round"`
 }
 
 // CommitData defines the structure for storing commit data for the regular node.
 type CommitData struct {
-	Round        string    `json:"round"`
-	SecretValue  [32]byte `json:"secret_value"`
-	Cos          [32]byte `json:"cos"`
-	Cvs          [32]byte `json:"cvs"`
-	SendToLeader bool   `json:"send_to_leader"`
-	SendCosToLeader bool `json:"send_cos_to_leader"`
-	Sign                  map[string]string `json:"sign"` // New field for v, r, s
+	Round           string            `json:"round"`
+	SecretValue     [32]byte          `json:"secret_value"`
+	Cos             [32]byte          `json:"cos"`
+	Cvs             [32]byte          `json:"cvs"`
+	SendToLeader    bool              `json:"send_to_leader"`
+	SendCosToLeader bool              `json:"send_cos_to_leader"`
+	Sign            map[string]string `json:"sign"` // New field for v, r, s
 }
 
-// loadCommitData loads the commit data for a given round number
-func LOAD_COMMIT_DATA(roundNum string) (*CommitData, error) {
+type Request struct {
+	Round      string `json:"round"`
+	EOAAddress string `json:"eoa_address"`
+	Signature  []byte `json:"signed_round"`
+}
+
+// LoadCommitData loads the commit data for a given round number
+func LoadCommitData(roundNum string) (*CommitData, error) {
 	// Open the commit file
 	file, err := os.Open(commitDataFile)
 	if err != nil {
@@ -64,7 +70,7 @@ func LOAD_COMMIT_DATA(roundNum string) (*CommitData, error) {
 }
 
 // saveCommitData saves the commit data to a file
-func SAVE_COMMIT_DATA(commitData CommitData) error {
+func SaveCommitData(commitData CommitData) error {
 	// Open the commit file (create if doesn't exist)
 	file, err := os.OpenFile(commitDataFile, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {

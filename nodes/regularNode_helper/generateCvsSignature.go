@@ -25,8 +25,13 @@ func GenerateCvsSignature(roundNum string, cvs [32]byte) (uint8, string, string,
 
 	// Fetch contract address and chain ID dynamically from the .env file
 	contractAddressEnv := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressEnv == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
 	chainIDEnv := os.Getenv("CHAIN_ID")
-
+	if chainIDEnv == "" {
+		log.Fatal("CHAIN_ID is not set in environment variables.")
+	}
 	contractAddressEnv = strings.TrimPrefix(contractAddressEnv, "0x")
 	contractAddress := common.HexToAddress(contractAddressEnv)
 
@@ -46,6 +51,9 @@ func GenerateCvsSignature(roundNum string, cvs [32]byte) (uint8, string, string,
 
 	// Load the private key
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		return 0, "", "", fmt.Errorf("failed to decode private key: %v", err)

@@ -13,16 +13,14 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/libp2p/go-libp2p"
 	core "github.com/libp2p/go-libp2p/core"
-	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
-	"github.com/multiformats/go-multiaddr"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/regularNode_helper"
-	"github.com/tokamak-network/DRB-node/transactions"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -32,34 +30,15 @@ const abiFilePath = "contract/abi/Commit2RevealDRB.json"
 func RunRegularNode() {
 	ctx := context.Background()
 
-	// Check if PeerID already exists, if not create and save it
-	privKey, peerID, err := utils.LoadPeerID()
+	port := os.Getenv("PORT")
+	if port == "" {
+		log.Fatal("PORT not set in environment variables.")
+	}
+	h, peerID, err := libp2putils.CreateHost(port)
 	if err != nil {
-		log.Println("PeerID not found, generating new one.")
-
-		// Generate a new deterministic libp2p private key (for example, from a fixed seed)
-		privKey, _, err = libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 0)
-		if err != nil {
-			log.Fatalf("Failed to generate libp2p private key: %v", err)
-		}
-
-		// Save the generated PeerID for future restarts
-		err = utils.SavePeerID(privKey)
-		if err != nil {
-			log.Fatalf("Failed to save PeerID: %v", err)
-		}
-
-		peerID, err = peer.IDFromPrivateKey(privKey)
-		if err != nil {
-			log.Fatalf("Failed to get PeerID from private key: %v", err)
-		}
+		log.Fatalf("Error creating host: %v", err)
 	}
 
-	// Create the libp2p host with the loaded or generated PeerID
-	h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", os.Getenv("PORT"))), libp2p.Identity(privKey))
-	if err != nil {
-		log.Fatalf("Failed to create libp2p host: %v", err)
-	}
 	defer h.Close()
 
 	h.SetStreamHandler("/sendSecretValue", func(s network.Stream) {
@@ -68,8 +47,19 @@ func RunRegularNode() {
 
 	// Get leader's multiaddress
 	leaderIP := os.Getenv("LEADER_IP")
+	if leaderIP == "" {
+		log.Fatal("LEADER_IP is not set in environment variables.")
+	}
+
 	leaderPort := os.Getenv("LEADER_PORT")
+	if leaderPort == "" {
+		log.Fatal("LEADER_PORT is not set in environment variables.")
+	}
+
 	leaderPeerID := os.Getenv("LEADER_PEER_ID")
+	if leaderPeerID == "" {
+		log.Fatal("LEADER_PEER_ID is not set in environment variables.")
+	}
 
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -87,7 +77,6 @@ func RunRegularNode() {
 
 	// Get the local IP address of the node
 	ip := utils.GetLocalIP() // Use dynamic IP retrieval
-	port := os.Getenv("PORT")
 
 	// Save the node's information (IP, Port, PeerID, EOA address)
 	nodeInfo := utils.NodeInfo{
@@ -102,27 +91,27 @@ func RunRegularNode() {
 	}
 
 	// Connect to the leader
-	leaderAddrString := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
-	log.Printf("Leader multiaddress: %s", leaderAddrString)
-
-	leaderAddr, err := multiaddr.NewMultiaddr(leaderAddrString)
+	leaderInfo, err := libp2putils.ConnectToPeer(h, leaderIP, leaderPort, leaderPeerID)
 	if err != nil {
-		log.Fatalf("Failed to parse leader multiaddress: %v", err)
+		log.Fatalf("Error connecting to leader: %v", err)
 	}
 
-	leaderInfo, err := peer.AddrInfoFromP2pAddr(leaderAddr)
-	if err != nil {
-		log.Fatalf("Failed to create peer info from leader multiaddress: %v", err)
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in the environment variables")
 	}
 
-	h.Peerstore().AddAddrs(leaderInfo.ID, leaderInfo.Addrs, peerstore.PermanentAddrTTL)
-
-	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to Ethereum client: %v", err)
 	}
 
-	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
 		log.Fatalf("Failed to load contract ABI: %v", err)
@@ -189,81 +178,81 @@ func RunRegularNode() {
 				continue
 			}
 
-// Check if this node's EOA is in the activated operators for the round
-if isEOAActivated(round, eoaAddress) {
-	log.Printf("EOA %s is activated in this round, generating commit...", eoaAddress)
+			// Check if this node's EOA is in the activated operators for the round
+			if isEOAActivated(round, eoaAddress) {
+				log.Printf("EOA %s is activated in this round, generating commit...", eoaAddress)
 
-	// Type assertion to extract round number as a string
-	roundNum, ok := round.Round.(string) // Round is a string in the response
-	if !ok {
-		log.Println("Error: Round is not of type string.")
-		continue
-	}
+				// Type assertion to extract round number as a string
+				roundNum, ok := round.Round.(string) // Round is a string in the response
+				if !ok {
+					log.Println("Error: Round is not of type string.")
+					continue
+				}
 
-	// Check if this round has already been committed (store it locally)
-	commitData, err := utils.LOAD_COMMIT_DATA(roundNum)
-	if err != nil && err.Error() != "commit not found" {
-		log.Printf("Error loading commit data: %v", err)
-		continue
-	}
+				// Check if this round has already been committed (store it locally)
+				commitData, err := utils.LoadCommitData(roundNum)
+				if err != nil && err.Error() != "commit not found" {
+					log.Printf("Error loading commit data: %v", err)
+					continue
+				}
 
-	// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil
-	if commitData != nil && round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
-		log.Printf("Commit data already exists for round %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", roundNum)
-		continue
-	}
+				// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil
+				if commitData != nil && round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
+					log.Printf("Commit data already exists for round %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", roundNum)
+					continue
+				}
 
-	// If Merkle Root and Random Number are nil, generate commit
-	if round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
-		// Generate commit
-		secretValue, cos, cvs, err := commitreveal2.GENERATE_COMMIT(roundNum, eoaAddress)
-		if err != nil {
-			log.Printf("Error generating commit: %v", err)
-			continue
-		}
+				// If Merkle Root and Random Number are nil, generate commit
+				if round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
+					// Generate commit
+					secretValue, cos, cvs, err := commitreveal2.GenerateCommit(roundNum, eoaAddress)
+					if err != nil {
+						log.Printf("Error generating commit: %v", err)
+						continue
+					}
 
-		// Prepare commit data
-		commitData := utils.CommitData{
-			Round:          roundNum,
-			SecretValue:    secretValue,
-			Cos:            cos,
-			Cvs:            cvs,
-			SendToLeader:   true,  // Mark commit to be sent to leader
-			SendCosToLeader: false, // Initially false, to allow sending COS
-		}
+					// Prepare commit data
+					commitData := utils.CommitData{
+						Round:           roundNum,
+						SecretValue:     secretValue,
+						Cos:             cos,
+						Cvs:             cvs,
+						SendToLeader:    true,  // Mark commit to be sent to leader
+						SendCosToLeader: false, // Initially false, to allow sending COS
+					}
 
-		// Save commit data locally to prevent resending
-		err = utils.SAVE_COMMIT_DATA(commitData)
-		if err != nil {
-			log.Printf("Error saving commit data: %v", err)
-			continue
-		}
+					// Save commit data locally to prevent resending
+					err = utils.SaveCommitData(commitData)
+					if err != nil {
+						log.Printf("Error saving commit data: %v", err)
+						continue
+					}
 
-		// Send commit to leader
-		sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, eoaAddress)
-	}
+					// Send commit to leader
+					sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, eoaAddress)
+				}
 
-	// If commit data exists and SendCosToLeader is false, send COS to leader
-	if commitData != nil && !commitData.SendCosToLeader {
-		// If Merkle Root is set but Random Number is nil, check and send COS
-		if round.MerkleRootSubmitted.MerkleRoot != nil && round.RandomNumberGenerated.RandomNumber == nil {
-			log.Printf("Merkle Root is set but Random Number is not. Sending COS for round %s.", roundNum)
+				// If commit data exists and SendCosToLeader is false, send COS to leader
+				if commitData != nil && !commitData.SendCosToLeader {
+					// If Merkle Root is set but Random Number is nil, check and send COS
+					if round.MerkleRootSubmitted.MerkleRoot != nil && round.RandomNumberGenerated.RandomNumber == nil {
+						log.Printf("Merkle Root is set but Random Number is not. Sending COS for round %s.", roundNum)
 
-			// Send COS to leader
-			sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress, privateKey)
+						// Send COS to leader
+						sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress, privateKey)
 
-			// Update SendCosToLeader flag
-			commitData.SendCosToLeader = true
+						// Update SendCosToLeader flag
+						commitData.SendCosToLeader = true
 
-			// Save updated commit data to prevent re-sending COS
-			err := utils.SAVE_COMMIT_DATA(*commitData)
-			if err != nil {
-				log.Printf("Error saving updated commit data after sending COS: %v", err)
+						// Save updated commit data to prevent re-sending COS
+						err := utils.SaveCommitData(*commitData)
+						if err != nil {
+							log.Printf("Error saving updated commit data after sending COS: %v", err)
+						}
+					}
+					continue
+				}
 			}
-		}
-		continue
-	}
-}			
 		}
 
 		// Wait before rechecking activation status
@@ -275,8 +264,8 @@ if isEOAActivated(round, eoaAddress) {
 func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	// Create commit request structure with signed COS and round data
 	req := utils.CosRequest{
-		Round:     commitData.Round,
-		Cos:       commitData.Cos,
+		Round:      commitData.Round,
+		Cos:        commitData.Cos,
 		EOAAddress: eoaAddress, // Include EOA address to verify
 	}
 
@@ -321,7 +310,7 @@ func isEOAActivated(round RoundData, eoaAddress string) bool {
 }
 
 func checkActivationStatus(client *utils.Client, eoaAddress string) bool {
-	activatedOperatorsResult, err := transactions.CallSmartContract(client.Client, client.ContractABI, "getActivatedOperators", client.ContractAddress)
+	activatedOperatorsResult, err := eth.CallSmartContract(client.Client, client.ContractABI, "getActivatedOperators", client.ContractAddress)
 	if err != nil {
 		log.Printf("Failed to call getActivatedOperators: %v", err)
 		return false
@@ -361,26 +350,37 @@ func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID 
 }
 
 func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
-	client, err := ethclient.Dial(os.Getenv("ETH_RPC_URL"))
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in environment variables.")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {
 		return false, fmt.Errorf("failed to connect to Ethereum client: %v", err)
 	}
 
-	contractAddress := common.HexToAddress(os.Getenv("CONTRACT_ADDRESS"))
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
 		return false, fmt.Errorf("failed to load contract ABI: %v", err)
 	}
 
 	// Fetch deposit amount
-	depositAmountResult, err := transactions.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := transactions.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -403,13 +403,13 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 		}
 
 		// Create and send deposit transaction
-		_, _, err = transactions.ExecuteTransaction(
+		_, _, err = eth.ExecuteTransaction(
 			ctx,
 			&utils.Client{
-				Client:       client,
+				Client:          client,
 				ContractAddress: contractAddress,
-				PrivateKey:   privateKey,
-				ContractABI:  parsedABI,
+				PrivateKey:      privateKey,
+				ContractABI:     parsedABI,
 			},
 			"deposit",
 			remaining,
@@ -428,14 +428,14 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 
 func checkDepositAmount(client *utils.Client, eoaAddress string) (bool, error) {
 	// Fetch deposit amount
-	depositAmountResult, err := transactions.CallSmartContract(client.Client, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.CallSmartContract(client.Client, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := transactions.CallSmartContract(client.Client, client.ContractABI, "s_activationThreshold", client.ContractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(client.Client, client.ContractABI, "s_activationThreshold", client.ContractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -451,7 +451,6 @@ func checkDepositAmount(client *utils.Client, eoaAddress string) (bool, error) {
 	return false, nil
 }
 
-
 // sendCommitToLeader sends the generated commit to the leader node
 func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
 	// Create commit request structure with signed round value and CVS
@@ -462,6 +461,10 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	}
 
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
+	
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Printf("Failed to decode leader private key: %v", err)
@@ -489,7 +492,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 
 	// Save commit data locally with v, r, s
 	commitData.Sign = req.Sign
-	if err := utils.SAVE_COMMIT_DATA(commitData); err != nil {
+	if err := utils.SaveCommitData(commitData); err != nil {
 		log.Printf("Failed to save commit data locally: %v", err)
 		return
 	}

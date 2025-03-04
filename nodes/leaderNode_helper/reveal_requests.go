@@ -64,6 +64,10 @@ func StartSecretValueRequests(h host.Host, roundNum string) {
 func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, nodeInfo NodeInfo) {
 	// Load private key from environment variable
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Printf("Failed to decode leader private key: %v", err)

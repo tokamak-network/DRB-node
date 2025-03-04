@@ -16,18 +16,15 @@ type PeerIDStorage struct {
 	PrivateKeyBytes []byte `json:"private_key_bytes"`
 }
 
-// GetPeerIDFileName returns the appropriate file name based on the node type
-func GetPeerIDFileName() string {
+// getPeerIDFileName returns the appropriate file name based on the node type
+func getPeerIDFileName() string {
 	// Read NODE_TYPE from the environment variable
 	nodeType := os.Getenv("NODE_TYPE")
 
 	// Default to "regular" if NODE_TYPE is not set
 	if nodeType == "" {
 		nodeType = "regular"
-	}
-
-	// Return the corresponding file name based on the node type
-	if nodeType == "leader" {
+	} else if nodeType == "leader" {
 		return "leader_peer_id.json"
 	}
 	return "regular_peer_id.json"
@@ -46,7 +43,7 @@ func SavePeerID(privKey crypto.PrivKey) error {
 	peerIDStorage := PeerIDStorage{PrivateKeyBytes: privKeyBytes}
 
 	// Marshal and save to the correct file based on the node type
-	fileName := GetPeerIDFileName()
+	fileName := getPeerIDFileName()
 	data, err := json.MarshalIndent(peerIDStorage, "", "  ")
 	if err != nil {
 		log.Printf("Failed to marshal private key bytes: %v", err)
@@ -66,7 +63,7 @@ func SavePeerID(privKey crypto.PrivKey) error {
 // LoadPeerID loads the libp2p PeerID's private key from a file
 func LoadPeerID() (crypto.PrivKey, peer.ID, error) {
 	// Get the correct file name based on the node type
-	fileName := GetPeerIDFileName()
+	fileName := getPeerIDFileName()
 
 	// Attempt to read the file containing the private key bytes
 	data, err := ioutil.ReadFile(fileName)
