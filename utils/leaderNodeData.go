@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 const leaderCommitDataFile = "leader_commits.json"
+
+var CommittedNodes = make(map[string]map[common.Address]LeaderCommitData)
 
 // LeaderCommitData defines the structure for storing commit data in the leader node.
 type LeaderCommitData struct {
@@ -27,48 +31,47 @@ type LeaderCommitData struct {
 
 // LoadLeaderCommitData should load data from the file and return the commit data for a specific round and EOA
 func LoadLeaderCommitData(roundNum, eoaAddress string) (*LeaderCommitData, error) {
-    // Open the commit file
-    file, err := os.Open(leaderCommitDataFile)
-    if err != nil {
-        if os.IsNotExist(err) {
-            return nil, fmt.Errorf("commit data not found")
-        }
-        return nil, fmt.Errorf("error opening leader commit data file: %v", err)
-    }
-    defer file.Close()
+	// Open the commit file
+	file, err := os.Open(leaderCommitDataFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("commit data not found")
+		}
+		return nil, fmt.Errorf("error opening leader commit data file: %v", err)
+	}
+	defer file.Close()
 
-    // Decode JSON data
-    var commits map[string]LeaderCommitData // Use LeaderCommitData
-    decoder := json.NewDecoder(file)
-    err = decoder.Decode(&commits)
-    if err != nil {
-        return nil, fmt.Errorf("error decoding leader commit data: %v", err)
-    }
+	// Decode JSON data
+	var commits map[string]LeaderCommitData // Use LeaderCommitData
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&commits)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding leader commit data: %v", err)
+	}
 
-    // Construct the composite key: ROUND+EOA
-    key := roundNum + "+" + eoaAddress
-    log.Printf("Loading commit data for key: %s", key) // Debug log for the key
+	// Construct the composite key: ROUND+EOA
+	key := roundNum + "+" + eoaAddress
+	log.Printf("Loading commit data for key: %s", key) // Debug log for the key
 
-    // Check if commit data exists for the given key
-    commitData, exists := commits[key]
-    if !exists {
-        return nil, fmt.Errorf("commit data not found for key: %s", key)
-    }
+	// Check if commit data exists for the given key
+	commitData, exists := commits[key]
+	if !exists {
+		return nil, fmt.Errorf("commit data not found for key: %s", key)
+	}
 
-    // Convert the CVS hex string back to a byte array
-    if commitData.CvsHex != "" {
-        cvsBytes, err := hex.DecodeString(commitData.CvsHex)
-        if err != nil {
-            return nil, fmt.Errorf("failed to decode CVS hex string: %v", err)
-        }
-        copy(commitData.Cvs[:], cvsBytes)
-    }
+	// Convert the CVS hex string back to a byte array
+	if commitData.CvsHex != "" {
+		cvsBytes, err := hex.DecodeString(commitData.CvsHex)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode CVS hex string: %v", err)
+		}
+		copy(commitData.Cvs[:], cvsBytes)
+	}
 
-    log.Printf("Loaded commit data for key: %s, CVS: %v", key, commitData.Cvs) // Debug log for loaded data
+	log.Printf("Loaded commit data for key: %s, CVS: %v", key, commitData.Cvs) // Debug log for loaded data
 
-    return &commitData, nil
+	return &commitData, nil
 }
-
 
 // SaveLeaderCommitData should save commit data in the correct format
 func SaveLeaderCommitData(commitData LeaderCommitData) error {

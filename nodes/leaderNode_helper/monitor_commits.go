@@ -21,135 +21,134 @@ import (
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
 func MonitorCommits(h host.Host) {
-    for {
-        checkRoundsForCompletion(h)
-        time.Sleep(10 * time.Second) // Adjust the interval as needed
-    }
+	for {
+		checkRoundsForCompletion(h)
+		time.Sleep(10 * time.Second) // Adjust the interval as needed
+	}
 }
 
 func checkRoundsForCompletion(h host.Host) {
-    // Fetch EOAs for each round
-    eoasForRounds := getEOAsForRounds()
+	// Fetch EOAs for each round
+	eoasForRounds := getEOAsForRounds()
 
-    for round := range eoasForRounds {
-        // Load the leader commits for the round
-        leaderCommits, err := loadLeaderCommits("leader_commits.json")
-        if err != nil {
-            log.Printf("Failed to load leader commits: %v", err)
-            continue
-        }
+	for round := range eoasForRounds {
+		// Load the leader commits for the round
+		leaderCommits, err := loadLeaderCommits("leader_commits.json")
+		if err != nil {
+			log.Printf("Failed to load leader commits: %v", err)
+			continue
+		}
 
-        // Check if the round has already generated a random number
-        if isRoundCompleted(leaderCommits, round) {
-            continue
-        }
+		// Check if the round has already generated a random number
+		if isRoundCompleted(leaderCommits, round) {
+			continue
+		}
 
-        // Check if the Merkle root has been submitted
-        if !isMerkleRootSubmitted(leaderCommits, round) {
-            log.Printf("Merkle root not submitted for round %s. Skipping random number generation.", round)
-            continue
-        }
+		// Check if the Merkle root has been submitted
+		if !isMerkleRootSubmitted(leaderCommits, round) {
+			log.Printf("Merkle root not submitted for round %s. Skipping random number generation.", round)
+			continue
+		}
 
-        // Fetch activated operators for the round
-        activatedOperators, err := FetchActivatedOperators(round)
-        if err != nil {
-            log.Printf("Failed to fetch activated operators for round %s: %v", round, err)
-            continue
-        }
+		// Fetch activated operators for the round
+		activatedOperators, err := FetchActivatedOperators(round)
+		if err != nil {
+			log.Printf("Failed to fetch activated operators for round %s: %v", round, err)
+			continue
+		}
 
-        // Filter out the `0x0000000000000000000000000000000000000000` address
-        filteredOperators := filterOperators(activatedOperators)
+		// Filter out the `0x0000000000000000000000000000000000000000` address
+		filteredOperators := filterOperators(activatedOperators)
 
-        // Convert filteredOperators from []string to []common.Address
-        var operatorAddresses []common.Address
-        for _, operator := range filteredOperators {
-            operatorAddresses = append(operatorAddresses, common.HexToAddress(operator))
-        }
+		// Convert filteredOperators from []string to []common.Address
+		var operatorAddresses []common.Address
+		for _, operator := range filteredOperators {
+			operatorAddresses = append(operatorAddresses, common.HexToAddress(operator))
+		}
 
-        // Collect secret values, signatures (v, r, s), and round info in the order of activated operators
-        var secrets [][]byte
-        var vs []uint8
-        var rs []common.Hash
-        var ss []common.Hash
+		// Collect secret values, signatures (v, r, s), and round info in the order of activated operators
+		var secrets [][]byte
+		var vs []uint8
+		var rs []common.Hash
+		var ss []common.Hash
 
-        allEOAsSubmitted := true
-        for _, operator := range operatorAddresses {
-            commitData, exists := leaderCommits[round+"+"+operator.Hex()]
-            if !exists || commitData.SecretValue == [32]byte{} {
-                log.Printf("EOA %s has not submitted a secret value for round %s. Initiating request.", operator.Hex(), round)
+		allEOAsSubmitted := true
+		for _, operator := range operatorAddresses {
+			commitData, exists := leaderCommits[round+"+"+operator.Hex()]
+			if !exists || commitData.SecretValue == [32]byte{} {
+				log.Printf("EOA %s has not submitted a secret value for round %s. Initiating request.", operator.Hex(), round)
 
-                // Initiate a request for the missing secret value
-                nodeInfo, err := fetchNodeInfo(operator.Hex())
-                if err != nil {
-                    log.Printf("Failed to fetch node info for EOA %s: %v", operator.Hex(), err)
-                    continue
-                }
+				// Initiate a request for the missing secret value
+				nodeInfo, err := fetchNodeInfo(operator.Hex())
+				if err != nil {
+					log.Printf("Failed to fetch node info for EOA %s: %v", operator.Hex(), err)
+					continue
+				}
 
-                sendSecretValueRequestToNode(h, round, operator.Hex(), nodeInfo)
-                allEOAsSubmitted = false
-                break
-            }
+				sendSecretValueRequestToNode(h, round, operator.Hex(), nodeInfo)
+				allEOAsSubmitted = false
+				break
+			}
 
-            // Ensure the signature map contains valid data
-            if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
-                log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
-                allEOAsSubmitted = false
-                break
-            }
+			// Ensure the signature map contains valid data
+			if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
+				log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
+				allEOAsSubmitted = false
+				break
+			}
 
-            // Parse and validate signature components
-            vStr := commitData.Sign["v"]
-            vValue, err := strconv.ParseUint(vStr, 10, 8)
-            if err != nil {
-                log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
-                allEOAsSubmitted = false
-                break
-            }
+			// Parse and validate signature components
+			vStr := commitData.Sign["v"]
+			vValue, err := strconv.ParseUint(vStr, 10, 8)
+			if err != nil {
+				log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
+				allEOAsSubmitted = false
+				break
+			}
 
-            secrets = append(secrets, commitData.SecretValue[:])
-            vs = append(vs, uint8(vValue))
-            rs = append(rs, common.HexToHash(commitData.Sign["r"]))
-            ss = append(ss, common.HexToHash(commitData.Sign["s"]))
-        }
+			secrets = append(secrets, commitData.SecretValue[:])
+			vs = append(vs, uint8(vValue))
+			rs = append(rs, common.HexToHash(commitData.Sign["r"]))
+			ss = append(ss, common.HexToHash(commitData.Sign["s"]))
+		}
 
-        // If all EOAs have submitted, trigger the random number generation transaction
-        if allEOAsSubmitted {
-            log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
-            err := generateRandomNumberTransaction(round, secrets, vs, rs, ss, operatorAddresses)
-            if err != nil {
-                log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
-            } else {
-                markRoundCompleted(leaderCommits, round)
-            }
-        }
-    }
+		// If all EOAs have submitted, trigger the random number generation transaction
+		if allEOAsSubmitted {
+			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
+			err := generateRandomNumberTransaction(round, secrets, vs, rs, ss, operatorAddresses)
+			if err != nil {
+				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
+			} else {
+				markRoundCompleted(leaderCommits, round)
+			}
+		}
+	}
 }
 
 // isMerkleRootSubmitted checks if the Merkle root has been submitted for a given round.
 func isMerkleRootSubmitted(leaderCommits map[string]utils.LeaderCommitData, round string) bool {
-    for _, commitData := range leaderCommits {
-        if commitData.Round == round {
-            return commitData.SubmitMerkleRootDone
-        }
-    }
-    return false
+	for _, commitData := range leaderCommits {
+		if commitData.Round == round {
+			return commitData.SubmitMerkleRootDone
+		}
+	}
+	return false
 }
 
 func fetchNodeInfo(eoa string) (NodeInfo, error) {
-    filePath := "registered_nodes.json"
-    nodes, err := LoadRegisteredNodes(filePath)
-    if err != nil {
-        return NodeInfo{}, fmt.Errorf("failed to load registered nodes: %v", err)
-    }
+	filePath := "registered_nodes.json"
+	nodes, err := LoadRegisteredNodes(filePath)
+	if err != nil {
+		return NodeInfo{}, fmt.Errorf("failed to load registered nodes: %v", err)
+	}
 
-    nodeInfo, exists := nodes[eoa]
-    if !exists {
-        return NodeInfo{}, fmt.Errorf("node info for EOA %s not found", eoa)
-    }
+	nodeInfo, exists := nodes[eoa]
+	if !exists {
+		return NodeInfo{}, fmt.Errorf("node info for EOA %s not found", eoa)
+	}
 
-    return nodeInfo, nil
+	return nodeInfo, nil
 }
-
 
 // Helper: Filter out `0x0000000000000000000000000000000000000000` from the list of operators.
 func filterOperators(operators []string) []string {
@@ -164,7 +163,7 @@ func filterOperators(operators []string) []string {
 
 // Fetch activated operators for a specific round
 func FetchActivatedOperators(round string) ([]string, error) {
-    subGraphURL := os.Getenv("SUBGRAPH_URL")
+	subGraphURL := os.Getenv("SUBGRAPH_URL")
 	if subGraphURL == "" {
 		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
 	}
@@ -197,94 +196,94 @@ func roundToInt(round string) int {
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
 func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash, eoas []common.Address) error {
-    log.Printf("Preparing to execute generateRandomNumber...")
+	log.Printf("Preparing to execute generateRandomNumber...")
 
-    // Convert `secrets` from [][]byte to []common.Hash
-    var secretsHashes []common.Hash
-    for _, secret := range secrets {
-        var secretHash common.Hash
-        copy(secretHash[:], secret)
-        secretsHashes = append(secretsHashes, secretHash)
-    }
+	// Convert `secrets` from [][]byte to []common.Hash
+	var secretsHashes []common.Hash
+	for _, secret := range secrets {
+		var secretHash common.Hash
+		copy(secretHash[:], secret)
+		secretsHashes = append(secretsHashes, secretHash)
+	}
 
-    // Check if secretsHashes, vs, rs, or ss are empty
-    if len(secretsHashes) == 0 || len(vs) == 0 || len(rs) == 0 || len(ss) == 0 {
-        return fmt.Errorf("one or more of the required arrays (secretsHashes, vs, rs, ss) are empty")
-    }
+	// Check if secretsHashes, vs, rs, or ss are empty
+	if len(secretsHashes) == 0 || len(vs) == 0 || len(rs) == 0 || len(ss) == 0 {
+		return fmt.Errorf("one or more of the required arrays (secretsHashes, vs, rs, ss) are empty")
+	}
 
-    // Debugging: Log EOA order
-    for i, eoa := range eoas {
-        log.Printf("EOA Position %d: %s", i+1, eoa.Hex())
-    }
+	// Debugging: Log EOA order
+	for i, eoa := range eoas {
+		log.Printf("EOA Position %d: %s", i+1, eoa.Hex())
+	}
 
-    // Prepare the round number
-    roundNum, ok := new(big.Int).SetString(round, 10)
-    if !ok {
-        return fmt.Errorf("invalid round number: %s", round)
-    }
+	// Prepare the round number
+	roundNum, ok := new(big.Int).SetString(round, 10)
+	if !ok {
+		return fmt.Errorf("invalid round number: %s", round)
+	}
 
-    // Load Ethereum client and private key
-    ethRPCURL := os.Getenv("ETH_RPC_URL")
+	// Load Ethereum client and private key
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
 		log.Fatal("ETH_RPC_URL is not set in environment variables.")
 	}
-    client, err := ethclient.Dial(ethRPCURL)
-    if err != nil {
-        return fmt.Errorf("failed to connect to Ethereum client: %v", err)
-    }
-    defer client.Close()
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
+	}
+	defer client.Close()
 
-    privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
-    privateKey, err := crypto.HexToECDSA(privateKeyHex)
-    if err != nil {
-        return fmt.Errorf("failed to load leader private key: %v", err)
-    }
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		return fmt.Errorf("failed to load leader private key: %v", err)
+	}
 
-    contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
-    contractAddress := common.HexToAddress(contractAddressStr)
-    parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-    if err != nil {
-        return fmt.Errorf("failed to load contract ABI: %v", err)
-    }
+	contractAddress := common.HexToAddress(contractAddressStr)
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return fmt.Errorf("failed to load contract ABI: %v", err)
+	}
 
-    clientUtils := &utils.Client{
-        Client:          client,
-        ContractAddress: contractAddress,
-        PrivateKey:      privateKey,
-        ContractABI:     parsedABI,
-    }
+	clientUtils := &utils.Client{
+		Client:          client,
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
 
-    // Debugging: Log all inputs before executing the transaction
-    log.Printf("Secrets: %v", secretsHashes)
-    log.Printf("VS: %v", vs)
-    log.Printf("RS: %v", rs)
-    log.Printf("SS: %v", ss)
+	// Debugging: Log all inputs before executing the transaction
+	log.Printf("Secrets: %v", secretsHashes)
+	log.Printf("VS: %v", vs)
+	log.Printf("RS: %v", rs)
+	log.Printf("SS: %v", ss)
 
-    // Prepare the function call to generateRandomNumber
-    tx, _, err := eth.ExecuteTransaction(
-        context.Background(),
-        clientUtils,
-        "generateRandomNumber",
-        big.NewInt(0),        // No Ether value
-        roundNum,             // uint256 round
-        secretsHashes,        // bytes32[] secrets
-        vs,                   // uint8[] vs
-        rs,                   // bytes32[] rs
-        ss,                   // bytes32[] ss
-    )
+	// Prepare the function call to generateRandomNumber
+	tx, _, err := eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		"generateRandomNumber",
+		big.NewInt(0), // No Ether value
+		roundNum,      // uint256 round
+		secretsHashes, // bytes32[] secrets
+		vs,            // uint8[] vs
+		rs,            // bytes32[] rs
+		ss,            // bytes32[] ss
+	)
 
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
-    log.Printf("Transaction submitted. TX Hash: %s", tx.Hash().Hex())
-    return nil
+	log.Printf("Transaction submitted. TX Hash: %s", tx.Hash().Hex())
+	return nil
 }
 
 // markRoundCompleted updates the leader_commits.json file to mark a round as completed.

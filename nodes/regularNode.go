@@ -45,6 +45,8 @@ func RunRegularNode() {
 		regularNode_helper.HandleSecretValueRequest(h, s)
 	})
 
+	go regularNode_helper.MonitorCommitRequest()
+
 	// Get leader's multiaddress
 	leaderIP := os.Getenv("LEADER_IP")
 	if leaderIP == "" {

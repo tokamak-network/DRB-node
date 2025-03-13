@@ -45,9 +45,12 @@ type GraphQLResponse struct {
 }
 
 // committedNodes and activatedOperators are authoritative in-memory states.
-var committedNodes = make(map[string]map[common.Address]utils.LeaderCommitData)
+// var committedNodes = make(map[string]map[common.Address]utils.LeaderCommitData)
 var activatedOperators = make(map[string]map[common.Address]bool)
 
+var roundFlag = make(map[string]uint64)
+var sendCommitRequest = make(map[string]bool)
+var onChainExecution = make(map[string]map[string]map[string]bool)
 func RunLeaderNode() {
 	port := os.Getenv("LEADER_PORT")
 	if port == "" {
@@ -73,7 +76,7 @@ func RunLeaderNode() {
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
 	go leaderNode_helper.MonitorCommits(h)
-
+	go leaderNode_helper.ReceiveCommit()
 	for {
 		roundsData, err := fetchRoundsData()
 		if err != nil {
@@ -230,7 +233,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 
 func isMerkleRootSubmitted(roundNum string) bool {
 	// Call with commitMu locked or ensure commitMu is locked outside
-	roundMap, exists := committedNodes[roundNum]
+	roundMap, exists := utils.CommittedNodes[roundNum]
 	if !exists || len(roundMap) == 0 {
 		return false
 	}
@@ -269,7 +272,7 @@ func allCommitsReceivedUnlocked(roundNum string) bool {
 		return false
 	}
 
-	roundCommits, roundExists := committedNodes[roundNum]
+	roundCommits, roundExists := utils.CommittedNodes[roundNum]
 	if !roundExists || len(roundCommits) == 0 {
 		return false
 	}
@@ -283,13 +286,42 @@ func allCommitsReceivedUnlocked(roundNum string) bool {
 	return true
 }
 
+func UpdatedallCommitsReceivedUnlocked(roundNum string) map[string]bool {
+	result := make(map[string]bool)
+	ops, exists := activatedOperators[roundNum]
+	if !exists || len(ops) == 0 {
+		return result
+	}
+
+	roundCommits, roundExists := utils.CommittedNodes[roundNum]
+	if !roundExists || len(roundCommits) == 0 {
+		for op := range ops {
+			result[op.Hex()] = false
+		}
+	}
+
+	for op := range ops {
+		data, ok := roundCommits[op]
+		if ok {
+			if data.Cvs != [32]byte{} {
+				result[op.Hex()] = true
+			} else {
+				result[op.Hex()] = false
+			}
+		} else {
+			result[op.Hex()] = false
+		}
+	}
+	return result
+}
+
 // getOrCreateLeaderCommitData returns commitData from in-memory map or creates a new one.
 // Called with commitMu locked.
 func getOrCreateLeaderCommitData(roundNum string, eoaAddress common.Address) *utils.LeaderCommitData {
-	roundMap, exists := committedNodes[roundNum]
+	roundMap, exists := utils.CommittedNodes[roundNum]
 	if !exists {
 		roundMap = make(map[common.Address]utils.LeaderCommitData)
-		committedNodes[roundNum] = roundMap
+		utils.CommittedNodes[roundNum] = roundMap
 	}
 
 	data, existsData := roundMap[eoaAddress]
@@ -303,10 +335,10 @@ func getOrCreateLeaderCommitData(roundNum string, eoaAddress common.Address) *ut
 // updateInMemoryData updates committedNodes with the latest commitData.
 // Called with commitMu locked.
 func updateInMemoryData(roundNum string, eoaAddress common.Address, commitData utils.LeaderCommitData) {
-	roundMap, exists := committedNodes[roundNum]
+	roundMap, exists := utils.CommittedNodes[roundNum]
 	if !exists {
 		roundMap = make(map[common.Address]utils.LeaderCommitData)
-		committedNodes[roundNum] = roundMap
+		utils.CommittedNodes[roundNum] = roundMap
 	}
 	roundMap[eoaAddress] = commitData
 }
@@ -344,7 +376,7 @@ func generateMerkleRoot(roundNum string) {
 	}
 
 	commitMu.Lock()
-	roundMap, roundExists := committedNodes[roundNum]
+	roundMap, roundExists := utils.CommittedNodes[roundNum]
 	if !roundExists || len(roundMap) == 0 {
 		log.Printf("No commits found in-memory for round %s, cannot generate Merkle root.", roundNum)
 		commitMu.Unlock()
@@ -454,7 +486,7 @@ func updateCommitDataAfterSubmit(roundNum string) {
 	commitMu.Lock()
 	defer commitMu.Unlock()
 
-	roundMap, exists := committedNodes[roundNum]
+	roundMap, exists := utils.CommittedNodes[roundNum]
 	if !exists {
 		return
 	}
@@ -540,15 +572,109 @@ func processRounds(roundsData *GraphQLResponse) {
 			log.Printf("Round %s is still waiting for commits", roundNum)
 
 			commitMu.Lock()
-			ready := allCommitsReceivedUnlocked(roundNum)
+			ready := UpdatedallCommitsReceivedUnlocked(roundNum)
 			commitMu.Unlock()
 
-			if ready {
+			allReceived := true
+			for op, submitted := range ready {
+				if !submitted {
+					allReceived = false
+					log.Printf("Operator %s has not submitted CV.", op)
+					if _, exists := onChainExecution[roundNum]; !exists {
+						onChainExecution[roundNum] = make(map[string]map[string]bool)
+					}
+
+					if _, exists := onChainExecution[roundNum]["CVS"]; !exists {
+						onChainExecution[roundNum]["CVS"] = make(map[string]bool)
+					}
+					if onChainExecution[roundNum]["CVS"][op] {
+						revert()
+					} else if sendCommitRequest[roundNum] {
+						handleMissingCV(op, roundNum)
+						onChainExecution[roundNum]["CVS"][op] = true
+					}
+				}
+			}
+			time.Sleep(80 * time.Second)
+			if allReceived {
 				log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
 				generateMerkleRoot(roundNum)
 			} else {
 				log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
+				roundFlag[roundNum]++
+				if roundFlag[roundNum] >= 2 {
+				sendCommitRequest[roundNum] = true
+				}
 			}
 		}
 	}
+}
+
+func handleMissingCV(op, roundNum string) {
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in environment variables.")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		log.Printf("Failed to connect to Ethereum client: %v", err)
+		return
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	roundNumInt, err := strconv.ParseInt(roundNum, 10, 64)
+	if err != nil {
+		log.Printf("Failed to parse roundNum: %v", err)
+		return
+	}
+
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode leader private key: %v", err)
+		return
+	}
+
+	clientUtils := &utils.Client{
+		Client:          client,
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+	operatorAddress := common.HexToAddress(op)
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		"submitCommitRequest",
+		big.NewInt(0),
+		operatorAddress,
+		big.NewInt(roundNumInt),
+	)
+	if err != nil {
+		log.Printf("Failed to submit commit request root for round %s: %v", roundNum, err)
+		return
+	}
+
+	log.Printf("Successfully submitted commit request for round %s and operator %v", roundNum, op)
+
+}
+
+func revert() {
+
 }

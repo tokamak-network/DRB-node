@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import {ReentrancyGuard} from "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {OptimismL1Fees} from "./OptimismL1Fees.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {DRBConsumerBase} from "./DRBConsumerBase.sol";
-import {Commit2RevealDRBStorage} from "./Commit2RevealDRBStorage.sol";
-import {Sort} from "./libraries/Sort.sol";
+import {ConsumerBase} from "./ConsumerBase.sol";
+import {CommitReveal2Storage} from "./CommitReveal2Storage.sol";
+import {Sort} from "./Sort.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
-contract Commit2RevealDRB is
+contract CommitReveal2 is
     EIP712,
-    ReentrancyGuard,
+    Ownable,
+    ReentrancyGuardTransient,
     OptimismL1Fees,
-    Commit2RevealDRBStorage
+    CommitReveal2Storage
 {
     constructor(
         uint256 activationThreshold,
@@ -25,8 +26,6 @@ contract Commit2RevealDRB is
         s_activationThreshold = activationThreshold;
         s_flatFee = flatFee;
         s_maxActivatedOperators = maxActivatedOperators;
-
-        s_activatedOperators.push(address(0));
     }
 
     function estimateRequestPrice(
@@ -58,7 +57,7 @@ contract Commit2RevealDRB is
             ExceedCallbackGasLimit()
         );
         uint256 activatedOperatorsLength = s_activatedOperators.length;
-        require(activatedOperatorsLength > 2, NotEnoughActivatedOperators());
+        require(activatedOperatorsLength > 1, NotEnoughActivatedOperators());
         require(
             msg.value >=
                 _calculateRequestPrice(
@@ -81,20 +80,15 @@ contract Commit2RevealDRB is
         s_activatedOperatorsAtRound[
             round
         ] = activatedOperators = s_activatedOperators;
-        uint256 i = 1;
         mapping(address => uint256)
             storage activatedOperatorOrderAtRound = s_activatedOperatorOrderAtRound[
                 round
             ];
-        uint256 activationThreshold = s_activationThreshold;
+        s_depositAmount[owner()] += msg.value;
+        uint256 i;
         do {
-            address operator = activatedOperators[i];
-            activatedOperatorOrderAtRound[operator] = i;
-            uint256 activatedOperatorIndex = s_activatedOperatorOrder[operator];
-            if ((s_depositAmount[operator] -= msg.value) < activationThreshold)
-                _deactivate(activatedOperatorIndex, operator);
             unchecked {
-                ++i;
+                activatedOperatorOrderAtRound[activatedOperators[i - 1]] = ++i;
             }
         } while (i < activatedOperatorsLength);
         emit RandomNumberRequested(round, activatedOperators);
@@ -158,7 +152,18 @@ contract Commit2RevealDRB is
             NotActivatedOperatorForThisRound()
         );
         s_roundInfo[round].merkleRoot = merkleRoot;
+        emit MerkleRootSubmitted(round, merkleRoot);
     }
+
+    event SubmitCVS(uint256 round, address op);
+    event COV(uint256 round, address op, bytes32 cov);
+
+    function submitCommitRequest(address op, uint256 roundNum) external {
+        emit SubmitCVS(roundNum, op);
+    } 
+    function submitCommit(address op, uint256 roundNum, bytes32 cv) external {
+        emit COV(roundNum, op, cv);
+    } 
 
     function generateRandomNumber(
         uint256 round,
@@ -168,6 +173,7 @@ contract Commit2RevealDRB is
         bytes32[] calldata ss
     ) external nonReentrant {
         uint256 secretsLength = secrets.length;
+        require(secretsLength > 1, NotEnoughParticipatedOperators());
 
         bytes32[] memory cos = new bytes32[](secretsLength);
         uint256[] memory cvs = new uint256[](secretsLength);
@@ -181,7 +187,7 @@ contract Commit2RevealDRB is
         // ** determine reveal order
         uint256[] memory diffs = new uint256[](secretsLength);
         uint256[] memory revealOrders = new uint256[](secretsLength);
-        for (uint256 i = 0; i < secretsLength; i = unchecked_inc(i)) {
+        for (uint256 i; i < secretsLength; i = unchecked_inc(i)) {
             diffs[i] = diff(rv, cvs[i]);
             revealOrders[i] = i;
         }
@@ -203,6 +209,7 @@ contract Commit2RevealDRB is
             storage activatedOperatorOrderAtRound = s_activatedOperatorOrderAtRound[
                 round
             ];
+        address[] memory participatedOperators = new address[](secretsLength);
         for (uint256 i; i < secretsLength; i = unchecked_inc(i)) {
             // signature malleability prevention
             require(
@@ -210,22 +217,22 @@ contract Commit2RevealDRB is
                     0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0,
                 InvalidSignatureS()
             );
-            require(
-                activatedOperatorOrderAtRound[
-                    ecrecover(
-                        _hashTypedDataV4(
-                            keccak256(
-                                abi.encode(
-                                    MESSAGE_TYPEHASH,
-                                    Message({round: round, cv: leaves[i]})
-                                )
-                            )
-                        ),
-                        vs[i],
-                        rs[i],
-                        ss[i]
+            address recoveredAddress = ecrecover(
+                _hashTypedDataV4(
+                    keccak256(
+                        abi.encode(
+                            MESSAGE_TYPEHASH,
+                            Message({round: round, cv: leaves[i]})
+                        )
                     )
-                ] > 0,
+                ),
+                vs[i],
+                rs[i],
+                ss[i]
+            );
+            participatedOperators[i] = recoveredAddress;
+            require(
+                activatedOperatorOrderAtRound[recoveredAddress] > 0,
                 InvalidSignature()
             );
         }
@@ -242,36 +249,14 @@ contract Commit2RevealDRB is
         bool success = _call(
             requestInfo.consumer,
             abi.encodeWithSelector(
-                DRBConsumerBase.rawFulfillRandomWords.selector,
+                ConsumerBase.rawFulfillRandomNumber.selector,
                 round,
                 randomNumber
             ),
             requestInfo.callbackGasLimit
         );
         roundInfo.fulfillSucceeded = success;
-        address[]
-            storage activatedOperatorsAtRound = s_activatedOperatorsAtRound[
-                round
-            ];
-        uint256 cost = requestInfo.cost;
-        uint256 activatedOperatorsLength = activatedOperatorsAtRound.length;
-        uint256 costWithReward = cost + (cost / (activatedOperatorsLength - 1));
-        uint256 activationThreshold = s_activationThreshold;
-
-        for (
-            uint256 i = 1;
-            i < activatedOperatorsLength;
-            i = unchecked_inc(i)
-        ) {
-            address operator = activatedOperatorsAtRound[i];
-            _checkAndActivateIfNotForceDeactivated(
-                s_activatedOperatorOrder[operator],
-                s_depositAmount[operator] += costWithReward,
-                activationThreshold,
-                operator
-            );
-        }
-        emit RandomNumberGenerated(round, randomNumber);
+        emit RandomNumberGenerated(round, randomNumber, participatedOperators);
     }
 
     function getMessageHash(
@@ -315,21 +300,6 @@ contract Commit2RevealDRB is
         return hashes[hashCount - 1];
     }
 
-    function _checkAndActivateIfNotForceDeactivated(
-        uint256 activatedOperatorIndex,
-        uint256 updatedDepositAmount,
-        uint256 threshold,
-        address operator
-    ) private {
-        if (
-            activatedOperatorIndex == 0 &&
-            updatedDepositAmount >= threshold &&
-            !s_forceDeactivated[operator]
-        ) {
-            _activate(operator);
-        }
-    }
-
     function _efficientKeccak256(
         bytes32 a,
         bytes32 b
@@ -347,48 +317,54 @@ contract Commit2RevealDRB is
         }
     }
 
-    function unchecked_dec(uint256 i) private pure returns (uint256) {
-        unchecked {
-            return i - 1;
+    function diff(uint256 a, uint256 b) private pure returns (uint256) {
+        return a > b ? a - b : b - a;
+    }
+
+    /// *** Owner ***
+    function activate(address operator) external nonReentrant onlyOwner {
+        require(
+            s_depositAmount[operator] >= s_activationThreshold,
+            LessThanActivationThreshold()
+        );
+        _activate(operator);
+    }
+
+    function activate(
+        address[] calldata operators
+    ) external nonReentrant onlyOwner {
+        uint256 operatorsLength = operators.length;
+        for (uint256 i; i < operatorsLength; i = unchecked_inc(i)) {
+            address operator = operators[i];
+            require(
+                s_depositAmount[operator] >= s_activationThreshold,
+                LessThanActivationThreshold()
+            );
+            _activate(operator);
         }
     }
 
-    function diff(uint256 a, uint256 b) private pure returns (uint256) {
-        return a > b ? a - b : b - a;
+    function deactivate(address operator) external nonReentrant onlyOwner {
+        uint256 activatedOperatorIndex = s_activatedOperatorOrder[operator];
+        require(activatedOperatorIndex != 0, OperatorNotActivated());
+        _deactivate(activatedOperatorIndex - 1, operator);
+    }
+
+    function deactivate(
+        address[] calldata operators
+    ) external nonReentrant onlyOwner {
+        uint256 operatorsLength = operators.length;
+        for (uint256 i; i < operatorsLength; i = unchecked_inc(i)) {
+            address operator = operators[i];
+            uint256 activatedOperatorIndex = s_activatedOperatorOrder[operator];
+            require(activatedOperatorIndex != 0, OperatorNotActivated());
+            _deactivate(activatedOperatorIndex - 1, operator);
+        }
     }
 
     /// ** deposit and withdraw
     function deposit() external payable nonReentrant {
         s_depositAmount[msg.sender] += msg.value;
-    }
-
-    function activate() external nonReentrant {
-        require(
-            s_depositAmount[msg.sender] >= s_activationThreshold,
-            LessThanActivationThreshold()
-        );
-        if (s_forceDeactivated[msg.sender])
-            s_forceDeactivated[msg.sender] = false;
-        _activate(msg.sender);
-    }
-
-    function depositAndActivate() external payable nonReentrant {
-        require(
-            (s_depositAmount[msg.sender] += msg.value) >= s_activationThreshold,
-            LessThanActivationThreshold()
-        );
-        _activate(msg.sender);
-    }
-
-    function deactivate() external nonReentrant {
-        uint256 activatedOperatorIndex = s_activatedOperatorOrder[msg.sender];
-        require(activatedOperatorIndex != 0, OperatorNotActivated());
-        require(
-            s_forceDeactivated[msg.sender] == false,
-            AlreadyForceDeactivated()
-        );
-        s_forceDeactivated[msg.sender] = true;
-        _deactivate(activatedOperatorIndex, msg.sender);
     }
 
     function withdraw(uint256 amount) external nonReentrant {
@@ -397,19 +373,19 @@ contract Commit2RevealDRB is
         if (
             activatedOperatorIndex != 0 &&
             s_depositAmount[msg.sender] < s_activationThreshold
-        ) _deactivate(activatedOperatorIndex, msg.sender);
+        ) _deactivate(activatedOperatorIndex - 1, msg.sender);
         payable(msg.sender).transfer(amount);
     }
 
     function _activate(address operator) private {
         require(s_activatedOperatorOrder[operator] == 0, AlreadyActivated());
+        s_activatedOperators.push(operator);
         uint256 activatedOperatorLength = s_activatedOperators.length;
         require(
             activatedOperatorLength <= s_maxActivatedOperators,
             ActivatedOperatorsLimitReached()
         );
         s_activatedOperatorOrder[operator] = activatedOperatorLength;
-        s_activatedOperators.push(operator);
         emit Activated(operator);
     }
 
@@ -422,7 +398,7 @@ contract Commit2RevealDRB is
         ];
         s_activatedOperators[activatedOperatorIndex] = lastOperator;
         s_activatedOperators.pop();
-        s_activatedOperatorOrder[lastOperator] = activatedOperatorIndex;
+        s_activatedOperatorOrder[lastOperator] = activatedOperatorIndex + 1;
         delete s_activatedOperatorOrder[operator];
         emit DeActivated(operator);
     }
@@ -465,40 +441,6 @@ contract Commit2RevealDRB is
                 0,
                 0
             )
-        }
-        return success;
-    }
-
-    function _call2(
-        address target,
-        bytes memory data,
-        uint256 callbackGasLimit
-    ) private returns (bool success) {
-        assembly {
-            let g := gas()
-            // Compute g -= GAS_FOR_CALL_EXACT_CHECK and check for underflow
-            // The gas actually passed to the callee is min(gasAmount, 63//64*gas available)
-            // We want to ensure that we revert if gasAmount > 63//64*gas available
-            // as we do not want to provide them with less, however that check itself costs
-            // gas. GAS_FOR_CALL_EXACT_CHECK ensures we have at least enough gas to be able to revert
-            // if gasAmount > 63//64*gas available.
-            if lt(g, GAS_FOR_CALL_EXACT_CHECK) {
-                revert(0, 0)
-            }
-            g := sub(g, GAS_FOR_CALL_EXACT_CHECK)
-            // if g - g//64 <= gas
-            // we subtract g//64 because of EIP-150
-            g := sub(g, div(g, 64))
-            if iszero(gt(sub(g, div(g, 64)), callbackGasLimit)) {
-                revert(0, 0)
-            }
-            // solidity calls check that a contract actually exists at the destination, so we do the same
-            if iszero(extcodesize(target)) {
-                revert(0, 0)
-            }
-            // call and return whether we succeeded. ignore return data
-            // call(gas, addr, value, argsOffset,argsLength,retOffset,retLength)
-            success := mload(add(data, 0x20))
         }
         return success;
     }
