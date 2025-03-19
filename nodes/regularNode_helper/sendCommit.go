@@ -7,12 +7,14 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/machinebox/graphql"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -66,8 +68,7 @@ func receiveCommitRequest() {
 				switch vLog.Topics[0] {
 				case SubmitCVS:
 					eventData := struct {
-						Round *big.Int
-						Op    common.Address
+						indices []*big.Int
 					}{}
 					err := parsedABI.UnpackIntoInterface(&eventData, "SubmitCVS", vLog.Data)
 					if err != nil {
@@ -75,34 +76,42 @@ func receiveCommitRequest() {
 						continue
 					}
 
-					fmt.Printf("CommitRequest Event:\n Round: %d\n Address: %s\n", eventData.Round, eventData.Op.Hex())
+					fmt.Printf("CommitRequest Event: %v \n", eventData.indices)
 
-					processCommitRequest(eventData.Round, eventData.Op)
+					processCommitRequest(eventData.indices)
 				}
 			}
 		}
 	}
 }
 
-func processCommitRequest(round *big.Int, eoa common.Address) error {
+func processCommitRequest(indices []*big.Int) error {
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}
-
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Fatalf("Failed to decode Ethereum private key: %v", err)
 	}
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+	// temporary variable for now. In the future there will be round global variable which would be accessible by every file to keep track of current round.
+	// currently there is no mechanism to do it.
+	round := "0"
+	acitvatedOps, _ := FetchActivatedOperators(round)
 
-	if eoaAddress != eoa.String() {
+	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
+	
+	if err != nil {
+		fmt.Println(err)
+	}
+	if !flag {
 		fmt.Println("Commit Request does not contain our EOA")
 		return nil
 	}
-
-	fmt.Printf("Processing commit for Round: %d and Address: %s\n", round, eoa.Hex())
-
+	
+	fmt.Printf("Processing commit for Round: %v\n", round)
+	
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
 		log.Fatal("ETH_RPC_URL is not set in the environment variables")
@@ -120,20 +129,20 @@ func processCommitRequest(round *big.Int, eoa common.Address) error {
 	if err != nil {
 		return fmt.Errorf("failed to load contract ABI: %v", err)
 	}
-
+	
 	clientUtils := &utils.Client{
 		Client:          client,
 		ContractAddress: contractAddress,
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
-
+	
 	file, err := os.ReadFile("commits.json")
 	if err != nil {
 		fmt.Println("Error reading file:", err)
 		return err
 	}
-
+	
 	err = json.Unmarshal(file, &commits)
 	if err != nil {
 		fmt.Println("Error parsing JSON:", err)
@@ -141,12 +150,7 @@ func processCommitRequest(round *big.Int, eoa common.Address) error {
 	}
 	var cvs []uint8
 	for key, data := range commits {
-		roundInt := new(big.Int)
-		roundInt, ok := roundInt.SetString(key, 10)
-		if !ok {
-			fmt.Errorf("Failed to convert the the string to big.Int")
-		}
-		if round.Cmp(roundInt) == 0 {
+		if round == key {
 			cvs = data.Cvs[:]
 			break
 		}
@@ -158,14 +162,51 @@ func processCommitRequest(round *big.Int, eoa common.Address) error {
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
-		"submitCommit",
+		"submitCv",
 		big.NewInt(0),
-		common.HexToAddress(eoaAddress),
-		round,
 		cv,
 	)
 	if err != nil {
 		fmt.Println("It contains error")
 	}
 	return nil
+}
+
+func findEOAAddress(indices []*big.Int, activatedOps []string, eoaAddress string) (bool, error) {
+	if len(indices) > len(activatedOps) {
+		return false, fmt.Errorf("Indices length is greater than activated operators")
+	}
+	for _, index := range indices {
+		if eoaAddress == activatedOps[index.Int64()] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func FetchActivatedOperators(round string) ([]string, error) {
+	subGraphURL := os.Getenv("SUBGRAPH_URL")
+	if subGraphURL == "" {
+		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
+	}
+	client := graphql.NewClient(subGraphURL)
+	roundInt, _ := strconv.Atoi(round)
+	req := utils.GetActivatedOperatorsAtRoundRequest(roundInt)
+
+	var resp struct {
+		RandomNumberRequesteds []struct {
+			ActivatedOperators []string `json:"activatedOperators"`
+		} `json:"randomNumberRequesteds"`
+	}
+
+	err := client.Run(context.Background(), req, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch activated operators: %v", err)
+	}
+
+	if len(resp.RandomNumberRequesteds) == 0 {
+		return nil, fmt.Errorf("no activated operators found for round %s", round)
+	}
+
+	return resp.RandomNumberRequesteds[0].ActivatedOperators, nil
 }
