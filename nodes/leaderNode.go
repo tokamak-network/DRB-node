@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math/big"
 	"os"
@@ -19,9 +20,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/machinebox/graphql"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
-	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -51,6 +52,9 @@ var activatedOperators = make(map[string]map[common.Address]bool)
 var roundFlag = make(map[string]uint64)
 var sendCommitRequest = make(map[string]bool)
 var onChainExecution = make(map[string]map[string]map[string]bool)
+var flag = make(map[string]bool)
+var dispute = make(map[string]bool)
+
 func RunLeaderNode() {
 	port := os.Getenv("LEADER_PORT")
 	if port == "" {
@@ -130,7 +134,7 @@ func handleCommitRequest(s network.Stream) {
 	if !VerifySignatureAndCheckActivation(commitVerificationRequest, "commit") {
 		return
 	}
-	
+
 	roundNum := req.Round
 	eoaAddress := common.HexToAddress(req.EOAAddress)
 
@@ -178,7 +182,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 
 	roundNum := req.Round
 	eoaAddress := common.HexToAddress(req.EOAAddress)
-		
+
 	commitMu.Lock()
 	defer commitMu.Unlock()
 
@@ -247,7 +251,7 @@ func isMerkleRootSubmitted(roundNum string) bool {
 	return false
 }
 
-func VerifySignatureAndCheckActivation(temp utils.Request, reqType string, ) bool {
+func VerifySignatureAndCheckActivation(temp utils.Request, reqType string) bool {
 	verifyReq := utils.RegistrationRequest{EOAAddress: temp.EOAAddress, Signature: temp.Signature}
 	if !utils.VerifySignature(verifyReq) {
 		log.Printf("Signature verification failed for round %s EOA %s", temp.Round, temp.EOAAddress)
@@ -464,11 +468,16 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
-
+	var functionName string
+	if dispute[roundNum] {
+		functionName = "submitMerkleRootAfterDispute"
+	} else {
+		functionName = "submitMerkleRoot"
+	}
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
-		"submitMerkleRoot",
+		functionName,
 		big.NewInt(0),
 		big.NewInt(roundNumInt),
 		merkleRootBytes32,
@@ -574,6 +583,7 @@ func processRounds(roundsData *GraphQLResponse) {
 			commitMu.Lock()
 			ready := UpdatedallCommitsReceivedUnlocked(roundNum)
 			commitMu.Unlock()
+			var missingOperators []string
 
 			allReceived := true
 			for op, submitted := range ready {
@@ -590,14 +600,19 @@ func processRounds(roundsData *GraphQLResponse) {
 					if onChainExecution[roundNum]["CVS"][op] {
 						revert()
 					} else if sendCommitRequest[roundNum] {
-						handleMissingCV(op, roundNum)
+						missingOperators = append(missingOperators, op)
 						onChainExecution[roundNum]["CVS"][op] = true
+						flag[roundNum] = true
+						dispute[roundNum] = true
 					}
 				}
 			}
-			time.Sleep(80 * time.Second)
+			if flag[roundNum] {
+				handleMissingCV(missingOperators, roundNum)
+			}
 			if allReceived {
 				log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
+
 				generateMerkleRoot(roundNum)
 			} else {
 				log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
@@ -610,7 +625,21 @@ func processRounds(roundsData *GraphQLResponse) {
 	}
 }
 
-func handleMissingCV(op, roundNum string) {
+func handleMissingCV(missingOperators []string, roundNum string) {
+	var indices []*big.Int
+	activatedOperators, err := leaderNode_helper.FetchActivatedOperators(roundNum)
+	if err != nil {
+		fmt.Println("Error loading the activated Operators in handleMissingCV()")
+	}
+	i := big.NewInt(0)
+	for op := range activatedOperators {
+		for missingOp := range missingOperators {
+			if op == missingOp {
+				indices = append(indices, i)
+			}
+		}
+		i.Add(i, big.NewInt(1))
+	}
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
 		log.Fatal("ETH_RPC_URL is not set in environment variables.")
@@ -634,12 +663,6 @@ func handleMissingCV(op, roundNum string) {
 		return
 	}
 
-	roundNumInt, err := strconv.ParseInt(roundNum, 10, 64)
-	if err != nil {
-		log.Printf("Failed to parse roundNum: %v", err)
-		return
-	}
-
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
@@ -657,21 +680,20 @@ func handleMissingCV(op, roundNum string) {
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
-	operatorAddress := common.HexToAddress(op)
+
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
-		"submitCommitRequest",
+		"requestToSubmitCv",
 		big.NewInt(0),
-		operatorAddress,
-		big.NewInt(roundNumInt),
+		indices,
 	)
 	if err != nil {
 		log.Printf("Failed to submit commit request root for round %s: %v", roundNum, err)
 		return
 	}
 
-	log.Printf("Successfully submitted commit request for round %s and operator %v", roundNum, op)
+	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, indices)
 
 }
 
