@@ -445,12 +445,6 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 		return
 	}
 
-	roundNumInt, err := strconv.ParseInt(roundNum, 10, 64)
-	if err != nil {
-		log.Printf("Failed to parse roundNum: %v", err)
-		return
-	}
-
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
@@ -479,7 +473,6 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 		clientUtils,
 		functionName,
 		big.NewInt(0),
-		big.NewInt(roundNumInt),
 		merkleRootBytes32,
 	)
 	if err != nil {
