@@ -27,6 +27,16 @@ func MonitorCommits(h host.Host) {
 	}
 }
 
+type RevealOrderData struct {
+	OrderedNodes []string   `json:"ordered_nodes"`
+	RevealOrder  []*big.Int `json:"reveal_order"`
+	RV           string     `json:"rv"`
+}
+
+type RevealOrders struct {
+	Data map[string]RevealOrderData `json:"0"`
+}
+
 func checkRoundsForCompletion(h host.Host) {
 	// Fetch EOAs for each round
 	eoasForRounds := getEOAsForRounds()
@@ -194,6 +204,28 @@ func roundToInt(round string) int {
 	return roundInt
 }
 
+func loadRevealOrders(filePath string) (map[string]RevealOrderData, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open reveal orders file: %v", err)
+	}
+	defer file.Close()
+
+	var revealOrders map[string]RevealOrderData
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&revealOrders); err != nil {
+		return nil, fmt.Errorf("failed to decode reveal orders: %v", err)
+	}
+
+	for key, data := range revealOrders {
+		for i, order := range data.RevealOrder {
+			revealOrders[key].RevealOrder[i] = new(big.Int).SetUint64(uint64(order.Int64()))
+		}
+	}
+
+	return revealOrders, nil
+}
+
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
 func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash, eoas []common.Address) error {
 	log.Printf("Preparing to execute generateRandomNumber...")
@@ -214,12 +246,6 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 	// Debugging: Log EOA order
 	for i, eoa := range eoas {
 		log.Printf("EOA Position %d: %s", i+1, eoa.Hex())
-	}
-
-	// Prepare the round number
-	roundNum, ok := new(big.Int).SetString(round, 10)
-	if !ok {
-		return fmt.Errorf("invalid round number: %s", round)
 	}
 
 	// Load Ethereum client and private key
@@ -259,6 +285,20 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		ContractABI:     parsedABI,
 	}
 
+	revealOrders, err := loadRevealOrders("reveal_orders.json")
+	if err != nil {
+		log.Printf("Failed to load reveal orders: %v", err)
+		return nil
+	}
+
+	roundRevealData, exists := revealOrders[round]
+	if !exists {
+		log.Printf("No reveal order found for round %s.", round)
+		return nil
+	}
+
+	revealOrder := roundRevealData.RevealOrder
+
 	// Debugging: Log all inputs before executing the transaction
 	log.Printf("Secrets: %v", secretsHashes)
 	log.Printf("VS: %v", vs)
@@ -271,11 +311,11 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		clientUtils,
 		"generateRandomNumber",
 		big.NewInt(0), // No Ether value
-		roundNum,      // uint256 round
 		secretsHashes, // bytes32[] secrets
 		vs,            // uint8[] vs
 		rs,            // bytes32[] rs
 		ss,            // bytes32[] ss
+		revealOrder,   // uint256[] revealOrder
 	)
 
 	if err != nil {
