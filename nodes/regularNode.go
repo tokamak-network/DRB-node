@@ -18,9 +18,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/regularNode_helper"
-	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -125,7 +125,6 @@ func RunRegularNode() {
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
-
 	for {
 		// Fetch round data
 		roundsData, err := fetchRoundsData()
@@ -239,7 +238,6 @@ func RunRegularNode() {
 					// If Merkle Root is set but Random Number is nil, check and send COS
 					if round.MerkleRootSubmitted.MerkleRoot != nil && round.RandomNumberGenerated.RandomNumber == nil {
 						log.Printf("Merkle Root is set but Random Number is not. Sending COS for round %s.", roundNum)
-
 						// Send COS to leader
 						sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress, privateKey)
 
@@ -466,7 +464,6 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}
-	
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
 		log.Printf("Failed to decode leader private key: %v", err)
@@ -477,9 +474,22 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	signedRequest := utils.SignData(eoaAddress, privateKey)
 
 	req.Signature = signedRequest
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	client, _ := ethclient.Dial(ethRPCURL)
 
-	// Generate v, r, s for the CVS using the helper function
-	v, r, s, err := regularNode_helper.GenerateCvsSignature(req.Round, req.Cvs)
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, _ := utils.LoadContractABI(abiFilePath)
+	result, err := eth.CallSmartContract(client, parsedABI, "getCurStartTime", contractAddress)
+	if err != nil {
+		fmt.Println("error", err)
+	}
+	startTime := result.(*big.Int).String()
+	v, r, s, err := regularNode_helper.GenerateCvsSignature(startTime, req.Cvs)
 	if err != nil {
 		log.Printf("Failed to generate v, r, s for CVS: %v", err)
 		return
