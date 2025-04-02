@@ -13,14 +13,14 @@ import (
 )
 
 // GenerateCvsSignature generates the EIP-712 signature components (v, r, s) for a given round and CVS value.
-func GenerateCvsSignature(roundNum string, cvs [32]byte) (uint8, string, string, error) {
+func GenerateCvsSignature(startTimeStr string, cvs [32]byte) (uint8, string, string, error) {
 	// Convert CVS to string for internal usage (optional, depending on use case)
 	cvsString := hex.EncodeToString(cvs[:])
 	log.Printf("Received CVS as [32]byte: %x", cvs)
 	log.Printf("Converted CVS to String: %s", cvsString)
 
 	// Define constants for EIP-712
-	name := "Tokamak DRB"
+	name := "Commit Reveal2"
 	version := "1"
 
 	// Fetch contract address and chain ID dynamically from the .env file
@@ -42,11 +42,11 @@ func GenerateCvsSignature(roundNum string, cvs [32]byte) (uint8, string, string,
 		return 0, "", "", fmt.Errorf("invalid chain ID: %s", chainIDEnv)
 	}
 
-	// Parse roundNum as *big.Int
-	round := new(big.Int)
-	_, ok := round.SetString(roundNum, 10)
+	// Parse startTimeStr as *big.Int
+	startTime := new(big.Int)
+	_, ok := startTime.SetString(startTimeStr, 10)
 	if !ok {
-		return 0, "", "", fmt.Errorf("invalid round number: %s", roundNum)
+		return 0, "", "", fmt.Errorf("invalid startTimeStr: %s", startTimeStr)
 	}
 
 	// Load the private key
@@ -73,15 +73,14 @@ func GenerateCvsSignature(roundNum string, cvs [32]byte) (uint8, string, string,
 			contractAddress.Bytes(),
 		),
 	)
-	log.Printf("Domain Separator: %s", domainSeparator.Hex())
 
 	// Step 2: Compute message hash
-	messageTypeHash := crypto.Keccak256Hash([]byte("Message(uint256 round,bytes32 cv)"))
-
+	messageTypeHash := crypto.Keccak256Hash([]byte("Message(uint256 startTime,bytes32 cv)"))
+	fmt.Println("messageTypeHash", messageTypeHash)
 	messageHash := crypto.Keccak256Hash(
 		abiEncode(
 			messageTypeHash.Bytes(),
-			intToBytes(round), // uint256 round
+			intToBytes(startTime), // uint256 startTime
 			cvs[:],            // bytes32 CVS as [32]byte
 		),
 	)
