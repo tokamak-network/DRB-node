@@ -17,7 +17,6 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-
 var CommitMu sync.Mutex
 
 type LeaderCommitData struct {
@@ -35,7 +34,7 @@ type LeaderCommitData struct {
 }
 
 func ReceiveCommit() {
-		receiveCommit()
+	receiveCommit()
 }
 
 func receiveCommit() {
@@ -62,7 +61,7 @@ func receiveCommit() {
 		log.Fatalf("Failed to subscribe to logs: %v", err)
 	}
 
-	cvsEventSig := parsedABI.Events["COV"].ID
+	cvsEventSig := parsedABI.Events["CvSubmitted"].ID
 
 	for {
 		select {
@@ -73,26 +72,25 @@ func receiveCommit() {
 			switch vLog.Topics[0] {
 			case cvsEventSig:
 				eventData := struct {
-					Round *big.Int
-					Op    common.Address
-					Cov   [32]byte
+					StartTime              *big.Int
+					Cov                    [32]byte
+					ActivatedOperatorIndex *big.Int
 				}{}
-				err := parsedABI.UnpackIntoInterface(&eventData, "COV", vLog.Data)
+				err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
 				if err != nil {
 					log.Printf("Failed to decode COV event log: %v", err)
 					continue
 				}
-				fmt.Printf("COV Event:\n Round: %d\n Address: %s\n COV: %v\n",
-					eventData.Round, eventData.Op.Hex(), eventData.Cov)
+				fmt.Printf("CvSubmitted Event:\n StartTime: %d\n Cov: %s\n ActivatedOperatorIndex: %v\n",
+					eventData.StartTime, eventData.Cov, eventData.ActivatedOperatorIndex)
 
-				processCVS(eventData.Round, eventData.Op, eventData.Cov)
+				processCVS(eventData.Cov, eventData.ActivatedOperatorIndex)
 			}
 		}
 	}
 }
 
-
-func processCVS(round *big.Int, eoa common.Address, cvs [32]byte) error {
+func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 	filePath := "leader_commits.json"
 	CommitMu.Lock()
 	defer CommitMu.Unlock()
@@ -108,14 +106,21 @@ func processCVS(round *big.Int, eoa common.Address, cvs [32]byte) error {
 	} else {
 		commitData = make(map[string]LeaderCommitData)
 	}
-	key := fmt.Sprintf("%s+%s", round.String(), eoa.Hex())
+
+	// temporary variable round for now. In the future there will be round global variable which would be accessible by every file to keep track of current round.
+	// currently there is no mechanism to do it.
+	round := "0"
+	acitvatedOps, _ := FetchActivatedOperators(round)
+	eoaAddress := acitvatedOps[activatedOperatorIndex.Int64()]
+	eoa := common.HexToAddress(eoaAddress)
+	key := fmt.Sprintf("%s+%s", round, eoa.Hex())
 	cvsHex := hex.EncodeToString(cvs[:])
 	cvsBytes, _ := hex.DecodeString(cvsHex)
-	
+
 	copy(cvs[:], cvsBytes)
 	if _, exists := commitData[key]; !exists {
 		commitData[key] = LeaderCommitData{
-			Round:                 round.String(),
+			Round:                 round,
 			EOAAddress:            eoa.Hex(),
 			Cvs:                   cvs,
 			CvsHex:                cvsHex,
@@ -146,27 +151,24 @@ func processCVS(round *big.Int, eoa common.Address, cvs [32]byte) error {
 		return err
 	}
 	updateCVS(round, eoa, cvs)
-	fmt.Printf("Successfully stored CVS for Round %s, EOA %s\n", round.String(), eoa.Hex())
+	fmt.Printf("Successfully stored CVS for Round %s, EOA %s\n", round, eoa.Hex())
 	return nil
 }
 
-
-func updateCVS(round *big.Int, eoa common.Address, cvs [32]byte) {
-
-	roundKey := round.String()
-	if _, exists := utils.CommittedNodes[roundKey]; !exists {
-		utils.CommittedNodes[roundKey] = make(map[common.Address]utils.LeaderCommitData)
+func updateCVS(round string, eoa common.Address, cvs [32]byte) {
+	if _, exists := utils.CommittedNodes[round]; !exists {
+		utils.CommittedNodes[round] = make(map[common.Address]utils.LeaderCommitData)
 	}
 
-	commitData, exists := utils.CommittedNodes[roundKey][eoa]
+	commitData, exists := utils.CommittedNodes[round][eoa]
 	if !exists {
 		commitData = utils.LeaderCommitData{}
 	}
 
 	commitData.EOAAddress = eoa.Hex()
-	commitData.Round = roundKey
+	commitData.Round = round
 	commitData.Cvs = cvs
 	cvsHex := hex.EncodeToString(cvs[:])
 	commitData.CvsHex = cvsHex
-	utils.CommittedNodes[roundKey][eoa] = commitData
+	utils.CommittedNodes[round][eoa] = commitData
 }
