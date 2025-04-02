@@ -56,7 +56,7 @@ func receiveCommitRequest() {
 	if err != nil {
 		log.Fatalf("Failed to subscribe to logs: %v", err)
 	}
-	SubmitCVS := parsedABI.Events["SubmitCVS"].ID
+	SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
 
 	for {
 		select {
@@ -68,17 +68,18 @@ func receiveCommitRequest() {
 				switch vLog.Topics[0] {
 				case SubmitCVS:
 					eventData := struct {
-						indices []*big.Int
+						StartTime *big.Int
+						Indices []*big.Int
 					}{}
-					err := parsedABI.UnpackIntoInterface(&eventData, "SubmitCVS", vLog.Data)
+					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
 					if err != nil {
 						log.Printf("Failed to decode event log: %v", err)
 						continue
 					}
 
-					fmt.Printf("CommitRequest Event: %v \n", eventData.indices)
+					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.Indices)
 
-					processCommitRequest(eventData.indices)
+					processCommitRequest(eventData.Indices)
 				}
 			}
 		}
@@ -95,7 +96,7 @@ func processCommitRequest(indices []*big.Int) error {
 		log.Fatalf("Failed to decode Ethereum private key: %v", err)
 	}
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	// temporary variable for now. In the future there will be round global variable which would be accessible by every file to keep track of current round.
+	// temporary variable round for now. In the future there will be round global variable which would be accessible by every file to keep track of current round.
 	// currently there is no mechanism to do it.
 	round := "0"
 	acitvatedOps, _ := FetchActivatedOperators(round)
