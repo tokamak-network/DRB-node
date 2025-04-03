@@ -75,7 +75,7 @@ func GenerateCvsSignature(startTimeStr string, cvs [32]byte) (uint8, string, str
 	)
 
 	// Step 2: Compute message hash
-	messageTypeHash := crypto.Keccak256Hash([]byte("Message(uint256 startTime,bytes32 cv)"))
+	messageTypeHash := crypto.Keccak256Hash([]byte("Message(uint256 timestamp,bytes32 cv)"))
 	fmt.Println("messageTypeHash", messageTypeHash)
 	messageHash := crypto.Keccak256Hash(
 		abiEncode(
