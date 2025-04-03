@@ -117,7 +117,7 @@ func handleRegistrationRequest(s network.Stream) {
 		log.Printf("Failed to handle registration request: %v", err)
 		return
 	}
-	log.Println("Node registration and activation completed.")
+	log.Println("Node registration completed.")
 }
 
 func handleCommitRequest(s network.Stream) {
