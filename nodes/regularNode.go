@@ -164,6 +164,13 @@ func RunRegularNode() {
 				}
 			}
 
+			err = activateOnChain(abiFilePath)
+			if err != nil {
+				log.Printf("failed to activate EOA %s on-chain: %v", eoaAddress, err)
+				time.Sleep(30 * time.Second)
+				continue
+			}
+
 			// Send registration request to leader
 			log.Println("Deposit sufficient. Sending registration request to leader...")
 			sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
@@ -523,4 +530,55 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	} else {
 		log.Printf("Commit successfully sent to leader for round %s", req.Round)
 	}
+}
+
+func activateOnChain(abiFilePath string) error {
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in the environment variables")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+	parsedABI, err := utils.LoadContractABI(abiFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in environment variables.")
+	}
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		return fmt.Errorf("failed to decode leader private key: %v", err)
+	}
+
+	clientUtils := &utils.Client{
+		Client:          client,
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		"activate",
+		big.NewInt(0),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to activate operator: %v", err)
+	}
+
+	return nil
 }
