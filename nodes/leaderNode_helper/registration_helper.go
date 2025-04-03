@@ -1,27 +1,21 @@
 package leaderNode_helper
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/big"
 	"os"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // NodeInfo stores the information for a registered node
 type NodeInfo struct {
-	IP      string `json:"ip"`
-	Port    string `json:"port"`
-	PeerID  string `json:"peer_id"`
+	IP     string `json:"ip"`
+	Port   string `json:"port"`
+	PeerID string `json:"peer_id"`
 }
 
 // LoadRegisteredNodes loads the registered nodes from a JSON file.
@@ -82,7 +76,7 @@ func RegisterNode(s network.Stream, filePath, abiFilePath string) error {
 		return fmt.Errorf("invalid remote address format: %s", remoteAddr)
 	}
 
-	ip := parts[2]  // Extract IP
+	ip := parts[2]   // Extract IP
 	port := parts[4] // Extract port
 
 	// Load existing nodes
@@ -106,99 +100,6 @@ func RegisterNode(s network.Stream, filePath, abiFilePath string) error {
 
 	log.Printf("Successfully registered or updated EOA %s with NodeInfo: IP=%s, Port=%s, PeerID=%s.", req.EOAAddress, ip, port, req.PeerID)
 
-	// Perform on-chain activation
-	err = ActivateOnChain(req.EOAAddress, abiFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to activate EOA %s on-chain: %v", req.EOAAddress, err)
-	}
-
-	log.Printf("Successfully activated EOA %s on-chain.", req.EOAAddress)
 	return nil
 }
 
-// ActivateOnChain handles the on-chain activation of the node.
-func ActivateOnChain(eoaAddress, abiFilePath string) error {
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	if ethRPCURL == "" {
-		log.Fatal("ETH_RPC_URL is not set in the environment variables")
-	}
-
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
-	}
-
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-
-	contractAddress := common.HexToAddress(contractAddressStr)
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to load contract ABI: %v", err)
-	}
-
-	operatorAddress := common.HexToAddress(eoaAddress)
-
-	// Verify if the operator is activated
-	activatedOperatorsResult, err := eth.CallSmartContract(client, parsedABI, "getActivatedOperators", contractAddress)
-	if err != nil {
-		return fmt.Errorf("failed to call getActivatedOperators: %v", err)
-	}
-
-	activatedOperators := activatedOperatorsResult.([]common.Address)
-	for _, operator := range activatedOperators {
-		if operator == operatorAddress {
-			log.Printf("Operator %s is already activated.", eoaAddress)
-			return nil
-		}
-	}
-
-	// Check deposit amount and activation threshold
-	depositAmountResult, err := eth.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, operatorAddress)
-	if err != nil {
-		return fmt.Errorf("failed to call s_depositAmount: %v", err)
-	}
-	depositAmount := depositAmountResult.(*big.Int)
-
-	activationThresholdResult, err := eth.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
-	if err != nil {
-		return fmt.Errorf("failed to call s_activationThreshold: %v", err)
-	}
-	activationThreshold := activationThresholdResult.(*big.Int)
-
-	if depositAmount.Cmp(activationThreshold) < 0 {
-		return fmt.Errorf("deposit amount is insufficient. Deposit: %s, Threshold: %s", depositAmount, activationThreshold)
-	}
-
-	// Activate the operator
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		return fmt.Errorf("failed to decode leader private key: %v", err)
-	}
-
-	clientUtils := &utils.Client{
-		Client:          client,
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
-	}
-
-	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
-		clientUtils,
-		"activate",
-		big.NewInt(0),
-		operatorAddress,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to activate operator: %v", err)
-	}
-
-	return nil
-}
