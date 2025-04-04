@@ -9,7 +9,6 @@ import (
 	"log"
 	"math/big"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -251,18 +250,17 @@ func isMerkleRootSubmitted(roundNum string) bool {
 	return false
 }
 
-func VerifySignatureAndCheckActivation(temp utils.Request, reqType string) bool {
-	verifyReq := utils.RegistrationRequest{EOAAddress: temp.EOAAddress, Signature: temp.Signature}
+func VerifySignatureAndCheckActivation(req utils.Request, reqType string) bool {
+	verifyReq := utils.RegistrationRequest{EOAAddress: req.EOAAddress, Signature: req.Signature}
 	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for round %s EOA %s", temp.Round, temp.EOAAddress)
+		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
 		return false
 	}
 
-	roundNum := temp.Round
-	eoaAddress := common.HexToAddress(temp.EOAAddress)
+	eoaAddress := common.HexToAddress(req.EOAAddress)
 
-	if !isEOAActivatedForRound(roundNum, eoaAddress) {
-		log.Printf("EOA %s not activated for round %s, skipping %s.", eoaAddress.Hex(), roundNum, reqType)
+	if !isEOAActivatedForRound(eoaAddress) {
+		log.Printf("EOA %s not activated, skipping %v.", eoaAddress.Hex(), reqType)
 		return false
 	}
 	return true
@@ -505,45 +503,20 @@ func updateCommitDataAfterSubmit(roundNum string) {
 	}
 }
 
-func isEOAActivatedForRound(roundNum string, eoaAddress common.Address) bool {
-	roundInt, err := strconv.Atoi(roundNum)
+func isEOAActivatedForRound(eoaAddress common.Address) bool {
+	activatedOperators, err := eth.GetActivatedOperators()
 	if err != nil {
-		log.Printf("Invalid round number %s: %v", roundNum, err)
-		return false
+		log.Printf("Error fetching the activated operators %v", err)
 	}
 
-	subGraphURL := os.Getenv("SUBGRAPH_URL")
-	if subGraphURL == "" {
-		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
-	}
-
-	client := graphql.NewClient(subGraphURL)
-	req := utils.GetActivatedOperatorsAtRoundRequest(roundInt)
-
-	var resp map[string]interface{}
-	ctx := context.Background()
-	err = client.Run(ctx, req, &resp)
-	if err != nil {
-		log.Printf("Failed to execute GraphQL request for activated operators in round %d: %v", roundInt, err)
-		return false
-	}
-
-	activatedOperatorsData, ok := resp["randomNumberRequesteds"].([]interface{})
-	if !ok || len(activatedOperatorsData) == 0 {
-		log.Printf("No activated operators found for round %d", roundInt)
-		return false
-	}
-
-	activated := activatedOperatorsData[0].(map[string]interface{})["activatedOperators"].([]interface{})
-	for _, operator := range activated {
-		operatorAddress := common.HexToAddress(operator.(string))
-		if operatorAddress == eoaAddress {
-			log.Printf("EOA address %s is activated for round %d", eoaAddress.Hex(), roundInt)
+	for _, operator := range activatedOperators {
+		if operator == eoaAddress {
+			log.Printf("EOA address %s is activated", eoaAddress.Hex())
 			return true
 		}
 	}
 
-	log.Printf("EOA address %s is NOT activated for round %d", eoaAddress.Hex(), roundInt)
+	log.Printf("EOA address %s is NOT activated", eoaAddress.Hex())
 	return false
 }
 
@@ -560,7 +533,7 @@ func processRounds(roundsData *GraphQLResponse) {
 			if _, exists := activatedOperators[roundNum]; !exists {
 				activatedOperators[roundNum] = make(map[common.Address]bool)
 			}
-			for _, op := range round.RandomNumberRequested.ActivatedOperators {
+			for _, op := range round.RandomNumberRequested.ActivatedOperators { // activated ops function se nikal lo
 				opAddr := common.HexToAddress(op)
 				if opAddr == common.HexToAddress("0x0000000000000000000000000000000000000000") {
 					continue
@@ -611,7 +584,7 @@ func processRounds(roundsData *GraphQLResponse) {
 				log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
 				roundFlag[roundNum]++
 				if roundFlag[roundNum] >= 2 {
-				sendCommitRequest[roundNum] = true
+					sendCommitRequest[roundNum] = true
 				}
 			}
 		}
