@@ -3,7 +3,9 @@ package eth
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/big"
+	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -154,4 +156,35 @@ func waitForTransactionSuccess(ctx context.Context, client *utils.Client, tx *ty
 		}
 		return nil, fmt.Errorf("transaction failed with status: %v", receipt.Status)
 	}
+}
+
+func GetActivatedOperators() ([]common.Address, error) {
+
+	var activatedOperators []common.Address
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to Ethereum RPC: %v", err)
+	}
+
+	abiFilePath := "contract/abi/Commit2RevealDRB.json"
+	parsedABI, err := utils.LoadContractABI(abiFilePath)
+	if err != nil {
+		log.Fatalf("Failed to load contract ABI: %v", err)
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	result, err := CallSmartContract(client, parsedABI, "getActivatedOperators", contractAddress)
+	if err != nil {
+		log.Printf("Failed to fetch activated operators: %v", err)
+		return activatedOperators, err
+	}
+	activatedOperators, _ = result.([]common.Address)
+	return activatedOperators, nil
 }
