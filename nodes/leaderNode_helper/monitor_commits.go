@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/machinebox/graphql"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -173,35 +172,17 @@ func filterOperators(operators []string) []string {
 
 // Fetch activated operators for a specific round
 func FetchActivatedOperators(round string) ([]string, error) {
-	subGraphURL := os.Getenv("SUBGRAPH_URL")
-	if subGraphURL == "" {
-		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
-	}
-	client := graphql.NewClient(subGraphURL)
-	req := utils.GetActivatedOperatorsAtRoundRequest(roundToInt(round))
-
-	var resp struct {
-		RandomNumberRequesteds []struct {
-			ActivatedOperators []string `json:"activatedOperators"`
-		} `json:"randomNumberRequesteds"`
-	}
-
-	err := client.Run(context.Background(), req, &resp)
+	var result []string
+	activatedOperators, err := eth.GetActivatedOperators()
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch activated operators: %v", err)
+		log.Printf("Error fetching the activated operators %v", err)
+		return result, err
 	}
-
-	if len(resp.RandomNumberRequesteds) == 0 {
-		return nil, fmt.Errorf("no activated operators found for round %s", round)
+	strAddresses := make([]string, len(activatedOperators))
+	for i, addr := range activatedOperators {
+		strAddresses[i] = addr.Hex()
 	}
-
-	return resp.RandomNumberRequesteds[0].ActivatedOperators, nil
-}
-
-// Helper: Convert round string to int
-func roundToInt(round string) int {
-	roundInt, _ := strconv.Atoi(round)
-	return roundInt
+	return strAddresses, nil
 }
 
 func loadRevealOrders(filePath string) (map[string]RevealOrderData, error) {
