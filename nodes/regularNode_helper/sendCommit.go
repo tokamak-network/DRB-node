@@ -7,14 +7,12 @@ import (
 	"log"
 	"math/big"
 	"os"
-	"strconv"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/machinebox/graphql"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -69,7 +67,7 @@ func receiveCommitRequest() {
 				case SubmitCVS:
 					eventData := struct {
 						StartTime *big.Int
-						Indices []*big.Int
+						Indices   []*big.Int
 					}{}
 					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
 					if err != nil {
@@ -102,7 +100,7 @@ func processCommitRequest(indices []*big.Int) error {
 	acitvatedOps, _ := FetchActivatedOperators(round)
 
 	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
-	
+
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -110,9 +108,9 @@ func processCommitRequest(indices []*big.Int) error {
 		fmt.Println("Commit Request does not contain our EOA")
 		return nil
 	}
-	
+
 	fmt.Printf("Processing commit for Round: %v\n", round)
-	
+
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
 		log.Fatal("ETH_RPC_URL is not set in the environment variables")
@@ -130,7 +128,7 @@ func processCommitRequest(indices []*big.Int) error {
 	if err != nil {
 		return fmt.Errorf("failed to load contract ABI: %v", err)
 	}
-	
+
 	clientUtils := &utils.Client{
 		Client:          client,
 		ContractAddress: contractAddress,
@@ -143,7 +141,7 @@ func processCommitRequest(indices []*big.Int) error {
 		fmt.Println("Error reading file:", err)
 		return err
 	}
-	
+
 	err = json.Unmarshal(file, &commits)
 	if err != nil {
 		fmt.Println("Error parsing JSON:", err)
@@ -159,7 +157,7 @@ func processCommitRequest(indices []*big.Int) error {
 	cvsSlice := cvs[:]
 	var cv [32]byte
 	copy(cv[:], []byte(cvsSlice))
-	
+
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
@@ -175,7 +173,7 @@ func processCommitRequest(indices []*big.Int) error {
 
 func findEOAAddress(indices []*big.Int, activatedOps []string, eoaAddress string) (bool, error) {
 	if len(indices) > len(activatedOps) {
-		return false, fmt.Errorf("Indices length is greater than activated operators")
+		return false, fmt.Errorf("indices length is greater than activated operators")
 	}
 	for _, index := range indices {
 		if eoaAddress == activatedOps[index.Int64()] {
@@ -186,28 +184,15 @@ func findEOAAddress(indices []*big.Int, activatedOps []string, eoaAddress string
 }
 
 func FetchActivatedOperators(round string) ([]string, error) {
-	subGraphURL := os.Getenv("SUBGRAPH_URL")
-	if subGraphURL == "" {
-		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
-	}
-	client := graphql.NewClient(subGraphURL)
-	roundInt, _ := strconv.Atoi(round)
-	req := utils.GetActivatedOperatorsAtRoundRequest(roundInt)
-
-	var resp struct {
-		RandomNumberRequesteds []struct {
-			ActivatedOperators []string `json:"activatedOperators"`
-		} `json:"randomNumberRequesteds"`
-	}
-
-	err := client.Run(context.Background(), req, &resp)
+	var result []string
+	activatedOperators, err := eth.GetActivatedOperators()
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch activated operators: %v", err)
+		log.Printf("Error fetching the activated operators %v", err)
+		return result, err
 	}
-
-	if len(resp.RandomNumberRequesteds) == 0 {
-		return nil, fmt.Errorf("no activated operators found for round %s", round)
+	strAddresses := make([]string, len(activatedOperators))
+	for i, addr := range activatedOperators {
+		strAddresses[i] = addr.Hex()
 	}
-
-	return resp.RandomNumberRequesteds[0].ActivatedOperators, nil
+	return strAddresses, nil
 }
