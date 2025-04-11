@@ -476,6 +476,9 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 	}
 
 	log.Printf("Successfully submitted Merkle root for round %s", roundNum)
+	roundData := leaderNode_helper.RoundsData[roundNum]
+	roundData.MerkleRoot = true
+	leaderNode_helper.RoundsData[roundNum] = roundData
 	updateCommitDataAfterSubmit(roundNum)
 }
 
