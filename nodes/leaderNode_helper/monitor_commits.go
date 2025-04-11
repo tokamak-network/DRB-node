@@ -25,7 +25,7 @@ func MonitorCommits(h host.Host) {
 		time.Sleep(10 * time.Second) // Adjust the interval as needed
 	}
 }
-
+var StartNextRound bool = true
 type RevealOrderData struct {
 	OrderedNodes []string   `json:"ordered_nodes"`
 	RevealOrder  []*big.Int `json:"reveal_order"`
@@ -320,6 +320,7 @@ func markRoundCompleted(leaderCommits map[string]utils.LeaderCommitData, round s
 	if err != nil {
 		log.Printf("Failed to save updated leader commits: %v", err)
 	}
+	StartNextRound = true
 }
 
 // isRoundCompleted checks if a round is already completed.
