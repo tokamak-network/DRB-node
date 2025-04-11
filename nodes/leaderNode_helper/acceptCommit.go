@@ -33,6 +33,9 @@ type RoundData struct {
 var RoundsData map[string]RoundData
 
 var RequestQueue []RandomRequest
+var Round *big.Int
+var CurrentRound string
+
 type LeaderCommitData struct {
 	Round                 string            `json:"round"`
 	EOAAddress            string            `json:"eoa_address"`
