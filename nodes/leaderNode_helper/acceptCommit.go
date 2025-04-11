@@ -62,6 +62,7 @@ func receiveCommit() {
 	}
 
 	cvsEventSig := parsedABI.Events["CvSubmitted"].ID
+	roundSig := parsedABI.Events["Round"].ID
 
 	for {
 		select {
