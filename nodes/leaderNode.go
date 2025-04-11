@@ -43,6 +43,7 @@ type RoundData struct {
 type GraphQLResponse struct {
 	Rounds []RoundData `json:"rounds"`
 }
+var firstRequest leaderNode_helper.RandomRequest
 
 // committedNodes and activatedOperators are authoritative in-memory states.
 // var committedNodes = make(map[string]map[common.Address]utils.LeaderCommitData)
@@ -81,14 +82,13 @@ func RunLeaderNode() {
 	go leaderNode_helper.MonitorCommits(h)
 	go leaderNode_helper.ReceiveCommit()
 	for {
-		roundsData, err := fetchRoundsData()
-		if err != nil {
-			log.Printf("Error fetching rounds data: %v", err)
-			time.Sleep(30 * time.Second)
-			continue
+		if(leaderNode_helper.StartNextRound) {
+			firstRequest = leaderNode_helper.RequestQueue[0]
+			leaderNode_helper.CurrentRound = firstRequest.Round.String()
 		}
+		fmt.Printf("Executing request: %v", firstRequest)
 
-		processRounds(roundsData)
+		processRounds(firstRequest)
 		time.Sleep(30 * time.Second)
 	}
 }
