@@ -290,19 +290,16 @@ func allCommitsReceivedUnlocked(roundNum string) bool {
 
 func UpdatedallCommitsReceivedUnlocked(roundNum string) map[string]bool {
 	result := make(map[string]bool)
-	ops, exists := activatedOperators[roundNum]
-	if !exists || len(ops) == 0 {
-		return result
-	}
+	ops, _ := eth.GetActivatedOperators()
 
 	roundCommits, roundExists := utils.CommittedNodes[roundNum]
 	if !roundExists || len(roundCommits) == 0 {
-		for op := range ops {
+		for _, op := range ops {
 			result[op.Hex()] = false
 		}
 	}
 
-	for op := range ops {
+	for _, op := range ops {
 		data, ok := roundCommits[op]
 		if ok {
 			if data.Cvs != [32]byte{} {
