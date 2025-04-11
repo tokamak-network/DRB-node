@@ -114,6 +114,15 @@ func receiveCommit() {
 	}
 }
 
+func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
+	req := RandomRequest{
+		StartTime: startTime,
+		State:     state,
+	}
+	RequestQueue = append(RequestQueue, req)
+	fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length: %v", len(RequestQueue))
+}
+
 func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 	filePath := "leader_commits.json"
 	CommitMu.Lock()
