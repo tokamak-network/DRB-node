@@ -520,72 +520,50 @@ func isEOAActivatedForRound(eoaAddress common.Address) bool {
 	return false
 }
 
-func processRounds(roundsData *GraphQLResponse) {
-	for _, round := range roundsData.Rounds {
-		roundNum, ok := round.Round.(string)
-		if !ok {
-			log.Printf("Error: Round is not of type string.")
-			continue
+func processRounds(round leaderNode_helper.RandomRequest) {
+	roundNum := round.Round.String()
+	if !leaderNode_helper.RoundsData[roundNum].MerkleRoot && !leaderNode_helper.RoundsData[roundNum].RandomNumber {
+		log.Printf("LeaderNode %s is still waiting for commits...", roundNum)
+
+		commitMu.Lock()
+		ready := UpdatedallCommitsReceivedUnlocked(roundNum)
+		commitMu.Unlock()
+		var missingOperators []string
+
+		allReceived := true
+		for op, submitted := range ready {
+			if !submitted {
+				allReceived = false
+				log.Printf("Operator %s has not submitted CV.", op)
+				if _, exists := onChainExecution[roundNum]; !exists {
+					onChainExecution[roundNum] = make(map[string]map[string]bool)
+				}
+
+				if _, exists := onChainExecution[roundNum]["CVS"]; !exists {
+					onChainExecution[roundNum]["CVS"] = make(map[string]bool)
+				}
+				if onChainExecution[roundNum]["CVS"][op] {
+					revert()
+				} else if sendCommitRequest[roundNum] {
+					missingOperators = append(missingOperators, op)
+					onChainExecution[roundNum]["CVS"][op] = true
+					flag[roundNum] = true
+					dispute[roundNum] = true
+				}
+			}
 		}
-
-		if len(round.RandomNumberRequested.ActivatedOperators) > 0 {
-			commitMu.Lock()
-			if _, exists := activatedOperators[roundNum]; !exists {
-				activatedOperators[roundNum] = make(map[common.Address]bool)
-			}
-			for _, op := range round.RandomNumberRequested.ActivatedOperators { // activated ops function se nikal lo
-				opAddr := common.HexToAddress(op)
-				if opAddr == common.HexToAddress("0x0000000000000000000000000000000000000000") {
-					continue
-				}
-				activatedOperators[roundNum][opAddr] = true
-			}
-			commitMu.Unlock()
+		if flag[roundNum] {
+			handleMissingCV(missingOperators, roundNum)
 		}
+		if allReceived {
+			log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
 
-		if round.MerkleRootSubmitted.MerkleRoot == nil && round.RandomNumberGenerated.RandomNumber == nil {
-			log.Printf("Round %s is still waiting for commits", roundNum)
-
-			commitMu.Lock()
-			ready := UpdatedallCommitsReceivedUnlocked(roundNum)
-			commitMu.Unlock()
-			var missingOperators []string
-
-			allReceived := true
-			for op, submitted := range ready {
-				if !submitted {
-					allReceived = false
-					log.Printf("Operator %s has not submitted CV.", op)
-					if _, exists := onChainExecution[roundNum]; !exists {
-						onChainExecution[roundNum] = make(map[string]map[string]bool)
-					}
-
-					if _, exists := onChainExecution[roundNum]["CVS"]; !exists {
-						onChainExecution[roundNum]["CVS"] = make(map[string]bool)
-					}
-					if onChainExecution[roundNum]["CVS"][op] {
-						revert()
-					} else if sendCommitRequest[roundNum] {
-						missingOperators = append(missingOperators, op)
-						onChainExecution[roundNum]["CVS"][op] = true
-						flag[roundNum] = true
-						dispute[roundNum] = true
-					}
-				}
-			}
-			if flag[roundNum] {
-				handleMissingCV(missingOperators, roundNum)
-			}
-			if allReceived {
-				log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
-
-				generateMerkleRoot(roundNum)
-			} else {
-				log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
-				roundFlag[roundNum]++
-				if roundFlag[roundNum] >= 2 {
-					sendCommitRequest[roundNum] = true
-				}
+			generateMerkleRoot(roundNum)
+		} else {
+			log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
+			roundFlag[roundNum]++
+			if roundFlag[roundNum] >= 2 {
+				sendCommitRequest[roundNum] = true
 			}
 		}
 	}
