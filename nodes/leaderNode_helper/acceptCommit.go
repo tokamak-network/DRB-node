@@ -25,6 +25,13 @@ type RandomRequest struct {
 	StartTime *big.Int
 	State     *big.Int
 }
+type RoundData struct {
+	MerkleRoot           bool
+	RandomNumber bool
+}
+
+var RoundsData map[string]RoundData
+
 var RequestQueue []RandomRequest
 type LeaderCommitData struct {
 	Round                 string            `json:"round"`
