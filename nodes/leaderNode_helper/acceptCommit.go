@@ -21,11 +21,11 @@ var CommitMu sync.Mutex
 var StartTime *big.Int
 
 type RandomRequest struct {
+	Round     *big.Int
 	StartTime *big.Int
 	State     *big.Int
 }
 var RequestQueue []RandomRequest
-
 type LeaderCommitData struct {
 	Round                 string            `json:"round"`
 	EOAAddress            string            `json:"eoa_address"`
@@ -105,17 +105,19 @@ func receiveCommit() {
 					log.Printf("Failed to decode RandomNumberRequested event log: %v", err)
 					continue
 				}
-				fmt.Printf("RandomNumberRequested Event:\n StartTime: %d\n State: %v\n",
-					eventData.StartTime, eventData.State)
+				Round = new(big.Int).Add(Round, big.NewInt(1))
+				fmt.Printf("RandomNumberRequested Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+					eventData.StartTime, eventData.State, Round)
 
-				processRandomRequestNumber(eventData.StartTime, eventData.State)
+				processRandomRequestNumber(eventData.StartTime, eventData.State, Round)
 			}
 		}
 	}
 }
 
-func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
+func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.Int) {
 	req := RandomRequest{
+		Round:     round,
 		StartTime: startTime,
 		State:     state,
 	}
