@@ -18,6 +18,13 @@ import (
 )
 
 var CommitMu sync.Mutex
+var StartTime *big.Int
+
+type RandomRequest struct {
+	StartTime *big.Int
+	State     *big.Int
+}
+var RequestQueue []RandomRequest
 
 type LeaderCommitData struct {
 	Round                 string            `json:"round"`
