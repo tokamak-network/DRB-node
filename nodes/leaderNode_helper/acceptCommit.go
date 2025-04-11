@@ -93,6 +93,22 @@ func receiveCommit() {
 					eventData.StartTime, eventData.Cov, eventData.ActivatedOperatorIndex)
 
 				processCVS(eventData.Cov, eventData.ActivatedOperatorIndex)
+
+			case roundSig:
+				eventData := struct {
+					StartTime *big.Int
+					State     *big.Int
+				}{}
+
+				err := parsedABI.UnpackIntoInterface(&eventData, "RandomNumberRequested", vLog.Data)
+				if err != nil {
+					log.Printf("Failed to decode RandomNumberRequested event log: %v", err)
+					continue
+				}
+				fmt.Printf("RandomNumberRequested Event:\n StartTime: %d\n State: %v\n",
+					eventData.StartTime, eventData.State)
+
+				processRandomRequestNumber(eventData.StartTime, eventData.State)
 			}
 		}
 	}
