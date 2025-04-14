@@ -33,6 +33,11 @@ func MonitorCommitRequest() {
 	receiveCommitRequest()
 }
 
+var StartTime *big.Int
+var StartNextRound bool = true
+var Round *big.Int
+var CurrentRound string
+
 func receiveCommitRequest() {
 	rpcURL := os.Getenv("ETH_RPC_URL")
 	contractAddress := os.Getenv("CONTRACT_ADDRESS")
