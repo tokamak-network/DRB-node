@@ -129,6 +129,8 @@ func checkRoundsForCompletion(h host.Host) {
 				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
 			} else {
 				markRoundCompleted(leaderCommits, round)
+				// pop the first request from the queue
+				RequestQueue = RequestQueue[1:] 
 			}
 		}
 	}
