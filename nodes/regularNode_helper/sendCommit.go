@@ -41,6 +41,12 @@ type RoundData struct {
 }
 var RoundsData map[string]RoundData
 
+type RandomRequest struct {
+	Round     *big.Int
+	StartTime *big.Int
+	State     *big.Int
+}
+var RequestQueue []RandomRequest
 var Round *big.Int
 var CurrentRound string
 
