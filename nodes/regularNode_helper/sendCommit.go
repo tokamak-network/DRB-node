@@ -35,6 +35,12 @@ func MonitorCommitRequest() {
 
 var StartTime *big.Int
 var StartNextRound bool = true
+type RoundData struct {
+	MerkleRoot   bool
+	RandomNumber bool
+}
+var RoundsData map[string]RoundData
+
 var Round *big.Int
 var CurrentRound string
 
