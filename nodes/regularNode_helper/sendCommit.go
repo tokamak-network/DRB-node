@@ -72,6 +72,7 @@ func receiveCommitRequest() {
 		log.Fatalf("Failed to subscribe to logs: %v", err)
 	}
 	SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
+	RoundSig := parsedABI.Events["Round"].ID
 
 	for {
 		select {
@@ -95,10 +96,38 @@ func receiveCommitRequest() {
 					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.Indices)
 
 					processCommitRequest(eventData.Indices)
+				
+				case RoundSig:
+					eventData := struct {
+						StartTime *big.Int
+						State     *big.Int
+					}{}
+	
+					err := parsedABI.UnpackIntoInterface(&eventData, "RandomNumberRequested", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode RandomNumberRequested event log: %v", err)
+						continue
+					}
+					Round = new(big.Int).Add(Round, big.NewInt(1))
+					fmt.Printf("RandomNumberRequested Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+						eventData.StartTime, eventData.State, Round)
+	
+					processRandomRequestNumber(eventData.StartTime, eventData.State, Round)
 				}
 			}
 		}
 	}
+}
+
+func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.Int) {
+	req := RandomRequest{
+		Round:     round,
+		StartTime: startTime,
+		State:     state,
+	}
+	// request random number queue
+	RequestQueue = append(RequestQueue, req)
+	fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length: %v", len(RequestQueue))
 }
 
 func processCommitRequest(indices []*big.Int) error {
