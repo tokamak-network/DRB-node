@@ -131,6 +131,7 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.I
 		StartTime: startTime,
 		State:     state,
 	}
+	// request random number queue
 	RequestQueue = append(RequestQueue, req)
 	fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length: %v", len(RequestQueue))
 }
