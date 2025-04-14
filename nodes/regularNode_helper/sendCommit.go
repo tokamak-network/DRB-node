@@ -73,6 +73,7 @@ func receiveCommitRequest() {
 	}
 	SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
 	RoundSig := parsedABI.Events["Round"].ID
+	MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
 
 	for {
 		select {
@@ -113,10 +114,32 @@ func receiveCommitRequest() {
 						eventData.StartTime, eventData.State, Round)
 	
 					processRandomRequestNumber(eventData.StartTime, eventData.State, Round)
+
+					case MerkleRootSubmittedSig: 
+					eventData := struct {
+						StartTime *big.Int
+						MerkleRoot     [32]byte
+					}{}
+					
+					err := parsedABI.UnpackIntoInterface(&eventData, "MerkleRootSubmitted", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
+						continue
+					}
+					fmt.Printf("MerkleRootSubmitted Event:\n StartTime: %v\n MerkleRoot: %v\n Round: %v\n",
+						eventData.StartTime, eventData.MerkleRoot, CurrentRound)
+
+					processMerkleRoot(CurrentRound)
 				}
 			}
 		}
 	}
+}
+
+func processMerkleRoot(round string) {
+	roundData := RoundsData[round]
+	roundData.MerkleRoot = true
+	RoundsData[round] = roundData
 }
 
 func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.Int) {
