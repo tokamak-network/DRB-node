@@ -110,13 +110,16 @@ func receiveCommit() {
 					State     *big.Int
 				}{}
 
-				err := parsedABI.UnpackIntoInterface(&eventData, "RandomNumberRequested", vLog.Data)
+				err := parsedABI.UnpackIntoInterface(&eventData, "Round", vLog.Data)
 				if err != nil {
-					log.Printf("Failed to decode RandomNumberRequested event log: %v", err)
+					log.Printf("Failed to decode Round event log: %v", err)
 					continue
 				}
+				if Round == nil {
+					Round = big.NewInt(0)
+				}
 				Round = new(big.Int).Add(Round, big.NewInt(1))
-				fmt.Printf("RandomNumberRequested Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+				fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 					eventData.StartTime, eventData.State, Round)
 
 				processRandomRequestNumber(eventData.StartTime, eventData.State, Round)
