@@ -126,16 +126,6 @@ func RunRegularNode() {
 		ContractABI:     parsedABI,
 	}
 	for {
-		// Fetch round data
-		if regularNode_helper.StartNextRound {
-			if len(regularNode_helper.RequestQueue) == 0 {
-				time.Sleep(10 * time.Second)
-				continue
-			}
-			firstRequest := regularNode_helper.RequestQueue[0]
-			regularNode_helper.CurrentRound = firstRequest.Round.String()
-		}
-		// roundsData, err := fetchRoundsData()
 		if err != nil {
 			log.Printf("Error fetching rounds data: %v", err)
 			time.Sleep(30 * time.Second)
@@ -182,6 +172,15 @@ func RunRegularNode() {
 			// Send registration request to leader
 			log.Println("Deposit sufficient. Sending registration request to leader...")
 			sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
+		}
+
+		if regularNode_helper.StartNextRound {
+			if len(regularNode_helper.RequestQueue) == 0 {
+				time.Sleep(10 * time.Second)
+				continue
+			}
+			firstRequest := regularNode_helper.RequestQueue[0]
+			regularNode_helper.CurrentRound = firstRequest.Round.String()
 		}
 
 		round := regularNode_helper.CurrentRound
