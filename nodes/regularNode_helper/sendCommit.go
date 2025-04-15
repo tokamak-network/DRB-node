@@ -105,11 +105,14 @@ func receiveCommitRequest() {
 						State     *big.Int
 					}{}
 	
-					err := parsedABI.UnpackIntoInterface(&eventData, "RandomNumberRequested", vLog.Data)
+					err := parsedABI.UnpackIntoInterface(&eventData, "Round", vLog.Data)
 					if err != nil {
 						log.Printf("Failed to decode RandomNumberRequested event log: %v", err)
 						continue
 					}
+					if Round == nil {
+						Round = big.NewInt(0)
+					}					
 					Round = new(big.Int).Add(Round, big.NewInt(1))
 					fmt.Printf("RandomNumberRequested Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 						eventData.StartTime, eventData.State, Round)
@@ -160,13 +163,16 @@ func processGeneratedRandomNumber(round *big.Int, randomNumber *big.Int) {
 	RoundsData[round.String()] = data
 
 	StartNextRound = true
-
+	RequestQueue = RequestQueue[1:]
 	fmt.Printf("Generated random number %v, for round: %v\n",randomNumber, round )
 }
 
 func processMerkleRoot(round string) {
 	roundData := RoundsData[round]
 	roundData.MerkleRoot = true
+	if RoundsData == nil {
+		RoundsData = make(map[string]RoundData)
+	}
 	RoundsData[round] = roundData
 }
 
