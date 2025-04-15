@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -92,7 +93,7 @@ func LoadRevealOrders(filePath string) (map[string]interface{}, error) {
 	return data, nil
 }
 
-func DetermineRevealOrder(roundNum string, activatedOperators map[string]map[common.Address]bool) error {
+func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) error {
 	// File path for reveal order storage
 	filePath := "reveal_orders.json"
 
@@ -111,16 +112,16 @@ func DetermineRevealOrder(roundNum string, activatedOperators map[string]map[com
 
 	log.Printf("Determining reveal order for round %s...", roundNum)
 
-	// Ensure activated operators exist for the round
-	operators, exists := activatedOperators[roundNum]
-	if !exists || len(operators) == 0 {
+	operators := eth.ActivatedOperators
+	
+	if  len(operators) == 0 {
 		log.Printf("No activated operators found for round %s", roundNum)
 		return fmt.Errorf("no activated operators found for round %s", roundNum)
 	}
 
 	var cosValues [][]byte
 	var addresses []string
-	for eoaAddress := range operators {
+	for _, eoaAddress := range operators {
 		eoaAddressStr := eoaAddress.Hex()
 
 		commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddressStr)
