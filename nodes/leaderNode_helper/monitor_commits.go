@@ -323,6 +323,9 @@ func markRoundCompleted(leaderCommits map[string]utils.LeaderCommitData, round s
 		log.Printf("Failed to save updated leader commits: %v", err)
 	}
 	StartNextRound = true
+	if RoundsData == nil {
+		RoundsData = make(map[string]RoundData)
+	}
 	data := RoundsData[round]
 	data.RandomNumber = true
 	RoundsData[round] = data
