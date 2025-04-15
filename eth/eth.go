@@ -19,6 +19,8 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+var ActivatedOperators = make([]common.Address, 0)
+
 // Smart contract call helper function
 func CallSmartContract(client *ethclient.Client, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
 	data, err := parsedABI.Pack(method, params...)
@@ -187,4 +189,12 @@ func GetActivatedOperators() ([]common.Address, error) {
 	}
 	activatedOperators, _ = result.([]common.Address)
 	return activatedOperators, nil
+}
+
+func UpdateActivatedOperators() {
+	var err error
+	ActivatedOperators, err = GetActivatedOperators()
+	if err != nil {
+		log.Printf("Error updating ActivatedOperators: %v", err)
+	}
 }
