@@ -43,11 +43,12 @@ type RoundData struct {
 type GraphQLResponse struct {
 	Rounds []RoundData `json:"rounds"`
 }
+
 var firstRequest leaderNode_helper.RandomRequest
 
 // committedNodes and activatedOperators are authoritative in-memory states.
 // var committedNodes = make(map[string]map[common.Address]utils.LeaderCommitData)
-var activatedOperators = make(map[string]map[common.Address]bool)
+// var activatedOperators = make(map[string]map[common.Address]bool)
 
 var roundFlag = make(map[string]uint64)
 var sendCommitRequest = make(map[string]bool)
@@ -82,8 +83,8 @@ func RunLeaderNode() {
 	go leaderNode_helper.MonitorCommits(h)
 	go leaderNode_helper.ReceiveCommit()
 	for {
-		if(leaderNode_helper.StartNextRound) {
-			if(len(leaderNode_helper.RequestQueue) == 0) {
+		if leaderNode_helper.StartNextRound {
+			if len(leaderNode_helper.RequestQueue) == 0 {
 				time.Sleep(10 * time.Second)
 				continue
 			}
@@ -228,7 +229,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if allCommitsReceivedUnlocked(roundNum) {
 		log.Printf("All COS received for round %s. Determining reveal order...", roundNum)
-		err := commitreveal2.DetermineRevealOrder(roundNum, activatedOperators)
+		err := commitreveal2.DetermineRevealOrder(roundNum, eth.ActivatedOperators)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s: %v", roundNum, err)
 			return
@@ -273,8 +274,8 @@ func VerifySignatureAndCheckActivation(req utils.Request, reqType string) bool {
 // allCommitsReceivedUnlocked checks if all operators have CVS in-memory.
 // Called with commitMu locked.
 func allCommitsReceivedUnlocked(roundNum string) bool {
-	ops, exists := activatedOperators[roundNum]
-	if !exists || len(ops) == 0 {
+	ops := eth.ActivatedOperators
+	if len(ops) == 0 {
 		return false
 	}
 
@@ -283,7 +284,7 @@ func allCommitsReceivedUnlocked(roundNum string) bool {
 		return false
 	}
 
-	for op := range ops {
+	for _, op := range ops {
 		data, ok := roundCommits[op]
 		if !ok || data.Cvs == [32]byte{} {
 			return false
@@ -482,6 +483,9 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 	log.Printf("Successfully submitted Merkle root for round %s", roundNum)
 	roundData := leaderNode_helper.RoundsData[roundNum]
 	roundData.MerkleRoot = true
+	if leaderNode_helper.RoundsData == nil {
+		leaderNode_helper.RoundsData = make(map[string]leaderNode_helper.RoundData)
+	}
 	leaderNode_helper.RoundsData[roundNum] = roundData
 	updateCommitDataAfterSubmit(roundNum)
 }
@@ -526,6 +530,8 @@ func isEOAActivatedForRound(eoaAddress common.Address) bool {
 
 func processRounds(round leaderNode_helper.RandomRequest) {
 	roundNum := round.Round.String()
+	// update the ActivatedOperators
+	eth.UpdateActivatedOperators()
 	if !leaderNode_helper.RoundsData[roundNum].MerkleRoot && !leaderNode_helper.RoundsData[roundNum].RandomNumber {
 		log.Printf("LeaderNode %s is still waiting for commits...", roundNum)
 
