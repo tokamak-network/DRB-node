@@ -44,7 +44,7 @@ func determineOrder(rv [32]byte, cosValues [][]byte) []int {
 
 	// Sort by the difference value
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].value.Cmp(entries[j].value) > 0
+		return entries[i].value.Cmp(entries[j].value) < 0
 	})
 
 	var order []int
