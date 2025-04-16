@@ -197,7 +197,6 @@ func RunRegularNode() {
 
 		// Check if this node's EOA is in the activated operators for the round
 		if isEOAActivated(round, eoaAddress) {
-			log.Printf("EOA %s is activated in this round, generating commit...", eoaAddress)
 
 			// Check if this round has already been committed (store it locally)
 			commitData, err := utils.LoadCommitData(round)
@@ -215,6 +214,7 @@ func RunRegularNode() {
 			// If Merkle Root and Random Number are nil, generate commit
 			if !merkleRootSubmitted && !randomNumberSubmitted {
 				// Generate commit
+				log.Printf("EOA %s is activated in this round, generating commit...", eoaAddress)
 				secretValue, cos, cvs, err := commitreveal2.GenerateCommit(round, eoaAddress)
 				if err != nil {
 					log.Printf("Error generating commit: %v", err)
