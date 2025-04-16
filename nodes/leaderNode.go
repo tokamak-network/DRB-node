@@ -17,7 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/machinebox/graphql"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
@@ -26,24 +25,6 @@ import (
 )
 
 var commitMu sync.Mutex
-
-type RoundData struct {
-	MerkleRootSubmitted struct {
-		MerkleRoot interface{} `json:"merkleRoot"`
-	} `json:"merkleRootSubmitted"`
-	Round                 interface{} `json:"round"`
-	RandomNumberGenerated struct {
-		RandomNumber interface{} `json:"randomNumber"`
-	} `json:"randomNumberGenerated"`
-	RandomNumberRequested struct {
-		ActivatedOperators []string `json:"activatedOperators"`
-	} `json:"randomNumberRequested"`
-}
-
-type GraphQLResponse struct {
-	Rounds []RoundData `json:"rounds"`
-}
-
 var firstRequest leaderNode_helper.RandomRequest
 
 // committedNodes and activatedOperators are authoritative in-memory states.
@@ -96,22 +77,6 @@ func RunLeaderNode() {
 		processRounds(firstRequest)
 		time.Sleep(30 * time.Second)
 	}
-}
-
-func fetchRoundsData() (*GraphQLResponse, error) {
-	subGraphURL := os.Getenv("SUBGRAPH_URL")
-	if subGraphURL == "" {
-		log.Fatal("SUBGRAPH_URL is not set in environment variables.")
-	}
-	client := graphql.NewClient(subGraphURL)
-	ctx := context.Background()
-	req := utils.GetRoundsRequest()
-
-	var resp GraphQLResponse
-	if err := client.Run(ctx, req, &resp); err != nil {
-		log.Fatalf("Failed to execute GraphQL request: %v", err)
-	}
-	return &resp, nil
 }
 
 func handleRegistrationRequest(s network.Stream) {
