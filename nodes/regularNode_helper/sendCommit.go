@@ -105,7 +105,7 @@ func receiveCommitRequest() {
 						State     *big.Int
 					}{}
 	
-					err := parsedABI.UnpackIntoInterface(&eventData, "Round", vLog.Data)
+					err := parsedABI.UnpackIntoInterface(&eventData, "RandomNumberRequested", vLog.Data)
 					if err != nil {
 						log.Printf("Failed to decode RandomNumberRequested event log: %v", err)
 						continue
@@ -150,41 +150,52 @@ func receiveCommitRequest() {
 					fmt.Printf("MerkleRootSubmitted Event:\n StartTime: %v\n MerkleRoot: %v\n Round: %v\n",
 						eventData.Round, eventData.RandomNumber, eventData.CallbackSuccess)
 
-					processGeneratedRandomNumber(eventData.Round, eventData.RandomNumber)
+					// processGeneratedRandomNumber(eventData.Round, eventData.RandomNumber)
 				}
 			}
 		}
 	}
 }
 
-func processGeneratedRandomNumber(round *big.Int, randomNumber *big.Int) {
-	data := RoundsData[round.String()]
-	data.RandomNumber = true
-	RoundsData[round.String()] = data
+// func processGeneratedRandomNumber(round *big.Int, randomNumber *big.Int) {
+// 	data := RoundsData[round.String()]
+// 	data.RandomNumber = true
+// 	RoundsData[round.String()] = data
 
-	StartNextRound = true
-	RequestQueue = RequestQueue[1:]
-	fmt.Printf("Generated random number %v, for round: %v\n",randomNumber, round )
-}
+// 	StartNextRound = true
+// 	RequestQueue = RequestQueue[1:]
+
+// 	fmt.Printf("Generated random number %v, for round: %v\n",randomNumber, round )
+// }
 
 func processMerkleRoot(round string) {
 	roundData := RoundsData[round]
 	roundData.MerkleRoot = true
-	if RoundsData == nil {
-		RoundsData = make(map[string]RoundData)
-	}
 	RoundsData[round] = roundData
 }
 
 func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.Int) {
+	if Round == nil {
+		Round = big.NewInt(-1)
+	}
 	req := RandomRequest{
 		Round:     round,
 		StartTime: startTime,
 		State:     state,
 	}
-	// request random number queue
-	RequestQueue = append(RequestQueue, req)
-	fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length: %v", len(RequestQueue))
+	if (state == big.NewInt(1)) {
+		Round = new(big.Int).Add(Round, big.NewInt(1))
+		fmt.Printf("RandomNumberRequested Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+			startTime, state, round)
+		
+		// request random number queue
+		RequestQueue = append(RequestQueue, req)
+		fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length: %v", len(RequestQueue))
+	}
+	if (state == big.NewInt(2)) {
+		RequestQueue = RequestQueue[1:]
+		fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length Completed: %v", len(RequestQueue))
+	}		
 }
 
 func processCommitRequest(indices []*big.Int) error {
