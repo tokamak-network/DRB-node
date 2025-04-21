@@ -105,16 +105,16 @@ func receiveCommitRequest() {
 						State     *big.Int
 					}{}
 	
-					err := parsedABI.UnpackIntoInterface(&eventData, "RandomNumberRequested", vLog.Data)
+					err := parsedABI.UnpackIntoInterface(&eventData, "Round", vLog.Data)
 					if err != nil {
-						log.Printf("Failed to decode RandomNumberRequested event log: %v", err)
+						log.Printf("Failed to decode Round event log: %v", err)
 						continue
 					}
 					if Round == nil {
 						Round = big.NewInt(0)
 					}					
 					Round = new(big.Int).Add(Round, big.NewInt(1))
-					fmt.Printf("RandomNumberRequested Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+					fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 						eventData.StartTime, eventData.State, Round)
 	
 					processRandomRequestNumber(eventData.StartTime, eventData.State, Round)
@@ -169,6 +169,9 @@ func receiveCommitRequest() {
 // }
 
 func processMerkleRoot(round string) {
+	if RoundsData == nil {
+		RoundsData = make(map[string]RoundData)
+	}
 	roundData := RoundsData[round]
 	roundData.MerkleRoot = true
 	RoundsData[round] = roundData
@@ -183,18 +186,25 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.I
 		StartTime: startTime,
 		State:     state,
 	}
-	if (state == big.NewInt(1)) {
+	if state.Cmp(big.NewInt(1)) == 0 {
 		Round = new(big.Int).Add(Round, big.NewInt(1))
-		fmt.Printf("RandomNumberRequested Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+		fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
 		
 		// request random number queue
 		RequestQueue = append(RequestQueue, req)
-		fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length: %v", len(RequestQueue))
+		fmt.Println("Added to queue:", req, "\nRound Queue length: %v", len(RequestQueue))
 	}
-	if (state == big.NewInt(2)) {
+	if state.Cmp(big.NewInt(2)) == 0 {
 		RequestQueue = RequestQueue[1:]
-		fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length Completed: %v", len(RequestQueue))
+		fmt.Println("Deleted from the queue:", req, "\nRound Queue length Completed: %v", len(RequestQueue))
+		
+		if RoundsData == nil {
+			RoundsData = make(map[string]RoundData)
+		}
+		roundData := RoundsData[round.String()]
+		roundData.RandomNumber = true
+		RoundsData[round.String()] = roundData
 	}		
 }
 
