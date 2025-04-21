@@ -115,7 +115,6 @@ func receiveCommit() {
 					log.Printf("Failed to decode Round event log: %v", err)
 					continue
 				}
-
 				processRandomRequestNumber(eventData.StartTime, eventData.State, Round)
 			}
 		}
@@ -123,15 +122,15 @@ func receiveCommit() {
 }
 
 func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.Int) {
-	req := RandomRequest{
-		Round:     round,
-		StartTime: startTime,
-		State:     state,
-	}
 	if Round == nil {
 		Round = big.NewInt(-1)
 	}
-	if (state == big.NewInt(1)) {
+	req := RandomRequest{
+		Round:     Round,
+		StartTime: startTime,
+		State:     state,
+	}
+	if state.Cmp(big.NewInt(1)) == 0 {
 		Round = new(big.Int).Add(Round, big.NewInt(1))
 		fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
@@ -139,7 +138,7 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.I
 		RequestQueue = append(RequestQueue, req)
 		fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length: %v", len(RequestQueue))
 	}
-	if (state == big.NewInt(2)) {
+	if state.Cmp(big.NewInt(2)) == 0 {
 		RequestQueue = RequestQueue[1:]
 		data := RoundsData[Round.String()]
 		data.RandomNumber = true
