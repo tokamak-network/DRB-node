@@ -115,12 +115,6 @@ func receiveCommit() {
 					log.Printf("Failed to decode Round event log: %v", err)
 					continue
 				}
-				if Round == nil {
-					Round = big.NewInt(0)
-				}
-				Round = new(big.Int).Add(Round, big.NewInt(1))
-				fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
-					eventData.StartTime, eventData.State, Round)
 
 				processRandomRequestNumber(eventData.StartTime, eventData.State, Round)
 			}
@@ -134,9 +128,24 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.I
 		StartTime: startTime,
 		State:     state,
 	}
+	if Round == nil {
+		Round = big.NewInt(-1)
+	}
+	if (state == big.NewInt(1)) {
+		Round = new(big.Int).Add(Round, big.NewInt(1))
+		fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+			startTime, state, round)
+		
+		RequestQueue = append(RequestQueue, req)
+		fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length: %v", len(RequestQueue))
+	}
+	if (state == big.NewInt(2)) {
+		RequestQueue = RequestQueue[1:]
+		data := RoundsData[Round.String()]
+		data.RandomNumber = true
+		RoundsData[Round.String()] = data
+	}
 	// request random number queue
-	RequestQueue = append(RequestQueue, req)
-	fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length: %v", len(RequestQueue))
 }
 
 func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
