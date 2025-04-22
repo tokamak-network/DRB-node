@@ -26,7 +26,7 @@ type CommitData struct {
 	SendCosToLeader bool              `json:"send_cos_to_leader"`
 	Sign            map[string]string `json:"sign"`
 }
-
+var Execution bool
 var commits map[string]CommitData
 
 func MonitorCommitRequest() {
@@ -40,7 +40,7 @@ type RoundData struct {
 	RandomNumber bool
 }
 var RoundsData map[string]RoundData
-
+var Req RandomRequest
 type RandomRequest struct {
 	Round     *big.Int
 	StartTime *big.Int
@@ -191,13 +191,10 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.I
 		fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
 		
-		// request random number queue
-		RequestQueue = append(RequestQueue, req)
-		fmt.Println("Added to queue:", req, "\nRound Queue length: %v", len(RequestQueue))
+		Req = req
+		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
-		RequestQueue = RequestQueue[1:]
-		fmt.Println("Deleted from the queue:", req, "\nRound Queue length Completed: %v", len(RequestQueue))
 		
 		if RoundsData == nil {
 			RoundsData = make(map[string]RoundData)
@@ -205,6 +202,8 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.I
 		roundData := RoundsData[round.String()]
 		roundData.RandomNumber = true
 		RoundsData[round.String()] = roundData
+
+		Execution = false
 	}		
 }
 
