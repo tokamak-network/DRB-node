@@ -36,12 +36,15 @@ func determineOrder(rv [32]byte, cosValues [][]byte) []int {
 
 	var entries []revealOrderEntry
 	rvValue := new(big.Int).SetBytes(rv[:])
-
+	fmt.Println("rvValue", rvValue)
 	for i, cos := range cosValues {
 		fmt.Println(i, "i")
-		cosValue := new(big.Int).SetBytes(cos)
-		fmt.Println(cosValue, "cosValue")
-		diff := new(big.Int).Abs(new(big.Int).Sub(rvValue, cosValue)) // Absolute difference
+		fmt.Println("cos", cos)
+		cvs := Keccak256(abiEncode(cos))
+		fmt.Println("cvs", cvs)
+		cvsValue := new(big.Int).SetBytes(cvs)
+		fmt.Println(cvsValue, "cvsValue")
+		diff := new(big.Int).Abs(new(big.Int).Sub(rvValue, cvsValue)) // Absolute difference
 		fmt.Println(diff, "diff")
 		entries = append(entries, revealOrderEntry{index: i, value: diff})
 		fmt.Println(entries, "entries")
@@ -53,9 +56,9 @@ func determineOrder(rv [32]byte, cosValues [][]byte) []int {
 	})
 		
 	var order []int
-	for temp, entry := range entries {
+	for i, entry := range entries {
 		order = append(order, entry.index)
-		fmt.Println(temp, "temp and", entry.value, "entry",entry.index )
+		fmt.Println(i, "temp and", entry.value, "entry",entry.index )
 	}
 	fmt.Println(order)
 
