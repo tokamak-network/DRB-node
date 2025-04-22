@@ -175,11 +175,11 @@ func RunRegularNode() {
 		}
 
 		if regularNode_helper.StartNextRound {
-			if len(regularNode_helper.RequestQueue) == 0 {
+			if !regularNode_helper.Execution {
 				time.Sleep(10 * time.Second)
 				continue
 			}
-			firstRequest := regularNode_helper.RequestQueue[0]
+			firstRequest := regularNode_helper.Req
 			regularNode_helper.CurrentRound = firstRequest.Round.String()
 		}
 
