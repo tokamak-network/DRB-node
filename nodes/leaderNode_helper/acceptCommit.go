@@ -19,7 +19,7 @@ import (
 
 var CommitMu sync.Mutex
 var StartTime *big.Int
-
+var Execution bool
 type RandomRequest struct {
 	Round     *big.Int
 	StartTime *big.Int
@@ -32,10 +32,9 @@ type RoundData struct {
 
 var RoundsData map[string]RoundData
 
-var RequestQueue []RandomRequest
 var Round *big.Int
 var CurrentRound string
-
+var Req RandomRequest
 type LeaderCommitData struct {
 	Round                 string            `json:"round"`
 	EOAAddress            string            `json:"eoa_address"`
@@ -115,6 +114,9 @@ func receiveCommit() {
 					log.Printf("Failed to decode Round event log: %v", err)
 					continue
 				}
+				if Round == nil {
+					Round = big.NewInt(-1)
+				}
 				processRandomRequestNumber(eventData.StartTime, eventData.State, Round)
 			}
 		}
@@ -134,17 +136,15 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.I
 		Round = new(big.Int).Add(Round, big.NewInt(1))
 		fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
-		
-		RequestQueue = append(RequestQueue, req)
-		fmt.Println("Added to queue:", req, "\nRandomNumberRequested Queue length: %v", len(RequestQueue))
+		Req = req
+		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
-		RequestQueue = RequestQueue[1:]
 		data := RoundsData[Round.String()]
 		data.RandomNumber = true
 		RoundsData[Round.String()] = data
+		Execution = false
 	}
-	// request random number queue
 }
 
 func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
