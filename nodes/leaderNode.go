@@ -65,11 +65,11 @@ func RunLeaderNode() {
 	go leaderNode_helper.ReceiveCommit()
 	for {
 		if leaderNode_helper.StartNextRound {
-			if len(leaderNode_helper.RequestQueue) == 0 {
+			if !leaderNode_helper.Execution {
 				time.Sleep(10 * time.Second)
 				continue
 			}
-			firstRequest = leaderNode_helper.RequestQueue[0]
+			firstRequest = leaderNode_helper.Req
 			leaderNode_helper.CurrentRound = firstRequest.Round.String()
 		}
 		fmt.Printf("Executing request: %v", firstRequest)
