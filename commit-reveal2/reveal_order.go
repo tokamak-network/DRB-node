@@ -38,20 +38,26 @@ func determineOrder(rv [32]byte, cosValues [][]byte) []int {
 	rvValue := new(big.Int).SetBytes(rv[:])
 
 	for i, cos := range cosValues {
+		fmt.Println(i, "i")
 		cosValue := new(big.Int).SetBytes(cos)
+		fmt.Println(cosValue, "cosValue")
 		diff := new(big.Int).Abs(new(big.Int).Sub(rvValue, cosValue)) // Absolute difference
+		fmt.Println(diff, "diff")
 		entries = append(entries, revealOrderEntry{index: i, value: diff})
+		fmt.Println(entries, "entries")
 	}
 
 	// Sort by the difference value
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].value.Cmp(entries[j].value) < 0
+		return entries[i].value.Cmp(entries[j].value) > 0
 	})
-
+		
 	var order []int
-	for _, entry := range entries {
+	for temp, entry := range entries {
 		order = append(order, entry.index)
+		fmt.Println(temp, "temp and", entry.value, "entry",entry.index )
 	}
+	fmt.Println(order)
 
 	return order
 }
