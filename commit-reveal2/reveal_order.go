@@ -119,6 +119,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 	}
 
 	var cvsValues [][]byte
+	var cosValues [][]byte
 	var addresses []string
 	for _, eoaAddress := range operators {
 		eoaAddressStr := eoaAddress.Hex()
@@ -135,11 +136,12 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 		}
 
 		cvsValues = append(cvsValues, commitData.Cvs[:])
+		cosValues = append(cvsValues, commitData.Cos[:])
 		addresses = append(addresses, eoaAddressStr)
 	}
 
 	// Calculate the RV and determine the reveal order
-	rv := calculateRV(cvsValues)
+	rv := calculateRV(cosValues)
 	revealOrder := determineOrder(rv, cvsValues)
 
 	// Reorder addresses based on reveal order
