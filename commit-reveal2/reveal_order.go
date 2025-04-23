@@ -28,7 +28,7 @@ func calculateRV(cosValues [][]byte) [32]byte {
 }
 
 // determineOrder calculates the reveal order by comparing COS values with RV
-func determineOrder(rv [32]byte, cosValues [][]byte) []int {
+func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	type revealOrderEntry struct {
 		index int
 		value *big.Int
@@ -36,18 +36,10 @@ func determineOrder(rv [32]byte, cosValues [][]byte) []int {
 
 	var entries []revealOrderEntry
 	rvValue := new(big.Int).SetBytes(rv[:])
-	fmt.Println("rvValue", rvValue)
-	for i, cos := range cosValues {
-		fmt.Println(i, "i")
-		fmt.Println("cos", cos)
-		cvs := Keccak256(abiEncode(cos))
-		fmt.Println("cvs", cvs)
+	for i, cvs := range cvsValues {
 		cvsValue := new(big.Int).SetBytes(cvs)
-		fmt.Println(cvsValue, "cvsValue")
 		diff := new(big.Int).Abs(new(big.Int).Sub(rvValue, cvsValue)) // Absolute difference
-		fmt.Println(diff, "diff")
 		entries = append(entries, revealOrderEntry{index: i, value: diff})
-		fmt.Println(entries, "entries")
 	}
 
 	// Sort by the difference value
@@ -56,11 +48,9 @@ func determineOrder(rv [32]byte, cosValues [][]byte) []int {
 	})
 		
 	var order []int
-	for i, entry := range entries {
+	for _, entry := range entries {
 		order = append(order, entry.index)
-		fmt.Println(i, "temp and", entry.value, "entry",entry.index )
 	}
-	fmt.Println(order)
 
 	return order
 }
@@ -128,7 +118,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 		return fmt.Errorf("no activated operators found for round %s", roundNum)
 	}
 
-	var cosValues [][]byte
+	var cvsValues [][]byte
 	var addresses []string
 	for _, eoaAddress := range operators {
 		eoaAddressStr := eoaAddress.Hex()
@@ -144,13 +134,13 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 			return fmt.Errorf("missing COS for operator %s", eoaAddressStr)
 		}
 
-		cosValues = append(cosValues, commitData.Cos[:])
+		cvsValues = append(cvsValues, commitData.Cvs[:])
 		addresses = append(addresses, eoaAddressStr)
 	}
 
 	// Calculate the RV and determine the reveal order
-	rv := calculateRV(cosValues)
-	revealOrder := determineOrder(rv, cosValues)
+	rv := calculateRV(cvsValues)
+	revealOrder := determineOrder(rv, cvsValues)
 
 	// Reorder addresses based on reveal order
 	orderedAddresses := make([]string, len(addresses))
