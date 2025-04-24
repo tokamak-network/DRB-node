@@ -309,3 +309,36 @@ func FetchActivatedOperators(round string) ([]string, error) {
 	}
 	return strAddresses, nil
 }
+
+func fetchCurrentRound() (*big.Int, error){
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to Ethereum RPC: %v", err)
+	}
+
+	abiFilePath := "contract/abi/Commit2RevealDRB.json"
+	parsedABI, err := utils.LoadContractABI(abiFilePath)
+	if err != nil {
+		log.Fatalf("Failed to load contract ABI: %v", err)
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	result, err := eth.CallSmartContract(client, parsedABI, "s_currentRound", contractAddress)
+	if err != nil {
+		log.Printf("Failed to fetch activated operators: %v", err)
+		return nil, err
+	}
+	currentRound, ok := result.(*big.Int)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type: expected *big.Int, got %v", result)
+	}
+
+	return currentRound, nil
+}
