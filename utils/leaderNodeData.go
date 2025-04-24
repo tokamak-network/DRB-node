@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -116,5 +117,43 @@ func SaveLeaderCommitData(commitData LeaderCommitData) error {
 	}
 
 	log.Printf("Saved commit data for key: %s", key) // Debug log for commit save
+	return nil
+}
+
+func RemoveLeaderCommitData(roundNum string) error {
+	// Load existing commit data
+	var allCommits map[string]LeaderCommitData
+	file, err := os.Open(leaderCommitDataFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("commit data not found")
+		}
+		return fmt.Errorf("error opening leader commit data file: %v", err)
+	}
+	defer file.Close()
+
+	if err := json.NewDecoder(file).Decode(&allCommits); err != nil {
+		return fmt.Errorf("failed to decode commit data: %v", err)
+	}
+
+	// Remove the commit data for the specified roundNum
+	for key := range allCommits {
+		if strings.HasPrefix(key, roundNum) {
+			delete(allCommits, key)
+		}
+	}
+
+	// Save the updated commit data back to the file
+	file, err = os.Create(leaderCommitDataFile)
+	if err != nil {
+		return fmt.Errorf("failed to create commit data file: %v", err)
+	}
+	defer file.Close()
+
+	if err := json.NewEncoder(file).Encode(allCommits); err != nil {
+		return fmt.Errorf("failed to encode commit data: %v", err)
+	}
+
+	log.Printf("Successfully removed commit data for round %s", roundNum)
 	return nil
 }

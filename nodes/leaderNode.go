@@ -518,7 +518,9 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 					onChainExecution[roundNum]["CVS"] = make(map[string]bool)
 				}
 				if onChainExecution[roundNum]["CVS"][op] {
-					revert()
+					if err := revert(roundNum); err != nil {
+						log.Printf("Failed to revert commit data for roundNum %s", roundNum)
+					}
 				} else if sendCommitRequest[roundNum] {
 					missingOperators = append(missingOperators, op)
 					onChainExecution[roundNum]["CVS"][op] = true
@@ -616,6 +618,10 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 
 }
 
-func revert() {
-
+func revert(roundNum string) error {
+	// revert Cv if receiving Cv from regular nodes
+	if err := utils.RemoveLeaderCommitData(roundNum); err != nil {
+		return err
+	}
+	return nil
 }
