@@ -618,10 +618,12 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 
 }
 
+// revert Cv if receiving Cv from regular nodes
 func revert(roundNum string) error {
-	// revert Cv if receiving Cv from regular nodes
+	// Remove Cvs for roundNum from leader_commit.json
 	if err := utils.RemoveLeaderCommitData(roundNum); err != nil {
 		return err
 	}
+
 	return nil
 }
