@@ -34,7 +34,6 @@ func MonitorCommitRequest() {
 }
 
 var StartTime *big.Int
-var StartNextRound bool = true
 type RoundData struct {
 	MerkleRoot   bool
 	RandomNumber bool
@@ -72,7 +71,7 @@ func receiveCommitRequest() {
 		log.Fatalf("Failed to subscribe to logs: %v", err)
 	}
 	SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
-	RoundSig := parsedABI.Events["Round"].ID
+	StatusSig := parsedABI.Events["Status"].ID
 	MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
 	RandomNumberGeneratedSig := parsedABI.Events["RandomNumberGenerated"].ID
 
@@ -99,25 +98,22 @@ func receiveCommitRequest() {
 
 					processCommitRequest(eventData.Indices)
 				
-				case RoundSig:
+				case StatusSig:
 					eventData := struct {
-						StartTime *big.Int
-						State     *big.Int
+						CurStartTime *big.Int
+						CurState     *big.Int
 					}{}
 	
-					err := parsedABI.UnpackIntoInterface(&eventData, "Round", vLog.Data)
+					err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
 					if err != nil {
-						log.Printf("Failed to decode Round event log: %v", err)
+						log.Printf("Failed to decode Status event log: %v", err)
 						continue
 					}
-					if Round == nil {
-						Round = big.NewInt(0)
-					}					
-					Round = new(big.Int).Add(Round, big.NewInt(1))
-					fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
-						eventData.StartTime, eventData.State, Round)
+
+					fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+						eventData.CurStartTime, eventData.CurState, CurrentRound)
 	
-					processRandomRequestNumber(eventData.StartTime, eventData.State, Round)
+					processRandomRequestNumber(eventData.CurStartTime, eventData.CurState)
 
 				case MerkleRootSubmittedSig: 
 					eventData := struct {
@@ -177,17 +173,15 @@ func processMerkleRoot(round string) {
 	RoundsData[round] = roundData
 }
 
-func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.Int) {
-	if Round == nil {
-		Round = big.NewInt(-1)
-	}
+func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
+	round, _ := fetchCurrentRound();
+	CurrentRound = round.String()
 	req := RandomRequest{
 		Round:     round,
 		StartTime: startTime,
 		State:     state,
 	}
 	if state.Cmp(big.NewInt(1)) == 0 {
-		Round = new(big.Int).Add(Round, big.NewInt(1))
 		fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
 		
@@ -195,10 +189,6 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.I
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
-		
-		if RoundsData == nil {
-			RoundsData = make(map[string]RoundData)
-		}
 		roundData := RoundsData[round.String()]
 		roundData.RandomNumber = true
 		RoundsData[round.String()] = roundData
