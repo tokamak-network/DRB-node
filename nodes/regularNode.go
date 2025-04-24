@@ -174,14 +174,12 @@ func RunRegularNode() {
 			sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
 		}
 
-		if regularNode_helper.StartNextRound {
-			if !regularNode_helper.Execution {
-				time.Sleep(10 * time.Second)
-				continue
-			}
-			firstRequest := regularNode_helper.Req
-			regularNode_helper.CurrentRound = firstRequest.Round.String()
+		if !regularNode_helper.Execution {
+			time.Sleep(10 * time.Second)
+			continue
 		}
+		// firstRequest := regularNode_helper.Req
+		// regularNode_helper.CurrentRound = firstRequest.Round.String()
 
 		round := regularNode_helper.CurrentRound
 		merkleRootSubmitted := regularNode_helper.RoundsData[round].MerkleRoot
