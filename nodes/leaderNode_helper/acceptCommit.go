@@ -132,12 +132,15 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 		State:     state,
 	}
 	if state.Cmp(big.NewInt(1)) == 0 {
-		fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
 		Req = req
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
+		if RoundsData == nil {
+			RoundsData = make(map[string]RoundData)
+		}
 		data := RoundsData[Round.String()]
 		data.RandomNumber = true
 		RoundsData[Round.String()] = data
