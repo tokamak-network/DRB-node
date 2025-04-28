@@ -156,7 +156,7 @@ func RunRegularNode() {
 					continue
 				}
 				if txSent {
-					log.Println("Deposit transaction sent. Waiting for confirmation...")
+					log.Println("Deposit successful")
 					time.Sleep(30 * time.Second)
 					continue
 				}
@@ -420,7 +420,6 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 			return false, fmt.Errorf("failed to send deposit transaction: %v", err)
 		}
 
-		log.Println("Deposit transaction sent.")
 		return true, nil
 	}
 
