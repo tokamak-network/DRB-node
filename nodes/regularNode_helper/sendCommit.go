@@ -109,9 +109,6 @@ func receiveCommitRequest() {
 						log.Printf("Failed to decode Status event log: %v", err)
 						continue
 					}
-
-					fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
-						eventData.CurStartTime, eventData.CurState, CurrentRound)
 	
 					processRandomRequestNumber(eventData.CurStartTime, eventData.CurState)
 
@@ -182,7 +179,7 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 		State:     state,
 	}
 	if state.Cmp(big.NewInt(1)) == 0 {
-		fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
 		
 		Req = req
