@@ -501,6 +501,7 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 		log.Printf("LeaderNode %s is still waiting for commits...", roundNum)
 
 		commitMu.Lock()
+		utils.TakeSnapshot("leader_commits.json")
 		ready := UpdatedallCommitsReceivedUnlocked(roundNum)
 		commitMu.Unlock()
 		var missingOperators []string
@@ -518,8 +519,8 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 					onChainExecution[roundNum]["CVS"] = make(map[string]bool)
 				}
 				if onChainExecution[roundNum]["CVS"][op] {
-					if err := revert(roundNum); err != nil {
-						log.Printf("Failed to revert commit data for roundNum %s", roundNum)
+					if err := utils.RevertStates("leader_commits.json"); err != nil {
+						log.Printf("failed to revert states, %v", err)
 					}
 				} else if sendCommitRequest[roundNum] {
 					missingOperators = append(missingOperators, op)
@@ -616,14 +617,4 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 
 	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, indices)
 
-}
-
-// revert Cv if receiving Cv from regular nodes
-func revert(roundNum string) error {
-	// Remove Cvs for roundNum from leader_commit.json
-	if err := utils.RemoveLeaderCommitData(roundNum); err != nil {
-		return err
-	}
-
-	return nil
 }
