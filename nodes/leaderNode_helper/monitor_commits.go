@@ -123,7 +123,7 @@ func checkRoundsForCompletion(h host.Host) {
 		// If all EOAs have submitted, trigger the random number generation transaction
 		if allEOAsSubmitted {
 			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
-			err := generateRandomNumberTransaction(round, secrets, vs, rs, ss, operatorAddresses)
+			err := generateRandomNumberTransaction(round, secrets, vs, rs, ss)
 			if err != nil {
 				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
 			} else {
@@ -207,7 +207,7 @@ func loadRevealOrders(filePath string) (map[string]RevealOrderData, error) {
 }
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
-func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash, eoas []common.Address) error {
+func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash,) error {
 	log.Printf("Preparing to execute generateRandomNumber...")
 
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
