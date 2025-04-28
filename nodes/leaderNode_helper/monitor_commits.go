@@ -120,7 +120,6 @@ func checkRoundsForCompletion(h host.Host) {
 			rs = append(rs, common.HexToHash(commitData.Sign["r"]))
 			ss = append(ss, common.HexToHash(commitData.Sign["s"]))
 		}
-
 		// If all EOAs have submitted, trigger the random number generation transaction
 		if allEOAsSubmitted {
 			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
@@ -211,25 +210,6 @@ func loadRevealOrders(filePath string) (map[string]RevealOrderData, error) {
 func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash, eoas []common.Address) error {
 	log.Printf("Preparing to execute generateRandomNumber...")
 
-	// Convert `secrets` from [][]byte to []common.Hash
-	var secretsHashes []common.Hash
-	for _, secret := range secrets {
-		var secretHash common.Hash
-		copy(secretHash[:], secret)
-		secretsHashes = append(secretsHashes, secretHash)
-	}
-
-	// Check if secretsHashes, vs, rs, or ss are empty
-	if len(secretsHashes) == 0 || len(vs) == 0 || len(rs) == 0 || len(ss) == 0 {
-		return fmt.Errorf("one or more of the required arrays (secretsHashes, vs, rs, ss) are empty")
-	}
-
-	// Debugging: Log EOA order
-	for i, eoa := range eoas {
-		log.Printf("EOA Position %d: %s", i+1, eoa.Hex())
-	}
-
-	// Load Ethereum client and private key
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
 		log.Fatal("ETH_RPC_URL is not set in environment variables.")
@@ -239,7 +219,7 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
 	}
 	defer client.Close()
-
+	
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
@@ -248,17 +228,17 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 	if err != nil {
 		return fmt.Errorf("failed to load leader private key: %v", err)
 	}
-
+	
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
 	contractAddress := common.HexToAddress(contractAddressStr)
+
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
 		return fmt.Errorf("failed to load contract ABI: %v", err)
 	}
-
 	clientUtils := &utils.Client{
 		Client:          client,
 		ContractAddress: contractAddress,
@@ -266,45 +246,83 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		ContractABI:     parsedABI,
 	}
 
+	type SigRS struct {
+		R [32]byte
+		S [32]byte
+	}
+	
+	type SecretAndSigRS struct {
+		Secret [32]byte
+		Rs     SigRS
+	}
+	var secretSigRSs []SecretAndSigRS
+	for i := range secrets {
+		var secret [32]byte
+		copy(secret[:], secrets[i])
+	
+		var r32, s32 [32]byte
+		copy(r32[:], rs[i].Bytes())
+		copy(s32[:], ss[i].Bytes())
+	
+		secretSigRSs = append(secretSigRSs, SecretAndSigRS{
+			Secret: secret,
+			Rs:     SigRS{R: r32, S: s32},
+		})
+	}
+
 	revealOrders, err := loadRevealOrders("reveal_orders.json")
 	if err != nil {
 		log.Printf("Failed to load reveal orders: %v", err)
 		return nil
 	}
-
+	
 	roundRevealData, exists := revealOrders[round]
 	if !exists {
 		log.Printf("No reveal order found for round %s.", round)
 		return nil
 	}
+	
+	order := roundRevealData.RevealOrder
+	packedRevealOrder := packRevealOrder(order)
+	
+	packedVs := packVsValues(vs)
 
-	revealOrder := roundRevealData.RevealOrder
-
-	// Debugging: Log all inputs before executing the transaction
-	log.Printf("Secrets: %v", secretsHashes)
-	log.Printf("VS: %v", vs)
-	log.Printf("RS: %v", rs)
-	log.Printf("SS: %v", ss)
-
-	// Prepare the function call to generateRandomNumber
 	tx, _, err := eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
 		"generateRandomNumber",
-		big.NewInt(0), // No Ether value
-		secretsHashes, // bytes32[] secrets
-		vs,            // uint8[] vs
-		rs,            // bytes32[] rs
-		ss,            // bytes32[] ss
-		revealOrder,   // uint256[] revealOrder
+		big.NewInt(0),
+		secretSigRSs,
+		packedVs,
+		packedRevealOrder,
 	)
-
 	if err != nil {
 		return err
 	}
 
 	log.Printf("Transaction submitted. TX Hash: %s", tx.Hash().Hex())
 	return nil
+}
+
+
+func packRevealOrder(order []*big.Int) *big.Int {
+	packedRevealOrder := big.NewInt(0)
+	for i, v := range order {
+		shift := uint(8 * i)
+		part := new(big.Int).Lsh(big.NewInt(int64(v.Int64())), shift)
+		packedRevealOrder.Or(packedRevealOrder, part)
+	}
+	return packedRevealOrder
+}
+
+func packVsValues(vs []uint8) *big.Int {
+	result := big.NewInt(0)
+	for i, v := range vs {
+		shift := uint(8 * i)
+		part := new(big.Int).Lsh(big.NewInt(int64(v)), shift)
+		result.Or(result, part)
+	}
+	return result
 }
 
 // markRoundCompleted updates the leader_commits.json file to mark a round as completed.
