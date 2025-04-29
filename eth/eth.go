@@ -91,19 +91,6 @@ func ExecuteTransaction(
 		return nil, nil, fmt.Errorf("failed to pack data for %s: %v", functionName, err)
 	}
 
-	tx := types.NewTransaction(auth.Nonce.Uint64(), client.ContractAddress, amount, 3000000, auth.GasPrice, packedData)
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), client.PrivateKey)
-	if err != nil {
-		log.Errorf("Failed to sign the transaction: %v", err)
-		return nil, nil, fmt.Errorf("failed to sign the transaction: %v", err)
-	}
-
-	// Send the transaction
-	if err := client.Client.SendTransaction(ctx, signedTx); err != nil {
-		log.Errorf("Failed to send the signed transaction: %v", err)
-		return nil, nil, fmt.Errorf("failed to send the signed transaction: %v", err)
-	}
-
 	callMsg := ethereum.CallMsg{
 		From: auth.From,
 		To:   &client.ContractAddress,
@@ -127,8 +114,20 @@ func ExecuteTransaction(
 		}
 		break
 	}
-
 	log.Infof("Transaction simulation successful, estimated gas: %d", estimateGas)
+
+	tx := types.NewTransaction(auth.Nonce.Uint64(), client.ContractAddress, amount, 3000000, auth.GasPrice, packedData)
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), client.PrivateKey)
+	if err != nil {
+		log.Errorf("Failed to sign the transaction: %v", err)
+		return nil, nil, fmt.Errorf("failed to sign the transaction: %v", err)
+	}
+
+	// Send the transaction
+	if err := client.Client.SendTransaction(ctx, signedTx); err != nil {
+		log.Errorf("Failed to send the signed transaction: %v", err)
+		return nil, nil, fmt.Errorf("failed to send the signed transaction: %v", err)
+	}
 
 	// Wait for the transaction to be mined
 	receipt, err := waitForTransactionSuccess(ctx, client, signedTx)

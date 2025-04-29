@@ -14,19 +14,21 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 var CommitMu sync.Mutex
 var StartTime *big.Int
 var Execution bool
+
 type RandomRequest struct {
 	Round     *big.Int
 	StartTime *big.Int
 	State     *big.Int
 }
 type RoundData struct {
-	MerkleRoot           bool
+	MerkleRoot   bool
 	RandomNumber bool
 }
 
@@ -35,6 +37,7 @@ var RoundsData map[string]RoundData
 var Round *big.Int
 var CurrentRound string
 var Req RandomRequest
+
 type LeaderCommitData struct {
 	Round                 string            `json:"round"`
 	EOAAddress            string            `json:"eoa_address"`
@@ -78,7 +81,7 @@ func receiveCommit() {
 	}
 
 	cvsEventSig := parsedABI.Events["CvSubmitted"].ID
-	roundSig := parsedABI.Events["Round"].ID
+	StatusSig := parsedABI.Events["Status"].ID
 
 	for {
 		select {
@@ -103,43 +106,41 @@ func receiveCommit() {
 
 				processCVS(eventData.Cov, eventData.ActivatedOperatorIndex)
 
-			case roundSig:
+			case StatusSig:
 				eventData := struct {
-					StartTime *big.Int
-					State     *big.Int
+					CurStartTime *big.Int
+					CurState     *big.Int
 				}{}
 
-				err := parsedABI.UnpackIntoInterface(&eventData, "Round", vLog.Data)
+				err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
 				if err != nil {
-					log.Printf("Failed to decode Round event log: %v", err)
+					log.Printf("Failed to decode Status event log: %v", err)
 					continue
 				}
-				if Round == nil {
-					Round = big.NewInt(-1)
-				}
-				processRandomRequestNumber(eventData.StartTime, eventData.State, Round)
+				processRandomRequestNumber(eventData.CurStartTime, eventData.CurState)
 			}
 		}
 	}
 }
 
-func processRandomRequestNumber(startTime *big.Int, state *big.Int, round *big.Int) {
-	if Round == nil {
-		Round = big.NewInt(-1)
-	}
+func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
+	round, _ := fetchCurrentRound();
+	CurrentRound = round.String()
 	req := RandomRequest{
-		Round:     Round,
+		Round:     round,
 		StartTime: startTime,
 		State:     state,
 	}
 	if state.Cmp(big.NewInt(1)) == 0 {
-		Round = new(big.Int).Add(Round, big.NewInt(1))
-		fmt.Printf("Round Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
 		Req = req
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
+		if RoundsData == nil {
+			RoundsData = make(map[string]RoundData)
+		}
 		data := RoundsData[Round.String()]
 		data.RandomNumber = true
 		RoundsData[Round.String()] = data
@@ -228,4 +229,37 @@ func updateCVS(round string, eoa common.Address, cvs [32]byte) {
 	cvsHex := hex.EncodeToString(cvs[:])
 	commitData.CvsHex = cvsHex
 	utils.CommittedNodes[round][eoa] = commitData
+}
+
+func fetchCurrentRound() (*big.Int, error){
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to Ethereum RPC: %v", err)
+	}
+
+	abiFilePath := "contract/abi/Commit2RevealDRB.json"
+	parsedABI, err := utils.LoadContractABI(abiFilePath)
+	if err != nil {
+		log.Fatalf("Failed to load contract ABI: %v", err)
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	result, err := eth.CallSmartContract(client, parsedABI, "s_currentRound", contractAddress)
+	if err != nil {
+		log.Printf("Failed to fetch activated operators: %v", err)
+		return nil, err
+	}
+	currentRound, ok := result.(*big.Int)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type: expected *big.Int, got %v", result)
+	}
+
+	return currentRound, nil
 }
