@@ -205,6 +205,11 @@ func RunRegularNode() {
 				continue
 			}
 
+			// Take snapshot for commit Data
+			if err = utils.TakeSnapshot("commits.json"); err != nil {
+				log.Printf("Error taking snapshot for commits.json, %v", err)
+			}
+
 			// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil
 			if commitData != nil && !merkleRootSubmitted && !randomNumberSubmitted {
 				log.Printf("Commit data already exists for round %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", round)
@@ -235,6 +240,7 @@ func RunRegularNode() {
 				err = utils.SaveCommitData(commitData)
 				if err != nil {
 					log.Printf("Error saving commit data: %v", err)
+					utils.RevertStates("commits.json")
 					continue
 				}
 
@@ -257,6 +263,7 @@ func RunRegularNode() {
 					err := utils.SaveCommitData(*commitData)
 					if err != nil {
 						log.Printf("Error saving updated commit data after sending COS: %v", err)
+						utils.RevertStates("commits.json")
 					}
 				}
 				continue
@@ -506,10 +513,16 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 		"s": s,
 	}
 
+	// Take snapshot for commit Data
+	if err = utils.TakeSnapshot("commits.json"); err != nil {
+		log.Printf("Error taking snapshot for commits.json, %v", err)
+	}
+
 	// Save commit data locally with v, r, s
 	commitData.Sign = req.Sign
 	if err := utils.SaveCommitData(commitData); err != nil {
 		log.Printf("Failed to save commit data locally: %v", err)
+		utils.RevertStates("commits.json")
 		return
 	}
 
