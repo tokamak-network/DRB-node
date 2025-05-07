@@ -36,6 +36,7 @@ var sendCommitRequest = make(map[string]bool)
 var onChainExecution = make(map[string]map[string]map[string]bool)
 var flag = make(map[string]bool)
 var dispute = make(map[string]bool)
+var requestCv = true
 
 func RunLeaderNode() {
 	port := os.Getenv("LEADER_PORT")
@@ -524,17 +525,19 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 			}
 		}
 		if flag[roundNum] {
-			handleMissingCV(missingOperators, roundNum)
+			if requestCv {
+				handleMissingCV(missingOperators, roundNum)
+			}
 		}
 		if allReceived {
 			log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
-
+			flag[roundNum] = false
 			generateMerkleRoot(roundNum)
 		} else {
 			log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
 			roundFlag[roundNum]++
 			if roundFlag[roundNum] >= 2 {
-				sendCommitRequest[roundNum] = true
+			sendCommitRequest[roundNum] = true
 			}
 		}
 	}
@@ -546,15 +549,28 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 	if err != nil {
 		fmt.Println("Error loading the activated Operators in handleMissingCV()")
 	}
-	i := big.NewInt(0)
-	for op := range activatedOperators {
-		for missingOp := range missingOperators {
-			if op == missingOp {
-				indices = append(indices, i)
-			}
-		}
-		i.Add(i, big.NewInt(1))
-	}
+	// i := big.NewInt(0)
+	fmt.Println("activatedOperators", activatedOperators)
+	fmt.Println("missingOperators", missingOperators)
+
+	// for op := range activatedOperators {
+	// 	for missingOp := range missingOperators {
+	// 		if op == missingOp {
+	// 			indices = append(indices, new(big.Int).Set(i))
+	// 		}
+	// 	}
+	// 	i.Add(i, big.NewInt(1))
+	// }
+	// sort.Slice(indices, func(i, j int) bool {
+	// 	return indices[i].Cmp(indices[j]) < 0
+	// })
+	indices = append(indices, big.NewInt(0))
+	indices = append(indices, big.NewInt(1))
+	fmt.Println("indices", indices)
+	packedIndices := packIndices(indices)
+
+	fmt.Println("packedIndices", packedIndices)
+
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
 		log.Fatal("ETH_RPC_URL is not set in environment variables.")
@@ -601,7 +617,7 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 		clientUtils,
 		"requestToSubmitCv",
 		big.NewInt(0),
-		indices,
+		packedIndices,
 	)
 	if err != nil {
 		log.Printf("Failed to submit commit request root for round %s: %v", roundNum, err)
@@ -609,7 +625,15 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 	}
 
 	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, indices)
+	requestCv = false
+}
 
+func packIndices(indices []*big.Int) *big.Int {
+	packed := big.NewInt(0)
+	for i, index := range indices {
+		packed.Or(packed, new(big.Int).Lsh(index, uint(8*i)))
+	}
+	return packed
 }
 
 func revert() {
