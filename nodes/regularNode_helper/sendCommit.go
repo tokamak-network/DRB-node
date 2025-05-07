@@ -86,7 +86,7 @@ func receiveCommitRequest() {
 				case SubmitCVS:
 					eventData := struct {
 						StartTime *big.Int
-						Indices   []*big.Int
+						PackedIndices   *big.Int
 					}{}
 					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
 					if err != nil {
@@ -94,9 +94,9 @@ func receiveCommitRequest() {
 						continue
 					}
 
-					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.Indices)
+					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.PackedIndices)
 
-					processCommitRequest(eventData.Indices)
+					processCommitRequest(eventData.PackedIndices)
 				
 				case StatusSig:
 					eventData := struct {
@@ -194,7 +194,7 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 	}		
 }
 
-func processCommitRequest(indices []*big.Int) error {
+func processCommitRequest(packedIndices *big.Int) error {
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
@@ -204,12 +204,14 @@ func processCommitRequest(indices []*big.Int) error {
 		log.Fatalf("Failed to decode Ethereum private key: %v", err)
 	}
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	// temporary variable round for now. In the future there will be round global variable which would be accessible by every file to keep track of current round.
-	// currently there is no mechanism to do it.
-	round := "0"
-	acitvatedOps, _ := FetchActivatedOperators(round)
 
+	acitvatedOps, _ := FetchActivatedOperators(CurrentRound)
+	length := 2
+	indices := unpackRevealOrder(packedIndices, length)
+	fmt.Println("indices", indices)
+	fmt.Println("packedIndices", packedIndices)
 	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
+	fmt.Println("flag", flag)
 
 	if err != nil {
 		fmt.Println(err)
@@ -219,7 +221,7 @@ func processCommitRequest(indices []*big.Int) error {
 		return nil
 	}
 
-	fmt.Printf("Processing commit for Round: %v\n", round)
+	fmt.Printf("Processing RequestedToSubmitCv event for Round: %v\n", CurrentRound)
 
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
@@ -259,7 +261,7 @@ func processCommitRequest(indices []*big.Int) error {
 	}
 	var cvs []uint8
 	for key, data := range commits {
-		if round == key {
+		if CurrentRound == key {
 			cvs = data.Cvs[:]
 			break
 		}
@@ -281,10 +283,28 @@ func processCommitRequest(indices []*big.Int) error {
 	return nil
 }
 
+
+func unpackRevealOrder(packedRevealOrder *big.Int, length int) []*big.Int {
+	order := make([]*big.Int, length)
+	mask := big.NewInt(0xFF)
+
+	for i := 0; i < length; i++ {
+		shift := uint(8 * i)
+		shifted := new(big.Int).Rsh(packedRevealOrder, shift)
+		value := new(big.Int).And(shifted, mask)
+		if i != 0  && value.Cmp(big.NewInt(0)) == 0 {
+			break
+		}
+		order[i] = value
+	}
+	return order
+}
+
 func findEOAAddress(indices []*big.Int, activatedOps []string, eoaAddress string) (bool, error) {
 	if len(indices) > len(activatedOps) {
 		return false, fmt.Errorf("indices length is greater than activated operators")
 	}
+	fmt.Println("eoaAddress", eoaAddress)
 	for _, index := range indices {
 		if eoaAddress == activatedOps[index.Int64()] {
 			return true, nil
