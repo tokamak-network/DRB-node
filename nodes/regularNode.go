@@ -157,7 +157,6 @@ func RunRegularNode() {
 				}
 				if txSent {
 					log.Println("Deposit successful")
-					time.Sleep(30 * time.Second)
 					continue
 				}
 			}
@@ -178,8 +177,7 @@ func RunRegularNode() {
 			time.Sleep(10 * time.Second)
 			continue
 		}
-		// firstRequest := regularNode_helper.Req
-		// regularNode_helper.CurrentRound = firstRequest.Round.String()
+		time.Sleep(5 * time.Second)
 
 		round := regularNode_helper.CurrentRound
 		merkleRootSubmitted := regularNode_helper.RoundsData[round].MerkleRoot
