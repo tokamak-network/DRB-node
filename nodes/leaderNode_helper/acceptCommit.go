@@ -101,8 +101,7 @@ func receiveCommit() {
 					log.Printf("Failed to decode CvSubmitted event log: %v", err)
 					continue
 				}
-				fmt.Printf("CvSubmitted Event:\n StartTime: %d\n Cov: %s\n ActivatedOperatorIndex: %v\n",
-					eventData.StartTime, eventData.Cv, eventData.Cv)
+				fmt.Printf("CvSubmitted Event: Fetched successfully")
 
 				processCVS(eventData.Cv, eventData.Index)
 
