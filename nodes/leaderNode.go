@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -424,16 +425,11 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
-	var functionName string
-	if dispute[roundNum] {
-		functionName = "submitMerkleRootAfterDispute"
-	} else {
-		functionName = "submitMerkleRoot"
-	}
+
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
-		functionName,
+		"submitMerkleRoot",
 		big.NewInt(0),
 		merkleRootBytes32,
 	)
@@ -495,7 +491,7 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 	// update the ActivatedOperators
 	eth.UpdateActivatedOperators()
 	if !leaderNode_helper.RoundsData[roundNum].MerkleRoot && !leaderNode_helper.RoundsData[roundNum].RandomNumber {
-		log.Printf("LeaderNode %s is still waiting for commits...", roundNum)
+		log.Printf("LeaderNode for round %s is still waiting for commits...", roundNum)
 
 		commitMu.Lock()
 		ready := UpdatedallCommitsReceivedUnlocked(roundNum)
@@ -549,27 +545,21 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 	if err != nil {
 		fmt.Println("Error loading the activated Operators in handleMissingCV()")
 	}
-	// i := big.NewInt(0)
-	fmt.Println("activatedOperators", activatedOperators)
-	fmt.Println("missingOperators", missingOperators)
+	i := big.NewInt(0)
 
-	// for op := range activatedOperators {
-	// 	for missingOp := range missingOperators {
-	// 		if op == missingOp {
-	// 			indices = append(indices, new(big.Int).Set(i))
-	// 		}
-	// 	}
-	// 	i.Add(i, big.NewInt(1))
-	// }
-	// sort.Slice(indices, func(i, j int) bool {
-	// 	return indices[i].Cmp(indices[j]) < 0
-	// })
-	indices = append(indices, big.NewInt(0))
-	indices = append(indices, big.NewInt(1))
-	fmt.Println("indices", indices)
+	for op := range activatedOperators {
+		for missingOp := range missingOperators {
+			if op == missingOp {
+				indices = append(indices, new(big.Int).Set(i))
+			}
+		}
+		i.Add(i, big.NewInt(1))
+	}
+	sort.Slice(indices, func(i, j int) bool {
+		return indices[i].Cmp(indices[j]) < 0
+	})
+
 	packedIndices := packIndices(indices)
-
-	fmt.Println("packedIndices", packedIndices)
 
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
