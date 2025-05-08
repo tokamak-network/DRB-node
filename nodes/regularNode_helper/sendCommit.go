@@ -206,8 +206,7 @@ func processCommitRequest(packedIndices *big.Int) error {
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 
 	acitvatedOps, _ := FetchActivatedOperators(CurrentRound)
-	length := 2
-	indices := unpackRevealOrder(packedIndices, length)
+	indices := unpackRevealOrder(packedIndices)
 	fmt.Println("indices", indices)
 	fmt.Println("packedIndices", packedIndices)
 	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
@@ -284,18 +283,20 @@ func processCommitRequest(packedIndices *big.Int) error {
 }
 
 
-func unpackRevealOrder(packedRevealOrder *big.Int, length int) []*big.Int {
-	order := make([]*big.Int, length)
+func unpackRevealOrder(packedRevealOrder *big.Int) []*big.Int {
+	order := []*big.Int{}
 	mask := big.NewInt(0xFF)
-
-	for i := 0; i < length; i++ {
+	i := 0
+	for {
 		shift := uint(8 * i)
 		shifted := new(big.Int).Rsh(packedRevealOrder, shift)
 		value := new(big.Int).And(shifted, mask)
+
 		if i != 0  && value.Cmp(big.NewInt(0)) == 0 {
 			break
 		}
-		order[i] = value
+		order = append(order, value)
+		i++;
 	}
 	return order
 }
