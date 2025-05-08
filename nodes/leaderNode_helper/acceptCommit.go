@@ -92,19 +92,19 @@ func receiveCommit() {
 			switch vLog.Topics[0] {
 			case cvsEventSig:
 				eventData := struct {
-					StartTime              *big.Int
-					Cov                    [32]byte
-					ActivatedOperatorIndex *big.Int
+					StartTime *big.Int
+					Cv        [32]byte
+					Index     *big.Int
 				}{}
 				err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
 				if err != nil {
-					log.Printf("Failed to decode COV event log: %v", err)
+					log.Printf("Failed to decode CvSubmitted event log: %v", err)
 					continue
 				}
 				fmt.Printf("CvSubmitted Event:\n StartTime: %d\n Cov: %s\n ActivatedOperatorIndex: %v\n",
-					eventData.StartTime, eventData.Cov, eventData.ActivatedOperatorIndex)
+					eventData.StartTime, eventData.Cv, eventData.Cv)
 
-				processCVS(eventData.Cov, eventData.ActivatedOperatorIndex)
+				processCVS(eventData.Cv, eventData.Index)
 
 			case StatusSig:
 				eventData := struct {
@@ -124,7 +124,7 @@ func receiveCommit() {
 }
 
 func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
-	round, _ := fetchCurrentRound();
+	round, _ := fetchCurrentRound()
 	CurrentRound = round.String()
 	req := RandomRequest{
 		Round:     round,
@@ -165,9 +165,7 @@ func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 		commitData = make(map[string]LeaderCommitData)
 	}
 
-	// temporary variable round for now. In the future there will be round global variable which would be accessible by every file to keep track of current round.
-	// currently there is no mechanism to do it.
-	round := "0"
+	round := CurrentRound
 	acitvatedOps, _ := FetchActivatedOperators(round)
 	eoaAddress := acitvatedOps[activatedOperatorIndex.Int64()]
 	eoa := common.HexToAddress(eoaAddress)
@@ -231,7 +229,7 @@ func updateCVS(round string, eoa common.Address, cvs [32]byte) {
 	utils.CommittedNodes[round][eoa] = commitData
 }
 
-func fetchCurrentRound() (*big.Int, error){
+func fetchCurrentRound() (*big.Int, error) {
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {
