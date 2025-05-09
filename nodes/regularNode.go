@@ -192,7 +192,7 @@ func RunRegularNode() {
 		}
 
 		// Check if this node's EOA is in the activated operators for the round
-		if isEOAActivated(round, eoaAddress) {
+		if isEOAActivated(eoaAddress) {
 
 			// Check if this round has already been committed (store it locally)
 			commitData, err := utils.LoadCommitData(round)
@@ -296,8 +296,8 @@ func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitD
 }
 
 // isEOAActivated checks if the current regular node's EOA address is in the activated operators list for the round
-func isEOAActivated(round string, eoaAddress string) bool {
-	address, _ := regularNode_helper.FetchActivatedOperators(round)
+func isEOAActivated(eoaAddress string) bool {
+	address := regularNode_helper.ActivatedOperator
 
 	// Compare with activated operators
 	for _, operator := range address {
