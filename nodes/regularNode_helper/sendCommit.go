@@ -28,6 +28,7 @@ type CommitData struct {
 }
 var Execution bool
 var commits map[string]CommitData
+var ActivatedOperator []string
 
 func MonitorCommitRequest() {
 	receiveCommitRequest()
@@ -153,8 +154,9 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 	if state.Cmp(big.NewInt(1)) == 0 {
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
-		
+		ActivatedOperator, _ = FetchActivatedOperators(CurrentRound)
 		Req = req
+
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
@@ -177,7 +179,7 @@ func processCommitRequest(packedIndices *big.Int) error {
 	}
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 
-	acitvatedOps, _ := FetchActivatedOperators(CurrentRound)
+	acitvatedOps := ActivatedOperator
 	indices := unpackRevealOrder(packedIndices)
 	fmt.Println("indices", indices)
 	fmt.Println("packedIndices", packedIndices)
