@@ -21,6 +21,7 @@ import (
 var CommitMu sync.Mutex
 var StartTime *big.Int
 var Execution bool
+var ActivatedOperator []string
 
 type RandomRequest struct {
 	Round     *big.Int
@@ -134,6 +135,8 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
 		Req = req
+		ActivatedOperator, _ = FetchActivatedOperators(CurrentRound)
+		eth.UpdateActivatedOperators()
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
@@ -165,8 +168,7 @@ func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 	}
 
 	round := CurrentRound
-	acitvatedOps, _ := FetchActivatedOperators(round)
-	eoaAddress := acitvatedOps[activatedOperatorIndex.Int64()]
+	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
 	eoa := common.HexToAddress(eoaAddress)
 	key := fmt.Sprintf("%s+%s", round, eoa.Hex())
 	cvsHex := hex.EncodeToString(cvs[:])
