@@ -135,7 +135,12 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
 		Req = req
-		ActivatedOperator, _ = FetchActivatedOperators(CurrentRound)
+		var err error
+		ActivatedOperator, err = FetchActivatedOperators(CurrentRound)
+		if err != nil {
+			log.Printf("Failed to fetch activated operators: %v", err)
+			return
+		}
 		eth.UpdateActivatedOperators()
 		Execution = true
 	}
