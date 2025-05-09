@@ -59,15 +59,8 @@ func checkRoundsForCompletion(h host.Host) {
 			continue
 		}
 
-		// Fetch activated operators for the round
-		activatedOperators, err := FetchActivatedOperators(round)
-		if err != nil {
-			log.Printf("Failed to fetch activated operators for round %s: %v", round, err)
-			continue
-		}
-
 		// Filter out the `0x0000000000000000000000000000000000000000` address
-		filteredOperators := filterOperators(activatedOperators)
+		filteredOperators := filterOperators(ActivatedOperator)
 
 		// Convert filteredOperators from []string to []common.Address
 		var operatorAddresses []common.Address
