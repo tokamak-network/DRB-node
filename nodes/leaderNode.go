@@ -323,11 +323,7 @@ func generateMerkleRoot(roundNum string) {
 
 	log.Printf("Generating Merkle root for round %s...", roundNum)
 
-	activatedOperatorsList, err := leaderNode_helper.FetchActivatedOperators(roundNum)
-	if err != nil {
-		log.Printf("Failed to fetch activated operators for round %s: %v", roundNum, err)
-		return
-	}
+	activatedOperatorsList := leaderNode_helper.ActivatedOperator
 
 	var filteredOperators []string
 	for _, operator := range activatedOperatorsList {
@@ -488,8 +484,6 @@ func isEOAActivatedForRound(eoaAddress common.Address) bool {
 
 func processRounds(round leaderNode_helper.RandomRequest) {
 	roundNum := round.Round.String()
-	// update the ActivatedOperators
-	eth.UpdateActivatedOperators()
 	if !leaderNode_helper.RoundsData[roundNum].MerkleRoot && !leaderNode_helper.RoundsData[roundNum].RandomNumber {
 		log.Printf("LeaderNode for round %s is still waiting for commits...", roundNum)
 
@@ -541,10 +535,7 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 
 func handleMissingCV(missingOperators []string, roundNum string) {
 	var indices []*big.Int
-	activatedOperators, err := leaderNode_helper.FetchActivatedOperators(roundNum)
-	if err != nil {
-		fmt.Println("Error loading the activated Operators in handleMissingCV()")
-	}
+	activatedOperators := leaderNode_helper.ActivatedOperator
 	i := big.NewInt(0)
 
 	for op := range activatedOperators {
