@@ -2,21 +2,32 @@ package utils
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 )
 
-const snapshotDir = "snapshot/"
+const snapshotDir = "./snapshots/"
 
 func TakeSnapshot(dst string) error {
 	file, err := os.Open(dst)
 	if err != nil {
-		return fmt.Errorf("failed to load leader commit data, %v", err)
+		log.Printf("failed to load leader commit data, %v", err)
 	}
 	defer file.Close()
 
-	snapshot, err := os.OpenFile(snapshotDir+dst, os.O_CREATE|os.O_RDWR, 0666)
+	// Create the snapshot directory if it doesn't exist
+	if err := os.MkdirAll(snapshotDir, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create snapshot directory: %v", err)
+	}
+
+	// Create the snapshot file path
+	filepath := filepath.Join(snapshotDir, dst)
+
+	// Open or create the snapshot file
+	snapshot, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
-		return fmt.Errorf("failed to create snapshot file: %v", err)
+		return fmt.Errorf("failed to open/create snapshot file: %v", err)
 	}
 	defer snapshot.Close()
 
@@ -29,7 +40,9 @@ func TakeSnapshot(dst string) error {
 }
 
 func RevertStates(dst string) error {
-	snapshot, err := os.OpenFile(snapshotDir+dst, os.O_CREATE|os.O_RDWR, 0666)
+	filepath := filepath.Join(snapshotDir, dst)
+
+	snapshot, err := os.OpenFile(filepath, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		return fmt.Errorf("failed to open snapshot file: %v", err)
 	}
