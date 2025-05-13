@@ -126,27 +126,9 @@ func checkRoundsForCompletion(h host.Host) {
 		if allEOAsSubmitted {
 			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
 
-			// Take snapshot for leader commits an reveal_orders
-			if err = utils.TakeSnapshot("leader_commits.json"); err != nil {
-				log.Printf("Error taking snapshot for commits.json, %v", err)
-			}
-
-			if err = utils.TakeSnapshot("reveal_orders.json"); err != nil {
-				log.Printf("Error taking snapshot for commits.json, %v", err)
-			}
-
 			err = generateRandomNumberTransaction(round, secrets, vs, rs, ss)
 			if err != nil {
 				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
-
-				// Revert state from snapshot
-				if err := utils.RevertStates("leader_commits.json"); err != nil {
-					log.Printf("failed to revert states, %v", err)
-				}
-
-				if err := utils.RevertStates("reveal_orders.json"); err != nil {
-					log.Printf("failed to revert states, %v", err)
-				}
 			} else {
 				markRoundCompleted(leaderCommits, round)
 			}
