@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 const snapshotDir = "./snapshots/"
 
 func TakeSnapshot(dst string) error {
+	log.Printf("Taking snapshot for %s", dst)
+
 	file, err := os.Open(dst)
 	if err != nil {
 		log.Printf("failed to load leader commit data, %v", err)
@@ -36,13 +39,17 @@ func TakeSnapshot(dst string) error {
 		return fmt.Errorf("failed to write file to snapshot: %v", err)
 	}
 
+	log.Printf("Succeed to take snapshot of %s", dst)
+
 	return nil
 }
 
 func RevertStates(dst string) error {
+	log.Printf("Reverting states from %s", dst)
+
 	filepath := filepath.Join(snapshotDir, dst)
 
-	snapshot, err := os.OpenFile(filepath, os.O_CREATE|os.O_RDWR, 0666)
+	snapshot, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open snapshot file: %v", err)
 	}
@@ -54,10 +61,12 @@ func RevertStates(dst string) error {
 	}
 	defer file.Close()
 
-	_, err = snapshot.WriteTo(file)
+	_, err = io.Copy(snapshot, file)
 	if err != nil {
 		return fmt.Errorf("failed to revert states from snapshot: %v", err)
 	}
+
+	log.Printf("%s is reverted successfully", dst)
 
 	return nil
 }

@@ -25,7 +25,9 @@ func MonitorCommits(h host.Host) {
 		time.Sleep(10 * time.Second) // Adjust the interval as needed
 	}
 }
+
 var StartNextRound bool = true
+
 type RevealOrderData struct {
 	OrderedNodes []string   `json:"ordered_nodes"`
 	RevealOrder  []*big.Int `json:"reveal_order"`
@@ -123,9 +125,28 @@ func checkRoundsForCompletion(h host.Host) {
 		// If all EOAs have submitted, trigger the random number generation transaction
 		if allEOAsSubmitted {
 			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
-			err := generateRandomNumberTransaction(round, secrets, vs, rs, ss)
+
+			// Take snapshot for leader commits an reveal_orders
+			if err = utils.TakeSnapshot("leader_commits.json"); err != nil {
+				log.Printf("Error taking snapshot for commits.json, %v", err)
+			}
+
+			if err = utils.TakeSnapshot("reveal_orders.json"); err != nil {
+				log.Printf("Error taking snapshot for commits.json, %v", err)
+			}
+
+			err = generateRandomNumberTransaction(round, secrets, vs, rs, ss)
 			if err != nil {
 				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
+
+				// Revert state from snapshot
+				if err := utils.RevertStates("leader_commits.json"); err != nil {
+					log.Printf("failed to revert states, %v", err)
+				}
+
+				if err := utils.RevertStates("reveal_orders.json"); err != nil {
+					log.Printf("failed to revert states, %v", err)
+				}
 			} else {
 				markRoundCompleted(leaderCommits, round)
 			}
@@ -207,7 +228,7 @@ func loadRevealOrders(filePath string) (map[string]RevealOrderData, error) {
 }
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
-func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash,) error {
+func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumber...")
 
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
@@ -219,7 +240,7 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
 	}
 	defer client.Close()
-	
+
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
@@ -228,7 +249,7 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 	if err != nil {
 		return fmt.Errorf("failed to load leader private key: %v", err)
 	}
-	
+
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
@@ -250,7 +271,7 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		R [32]byte
 		S [32]byte
 	}
-	
+
 	type SecretAndSigRS struct {
 		Secret [32]byte
 		Rs     SigRS
@@ -259,11 +280,11 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 	for i := range secrets {
 		var secret [32]byte
 		copy(secret[:], secrets[i])
-	
+
 		var r32, s32 [32]byte
 		copy(r32[:], rs[i].Bytes())
 		copy(s32[:], ss[i].Bytes())
-	
+
 		secretSigRSs = append(secretSigRSs, SecretAndSigRS{
 			Secret: secret,
 			Rs:     SigRS{R: r32, S: s32},
@@ -275,16 +296,16 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		log.Printf("Failed to load reveal orders: %v", err)
 		return nil
 	}
-	
+
 	roundRevealData, exists := revealOrders[round]
 	if !exists {
 		log.Printf("No reveal order found for round %s.", round)
 		return nil
 	}
-	
+
 	order := roundRevealData.RevealOrder
 	packedRevealOrder := packRevealOrder(order)
-	
+
 	packedVs := packVsValues(vs)
 
 	tx, _, err := eth.ExecuteTransaction(
@@ -303,7 +324,6 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 	log.Printf("Transaction submitted. TX Hash: %s", tx.Hash().Hex())
 	return nil
 }
-
 
 func packRevealOrder(order []*big.Int) *big.Int {
 	packedRevealOrder := big.NewInt(0)
@@ -338,7 +358,7 @@ func markRoundCompleted(leaderCommits map[string]utils.LeaderCommitData, round s
 	if err != nil {
 		log.Printf("Failed to save updated leader commits: %v", err)
 	}
-	
+
 	if RoundsData == nil {
 		RoundsData = make(map[string]RoundData)
 	}
