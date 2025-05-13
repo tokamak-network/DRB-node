@@ -204,9 +204,7 @@ func RunRegularNode() {
 			}
 
 			// Take snapshot for commit Data
-			if err = utils.TakeSnapshot("commits.json"); err != nil {
-				log.Printf("Error taking snapshot for commits.json, %v", err)
-			}
+			utils.TakeSnapshot("commits.json")
 
 			// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil
 			if commitData != nil && !merkleRootSubmitted && !randomNumberSubmitted {
@@ -511,9 +509,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	}
 
 	// Take snapshot for commit Data
-	if err = utils.TakeSnapshot("commits.json"); err != nil {
-		log.Printf("Error taking snapshot for commits.json, %v", err)
-	}
+	utils.TakeSnapshot("commits.json")
 
 	// Save commit data locally with v, r, s
 	commitData.Sign = req.Sign

@@ -515,9 +515,7 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 					onChainExecution[roundNum]["CVS"] = make(map[string]bool)
 				}
 				if onChainExecution[roundNum]["CVS"][op] {
-					if err := utils.RevertStates("leader_commits.json"); err != nil {
-						log.Printf("failed to revert states, %v", err)
-					}
+					utils.RevertStates("leader_commits.json")
 				} else if sendCommitRequest[roundNum] {
 					missingOperators = append(missingOperators, op)
 					onChainExecution[roundNum]["CVS"][op] = true
