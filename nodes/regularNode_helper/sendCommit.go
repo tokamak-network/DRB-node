@@ -181,16 +181,13 @@ func processCommitRequest(packedIndices *big.Int) error {
 
 	acitvatedOps := ActivatedOperator
 	indices := unpackRevealOrder(packedIndices)
-	fmt.Println("indices", indices)
-	fmt.Println("packedIndices", packedIndices)
 	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
-	fmt.Println("flag", flag)
 
 	if err != nil {
 		fmt.Println(err)
 	}
 	if !flag {
-		fmt.Println("Commit Request does not contain our EOA")
+		fmt.Println("Cv Request does not contain our EOA")
 		return nil
 	}
 
@@ -279,7 +276,6 @@ func findEOAAddress(indices []*big.Int, activatedOps []string, eoaAddress string
 	if len(indices) > len(activatedOps) {
 		return false, fmt.Errorf("indices length is greater than activated operators")
 	}
-	fmt.Println("eoaAddress", eoaAddress)
 	for _, index := range indices {
 		if eoaAddress == activatedOps[index.Int64()] {
 			return true, nil
