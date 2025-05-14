@@ -534,24 +534,22 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 }
 
 func handleMissingCV(missingOperators []string, roundNum string) {
-	var indices []*big.Int
+	leaderNode_helper.CvOnChain = true
 	activatedOperators := leaderNode_helper.ActivatedOperator
 	i := big.NewInt(0)
-
-	for op := range activatedOperators {
-		for missingOp := range missingOperators {
+	for _, op := range activatedOperators {
+		for _, missingOp := range missingOperators {
 			if op == missingOp {
-				indices = append(indices, new(big.Int).Set(i))
+				leaderNode_helper.Indices = append(leaderNode_helper.Indices, new(big.Int).Set(i))
 			}
 		}
 		i.Add(i, big.NewInt(1))
 	}
-	sort.Slice(indices, func(i, j int) bool {
-		return indices[i].Cmp(indices[j]) < 0
+	sort.Slice(leaderNode_helper.Indices, func(i, j int) bool {
+		return leaderNode_helper.Indices[i].Cmp(leaderNode_helper.Indices[j]) < 0
 	})
 
-	packedIndices := packIndices(indices)
-
+	packedIndices := packIndices(leaderNode_helper.Indices)
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
 		log.Fatal("ETH_RPC_URL is not set in environment variables.")
@@ -605,7 +603,7 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 		return
 	}
 
-	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, indices)
+	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, leaderNode_helper.Indices)
 	requestCv = false
 }
 
