@@ -25,6 +25,7 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+var submittingMerkleRoot = false
 var commitMu sync.Mutex
 var firstRequest leaderNode_helper.RandomRequest
 
@@ -373,8 +374,10 @@ func generateMerkleRoot(roundNum string) {
 		log.Printf("Failed to create Merkle tree for round %s: %v", roundNum, err)
 		return
 	}
-
-	submitMerkleRoot(roundNum, merkleRoot)
+	if !submittingMerkleRoot { 
+		submittingMerkleRoot = true
+		submitMerkleRoot(roundNum, merkleRoot)
+	}
 }
 
 func submitMerkleRoot(roundNum string, merkleRoot []byte) {
@@ -435,6 +438,7 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 	}
 
 	log.Printf("Successfully submitted Merkle root for round %s", roundNum)
+	submittingMerkleRoot = false
 	roundData := leaderNode_helper.RoundsData[roundNum]
 	roundData.MerkleRoot = true
 	if leaderNode_helper.RoundsData == nil {
