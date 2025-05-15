@@ -493,11 +493,11 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 	roundNum := round.Round.String()
 	// update the ActivatedOperators
 	eth.UpdateActivatedOperators()
+	utils.TakeSnapshot("leader_commits.json")
 	if !leaderNode_helper.RoundsData[roundNum].MerkleRoot && !leaderNode_helper.RoundsData[roundNum].RandomNumber {
 		log.Printf("LeaderNode %s is still waiting for commits...", roundNum)
 
 		commitMu.Lock()
-		utils.TakeSnapshot("leader_commits.json")
 		ready := UpdatedallCommitsReceivedUnlocked(roundNum)
 		commitMu.Unlock()
 		var missingOperators []string

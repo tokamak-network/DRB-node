@@ -125,6 +125,10 @@ func RunRegularNode() {
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
+
+	// Take snapshot for commit Data
+	utils.TakeSnapshot("commits.json")
+
 	for {
 		if err != nil {
 			log.Printf("Error fetching rounds data: %v", err)
@@ -202,9 +206,6 @@ func RunRegularNode() {
 				log.Printf("Error loading commit data: %v", err)
 				continue
 			}
-
-			// Take snapshot for commit Data
-			utils.TakeSnapshot("commits.json")
 
 			// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil
 			if commitData != nil && !merkleRootSubmitted && !randomNumberSubmitted {
