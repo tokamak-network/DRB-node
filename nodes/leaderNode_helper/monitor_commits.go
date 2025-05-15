@@ -98,14 +98,17 @@ func checkRoundsForCompletion(h host.Host) {
 			}
 
 			secrets = append(secrets, commitData.SecretValue[:])
-			// Ensure the signature map contains valid data
-			if int64(i) <= Indices[index].Int64() {
-				if int64(i) == Indices[index].Int64() {
-					index++
-					continue
+			// if Cv values are on-chain, than check this condition
+			if CvOnChain {
+				if int64(i) <= Indices[index].Int64() {
+					if int64(i) == Indices[index].Int64() {
+						index++
+						continue
+					}
 				}
 			}
-
+			
+			// Ensure the signature map contains valid data
 			if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
 				log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
 				allEOAsSubmitted = false
