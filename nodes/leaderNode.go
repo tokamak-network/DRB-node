@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"log"
 	"math/big"
 	"os"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
@@ -49,7 +49,11 @@ var flag = make(map[string]bool)
 var dispute = make(map[string]bool)
 var requestCv = true
 
-func RunLeaderNode() {
+type Handler struct {
+	fallbackEthClient *fallback_ethclient.FallbackRPCClient
+}
+
+func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	port := os.Getenv("LEADER_PORT")
 	if port == "" {
 		log.Fatal("LEADER_PORT is not set in environment variables.")
@@ -59,12 +63,17 @@ func RunLeaderNode() {
 	if err != nil {
 		log.Fatalf("Error creating host: %v", err)
 	}
+
+	handler := &Handler{
+		fallbackEthClient: fallbackEthClient,
+	}
+
 	defer h.Close()
 	libp2putils.SetHost(h)
-	h.SetStreamHandler("/register", handleRegistrationRequest)
-	h.SetStreamHandler("/cvs", handleCommitRequest)
+	h.SetStreamHandler("/register", handler.handleRegistrationRequest)
+	h.SetStreamHandler("/cvs", handler.handleCommitRequest)
 	h.SetStreamHandler("/cos", func(s network.Stream) {
-		handleCOSRequest(h, s)
+		handleCOSRequest(fallbackEthClient, h, s)
 	})
 	h.SetStreamHandler("/secretValue", func(s network.Stream) {
 		leaderNode_helper.AcceptSecretValue(h, s)
@@ -73,8 +82,8 @@ func RunLeaderNode() {
 	log.Printf("Leader node running on: %s", h.Addrs())
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
-	go leaderNode_helper.MonitorCommits()
-	go leaderNode_helper.ReceiveCommit()
+	go leaderNode_helper.MonitorCommits(fallbackEthClient)
+	go leaderNode_helper.ReceiveCommit(fallbackEthClient)
 	for {
 		if !leaderNode_helper.Execution {
 			time.Sleep(10 * time.Second)
@@ -82,12 +91,12 @@ func RunLeaderNode() {
 		}
 		firstRequest = leaderNode_helper.Req
 		fmt.Printf("Executing request: %v", firstRequest)
-		processRounds(firstRequest)
+		processRounds(fallbackEthClient, firstRequest)
 		time.Sleep(30 * time.Second)
 	}
 }
 
-func handleRegistrationRequest(s network.Stream) {
+func (h *Handler) handleRegistrationRequest(s network.Stream) {
 	defer s.Close()
 	filePath := "registered_nodes.json"
 	if err := leaderNode_helper.RegisterNode(s, filePath, "contract/abi/Commit2RevealDRB.json"); err != nil {
@@ -97,8 +106,10 @@ func handleRegistrationRequest(s network.Stream) {
 	log.Println("Node registration completed.")
 }
 
-func handleCommitRequest(s network.Stream) {
+func (h *Handler) handleCommitRequest(s network.Stream) {
 	defer s.Close()
+
+	fallbackEthClient := h.fallbackEthClient
 
 	var req utils.CommitRequest
 	if err := json.NewDecoder(s).Decode(&req); err != nil {
@@ -108,7 +119,7 @@ func handleCommitRequest(s network.Stream) {
 
 	commitVerificationRequest := utils.Request{Round: req.Round, EOAAddress: req.EOAAddress, Signature: req.Signature}
 
-	if !VerifySignatureAndCheckActivation(commitVerificationRequest, "commit") {
+	if !VerifySignatureAndCheckActivation(fallbackEthClient, commitVerificationRequest, "commit") {
 		return
 	}
 
@@ -137,12 +148,12 @@ func handleCommitRequest(s network.Stream) {
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
 		log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
 		commitMu.Unlock() // Unlock before calling generateMerkleRoot
-		generateMerkleRoot(roundNum)
+		generateMerkleRoot(fallbackEthClient, roundNum)
 		commitMu.Lock() // Re-lock if needed
 	}
 }
 
-func handleCOSRequest(h host.Host, s network.Stream) {
+func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h host.Host, s network.Stream) {
 	defer s.Close()
 
 	var req utils.CosRequest
@@ -153,7 +164,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 
 	cosVerificationRequest := utils.Request{Round: req.Round, EOAAddress: req.EOAAddress, Signature: req.Signature}
 
-	if !VerifySignatureAndCheckActivation(cosVerificationRequest, "COS") {
+	if !VerifySignatureAndCheckActivation(fallbackEthClient, cosVerificationRequest, "COS") {
 		return
 	}
 
@@ -214,7 +225,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 			}
 			if len(missingIndices) > 0 {
 				log.Printf("Requesting on-chain for missing COS indices: %v for round %s", missingIndices, rn)
-				requestToSubmitCo(rn, missingIndices)
+				requestToSubmitCo(fallbackEthClient, rn, missingIndices)
 			}
 		}(roundNum)
 	})
@@ -223,7 +234,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
 		log.Printf("All CVS received for round %s after COS, generating Merkle root...", roundNum)
 		commitMu.Unlock()
-		generateMerkleRoot(roundNum)
+		generateMerkleRoot(fallbackEthClient, roundNum)
 		commitMu.Lock()
 	}
 
@@ -255,7 +266,7 @@ func isMerkleRootSubmitted(roundNum string) bool {
 	return false
 }
 
-func VerifySignatureAndCheckActivation(req utils.Request, reqType string) bool {
+func VerifySignatureAndCheckActivation(fallbackEthClient *fallback_ethclient.FallbackRPCClient, req utils.Request, reqType string) bool {
 	verifyReq := utils.RegistrationRequest{EOAAddress: req.EOAAddress, Signature: req.Signature}
 	if !utils.VerifySignature(verifyReq) {
 		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
@@ -264,7 +275,7 @@ func VerifySignatureAndCheckActivation(req utils.Request, reqType string) bool {
 
 	eoaAddress := common.HexToAddress(req.EOAAddress)
 
-	if !isEOAActivatedForRound(eoaAddress) {
+	if !isEOAActivatedForRound(fallbackEthClient, eoaAddress) {
 		log.Printf("EOA %s not activated, skipping %v.", eoaAddress.Hex(), reqType)
 		return false
 	}
@@ -312,9 +323,9 @@ func allCosReceivedUnlocked(roundNum string) bool {
 	return true
 }
 
-func UpdatedallCommitsReceivedUnlocked(roundNum string) map[string]bool {
+func UpdatedallCommitsReceivedUnlocked(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string) map[string]bool {
 	result := make(map[string]bool)
-	ops, _ := eth.GetActivatedOperators()
+	ops, _ := eth.GetActivatedOperators(fallbackEthClient)
 
 	roundCommits, roundExists := utils.CommittedNodes[roundNum]
 	if !roundExists || len(roundCommits) == 0 {
@@ -367,7 +378,7 @@ func updateInMemoryData(roundNum string, eoaAddress common.Address, commitData u
 }
 
 // generateMerkleRoot doesn't lock; it locks inside to read from memory
-func generateMerkleRoot(roundNum string) {
+func generateMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string) {
 	commitMu.Lock()
 	// Check if merkle root is already done before proceeding
 	if isMerkleRootSubmitted(roundNum) {
@@ -420,24 +431,13 @@ func generateMerkleRoot(roundNum string) {
 	}
 	if !submittingMerkleRoot {
 		submittingMerkleRoot = true
-		submitMerkleRoot(roundNum, merkleRoot)
+		submitMerkleRoot(fallbackEthClient, roundNum, merkleRoot)
 	}
 }
 
-func submitMerkleRoot(roundNum string, merkleRoot []byte) {
+func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string, merkleRoot []byte) {
 	var merkleRootBytes32 [32]byte
 	copy(merkleRootBytes32[:], merkleRoot)
-
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	if ethRPCURL == "" {
-		log.Fatal("ETH_RPC_URL is not set in environment variables.")
-	}
-
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		log.Printf("Failed to connect to Ethereum client: %v", err)
-		return
-	}
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -463,7 +463,6 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 	}
 
 	clientUtils := &utils.Client{
-		Client:          client,
 		ContractAddress: contractAddress,
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
@@ -472,6 +471,7 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
+		fallbackEthClient,
 		"submitMerkleRoot",
 		big.NewInt(0),
 		merkleRootBytes32,
@@ -513,8 +513,8 @@ func updateCommitDataAfterSubmit(roundNum string) {
 	}
 }
 
-func isEOAActivatedForRound(eoaAddress common.Address) bool {
-	activatedOperators, err := eth.GetActivatedOperators()
+func isEOAActivatedForRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient, eoaAddress common.Address) bool {
+	activatedOperators, err := eth.GetActivatedOperators(fallbackEthClient)
 	if err != nil {
 		log.Printf("Error fetching the activated operators %v", err)
 	}
@@ -530,13 +530,13 @@ func isEOAActivatedForRound(eoaAddress common.Address) bool {
 	return false
 }
 
-func processRounds(round leaderNode_helper.RandomRequest) {
+func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round leaderNode_helper.RandomRequest) {
 	roundNum := round.Round.String()
 	if !leaderNode_helper.RoundsData[roundNum].MerkleRoot && !leaderNode_helper.RoundsData[roundNum].RandomNumber {
 		log.Printf("LeaderNode for round %s is still waiting for commits...", roundNum)
 
 		commitMu.Lock()
-		ready := UpdatedallCommitsReceivedUnlocked(roundNum)
+		ready := UpdatedallCommitsReceivedUnlocked(fallbackEthClient, roundNum)
 		commitMu.Unlock()
 		var missingOperators []string
 
@@ -552,7 +552,7 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 					onChainExecution[roundNum]["CVS"] = make(map[string]int)
 				}
 				if onChainExecution[roundNum]["CVS"][op] >= 3 {
-					failToSubmitCv()
+					failToSubmitCv(fallbackEthClient)
 					revert()
 				} else if sendCommitRequest[roundNum] {
 					fmt.Println("inside sendCommitRequest[roundNum] condition")
@@ -565,13 +565,13 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 		}
 		if flag[roundNum] {
 			if requestCv {
-				handleMissingCV(missingOperators, roundNum)
+				handleMissingCV(fallbackEthClient, missingOperators, roundNum)
 			}
 		}
 		if allReceived {
 			log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
 			flag[roundNum] = false
-			generateMerkleRoot(roundNum)
+			generateMerkleRoot(fallbackEthClient, roundNum)
 		} else {
 			log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
 			roundFlag[roundNum]++
@@ -582,18 +582,7 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 	}
 }
 
-func failToSubmitCv() {
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	if ethRPCURL == "" {
-		log.Fatal("ETH_RPC_URL is not set in environment variables.")
-	}
-
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		log.Printf("Failed to connect to Ethereum client: %v", err)
-		return
-	}
-
+func failToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
@@ -618,7 +607,6 @@ func failToSubmitCv() {
 	}
 
 	clientUtils := &utils.Client{
-		Client:          client,
 		ContractAddress: contractAddress,
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
@@ -627,6 +615,7 @@ func failToSubmitCv() {
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
+		fallbackEthClient,
 		"failToSubmitCv",
 		big.NewInt(0),
 	)
@@ -692,19 +681,9 @@ func orderedPackedIndices(missingIndices []*big.Int) ([]*big.Int, []*big.Int) {
 	return notOnChain, onChain
 }
 
-func requestToSubmitCo(roundNum string, missingIndices []*big.Int) {
+func requestToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string, missingIndices []*big.Int) {
 	fmt.Println("missingIndices", missingIndices)
 	cvOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices := prepareArgumentsForRequestToSubmitCo(roundNum, missingIndices)
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	if ethRPCURL == "" {
-		log.Fatal("ETH_RPC_URL is not set in environment variables.")
-	}
-
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		log.Printf("Failed to connect to Ethereum client: %v", err)
-		return
-	}
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -730,7 +709,6 @@ func requestToSubmitCo(roundNum string, missingIndices []*big.Int) {
 	}
 
 	clientUtils := &utils.Client{
-		Client:          client,
 		ContractAddress: contractAddress,
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
@@ -744,6 +722,7 @@ func requestToSubmitCo(roundNum string, missingIndices []*big.Int) {
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
+		fallbackEthClient,
 		"requestToSubmitCo",
 		big.NewInt(0),
 		cvOnChainCvAndSigRS,
@@ -759,7 +738,7 @@ func requestToSubmitCo(roundNum string, missingIndices []*big.Int) {
 	log.Printf("Successfully submitted cos request for round %s and indices %v", roundNum, missingIndices)
 }
 
-func handleMissingCV(missingOperators []string, roundNum string) {
+func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, missingOperators []string, roundNum string) {
 	leaderNode_helper.CvOnChain = true
 	activatedOperators := leaderNode_helper.ActivatedOperator
 	i := big.NewInt(0)
@@ -776,16 +755,6 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 	})
 
 	packedIndices := packIndices(leaderNode_helper.Indices)
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	if ethRPCURL == "" {
-		log.Fatal("ETH_RPC_URL is not set in environment variables.")
-	}
-
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		log.Printf("Failed to connect to Ethereum client: %v", err)
-		return
-	}
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -811,7 +780,6 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 	}
 
 	clientUtils := &utils.Client{
-		Client:          client,
 		ContractAddress: contractAddress,
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
@@ -820,6 +788,7 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
+		fallbackEthClient,
 		"requestToSubmitCv",
 		big.NewInt(0),
 		packedIndices,

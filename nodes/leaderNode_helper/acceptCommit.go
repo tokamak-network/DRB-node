@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"log"
 	"math/big"
 	"os"
@@ -55,11 +56,11 @@ type LeaderCommitData struct {
 	RandomNumberGenerated bool              `json:"random_number_generated"`
 }
 
-func ReceiveCommit() {
-	receiveCommit()
+func ReceiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+	receiveCommit(fallbackEthClient)
 }
 
-func receiveCommit() {
+func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	rpcURL := os.Getenv("ETH_RPC_URL")
 	client, err := ethclient.Dial(rpcURL)
 	contractAddress := os.Getenv("CONTRACT_ADDRESS")
@@ -134,14 +135,14 @@ func receiveCommit() {
 					log.Printf("Failed to decode Status event log: %v", err)
 					continue
 				}
-				processRandomRequestNumber(eventData.CurStartTime, eventData.CurState)
+				processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
 			}
 		}
 	}
 }
 
-func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
-	round, _ := fetchCurrentRound()
+func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, state *big.Int) {
+	round, _ := fetchCurrentRound(fallbackEthClient)
 	CurrentRound = round.String()
 	req := RandomRequest{
 		Round:     round,
@@ -153,12 +154,12 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 			startTime, state, round)
 		Req = req
 		var err error
-		ActivatedOperator, err = FetchActivatedOperators(CurrentRound)
+		ActivatedOperator, err = FetchActivatedOperators(fallbackEthClient, CurrentRound)
 		if err != nil {
 			log.Printf("Failed to fetch activated operators: %v", err)
 			return
 		}
-		eth.UpdateActivatedOperators()
+		eth.UpdateActivatedOperators(fallbackEthClient)
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
@@ -350,13 +351,7 @@ func AllCosReceivedUnlocked(roundNum string) bool {
 	return true
 }
 
-func fetchCurrentRound() (*big.Int, error) {
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to Ethereum RPC: %v", err)
-	}
-
+func fetchCurrentRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient) (*big.Int, error) {
 	abiFilePath := "contract/abi/Commit2RevealDRB.json"
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
@@ -370,7 +365,7 @@ func fetchCurrentRound() (*big.Int, error) {
 
 	contractAddress := common.HexToAddress(contractAddressStr)
 
-	result, err := eth.CallSmartContract(client, parsedABI, "s_currentRound", contractAddress)
+	result, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_currentRound", contractAddress)
 	if err != nil {
 		log.Printf("Failed to fetch activated operators: %v", err)
 		return nil, err

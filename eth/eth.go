@@ -13,22 +13,22 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/sirupsen/logrus"
 	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 var ActivatedOperators = make([]common.Address, 0)
 
 // Smart contract call helper function
-func CallSmartContract(client *ethclient.Client, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
+func CallSmartContract(fallbackEthClient *fallback_ethclient.FallbackRPCClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
 	data, err := parsedABI.Pack(method, params...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack data for %s: %v", method, err)
 	}
 
-	result, err := client.CallContract(context.Background(), ethereum.CallMsg{
+	result, err := fallbackEthClient.CallContract(context.Background(), ethereum.CallMsg{
 		To:   &contractAddress,
 		Data: data,
 	}, nil)
@@ -48,6 +48,7 @@ func CallSmartContract(client *ethclient.Client, parsedABI abi.ABI, method strin
 func ExecuteTransaction(
 	ctx context.Context,
 	client *utils.Client,
+	fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 	functionName string,
 	amount *big.Int,
 	params ...interface{},
@@ -58,7 +59,7 @@ func ExecuteTransaction(
 
 	log.Infof("Preparing to execute %s...", functionName)
 
-	chainID, err := client.Client.NetworkID(ctx)
+	chainID, err := fallbackEthClient.NetworkID(ctx)
 	if err != nil {
 		log.Errorf("Failed to fetch network ID: %v", err)
 		return nil, nil, fmt.Errorf("failed to fetch network ID: %v", err)
@@ -70,7 +71,7 @@ func ExecuteTransaction(
 		return nil, nil, fmt.Errorf("failed to create authorized transactor: %v", err)
 	}
 
-	nonce, err := client.Client.PendingNonceAt(ctx, auth.From)
+	nonce, err := fallbackEthClient.PendingNonceAt(ctx, auth.From)
 	if err != nil {
 		log.Errorf("Failed to fetch nonce: %v", err)
 		return nil, nil, fmt.Errorf("failed to fetch nonce: %v", err)
@@ -78,7 +79,7 @@ func ExecuteTransaction(
 
 	auth.Nonce = big.NewInt(int64(nonce))
 
-	gasPrice, err := client.Client.SuggestGasPrice(ctx)
+	gasPrice, err := fallbackEthClient.SuggestGasPrice(ctx)
 	if err != nil {
 		log.Errorf("Failed to suggest gas price: %v", err)
 		return nil, nil, fmt.Errorf("failed to suggest gas price: %v", err)
@@ -102,7 +103,7 @@ func ExecuteTransaction(
 	attempt := 0
 
 	for attempt < maxAttempt {
-		estimateGas, err = client.Client.EstimateGas(ctx, callMsg)
+		estimateGas, err = fallbackEthClient.EstimateGas(ctx, callMsg)
 		if err != nil {
 			attempt++
 			log.Errorf("Gas estimation failed for %s, attempt %d: %v", functionName, attempt, err)
@@ -124,13 +125,13 @@ func ExecuteTransaction(
 	}
 
 	// Send the transaction
-	if err := client.Client.SendTransaction(ctx, signedTx); err != nil {
+	if err := fallbackEthClient.SendTransaction(ctx, signedTx); err != nil {
 		log.Errorf("Failed to send the signed transaction: %v", err)
 		return nil, nil, fmt.Errorf("failed to send the signed transaction: %v", err)
 	}
 
 	// Wait for the transaction to be mined
-	receipt, err := waitForTransactionSuccess(ctx, client, signedTx)
+	receipt, err := waitForTransactionSuccess(ctx, client, fallbackEthClient, signedTx)
 	if err != nil {
 		log.Errorf("Transaction failed: %v", err)
 		return nil, nil, err
@@ -141,9 +142,9 @@ func ExecuteTransaction(
 }
 
 // waitForTransactionSuccess waits for the transaction to be mined and returns the receipt
-func waitForTransactionSuccess(ctx context.Context, client *utils.Client, tx *types.Transaction) (*types.Receipt, error) {
+func waitForTransactionSuccess(ctx context.Context, client *utils.Client, fallbackEthClient *fallback_ethclient.FallbackRPCClient, tx *types.Transaction) (*types.Receipt, error) {
 	for {
-		receipt, err := client.Client.TransactionReceipt(ctx, tx.Hash())
+		receipt, err := fallbackEthClient.TransactionReceipt(ctx, tx.Hash())
 		if err != nil {
 			// Check if it's just waiting for confirmation (receipt not yet available)
 			if err.Error() == "not found" {
@@ -159,15 +160,8 @@ func waitForTransactionSuccess(ctx context.Context, client *utils.Client, tx *ty
 	}
 }
 
-func GetActivatedOperators() ([]common.Address, error) {
-
+func GetActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient) ([]common.Address, error) {
 	var activatedOperators []common.Address
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to Ethereum RPC: %v", err)
-	}
-
 	abiFilePath := "contract/abi/Commit2RevealDRB.json"
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
@@ -181,7 +175,7 @@ func GetActivatedOperators() ([]common.Address, error) {
 
 	contractAddress := common.HexToAddress(contractAddressStr)
 
-	result, err := CallSmartContract(client, parsedABI, "getActivatedOperators", contractAddress)
+	result, err := CallSmartContract(fallbackEthClient, parsedABI, "getActivatedOperators", contractAddress)
 	if err != nil {
 		log.Printf("Failed to fetch activated operators: %v", err)
 		return activatedOperators, err
@@ -190,9 +184,9 @@ func GetActivatedOperators() ([]common.Address, error) {
 	return activatedOperators, nil
 }
 
-func UpdateActivatedOperators() {
+func UpdateActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	var err error
-	ActivatedOperators, err = GetActivatedOperators()
+	ActivatedOperators, err = GetActivatedOperators(fallbackEthClient)
 	if err != nil {
 		log.Printf("Error updating ActivatedOperators: %v", err)
 	}
