@@ -18,6 +18,9 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+var CvOnChain bool
+var Indices []*big.Int
+
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
 func MonitorCommits(h host.Host) {
 	for {
@@ -61,15 +64,8 @@ func checkRoundsForCompletion(h host.Host) {
 			continue
 		}
 
-		// Fetch activated operators for the round
-		activatedOperators, err := FetchActivatedOperators(round)
-		if err != nil {
-			log.Printf("Failed to fetch activated operators for round %s: %v", round, err)
-			continue
-		}
-
 		// Filter out the `0x0000000000000000000000000000000000000000` address
-		filteredOperators := filterOperators(activatedOperators)
+		filteredOperators := filterOperators(ActivatedOperator)
 
 		// Convert filteredOperators from []string to []common.Address
 		var operatorAddresses []common.Address
@@ -82,9 +78,9 @@ func checkRoundsForCompletion(h host.Host) {
 		var vs []uint8
 		var rs []common.Hash
 		var ss []common.Hash
-
+		var index int
 		allEOAsSubmitted := true
-		for _, operator := range operatorAddresses {
+		for i, operator := range operatorAddresses {
 			commitData, exists := leaderCommits[round+"+"+operator.Hex()]
 			if !exists || commitData.SecretValue == [32]byte{} {
 				log.Printf("EOA %s has not submitted a secret value for round %s. Initiating request.", operator.Hex(), round)
@@ -101,11 +97,22 @@ func checkRoundsForCompletion(h host.Host) {
 				break
 			}
 
+			secrets = append(secrets, commitData.SecretValue[:])
+			// if Cv values are on-chain, than check this condition
+			if CvOnChain {
+				if int64(i) <= Indices[index].Int64() {
+					if int64(i) == Indices[index].Int64() {
+						index++
+						continue
+					}
+				}
+			}
+			
 			// Ensure the signature map contains valid data
 			if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
 				log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
 				allEOAsSubmitted = false
-				break
+				continue
 			}
 
 			// Parse and validate signature components
@@ -114,10 +121,9 @@ func checkRoundsForCompletion(h host.Host) {
 			if err != nil {
 				log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
 				allEOAsSubmitted = false
-				break
+				continue
 			}
 
-			secrets = append(secrets, commitData.SecretValue[:])
 			vs = append(vs, uint8(vValue))
 			rs = append(rs, common.HexToHash(commitData.Sign["r"]))
 			ss = append(ss, common.HexToHash(commitData.Sign["s"]))
@@ -126,7 +132,12 @@ func checkRoundsForCompletion(h host.Host) {
 		if allEOAsSubmitted {
 			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
 
-			err = generateRandomNumberTransaction(round, secrets, vs, rs, ss)
+			var err error
+			if !CvOnChain {
+				err = generateRandomNumberTransaction(round, secrets, vs, rs, ss)
+			} else {
+				err = generateRandomNumberTransactionSomeCvOnChain(round, secrets, vs, rs, ss)
+			}
 			if err != nil {
 				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
 			} else {
@@ -287,7 +298,6 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 
 	order := roundRevealData.RevealOrder
 	packedRevealOrder := packRevealOrder(order)
-
 	packedVs := packVsValues(vs)
 
 	tx, _, err := eth.ExecuteTransaction(
@@ -296,6 +306,95 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		"generateRandomNumber",
 		big.NewInt(0),
 		secretSigRSs,
+		packedVs,
+		packedRevealOrder,
+	)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Transaction submitted. TX Hash: %s", tx.Hash().Hex())
+	return nil
+}
+
+func generateRandomNumberTransactionSomeCvOnChain(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
+	log.Printf("Preparing to execute generateRandomNumberTransactionSomeCvOnChain...")
+
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in environment variables.")
+	}
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
+	}
+	defer client.Close()
+
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		return fmt.Errorf("failed to load leader private key: %v", err)
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+	clientUtils := &utils.Client{
+		Client:          client,
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	type SigRS struct {
+		R [32]byte
+		S [32]byte
+	}
+
+	var sigRSArray []SigRS
+	var vsArray []uint8
+	for i := range vs {
+		sigRSArray = append(sigRSArray, SigRS{R: rs[i], S: ss[i]})
+		vsArray = append(vsArray, vs[i])
+	}
+	var allSecrets [][32]byte
+	for i := range secrets {
+		var secret [32]byte
+		copy(secret[:], secrets[i])
+		allSecrets = append(allSecrets, secret)
+	}
+
+	revealOrders, err := loadRevealOrders("reveal_orders.json")
+	if err != nil {
+		log.Printf("Failed to load reveal orders: %v", err)
+		return nil
+	}
+
+	roundRevealData, exists := revealOrders[round]
+	if !exists {
+		log.Printf("No reveal order found for round %s.", round)
+		return nil
+	}
+	order := roundRevealData.RevealOrder
+	packedRevealOrder := packRevealOrder(order)
+	packedVs := packVsValues(vsArray)
+	tx, _, err := eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		"generateRandomNumberWhenSomeCvsAreOnChain",
+		big.NewInt(0),
+		allSecrets,
+		sigRSArray,
 		packedVs,
 		packedRevealOrder,
 	)

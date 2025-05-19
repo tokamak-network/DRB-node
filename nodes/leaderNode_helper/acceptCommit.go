@@ -21,6 +21,7 @@ import (
 var CommitMu sync.Mutex
 var StartTime *big.Int
 var Execution bool
+var ActivatedOperator []string
 
 type RandomRequest struct {
 	Round     *big.Int
@@ -92,19 +93,18 @@ func receiveCommit() {
 			switch vLog.Topics[0] {
 			case cvsEventSig:
 				eventData := struct {
-					StartTime              *big.Int
-					Cov                    [32]byte
-					ActivatedOperatorIndex *big.Int
+					StartTime *big.Int
+					Cv        [32]byte
+					Index     *big.Int
 				}{}
 				err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
 				if err != nil {
-					log.Printf("Failed to decode COV event log: %v", err)
+					log.Printf("Failed to decode CvSubmitted event log: %v", err)
 					continue
 				}
-				fmt.Printf("CvSubmitted Event:\n StartTime: %d\n Cov: %s\n ActivatedOperatorIndex: %v\n",
-					eventData.StartTime, eventData.Cov, eventData.ActivatedOperatorIndex)
+				fmt.Printf("CvSubmitted Event: Fetched successfully")
 
-				processCVS(eventData.Cov, eventData.ActivatedOperatorIndex)
+				processCVS(eventData.Cv, eventData.Index)
 
 			case StatusSig:
 				eventData := struct {
@@ -124,7 +124,7 @@ func receiveCommit() {
 }
 
 func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
-	round, _ := fetchCurrentRound();
+	round, _ := fetchCurrentRound()
 	CurrentRound = round.String()
 	req := RandomRequest{
 		Round:     round,
@@ -135,6 +135,13 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
 		Req = req
+		var err error
+		ActivatedOperator, err = FetchActivatedOperators(CurrentRound)
+		if err != nil {
+			log.Printf("Failed to fetch activated operators: %v", err)
+			return
+		}
+		eth.UpdateActivatedOperators()
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
@@ -165,11 +172,8 @@ func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 		commitData = make(map[string]LeaderCommitData)
 	}
 
-	// temporary variable round for now. In the future there will be round global variable which would be accessible by every file to keep track of current round.
-	// currently there is no mechanism to do it.
-	round := "0"
-	acitvatedOps, _ := FetchActivatedOperators(round)
-	eoaAddress := acitvatedOps[activatedOperatorIndex.Int64()]
+	round := CurrentRound
+	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
 	eoa := common.HexToAddress(eoaAddress)
 	key := fmt.Sprintf("%s+%s", round, eoa.Hex())
 	cvsHex := hex.EncodeToString(cvs[:])
@@ -231,7 +235,7 @@ func updateCVS(round string, eoa common.Address, cvs [32]byte) {
 	utils.CommittedNodes[round][eoa] = commitData
 }
 
-func fetchCurrentRound() (*big.Int, error){
+func fetchCurrentRound() (*big.Int, error) {
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {

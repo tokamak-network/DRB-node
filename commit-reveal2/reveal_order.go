@@ -136,7 +136,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 		}
 
 		cvsValues = append(cvsValues, commitData.Cvs[:])
-		cosValues = append(cvsValues, commitData.Cos[:])
+		cosValues = append(cosValues, commitData.Cos[:])
 		addresses = append(addresses, eoaAddressStr)
 	}
 

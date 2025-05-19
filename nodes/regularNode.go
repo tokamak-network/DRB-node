@@ -158,7 +158,6 @@ func RunRegularNode() {
 				}
 				if txSent {
 					log.Println("Deposit successful")
-					time.Sleep(30 * time.Second)
 					continue
 				}
 			}
@@ -179,8 +178,7 @@ func RunRegularNode() {
 			time.Sleep(10 * time.Second)
 			continue
 		}
-		// firstRequest := regularNode_helper.Req
-		// regularNode_helper.CurrentRound = firstRequest.Round.String()
+		time.Sleep(5 * time.Second)
 
 		round := regularNode_helper.CurrentRound
 		merkleRootSubmitted := regularNode_helper.RoundsData[round].MerkleRoot
@@ -195,7 +193,7 @@ func RunRegularNode() {
 		}
 
 		// Check if this node's EOA is in the activated operators for the round
-		if isEOAActivated(round, eoaAddress) {
+		if isEOAActivated(eoaAddress) {
 
 			// Take snapshot for commit Data
 			utils.TakeSnapshot("commits.json")
@@ -304,8 +302,8 @@ func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitD
 }
 
 // isEOAActivated checks if the current regular node's EOA address is in the activated operators list for the round
-func isEOAActivated(round string, eoaAddress string) bool {
-	address, _ := regularNode_helper.FetchActivatedOperators(round)
+func isEOAActivated(eoaAddress string) bool {
+	address := regularNode_helper.ActivatedOperator
 
 	// Compare with activated operators
 	for _, operator := range address {

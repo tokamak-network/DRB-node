@@ -28,6 +28,7 @@ type CommitData struct {
 }
 var Execution bool
 var commits map[string]CommitData
+var ActivatedOperator []string
 
 func MonitorCommitRequest() {
 	receiveCommitRequest()
@@ -73,7 +74,6 @@ func receiveCommitRequest() {
 	SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
 	StatusSig := parsedABI.Events["Status"].ID
 	MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
-	RandomNumberGeneratedSig := parsedABI.Events["RandomNumberGenerated"].ID
 
 	for {
 		select {
@@ -86,7 +86,7 @@ func receiveCommitRequest() {
 				case SubmitCVS:
 					eventData := struct {
 						StartTime *big.Int
-						Indices   []*big.Int
+						PackedIndices   *big.Int
 					}{}
 					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
 					if err != nil {
@@ -94,9 +94,9 @@ func receiveCommitRequest() {
 						continue
 					}
 
-					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.Indices)
+					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.PackedIndices)
 
-					processCommitRequest(eventData.Indices)
+					processCommitRequest(eventData.PackedIndices)
 				
 				case StatusSig:
 					eventData := struct {
@@ -128,38 +128,11 @@ func receiveCommitRequest() {
 
 					processMerkleRoot(CurrentRound)
 				
-				case RandomNumberGeneratedSig: 
-					eventData := struct {
-						Round *big.Int
-						RandomNumber *big.Int
-						CallbackSuccess     bool
-					}{}
-					
-					err := parsedABI.UnpackIntoInterface(&eventData, "RandomNumberGenerated", vLog.Data)
-					if err != nil {
-						log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
-						continue
-					}
-					fmt.Printf("MerkleRootSubmitted Event:\n StartTime: %v\n MerkleRoot: %v\n Round: %v\n",
-						eventData.Round, eventData.RandomNumber, eventData.CallbackSuccess)
-
-					// processGeneratedRandomNumber(eventData.Round, eventData.RandomNumber)
 				}
 			}
 		}
 	}
 }
-
-// func processGeneratedRandomNumber(round *big.Int, randomNumber *big.Int) {
-// 	data := RoundsData[round.String()]
-// 	data.RandomNumber = true
-// 	RoundsData[round.String()] = data
-
-// 	StartNextRound = true
-// 	RequestQueue = RequestQueue[1:]
-
-// 	fmt.Printf("Generated random number %v, for round: %v\n",randomNumber, round )
-// }
 
 func processMerkleRoot(round string) {
 	if RoundsData == nil {
@@ -181,8 +154,9 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 	if state.Cmp(big.NewInt(1)) == 0 {
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			startTime, state, round)
-		
+		ActivatedOperator, _ = FetchActivatedOperators(CurrentRound)
 		Req = req
+
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
@@ -194,7 +168,7 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 	}		
 }
 
-func processCommitRequest(indices []*big.Int) error {
+func processCommitRequest(packedIndices *big.Int) error {
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
@@ -204,22 +178,20 @@ func processCommitRequest(indices []*big.Int) error {
 		log.Fatalf("Failed to decode Ethereum private key: %v", err)
 	}
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	// temporary variable round for now. In the future there will be round global variable which would be accessible by every file to keep track of current round.
-	// currently there is no mechanism to do it.
-	round := "0"
-	acitvatedOps, _ := FetchActivatedOperators(round)
 
+	acitvatedOps := ActivatedOperator
+	indices := unpackRevealOrder(packedIndices)
 	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
 
 	if err != nil {
 		fmt.Println(err)
 	}
 	if !flag {
-		fmt.Println("Commit Request does not contain our EOA")
+		fmt.Println("Cv Request does not contain our EOA")
 		return nil
 	}
 
-	fmt.Printf("Processing commit for Round: %v\n", round)
+	fmt.Printf("Processing RequestedToSubmitCv event for Round: %v\n", CurrentRound)
 
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
@@ -259,7 +231,7 @@ func processCommitRequest(indices []*big.Int) error {
 	}
 	var cvs []uint8
 	for key, data := range commits {
-		if round == key {
+		if CurrentRound == key {
 			cvs = data.Cvs[:]
 			break
 		}
@@ -279,6 +251,25 @@ func processCommitRequest(indices []*big.Int) error {
 		fmt.Println("It contains error")
 	}
 	return nil
+}
+
+
+func unpackRevealOrder(packedRevealOrder *big.Int) []*big.Int {
+	order := []*big.Int{}
+	mask := big.NewInt(0xFF)
+	i := 0
+	for {
+		shift := uint(8 * i)
+		shifted := new(big.Int).Rsh(packedRevealOrder, shift)
+		value := new(big.Int).And(shifted, mask)
+
+		if i != 0  && value.Cmp(big.NewInt(0)) == 0 {
+			break
+		}
+		order = append(order, value)
+		i++;
+	}
+	return order
 }
 
 func findEOAAddress(indices []*big.Int, activatedOps []string, eoaAddress string) (bool, error) {

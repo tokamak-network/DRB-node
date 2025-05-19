@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -36,6 +37,7 @@ var sendCommitRequest = make(map[string]bool)
 var onChainExecution = make(map[string]map[string]map[string]bool)
 var flag = make(map[string]bool)
 var dispute = make(map[string]bool)
+var requestCv = true
 
 func RunLeaderNode() {
 	port := os.Getenv("LEADER_PORT")
@@ -321,11 +323,7 @@ func generateMerkleRoot(roundNum string) {
 
 	log.Printf("Generating Merkle root for round %s...", roundNum)
 
-	activatedOperatorsList, err := leaderNode_helper.FetchActivatedOperators(roundNum)
-	if err != nil {
-		log.Printf("Failed to fetch activated operators for round %s: %v", roundNum, err)
-		return
-	}
+	activatedOperatorsList := leaderNode_helper.ActivatedOperator
 
 	var filteredOperators []string
 	for _, operator := range activatedOperatorsList {
@@ -423,16 +421,11 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
-	var functionName string
-	if dispute[roundNum] {
-		functionName = "submitMerkleRootAfterDispute"
-	} else {
-		functionName = "submitMerkleRoot"
-	}
+
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
-		functionName,
+		"submitMerkleRoot",
 		big.NewInt(0),
 		merkleRootBytes32,
 	)
@@ -491,11 +484,11 @@ func isEOAActivatedForRound(eoaAddress common.Address) bool {
 
 func processRounds(round leaderNode_helper.RandomRequest) {
 	roundNum := round.Round.String()
-	// update the ActivatedOperators
-	eth.UpdateActivatedOperators()
+
 	utils.TakeSnapshot("leader_commits.json")
+  
 	if !leaderNode_helper.RoundsData[roundNum].MerkleRoot && !leaderNode_helper.RoundsData[roundNum].RandomNumber {
-		log.Printf("LeaderNode %s is still waiting for commits...", roundNum)
+		log.Printf("LeaderNode for round %s is still waiting for commits...", roundNum)
 
 		commitMu.Lock()
 		ready := UpdatedallCommitsReceivedUnlocked(roundNum)
@@ -525,37 +518,41 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 			}
 		}
 		if flag[roundNum] {
-			handleMissingCV(missingOperators, roundNum)
+			if requestCv {
+				handleMissingCV(missingOperators, roundNum)
+			}
 		}
 		if allReceived {
 			log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
-
+			flag[roundNum] = false
 			generateMerkleRoot(roundNum)
 		} else {
 			log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
 			roundFlag[roundNum]++
 			if roundFlag[roundNum] >= 2 {
-				sendCommitRequest[roundNum] = true
+			sendCommitRequest[roundNum] = true
 			}
 		}
 	}
 }
 
 func handleMissingCV(missingOperators []string, roundNum string) {
-	var indices []*big.Int
-	activatedOperators, err := leaderNode_helper.FetchActivatedOperators(roundNum)
-	if err != nil {
-		fmt.Println("Error loading the activated Operators in handleMissingCV()")
-	}
+	leaderNode_helper.CvOnChain = true
+	activatedOperators := leaderNode_helper.ActivatedOperator
 	i := big.NewInt(0)
-	for op := range activatedOperators {
-		for missingOp := range missingOperators {
+	for _, op := range activatedOperators {
+		for _, missingOp := range missingOperators {
 			if op == missingOp {
-				indices = append(indices, i)
+				leaderNode_helper.Indices = append(leaderNode_helper.Indices, new(big.Int).Set(i))
 			}
 		}
 		i.Add(i, big.NewInt(1))
 	}
+	sort.Slice(leaderNode_helper.Indices, func(i, j int) bool {
+		return leaderNode_helper.Indices[i].Cmp(leaderNode_helper.Indices[j]) < 0
+	})
+
+	packedIndices := packIndices(leaderNode_helper.Indices)
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
 		log.Fatal("ETH_RPC_URL is not set in environment variables.")
@@ -602,13 +599,21 @@ func handleMissingCV(missingOperators []string, roundNum string) {
 		clientUtils,
 		"requestToSubmitCv",
 		big.NewInt(0),
-		indices,
+		packedIndices,
 	)
 	if err != nil {
 		log.Printf("Failed to submit commit request root for round %s: %v", roundNum, err)
 		return
 	}
 
-	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, indices)
+	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, leaderNode_helper.Indices)
+	requestCv = false
+}
 
+func packIndices(indices []*big.Int) *big.Int {
+	packed := big.NewInt(0)
+	for i, index := range indices {
+		packed.Or(packed, new(big.Int).Lsh(index, uint(8*i)))
+	}
+	return packed
 }
