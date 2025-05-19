@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -40,15 +39,4 @@ func CreateStream(h host.Host, nodeInfo NodeInfo, protocolStr string) (network.S
 	}
 
 	return stream, nil
-}
-
-func SendDataOverStream(stream network.Stream, data interface{}) error {
-	// Encode the data into JSON
-	encoder := json.NewEncoder(stream)
-	err := encoder.Encode(data)
-	if err != nil {
-		return fmt.Errorf("failed to encode and send data over stream: %v", err)
-	}
-
-	return nil
 }
