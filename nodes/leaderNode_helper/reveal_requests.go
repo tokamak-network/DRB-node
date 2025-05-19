@@ -1,12 +1,13 @@
 package leaderNode_helper
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
-	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -16,21 +17,15 @@ var revealRequestStatus = make(map[string][]string)
 // StartSecretValueRequests initializes the secret value request process for a given round
 func StartSecretValueRequests(h host.Host, roundNum string) {
 	// Load reveal order for the round
-	revealData, err := commitreveal2.LoadRevealOrders("reveal_orders.json")
+	revealData, err := loadRevealOrders("reveal_orders.json")
 	if err != nil {
 		log.Printf("Failed to load reveal orders: %v", err)
 		return
 	}
 
-	roundRevealData, exists := revealData[roundNum].(map[string]interface{})
+	roundRevealData, exists := revealData[roundNum]
 	if !exists {
 		log.Printf("No reveal order found for round %s.", roundNum)
-		return
-	}
-
-	orderedNodes, ok := roundRevealData["ordered_nodes"].([]interface{})
-	if !ok {
-		log.Printf("Reveal order is invalid or missing for round %s.", roundNum)
 		return
 	}
 
@@ -48,8 +43,8 @@ func StartSecretValueRequests(h host.Host, roundNum string) {
 	}
 
 	// Send the request to the first node in the reveal order
-	for _, node := range orderedNodes {
-		eoa := node.(string)
+	for _, node := range roundRevealData.OrderedNodes {
+		eoa := node
 		nodeInfo, exists := nodes[eoa]
 		if !exists {
 			log.Printf("Node info for EOA %s not found in registered nodes.", eoa)
@@ -104,23 +99,19 @@ func HandleSecretValueResponse(h host.Host, roundNum string, eoa string) {
 	log.Printf("Secret value received for round %s from EOA %s", roundNum, eoa)
 
 	// Load reveal order for the round
-	revealData, err := commitreveal2.LoadRevealOrders("reveal_orders.json")
+	revealData, err := loadRevealOrders("reveal_orders.json")
 	if err != nil {
 		log.Printf("Failed to load reveal orders: %v", err)
 		return
 	}
 
-	roundRevealData, exists := revealData[roundNum].(map[string]interface{})
+	roundRevealData, exists := revealData[roundNum]
 	if !exists {
 		log.Printf("No reveal order found for round %s.", roundNum)
 		return
 	}
 
-	orderedNodes, ok := roundRevealData["ordered_nodes"].([]interface{})
-	if !ok {
-		log.Printf("Reveal order is invalid or missing for round %s.", roundNum)
-		return
-	}
+	orderedNodes := roundRevealData.OrderedNodes
 
 	// Load registered nodes
 	filePath := "registered_nodes.json"
@@ -132,7 +123,7 @@ func HandleSecretValueResponse(h host.Host, roundNum string, eoa string) {
 
 	// Check which node is next in the reveal order
 	for _, node := range orderedNodes {
-		nodeEOA := node.(string)
+		nodeEOA := node
 		if !contains(revealRequestStatus[roundNum], nodeEOA) {
 			nodeInfo, exists := nodes[nodeEOA]
 			if !exists {
@@ -149,6 +140,18 @@ func HandleSecretValueResponse(h host.Host, roundNum string, eoa string) {
 	log.Printf("All nodes processed for round %s.", roundNum)
 }
 
+func loadRevealOrders(filePath string) (RevealOrders, error) {
+	var orders RevealOrders
+	file, err := os.ReadFile(filePath)
+	if err != nil {
+		return orders, err
+	}
+	if err := json.Unmarshal(file, &orders); err != nil {
+		return orders, err
+	}
+	return orders, nil
+}
+
 // sendToRegularNode sends a request to a specific regular node
 func sendToRegularNode(h host.Host, nodeInfo NodeInfo, protocol string, data interface{}) error {
 	stream, err := utils.CreateStream(h, utils.NodeInfo{
@@ -162,7 +165,12 @@ func sendToRegularNode(h host.Host, nodeInfo NodeInfo, protocol string, data int
 	defer stream.Close()
 
 	// Send the encoded data
-	return utils.SendDataOverStream(stream, data)
+	encoder := json.NewEncoder(stream)
+	err = encoder.Encode(data)
+	if err != nil {
+		return fmt.Errorf("failed to encode and send data over stream: %v", err)
+	}
+	return nil
 }
 
 // contains checks if an item exists in a slice

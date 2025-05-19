@@ -36,9 +36,7 @@ type RevealOrderData struct {
 	RV           string     `json:"rv"`
 }
 
-type RevealOrders struct {
-	Data map[string]RevealOrderData `json:"0"`
-}
+type RevealOrders map[string]RevealOrderData
 
 func checkRoundsForCompletion() {
 	// Fetch EOAs for each round
@@ -170,28 +168,6 @@ func FetchActivatedOperators(round string) ([]string, error) {
 		strAddresses[i] = addr.Hex()
 	}
 	return strAddresses, nil
-}
-
-func loadRevealOrders(filePath string) (map[string]RevealOrderData, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open reveal orders file: %v", err)
-	}
-	defer file.Close()
-
-	var revealOrders map[string]RevealOrderData
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&revealOrders); err != nil {
-		return nil, fmt.Errorf("failed to decode reveal orders: %v", err)
-	}
-
-	for key, data := range revealOrders {
-		for i, order := range data.RevealOrder {
-			revealOrders[key].RevealOrder[i] = new(big.Int).SetUint64(uint64(order.Int64()))
-		}
-	}
-
-	return revealOrders, nil
 }
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
