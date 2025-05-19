@@ -83,8 +83,8 @@ func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, node
 	// Create the secret value request
 	req := utils.SecretValueRequest{
 		EOAAddress: eoaAddress, // Leader's EOA
-		Round:      roundNum,                // Round number
-		Signature:  signature,               // Signed round number
+		Round:      roundNum,   // Round number
+		Signature:  signature,  // Signed round number
 	}
 
 	// Send the request

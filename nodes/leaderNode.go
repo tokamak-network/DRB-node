@@ -64,7 +64,7 @@ func RunLeaderNode() {
 	log.Printf("Leader node running on: %s", h.Addrs())
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
-	go leaderNode_helper.MonitorCommits(h)
+	go leaderNode_helper.MonitorCommits()
 	go leaderNode_helper.ReceiveCommit()
 	for {
 		if !leaderNode_helper.Execution {
@@ -191,7 +191,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	}
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
-	if allCommitsReceivedUnlocked(roundNum) {
+	if allCosReceivedUnlocked(roundNum) {
 		log.Printf("All COS received for round %s. Determining reveal order...", roundNum)
 		err := commitreveal2.DetermineRevealOrder(roundNum, eth.ActivatedOperators)
 		if err != nil {
@@ -251,6 +251,25 @@ func allCommitsReceivedUnlocked(roundNum string) bool {
 	for _, op := range ops {
 		data, ok := roundCommits[op]
 		if !ok || data.Cvs == [32]byte{} {
+			return false
+		}
+	}
+	return true
+}
+func allCosReceivedUnlocked(roundNum string) bool {
+	ops := eth.ActivatedOperators
+	if len(ops) == 0 {
+		return false
+	}
+
+	roundCommits, roundExists := utils.CommittedNodes[roundNum]
+	if !roundExists || len(roundCommits) == 0 {
+		return false
+	}
+
+	for _, op := range ops {
+		data, ok := roundCommits[op]
+		if !ok || data.Cos == [32]byte{} {
 			return false
 		}
 	}
@@ -532,7 +551,7 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 			log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
 			roundFlag[roundNum]++
 			if roundFlag[roundNum] >= 2 {
-			sendCommitRequest[roundNum] = true
+				sendCommitRequest[roundNum] = true
 			}
 		}
 	}
