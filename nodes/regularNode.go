@@ -126,9 +126,6 @@ func RunRegularNode() {
 		ContractABI:     parsedABI,
 	}
 
-	// Take snapshot for commit Data
-	utils.TakeSnapshot("commits.json")
-
 	for {
 		if err != nil {
 			log.Printf("Error fetching rounds data: %v", err)
@@ -199,6 +196,9 @@ func RunRegularNode() {
 
 		// Check if this node's EOA is in the activated operators for the round
 		if isEOAActivated(round, eoaAddress) {
+
+			// Take snapshot for commit Data
+			utils.TakeSnapshot("commits.json")
 
 			// Check if this round has already been committed (store it locally)
 			commitData, err := utils.LoadCommitData(round)
