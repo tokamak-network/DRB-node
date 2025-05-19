@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -22,9 +21,9 @@ var CvOnChain bool
 var Indices []*big.Int
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
-func MonitorCommits(h host.Host) {
+func MonitorCommits() {
 	for {
-		checkRoundsForCompletion(h)
+		checkRoundsForCompletion()
 		time.Sleep(10 * time.Second) // Adjust the interval as needed
 	}
 }
@@ -41,7 +40,7 @@ type RevealOrders struct {
 	Data map[string]RevealOrderData `json:"0"`
 }
 
-func checkRoundsForCompletion(h host.Host) {
+func checkRoundsForCompletion() {
 	// Fetch EOAs for each round
 	eoasForRounds := getEOAsForRounds()
 
@@ -83,16 +82,7 @@ func checkRoundsForCompletion(h host.Host) {
 		for i, operator := range operatorAddresses {
 			commitData, exists := leaderCommits[round+"+"+operator.Hex()]
 			if !exists || commitData.SecretValue == [32]byte{} {
-				log.Printf("EOA %s has not submitted a secret value for round %s. Initiating request.", operator.Hex(), round)
-
-				// Initiate a request for the missing secret value
-				nodeInfo, err := fetchNodeInfo(operator.Hex())
-				if err != nil {
-					log.Printf("Failed to fetch node info for EOA %s: %v", operator.Hex(), err)
-					continue
-				}
-
-				sendSecretValueRequestToNode(h, round, operator.Hex(), nodeInfo)
+				log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round)
 				allEOAsSubmitted = false
 				break
 			}
@@ -107,7 +97,7 @@ func checkRoundsForCompletion(h host.Host) {
 					}
 				}
 			}
-			
+
 			// Ensure the signature map contains valid data
 			if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
 				log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
@@ -154,21 +144,6 @@ func isMerkleRootSubmitted(leaderCommits map[string]utils.LeaderCommitData, roun
 		}
 	}
 	return false
-}
-
-func fetchNodeInfo(eoa string) (NodeInfo, error) {
-	filePath := "registered_nodes.json"
-	nodes, err := LoadRegisteredNodes(filePath)
-	if err != nil {
-		return NodeInfo{}, fmt.Errorf("failed to load registered nodes: %v", err)
-	}
-
-	nodeInfo, exists := nodes[eoa]
-	if !exists {
-		return NodeInfo{}, fmt.Errorf("node info for EOA %s not found", eoa)
-	}
-
-	return nodeInfo, nil
 }
 
 // Helper: Filter out `0x0000000000000000000000000000000000000000` from the list of operators.
