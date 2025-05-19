@@ -345,18 +345,7 @@ func generateMerkleRoot(roundNum string) {
 
 	activatedOperatorsList := leaderNode_helper.ActivatedOperator
 
-	var filteredOperators []string
-	for _, operator := range activatedOperatorsList {
-		if operator != "0x0000000000000000000000000000000000000000" {
-			filteredOperators = append(filteredOperators, operator)
-		}
-	}
-
-	log.Printf("Activated operators for round %s in order: %v", roundNum, filteredOperators)
-	if len(filteredOperators) == 0 {
-		log.Printf("No valid activated operators found for round %s. Cannot generate Merkle root.", roundNum)
-		return
-	}
+	log.Printf("Activated operators for round %s in order: %v", roundNum, activatedOperatorsList)
 
 	commitMu.Lock()
 	roundMap, roundExists := utils.CommittedNodes[roundNum]
@@ -367,7 +356,7 @@ func generateMerkleRoot(roundNum string) {
 	}
 
 	var leaves [][]byte
-	for _, op := range filteredOperators {
+	for _, op := range activatedOperatorsList {
 		opAddr := common.HexToAddress(op)
 		data, ok := roundMap[opAddr]
 		if !ok || data.Cvs == [32]byte{} {

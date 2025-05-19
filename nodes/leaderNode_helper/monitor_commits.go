@@ -61,12 +61,9 @@ func checkRoundsForCompletion() {
 			continue
 		}
 
-		// Filter out the `0x0000000000000000000000000000000000000000` address
-		filteredOperators := filterOperators(ActivatedOperator)
-
-		// Convert filteredOperators from []string to []common.Address
+		// Convert ActivatedOperator from []string to []common.Address
 		var operatorAddresses []common.Address
-		for _, operator := range filteredOperators {
+		for _, operator := range ActivatedOperator {
 			operatorAddresses = append(operatorAddresses, common.HexToAddress(operator))
 		}
 
@@ -142,17 +139,6 @@ func isMerkleRootSubmitted(leaderCommits map[string]utils.LeaderCommitData, roun
 		}
 	}
 	return false
-}
-
-// Helper: Filter out `0x0000000000000000000000000000000000000000` from the list of operators.
-func filterOperators(operators []string) []string {
-	var filtered []string
-	for _, operator := range operators {
-		if operator != "0x0000000000000000000000000000000000000000" {
-			filtered = append(filtered, operator)
-		}
-	}
-	return filtered
 }
 
 // Fetch activated operators for a specific round
