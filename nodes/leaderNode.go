@@ -35,7 +35,7 @@ var firstRequest leaderNode_helper.RandomRequest
 
 var roundFlag = make(map[string]uint64)
 var sendCommitRequest = make(map[string]bool)
-var onChainExecution = make(map[string]map[string]map[string]bool)
+var onChainExecution = make(map[string]map[string]map[string]int)
 var flag = make(map[string]bool)
 var dispute = make(map[string]bool)
 var requestCv = true
@@ -374,7 +374,7 @@ func generateMerkleRoot(roundNum string) {
 		log.Printf("Failed to create Merkle tree for round %s: %v", roundNum, err)
 		return
 	}
-	if !submittingMerkleRoot { 
+	if !submittingMerkleRoot {
 		submittingMerkleRoot = true
 		submitMerkleRoot(roundNum, merkleRoot)
 	}
@@ -502,17 +502,18 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 				allReceived = false
 				log.Printf("Operator %s has not submitted CV.", op)
 				if _, exists := onChainExecution[roundNum]; !exists {
-					onChainExecution[roundNum] = make(map[string]map[string]bool)
+					onChainExecution[roundNum] = make(map[string]map[string]int)
 				}
-
 				if _, exists := onChainExecution[roundNum]["CVS"]; !exists {
-					onChainExecution[roundNum]["CVS"] = make(map[string]bool)
+					onChainExecution[roundNum]["CVS"] = make(map[string]int)
 				}
-				if onChainExecution[roundNum]["CVS"][op] {
+				if onChainExecution[roundNum]["CVS"][op] >= 3 {
+					failToSubmitCv()
 					revert()
 				} else if sendCommitRequest[roundNum] {
+					fmt.Println("inside sendCommitRequest[roundNum] condition")
 					missingOperators = append(missingOperators, op)
-					onChainExecution[roundNum]["CVS"][op] = true
+					onChainExecution[roundNum]["CVS"][op]++
 					flag[roundNum] = true
 					dispute[roundNum] = true
 				}
@@ -535,6 +536,62 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 			}
 		}
 	}
+}
+
+func failToSubmitCv() {
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in environment variables.")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		log.Printf("Failed to connect to Ethereum client: %v", err)
+		return
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode leader private key: %v", err)
+		return
+	}
+
+	clientUtils := &utils.Client{
+		Client:          client,
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		"failToSubmitCv",
+		big.NewInt(0),
+	)
+	if err != nil {
+		log.Printf("Failed to failToSubmitCv request root for round %s: %v", leaderNode_helper.CurrentRound, err)
+		return
+	}
+
+	log.Printf("Successfully submitted failToSubmitCv request for round %s", leaderNode_helper.CurrentRound)
 }
 
 func handleMissingCV(missingOperators []string, roundNum string) {
