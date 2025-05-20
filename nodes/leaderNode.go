@@ -192,13 +192,12 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if allCosReceivedUnlocked(roundNum) {
-		log.Printf("All COS received for round %s. Determining reveal order...", roundNum)
+		log.Printf("All COS received for round %s.", roundNum)
 		err := commitreveal2.DetermineRevealOrder(roundNum, eth.ActivatedOperators)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s: %v", roundNum, err)
 			return
 		}
-		log.Printf("Reveal order determined for round %s.", roundNum)
 		leaderNode_helper.StartSecretValueRequests(h, roundNum)
 	}
 }
