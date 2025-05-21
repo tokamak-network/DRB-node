@@ -82,6 +82,8 @@ func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, node
 		Signature:  signature,  // Signed round number
 	}
 
+	fmt.Println("Sending secret value request to EOA:", eoa)
+
 	// Send the request
 	err = sendToRegularNode(h, nodeInfo, "/sendSecretValue", req)
 	if err != nil {
