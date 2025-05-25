@@ -123,7 +123,7 @@ func receiveCommitRequest() {
 						log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
 						continue
 					}
-					fmt.Printf("MerkleRootSubmitted Event:\n StartTime: %v\n MerkleRoot: %v\n Round: %v\n",
+					fmt.Printf("\033[34mMerkleRootSubmitted Event:\n StartTime: %v\n MerkleRoot: %v\n Round: %v\033[0m\n",
 						eventData.StartTime, eventData.MerkleRoot, CurrentRound)
 
 					processMerkleRoot(CurrentRound)

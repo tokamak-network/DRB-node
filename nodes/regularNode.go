@@ -345,7 +345,7 @@ func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID 
 	if err := json.NewEncoder(s).Encode(req); err != nil {
 		log.Printf("Failed to send registration request: %v", err)
 	} else {
-		log.Println("\033[32mRegistration request sent to leader.\033[0m]")
+		log.Println("\033[32mRegistration request sent to leader.\033[0m")
 	}
 }
 
@@ -389,7 +389,6 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 	// If deposit is insufficient, we calculate the remaining amount and proceed with the deposit
 	if depositAmount.Cmp(activationThreshold) < 0 {
 		remaining := new(big.Int).Sub(activationThreshold, depositAmount)
-
 
 		// Check account balance
 		balance, err := client.BalanceAt(ctx, common.HexToAddress(eoaAddress), nil)
