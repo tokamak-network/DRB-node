@@ -29,6 +29,7 @@ func MonitorCommits() {
 }
 
 var StartNextRound bool = true
+var AllCosReceived bool
 
 type RevealOrderData struct {
 	OrderedNodes []string   `json:"ordered_nodes"`
@@ -46,7 +47,6 @@ func checkRoundsForCompletion() {
 		// Load the leader commits for the round
 		leaderCommits, err := loadLeaderCommits("leader_commits.json")
 		if err != nil {
-			log.Printf("Failed to load leader commits: %v", err)
 			continue
 		}
 
@@ -74,58 +74,61 @@ func checkRoundsForCompletion() {
 		var ss []common.Hash
 		var index int
 		allEOAsSubmitted := true
-		for i, operator := range operatorAddresses {
-			commitData, exists := leaderCommits[round+"+"+operator.Hex()]
-			if !exists || commitData.SecretValue == [32]byte{} {
-				log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round)
-				allEOAsSubmitted = false
-				break
-			}
+		if AllCosReceived {
+			for i, operator := range operatorAddresses {
+				commitData, exists := leaderCommits[round+"+"+operator.Hex()]
+				if !exists || commitData.SecretValue == [32]byte{} {
+					log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round)
+					allEOAsSubmitted = false
+					break
+				}
 
-			secrets = append(secrets, commitData.SecretValue[:])
-			// if Cv values are on-chain, than check this condition
-			if CvOnChain {
-				if int64(i) <= Indices[index].Int64() {
-					if int64(i) == Indices[index].Int64() {
-						index++
-						continue
+				secrets = append(secrets, commitData.SecretValue[:])
+				// if Cv values are on-chain, than check this condition
+				if CvOnChain {
+					if int64(i) <= Indices[index].Int64() {
+						if int64(i) == Indices[index].Int64() {
+							index++
+							continue
+						}
 					}
 				}
-			}
 
-			// Ensure the signature map contains valid data
-			if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
-				log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
-				allEOAsSubmitted = false
-				continue
-			}
+				// Ensure the signature map contains valid data
+				if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
+					log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
+					allEOAsSubmitted = false
+					continue
+				}
 
-			// Parse and validate signature components
-			vStr := commitData.Sign["v"]
-			vValue, err := strconv.ParseUint(vStr, 10, 8)
-			if err != nil {
-				log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
-				allEOAsSubmitted = false
-				continue
-			}
+				// Parse and validate signature components
+				vStr := commitData.Sign["v"]
+				vValue, err := strconv.ParseUint(vStr, 10, 8)
+				if err != nil {
+					log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
+					allEOAsSubmitted = false
+					continue
+				}
 
-			vs = append(vs, uint8(vValue))
-			rs = append(rs, common.HexToHash(commitData.Sign["r"]))
-			ss = append(ss, common.HexToHash(commitData.Sign["s"]))
-		}
-		// If all EOAs have submitted, trigger the random number generation transaction
-		if allEOAsSubmitted {
-			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
-			var err error
-			if !CvOnChain {
-				err = generateRandomNumberTransaction(round, secrets, vs, rs, ss)
-			} else {
-				err = generateRandomNumberTransactionSomeCvOnChain(round, secrets, vs, rs, ss)
+				vs = append(vs, uint8(vValue))
+				rs = append(rs, common.HexToHash(commitData.Sign["r"]))
+				ss = append(ss, common.HexToHash(commitData.Sign["s"]))
 			}
-			if err != nil {
-				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
-			} else {
-				markRoundCompleted(leaderCommits, round)
+			// If all EOAs have submitted, trigger the random number generation transaction
+			if allEOAsSubmitted {
+				log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
+				var err error
+				if !CvOnChain {
+					err = generateRandomNumberTransaction(round, secrets, vs, rs, ss)
+				} else {
+					err = generateRandomNumberTransactionSomeCvOnChain(round, secrets, vs, rs, ss)
+				}
+				if err != nil {
+					log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
+				} else {
+					markRoundCompleted(leaderCommits, round)
+					AllCosReceived = false
+				}
 			}
 		}
 	}
@@ -400,7 +403,6 @@ func getEOAsForRounds() map[string][]common.Address {
 
 	leaderCommits, err := loadLeaderCommits("leader_commits.json")
 	if err != nil {
-		log.Printf("Failed to load leader commits: %v", err)
 		return eoasForRounds
 	}
 

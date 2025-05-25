@@ -136,7 +136,8 @@ func ExecuteTransaction(
 		return nil, nil, err
 	}
 
-	log.Infof("Transaction %s confirmed in block %v", signedTx.Hash().Hex(), receipt.BlockNumber)
+	// log.Infof("\033[32m✅ Transaction %s confirmed in block %v\033[0m", signedTx.Hash().Hex(), receipt.BlockNumber)
+	fmt.Printf("✅ \033[32mTransaction %s confirmed in block %v for function %v.\033[0m\n", signedTx.Hash().Hex(), receipt.BlockNumber, functionName)
 	return signedTx, auth, nil
 }
 

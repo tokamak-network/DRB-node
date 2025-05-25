@@ -94,7 +94,6 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 	}
 
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	log.Printf("EOA Address: %s", eoaAddress)
 
 	// Sign the round number using the regular node's private key
 	signature := utils.SignData(eoaAddress, privateKey)
@@ -122,5 +121,5 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 		return
 	}
 
-	log.Printf("Secret value sent for round %s to leader node", roundNum)
+	log.Printf("\033[32mSecret successfully sent to leader for round %s\033[0m", roundNum)
 }

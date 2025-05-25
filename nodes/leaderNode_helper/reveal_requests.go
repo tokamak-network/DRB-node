@@ -70,7 +70,6 @@ func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, node
 	}
 
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	log.Printf("EOA Address: %s", eoaAddress)
 
 	// Sign the round number
 	signature := utils.SignData(eoaAddress, privateKey)
@@ -81,8 +80,6 @@ func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, node
 		Round:      roundNum,   // Round number
 		Signature:  signature,  // Signed round number
 	}
-
-	fmt.Println("Sending secret value request to EOA:", eoa)
 
 	// Send the request
 	err = sendToRegularNode(h, nodeInfo, "/sendSecretValue", req)
@@ -98,8 +95,6 @@ func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, node
 
 // handleSecretValueResponse processes a response and sends the next request if applicable
 func HandleSecretValueResponse(h host.Host, roundNum string, eoa string) {
-	log.Printf("Secret value received for round %s from EOA %s", roundNum, eoa)
-
 	// Load reveal order for the round
 	revealData, err := loadRevealOrders("reveal_orders.json")
 	if err != nil {
@@ -139,7 +134,7 @@ func HandleSecretValueResponse(h host.Host, roundNum string, eoa string) {
 		}
 	}
 
-	log.Printf("All nodes processed for round %s.", roundNum)
+	log.Printf("\033[32mAll nodes processed for round %s.\033[0m", roundNum)
 }
 
 func loadRevealOrders(filePath string) (RevealOrders, error) {

@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -51,7 +50,6 @@ func LoadLeaderCommitData(roundNum, eoaAddress string) (*LeaderCommitData, error
 
 	// Construct the composite key: ROUND+EOA
 	key := roundNum + "+" + eoaAddress
-	log.Printf("Loading commit data for key: %s", key) // Debug log for the key
 
 	// Check if commit data exists for the given key
 	commitData, exists := commits[key]
@@ -67,8 +65,6 @@ func LoadLeaderCommitData(roundNum, eoaAddress string) (*LeaderCommitData, error
 		}
 		copy(commitData.Cvs[:], cvsBytes)
 	}
-
-	log.Printf("Loaded commit data for key: %s, CVS: %v", key, commitData.Cvs) // Debug log for loaded data
 
 	return &commitData, nil
 }
@@ -114,7 +110,5 @@ func SaveLeaderCommitData(commitData LeaderCommitData) error {
 	if err != nil {
 		return fmt.Errorf("error encoding leader commit data: %v", err)
 	}
-
-	log.Printf("Saved commit data for key: %s", key) // Debug log for commit save
 	return nil
 }

@@ -132,7 +132,7 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 		State:     state,
 	}
 	if state.Cmp(big.NewInt(1)) == 0 {
-		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+		log.Printf("\n\033[34mStatus Event:\n StartTime: %v\n State: %v\n Round: %v\033[0m",
 			startTime, state, round)
 		Req = req
 		var err error

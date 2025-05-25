@@ -32,8 +32,6 @@ func AcceptSecretValue(h host.Host, s network.Stream) {
 		return
 	}
 
-	log.Printf("Successfully verified signature for EOA: %s", req.EOAAddress)
-
 	// Fetch or initialize the leader commit data for the given round and EOA
 	commitData, err := utils.LoadLeaderCommitData(req.Round, req.EOAAddress)
 	if err != nil {
@@ -48,16 +46,14 @@ func AcceptSecretValue(h host.Host, s network.Stream) {
 	copy(commitData.SecretValue[:], req.SecretValue[:])
 	commitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
 
-	log.Printf("Received and stored secret value for round %s and EOA %s: byte=%x, hex=%s",
-		req.Round, req.EOAAddress, commitData.SecretValue, commitData.SecretValueHex)
+	log.Printf("Received and stored secret value for round %s and EOA %s",
+		req.Round, req.EOAAddress)
 
 	// Save the updated commit data
 	if err := utils.SaveLeaderCommitData(*commitData); err != nil {
 		log.Printf("Failed to save leader commit data for round %s and EOA %s: %v", req.Round, req.EOAAddress, err)
 		return
 	}
-
-	log.Printf("Successfully saved secret value for round %s and EOA %s", req.Round, req.EOAAddress)
 
 	// Continue requesting secret values from remaining nodes in the reveal order
 	HandleSecretValueResponse(h, req.Round, req.EOAAddress)

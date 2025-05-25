@@ -164,7 +164,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 		return fmt.Errorf("failed to save reveal order for round %s", roundNum)
 	}
 
-	log.Printf("Reveal order determined and stored for round %s", roundNum)
+	log.Printf("🔎 Reveal order for round %s is %v", roundNum, revealOrder)
 	return nil
 }
 

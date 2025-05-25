@@ -137,7 +137,7 @@ func RunRegularNode() {
 		if isActivated {
 			log.Println("Node is activated. No further action required.")
 		} else {
-			log.Println("Node is not activated. Checking deposit amount...")
+			log.Println("\033[31mNode is not activated. Checking deposit amount...\033[0m")
 
 			// Check and ensure deposit is sufficient
 			depositSufficient, err := checkDepositAmount(clientUtils, eoaAddress)
@@ -148,7 +148,7 @@ func RunRegularNode() {
 			}
 
 			if !depositSufficient {
-				log.Println("Deposit insufficient. Initiating deposit transaction...")
+				log.Println("⚠️ \033[33m Deposit insufficient. Initiating deposit transaction...\033[0m")
 				txSent, err := depositAndCheckActivation(ctx, eoaAddress, privateKey)
 				if err != nil {
 					log.Printf("Error during deposit transaction: %v", err)
@@ -169,7 +169,7 @@ func RunRegularNode() {
 			}
 
 			// Send registration request to leader
-			log.Println("Deposit sufficient. Sending registration request to leader...")
+			log.Println("Activation successfuly. Sending registration request to leader...")
 			sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
 		}
 
@@ -291,7 +291,7 @@ func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitD
 	if err := json.NewEncoder(s).Encode(req); err != nil {
 		log.Printf("Failed to send COS commit to leader: %v", err)
 	} else {
-		log.Printf("COS commit sent to leader for round %s", commitData.Round)
+		log.Printf("\033[32mCOS successfully sent to leader for round %s\033[0m", commitData.Round)
 	}
 }
 
@@ -345,7 +345,7 @@ func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID 
 	if err := json.NewEncoder(s).Encode(req); err != nil {
 		log.Printf("Failed to send registration request: %v", err)
 	} else {
-		log.Println("Registration request sent to leader.")
+		log.Println("\033[32mRegistration request sent to leader.\033[0m]")
 	}
 }
 
@@ -389,7 +389,7 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 	// If deposit is insufficient, we calculate the remaining amount and proceed with the deposit
 	if depositAmount.Cmp(activationThreshold) < 0 {
 		remaining := new(big.Int).Sub(activationThreshold, depositAmount)
-		log.Printf("Deposit insufficient. Adding remaining: %s", remaining.String())
+
 
 		// Check account balance
 		balance, err := client.BalanceAt(ctx, common.HexToAddress(eoaAddress), nil)
@@ -520,7 +520,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	if err := json.NewEncoder(send).Encode(req); err != nil {
 		log.Printf("Failed to send commit to leader for round %s: %v", req.Round, err)
 	} else {
-		log.Printf("Commit successfully sent to leader for round %s", req.Round)
+		log.Printf("\033[32mCVS successfully sent to leader for round %s\033[0m", req.Round)
 	}
 }
 

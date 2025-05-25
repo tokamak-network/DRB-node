@@ -2,7 +2,7 @@ package commitreveal2
 
 import (
 	"errors"
-	"fmt"
+	"log"
 
 	"golang.org/x/crypto/sha3"
 )
@@ -59,7 +59,7 @@ func CreateMerkleTree(leaves [][]byte) ([]byte, error) {
 
 	// The last element in the hashes array is the Merkle root
 	merkleRoot := hashes[hashCount-1]
-	fmt.Printf("Merkle Root: 0x%x\n", merkleRoot)
+	log.Printf("Merkle Root: 0x%x\n", merkleRoot)
 
 	return merkleRoot, nil
 }

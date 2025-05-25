@@ -64,6 +64,7 @@ func RunLeaderNode() {
 	log.Printf("Leader node running on: %s", h.Addrs())
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
+
 	go leaderNode_helper.MonitorCommits()
 	go leaderNode_helper.ReceiveCommit()
 	for {
@@ -72,7 +73,7 @@ func RunLeaderNode() {
 			continue
 		}
 		firstRequest = leaderNode_helper.Req
-		fmt.Printf("Executing request: %v", firstRequest)
+		log.Printf("Executing request: %v", firstRequest)
 		processRounds(firstRequest)
 		time.Sleep(30 * time.Second)
 	}
@@ -85,7 +86,7 @@ func handleRegistrationRequest(s network.Stream) {
 		log.Printf("Failed to handle registration request: %v", err)
 		return
 	}
-	log.Println("Node registration completed.")
+	log.Println("\033[32mNode registration completed.\033[0m")
 }
 
 func handleCommitRequest(s network.Stream) {
@@ -122,11 +123,10 @@ func handleCommitRequest(s network.Stream) {
 		return
 	}
 	updateInMemoryData(roundNum, eoaAddress, *commitData)
-	log.Printf("Commit data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	// Check if all commits are ready after this update
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
-		log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
+		log.Printf("\033[32mAll CVS received for round %s.\033[0m", roundNum)
 		commitMu.Unlock() // Unlock before calling generateMerkleRoot
 		generateMerkleRoot(roundNum)
 		commitMu.Lock() // Re-lock if needed
@@ -173,14 +173,13 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 
 	commitData.Cos = req.Cos
 	commitData.CosHex = hex.EncodeToString(req.Cos[:])
-	log.Printf("Storing COS for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	if err := utils.SaveLeaderCommitData(*commitData); err != nil {
 		log.Printf("Error saving COS data for round %s EOA %s: %v", roundNum, eoaAddress.Hex(), err)
 		return
 	}
 	updateInMemoryData(roundNum, eoaAddress, *commitData)
-	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
+	log.Printf("Received and Stored COS for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	// Check if all commits are ready after this COS
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
@@ -192,12 +191,13 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if allCosReceivedUnlocked(roundNum) {
-		log.Printf("All COS received for round %s.", roundNum)
+		log.Printf("\033[32mAll COS received for round %s.\033[0m", roundNum)
 		err := commitreveal2.DetermineRevealOrder(roundNum, eth.ActivatedOperators)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s: %v", roundNum, err)
 			return
 		}
+		leaderNode_helper.AllCosReceived = true
 		leaderNode_helper.StartSecretValueRequests(h, roundNum)
 	}
 }
@@ -341,10 +341,8 @@ func generateMerkleRoot(roundNum string) {
 	commitMu.Unlock()
 
 	log.Printf("Generating Merkle root for round %s...", roundNum)
-
 	activatedOperatorsList := leaderNode_helper.ActivatedOperator
 
-	log.Printf("Activated operators for round %s in order: %v", roundNum, activatedOperatorsList)
 
 	commitMu.Lock()
 	roundMap, roundExists := utils.CommittedNodes[roundNum]
@@ -364,7 +362,6 @@ func generateMerkleRoot(roundNum string) {
 			return
 		}
 		leaves = append(leaves, data.Cvs[:])
-		log.Printf("Added CVS from operator %s for round %s", opAddr.Hex(), roundNum)
 	}
 
 	commitMu.Unlock()
@@ -373,8 +370,6 @@ func generateMerkleRoot(roundNum string) {
 		log.Printf("Error: No CVS commits found for round %s. Cannot generate Merkle root.", roundNum)
 		return
 	}
-
-	log.Printf("Leaves for Merkle tree for round %s: %v", roundNum, leaves)
 
 	merkleRoot, err := commitreveal2.CreateMerkleTree(leaves)
 	if err != nil {
@@ -444,7 +439,6 @@ func submitMerkleRoot(roundNum string, merkleRoot []byte) {
 		return
 	}
 
-	log.Printf("Successfully submitted Merkle root for round %s", roundNum)
 	submittingMerkleRoot = false
 	roundData := leaderNode_helper.RoundsData[roundNum]
 	roundData.MerkleRoot = true
@@ -466,7 +460,6 @@ func updateCommitDataAfterSubmit(roundNum string) {
 
 	for eoaAddress, data := range roundMap {
 		data.SubmitMerkleRootDone = true
-		log.Printf("Setting submit_merkle_root_done = true for key: %s+%s", roundNum, eoaAddress.Hex())
 
 		if err := utils.SaveLeaderCommitData(data); err != nil {
 			log.Printf("Failed to save updated commit data for %s in round %s: %v", eoaAddress.Hex(), roundNum, err)
@@ -484,7 +477,6 @@ func isEOAActivatedForRound(eoaAddress common.Address) bool {
 
 	for _, operator := range activatedOperators {
 		if operator == eoaAddress {
-			log.Printf("EOA address %s is activated", eoaAddress.Hex())
 			return true
 		}
 	}
@@ -507,7 +499,7 @@ func processRounds(round leaderNode_helper.RandomRequest) {
 		for op, submitted := range ready {
 			if !submitted {
 				allReceived = false
-				log.Printf("Operator %s has not submitted CV.", op)
+				log.Printf("⏳ \033[33mOperator %s has not submitted CV.\033[0m", op)
 				if _, exists := onChainExecution[roundNum]; !exists {
 					onChainExecution[roundNum] = make(map[string]map[string]int)
 				}

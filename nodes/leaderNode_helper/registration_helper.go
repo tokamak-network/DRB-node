@@ -66,8 +66,7 @@ func RegisterNode(s network.Stream, filePath, abiFilePath string) error {
 	if !utils.VerifySignature(req) {
 		return fmt.Errorf("failed to verify signature for PeerID: %s", req.PeerID)
 	}
-
-	log.Printf("Verified registration for PeerID: %s", req.PeerID)
+	log.Printf("Registring node with EOA %v", req.EOAAddress)
 
 	// Get the remote IP and port
 	remoteAddr := s.Conn().RemoteMultiaddr().String()
@@ -98,8 +97,5 @@ func RegisterNode(s network.Stream, filePath, abiFilePath string) error {
 		return fmt.Errorf("failed to save registered nodes: %v", err)
 	}
 
-	log.Printf("Successfully registered or updated EOA %s with NodeInfo: IP=%s, Port=%s, PeerID=%s.", req.EOAAddress, ip, port, req.PeerID)
-
 	return nil
 }
-
