@@ -7,6 +7,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -35,7 +36,7 @@ func AcceptSecretValue(h host.Host, s network.Stream) {
 	log.Printf("Successfully verified signature for EOA: %s", req.EOAAddress)
 
 	// Fetch or initialize the leader commit data for the given round and EOA
-	commitData, err := utils.LoadLeaderCommitData(req.Round, req.EOAAddress)
+	commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(req.Round, req.EOAAddress)
 	if err != nil {
 		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", req.Round, req.EOAAddress)
 		commitData = &utils.LeaderCommitData{
@@ -52,7 +53,7 @@ func AcceptSecretValue(h host.Host, s network.Stream) {
 		req.Round, req.EOAAddress, commitData.SecretValue, commitData.SecretValueHex)
 
 	// Save the updated commit data
-	if err := utils.SaveLeaderCommitData(*commitData); err != nil {
+	if err := database.AddLeaderCommit(commitData); err != nil {
 		log.Printf("Failed to save leader commit data for round %s and EOA %s: %v", req.Round, req.EOAAddress, err)
 		return
 	}

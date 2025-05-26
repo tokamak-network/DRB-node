@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -47,7 +48,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	log.Printf("Verified secret value request for round %s from leader %s", req.Round, req.EOAAddress)
 
 	// Fetch the secret value for the specified round
-	commitData, err := utils.LoadCommitData(req.Round)
+	commitData, err := database.GetCommitByRound(req.Round)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s: %v", req.Round, err)
 		return
@@ -76,7 +77,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 // SendSecretValue sends the secret value for a round to the leader node
 func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 	// Load the commit data for the specified round
-	commitData, err := utils.LoadCommitData(roundNum)
+	commitData, err := database.GetCommitByRound(roundNum)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s: %v", roundNum, err)
 		return

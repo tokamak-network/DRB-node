@@ -18,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/regularNode_helper"
@@ -88,7 +89,7 @@ func RunRegularNode() {
 		EOAAddress: eoaAddress,
 	}
 
-	if err := utils.SaveNodeInfo([]utils.NodeInfo{nodeInfo}); err != nil {
+	if err := database.AddNodeInfo(&nodeInfo); err != nil {
 		log.Printf("Failed to save node info: %v", err)
 	}
 
@@ -195,7 +196,7 @@ func RunRegularNode() {
 		if isEOAActivated(eoaAddress) {
 
 			// Check if this round has already been committed (store it locally)
-			commitData, err := utils.LoadCommitData(round)
+			commitData, err := database.GetCommitByRound(round)
 			if err != nil && err.Error() != "commit not found" {
 				log.Printf("Error loading commit data: %v", err)
 				continue
@@ -228,7 +229,7 @@ func RunRegularNode() {
 				}
 
 				// Save commit data locally to prevent resending
-				err = utils.SaveCommitData(commitData)
+				err = database.AddCommit(&commitData)
 				if err != nil {
 					log.Printf("Error saving commit data: %v", err)
 					continue
@@ -250,7 +251,7 @@ func RunRegularNode() {
 					commitData.SendCosToLeader = true
 
 					// Save updated commit data to prevent re-sending COS
-					err := utils.SaveCommitData(*commitData)
+					err := database.AddCommit(commitData)
 					if err != nil {
 						log.Printf("Error saving updated commit data after sending COS: %v", err)
 					}
@@ -495,15 +496,15 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	}
 
 	// Add signature values to the commit request
-	req.Sign = map[string]string{
-		"v": fmt.Sprintf("%d", v),
-		"r": r,
-		"s": s,
+	req.Sign = utils.SignInfo{
+		V: fmt.Sprintf("%d", v),
+		R: r,
+		S: s,
 	}
 
 	// Save commit data locally with v, r, s
 	commitData.Sign = req.Sign
-	if err := utils.SaveCommitData(commitData); err != nil {
+	if err := database.AddCommit(&commitData); err != nil {
 		log.Printf("Failed to save commit data locally: %v", err)
 		return
 	}

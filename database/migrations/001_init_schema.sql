@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS node_info (
     port TEXT NOT NULL,
     peer_id TEXT NOT NULL,
     eoa_address TEXT NOT NULL,
-    private_key TEXT NOT NULL
+    private_key BYTEA NOT NULL
 );
 
 -- Create registered_nodes schema
@@ -35,6 +35,20 @@ CREATE TABLE IF NOT EXISTS leader_commits (
     sign_v TEXT NOT NULL,
     submit_merkle_root_done BOOLEAN NOT NULL,
     random_number_generated BOOLEAN NOT NULL
+);
+
+-- Create commits schema
+CREATE TABLE IF NOT EXISTS commits (
+    id SERIAL PRIMARY KEY,
+    round INT NOT NULL,
+    cvs BYTEA NOT NULL,
+    cos BYTEA NOT NULL,
+    secret_value BYTEA NOT NULL,
+    sign_r TEXT NOT NULL,
+    sign_s TEXT NOT NULL,
+    sign_v TEXT NOT NULL,
+    send_to_leader BOOLEAN NOT NULL,
+    send_cos_to_leader BOOLEAN NOT NULL
 );
 
 -- Create reveal_orders schema

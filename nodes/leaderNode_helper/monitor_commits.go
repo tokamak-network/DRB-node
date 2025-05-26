@@ -2,7 +2,6 @@ package leaderNode_helper
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -13,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -39,28 +39,13 @@ type RevealOrderData struct {
 type RevealOrders map[string]RevealOrderData
 
 func checkRoundsForCompletion() {
-	// Fetch EOAs for each round
-	eoasForRounds := getEOAsForRounds()
+	// Fetch rounds to process
+	roundsToProcess, err := database.GetRoundsToProcess()
+	if err != nil {
+		return
+	}
 
-	for round := range eoasForRounds {
-		// Load the leader commits for the round
-		leaderCommits, err := loadLeaderCommits("leader_commits.json")
-		if err != nil {
-			log.Printf("Failed to load leader commits: %v", err)
-			continue
-		}
-
-		// Check if the round has already generated a random number
-		if isRoundCompleted(leaderCommits, round) {
-			continue
-		}
-
-		// Check if the Merkle root has been submitted
-		if !isMerkleRootSubmitted(leaderCommits, round) {
-			log.Printf("Merkle root not submitted for round %s. Skipping random number generation.", round)
-			continue
-		}
-
+	for _, round := range roundsToProcess {
 		// Convert ActivatedOperator from []string to []common.Address
 		var operatorAddresses []common.Address
 		for _, operator := range ActivatedOperator {
@@ -75,9 +60,9 @@ func checkRoundsForCompletion() {
 		var index int
 		allEOAsSubmitted := true
 		for i, operator := range operatorAddresses {
-			commitData, exists := leaderCommits[round+"+"+operator.Hex()]
-			if !exists || commitData.SecretValue == [32]byte{} {
-				log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round)
+			commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round.Round, operator.Hex())
+			if err != nil || commitData.SecretValue == [32]byte{} {
+				log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round.Round)
 				allEOAsSubmitted = false
 				break
 			}
@@ -94,51 +79,44 @@ func checkRoundsForCompletion() {
 			}
 
 			// Ensure the signature map contains valid data
-			if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
-				log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
+			if commitData.Sign.V == "" || commitData.Sign.R == "" || commitData.Sign.S == "" {
+				log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round.Round)
 				allEOAsSubmitted = false
 				continue
 			}
 
 			// Parse and validate signature components
-			vStr := commitData.Sign["v"]
+			vStr := commitData.Sign.V
 			vValue, err := strconv.ParseUint(vStr, 10, 8)
 			if err != nil {
-				log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
+				log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round.Round, err)
 				allEOAsSubmitted = false
 				continue
 			}
 
 			vs = append(vs, uint8(vValue))
-			rs = append(rs, common.HexToHash(commitData.Sign["r"]))
-			ss = append(ss, common.HexToHash(commitData.Sign["s"]))
+			rs = append(rs, common.HexToHash(commitData.Sign.R))
+			ss = append(ss, common.HexToHash(commitData.Sign.S))
 		}
 		// If all EOAs have submitted, trigger the random number generation transaction
 		if allEOAsSubmitted {
-			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
+			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round.Round)
 			var err error
 			if !CvOnChain {
-				err = generateRandomNumberTransaction(round, secrets, vs, rs, ss)
+				err = generateRandomNumberTransaction(round.Round, secrets, vs, rs, ss)
 			} else {
-				err = generateRandomNumberTransactionSomeCvOnChain(round, secrets, vs, rs, ss)
+				err = generateRandomNumberTransactionSomeCvOnChain(round.Round, secrets, vs, rs, ss)
 			}
 			if err != nil {
-				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
+				log.Printf("Failed to execute random number generation transaction for round %s: %v", round.Round, err)
 			} else {
-				markRoundCompleted(leaderCommits, round)
+				err = markRoundCompleted(round.Round)
+				if err != nil {
+					log.Printf("Failed to mark round %s as completed: %v", round.Round, err)
+				}
 			}
 		}
 	}
-}
-
-// isMerkleRootSubmitted checks if the Merkle root has been submitted for a given round.
-func isMerkleRootSubmitted(leaderCommits map[string]utils.LeaderCommitData, round string) bool {
-	for _, commitData := range leaderCommits {
-		if commitData.Round == round {
-			return commitData.SubmitMerkleRootDone
-		}
-	}
-	return false
 }
 
 // Fetch activated operators for a specific round
@@ -220,16 +198,10 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		})
 	}
 
-	revealOrders, err := loadRevealOrders("reveal_orders.json")
+	roundRevealData, err := database.GetRevealOrder(round)
 	if err != nil {
-		log.Printf("Failed to load reveal orders: %v", err)
-		return nil
-	}
-
-	roundRevealData, exists := revealOrders[round]
-	if !exists {
-		log.Printf("No reveal order found for round %s.", round)
-		return nil
+		log.Printf("Failed to load reveal order: %v", err)
+		return err
 	}
 
 	order := roundRevealData.RevealOrder
@@ -310,17 +282,12 @@ func generateRandomNumberTransactionSomeCvOnChain(round string, secrets [][]byte
 		allSecrets = append(allSecrets, secret)
 	}
 
-	revealOrders, err := loadRevealOrders("reveal_orders.json")
+	roundRevealData, err := database.GetRevealOrder(round)
 	if err != nil {
-		log.Printf("Failed to load reveal orders: %v", err)
-		return nil
+		log.Printf("Failed to load reveal order: %v", err)
+		return err
 	}
 
-	roundRevealData, exists := revealOrders[round]
-	if !exists {
-		log.Printf("No reveal order found for round %s.", round)
-		return nil
-	}
 	order := roundRevealData.RevealOrder
 	packedRevealOrder := packRevealOrder(order)
 	packedVs := packVsValues(vsArray)
@@ -342,11 +309,11 @@ func generateRandomNumberTransactionSomeCvOnChain(round string, secrets [][]byte
 	return nil
 }
 
-func packRevealOrder(order []*big.Int) *big.Int {
+func packRevealOrder(order []int) *big.Int {
 	packedRevealOrder := big.NewInt(0)
 	for i, v := range order {
 		shift := uint(8 * i)
-		part := new(big.Int).Lsh(big.NewInt(int64(v.Int64())), shift)
+		part := new(big.Int).Lsh(big.NewInt(int64(v)), shift)
 		packedRevealOrder.Or(packedRevealOrder, part)
 	}
 	return packedRevealOrder
@@ -362,18 +329,11 @@ func packVsValues(vs []uint8) *big.Int {
 	return result
 }
 
-// markRoundCompleted updates the leader_commits.json file to mark a round as completed.
-func markRoundCompleted(leaderCommits map[string]utils.LeaderCommitData, round string) {
-	for key, commitData := range leaderCommits {
-		if commitData.Round == round {
-			commitData.RandomNumberGenerated = true
-			leaderCommits[key] = commitData
-		}
-	}
-
-	err := saveLeaderCommits("leader_commits.json", leaderCommits)
+// markRoundCompleted updates to mark a round as completed
+func markRoundCompleted(round string) error {
+	err := database.UpdateLeaderCommitRandomNumberGenerated(round)
 	if err != nil {
-		log.Printf("Failed to save updated leader commits: %v", err)
+		return err
 	}
 
 	if RoundsData == nil {
@@ -382,98 +342,6 @@ func markRoundCompleted(leaderCommits map[string]utils.LeaderCommitData, round s
 	data := RoundsData[round]
 	data.RandomNumber = true
 	RoundsData[round] = data
-}
-
-// isRoundCompleted checks if a round is already completed.
-func isRoundCompleted(leaderCommits map[string]utils.LeaderCommitData, round string) bool {
-	for _, commitData := range leaderCommits {
-		if commitData.Round == round {
-			return commitData.RandomNumberGenerated
-		}
-	}
-	return false
-}
-
-// getEOAsForRounds fetches all EOAs for each round from leader_commits.json.
-func getEOAsForRounds() map[string][]common.Address {
-	eoasForRounds := make(map[string][]common.Address)
-
-	leaderCommits, err := loadLeaderCommits("leader_commits.json")
-	if err != nil {
-		log.Printf("Failed to load leader commits: %v", err)
-		return eoasForRounds
-	}
-
-	// Populate EOAs from leader commits
-	for key := range leaderCommits {
-		round, eoa := parseLeaderCommitKey(key)
-		if round == "" || eoa == "" {
-			continue
-		}
-		eoasForRounds[round] = appendIfNotExists(eoasForRounds[round], common.HexToAddress(eoa))
-	}
-
-	return eoasForRounds
-}
-
-// Helper: Parse leader commit key into round and EOA
-func parseLeaderCommitKey(key string) (string, string) {
-	split := len(key)
-	for i := len(key) - 1; i >= 0; i-- {
-		if key[i] == '+' {
-			split = i
-			break
-		}
-	}
-	if split == len(key) {
-		return "", "" // Invalid key format
-	}
-	return key[:split], key[split+1:]
-}
-
-// Helper: Append EOA to a slice only if it doesn't already exist
-func appendIfNotExists(slice []common.Address, eoa common.Address) []common.Address {
-	for _, addr := range slice {
-		if addr == eoa {
-			return slice
-		}
-	}
-	return append(slice, eoa)
-}
-
-// Helper: Load leader commits
-func loadLeaderCommits(filePath string) (map[string]utils.LeaderCommitData, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("leader commit file not found")
-		}
-		return nil, fmt.Errorf("failed to open leader commit file: %v", err)
-	}
-	defer file.Close()
-
-	var data map[string]utils.LeaderCommitData
-	err = json.NewDecoder(file).Decode(&data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode leader commit file: %v", err)
-	}
-
-	return data, nil
-}
-
-// Helper: Save leader commits
-func saveLeaderCommits(filePath string, data map[string]utils.LeaderCommitData) error {
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create leader commit file: %v", err)
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	err = encoder.Encode(data)
-	if err != nil {
-		return fmt.Errorf("failed to save leader commits: %v", err)
-	}
 
 	return nil
 }

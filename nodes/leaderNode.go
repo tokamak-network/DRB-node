@@ -19,6 +19,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
@@ -80,8 +81,7 @@ func RunLeaderNode() {
 
 func handleRegistrationRequest(s network.Stream) {
 	defer s.Close()
-	filePath := "registered_nodes.json"
-	if err := leaderNode_helper.RegisterNode(s, filePath, "contract/abi/Commit2RevealDRB.json"); err != nil {
+	if err := leaderNode_helper.RegisterNode(s, "contract/abi/Commit2RevealDRB.json"); err != nil {
 		log.Printf("Failed to handle registration request: %v", err)
 		return
 	}
@@ -117,7 +117,7 @@ func handleCommitRequest(s network.Stream) {
 		log.Printf("Storing CVS and signature for round %s EOA %s", roundNum, eoaAddress.Hex())
 	}
 
-	if err := utils.SaveLeaderCommitData(*commitData); err != nil {
+	if err := database.AddLeaderCommit(commitData); err != nil {
 		log.Printf("Error saving commit data for round %s EOA %s: %v", roundNum, eoaAddress.Hex(), err)
 		return
 	}
@@ -175,7 +175,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	commitData.CosHex = hex.EncodeToString(req.Cos[:])
 	log.Printf("Storing COS for round %s EOA %s", roundNum, eoaAddress.Hex())
 
-	if err := utils.SaveLeaderCommitData(*commitData); err != nil {
+	if err := database.AddLeaderCommit(commitData); err != nil {
 		log.Printf("Error saving COS data for round %s EOA %s: %v", roundNum, eoaAddress.Hex(), err)
 		return
 	}
@@ -468,7 +468,7 @@ func updateCommitDataAfterSubmit(roundNum string) {
 		data.SubmitMerkleRootDone = true
 		log.Printf("Setting submit_merkle_root_done = true for key: %s+%s", roundNum, eoaAddress.Hex())
 
-		if err := utils.SaveLeaderCommitData(data); err != nil {
+		if err := database.AddLeaderCommit(&data); err != nil {
 			log.Printf("Failed to save updated commit data for %s in round %s: %v", eoaAddress.Hex(), roundNum, err)
 		} else {
 			roundMap[eoaAddress] = data

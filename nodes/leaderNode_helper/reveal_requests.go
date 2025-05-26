@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -17,21 +18,14 @@ var revealRequestStatus = make(map[string][]string)
 // StartSecretValueRequests initializes the secret value request process for a given round
 func StartSecretValueRequests(h host.Host, roundNum string) {
 	// Load reveal order for the round
-	revealData, err := loadRevealOrders("reveal_orders.json")
+	roundRevealData, err := database.GetRevealOrder(roundNum)
 	if err != nil {
-		log.Printf("Failed to load reveal orders: %v", err)
-		return
-	}
-
-	roundRevealData, exists := revealData[roundNum]
-	if !exists {
-		log.Printf("No reveal order found for round %s.", roundNum)
+		log.Printf("Failed to load reveal order: %v", err)
 		return
 	}
 
 	// Load registered nodes
-	filePath := "registered_nodes.json"
-	nodes, err := LoadRegisteredNodes(filePath)
+	nodes, err := database.GetRegisteredNodes()
 	if err != nil {
 		log.Printf("Failed to load registered nodes: %v", err)
 		return
@@ -43,20 +37,19 @@ func StartSecretValueRequests(h host.Host, roundNum string) {
 	}
 
 	// Send the request to the first node in the reveal order
-	for _, node := range roundRevealData.OrderedNodes {
-		eoa := node
-		nodeInfo, exists := nodes[eoa]
-		if !exists {
-			log.Printf("Node info for EOA %s not found in registered nodes.", eoa)
-			continue
+	for _, eoa := range roundRevealData.OrderedNodes {
+		for _, node := range nodes {
+			if node.EOAAddress == eoa {
+				sendSecretValueRequestToNode(h, roundNum, eoa, node)
+			} else {
+				log.Printf("Node info for EOA %s not found in registered nodes.", eoa)
+				continue
+			}
 		}
-
-		sendSecretValueRequestToNode(h, roundNum, eoa, nodeInfo)
-		break
 	}
 }
 
-func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, nodeInfo NodeInfo) {
+func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, nodeInfo *utils.NodeInfo) {
 	// Load private key from environment variable
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -83,7 +76,7 @@ func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, node
 	}
 
 	// Send the request
-	err = sendToRegularNode(h, nodeInfo, "/sendSecretValue", req)
+	err = sendToRegularNode(h, *nodeInfo, "/sendSecretValue", req)
 	if err != nil {
 		log.Printf("Failed to send secret value request to EOA %s for round %s: %v", eoa, roundNum, err)
 	} else {
@@ -99,61 +92,36 @@ func HandleSecretValueResponse(h host.Host, roundNum string, eoa string) {
 	log.Printf("Secret value received for round %s from EOA %s", roundNum, eoa)
 
 	// Load reveal order for the round
-	revealData, err := loadRevealOrders("reveal_orders.json")
+	roundRevealData, err := database.GetRevealOrder(roundNum)
 	if err != nil {
-		log.Printf("Failed to load reveal orders: %v", err)
+		log.Printf("Failed to load reveal order: %v", err)
 		return
 	}
-
-	roundRevealData, exists := revealData[roundNum]
-	if !exists {
-		log.Printf("No reveal order found for round %s.", roundNum)
-		return
-	}
-
-	orderedNodes := roundRevealData.OrderedNodes
 
 	// Load registered nodes
-	filePath := "registered_nodes.json"
-	nodes, err := LoadRegisteredNodes(filePath)
+	nodes, err := database.GetRegisteredNodes()
 	if err != nil {
 		log.Printf("Failed to load registered nodes: %v", err)
 		return
 	}
 
 	// Check which node is next in the reveal order
-	for _, node := range orderedNodes {
-		nodeEOA := node
-		if !contains(revealRequestStatus[roundNum], nodeEOA) {
-			nodeInfo, exists := nodes[nodeEOA]
-			if !exists {
-				log.Printf("Node info for EOA %s not found in registered nodes.", nodeEOA)
-				continue
+	for _, eoa := range roundRevealData.OrderedNodes {
+		if !contains(revealRequestStatus[roundNum], eoa) {
+			for _, node := range nodes {
+				if node.EOAAddress == eoa {
+					sendSecretValueRequestToNode(h, roundNum, eoa, node)
+					return
+				}
 			}
-
-			// Send secret value request to the next node
-			sendSecretValueRequestToNode(h, roundNum, nodeEOA, nodeInfo)
-			return
 		}
 	}
 
 	log.Printf("All nodes processed for round %s.", roundNum)
 }
 
-func loadRevealOrders(filePath string) (RevealOrders, error) {
-	var orders RevealOrders
-	file, err := os.ReadFile(filePath)
-	if err != nil {
-		return orders, err
-	}
-	if err := json.Unmarshal(file, &orders); err != nil {
-		return orders, err
-	}
-	return orders, nil
-}
-
 // sendToRegularNode sends a request to a specific regular node
-func sendToRegularNode(h host.Host, nodeInfo NodeInfo, protocol string, data interface{}) error {
+func sendToRegularNode(h host.Host, nodeInfo utils.NodeInfo, protocol string, data interface{}) error {
 	stream, err := utils.CreateStream(h, utils.NodeInfo{
 		IP:     nodeInfo.IP,
 		Port:   nodeInfo.Port,

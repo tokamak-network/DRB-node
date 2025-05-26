@@ -22,7 +22,7 @@ func main() {
 	// Load configuration
 	cfg := database.LoadConfig()
 
-	_, err := database.InitSQLDB(cfg.DBPort, cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBName)
+	err := database.InitSQLDB(cfg.DBPort, cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBName)
 	if err != nil {
 		log.Fatalf("Error initializing sql db: %v", err)
 	}

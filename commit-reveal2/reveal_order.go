@@ -2,14 +2,13 @@ package commitreveal2
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -46,7 +45,7 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].value.Cmp(entries[j].value) > 0
 	})
-		
+
 	var order []int
 	for _, entry := range entries {
 		order = append(order, entry.index)
@@ -55,65 +54,18 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	return order
 }
 
-// saveRevealOrder stores the RV and reveal order in a file
-func saveRevealOrders(filePath string, data map[string]interface{}) error {
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create reveal order file: %v", err)
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	err = encoder.Encode(data)
-	if err != nil {
-		return fmt.Errorf("failed to write reveal order to file: %v", err)
-	}
-
-	return nil
-}
-
-func LoadRevealOrders(filePath string) (map[string]interface{}, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Return an empty map if the file doesn't exist
-			return make(map[string]interface{}), nil
-		}
-		return nil, fmt.Errorf("failed to open reveal order file: %v", err)
-	}
-	defer file.Close()
-
-	var data map[string]interface{}
-	err = json.NewDecoder(file).Decode(&data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode reveal order file: %v", err)
-	}
-
-	return data, nil
-}
-
 func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) error {
-	// File path for reveal order storage
-	filePath := "reveal_orders.json"
-
-	// Load existing data
-	data, err := LoadRevealOrders(filePath)
-	if err != nil {
-		log.Printf("Failed to load existing reveal orders: %v", err)
-		return err
-	}
-
-	// Check if the round already exists
-	if _, exists := data[roundNum]; exists {
+	_, err := database.GetRevealOrder(roundNum)
+	if err == nil {
 		log.Printf("Reveal order already exists for round %s. Skipping calculation.", roundNum)
-		return nil
+		// 	return nil
 	}
 
 	log.Printf("Determining reveal order for round %s...", roundNum)
 
 	operators := eth.ActivatedOperators
-	
-	if  len(operators) == 0 {
+
+	if len(operators) == 0 {
 		log.Printf("No activated operators found for round %s", roundNum)
 		return fmt.Errorf("no activated operators found for round %s", roundNum)
 	}
@@ -124,7 +76,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 	for _, eoaAddress := range operators {
 		eoaAddressStr := eoaAddress.Hex()
 
-		commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddressStr)
+		commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, eoaAddressStr)
 		if err != nil {
 			log.Printf("Failed to load COS for operator %s in round %s: %v", eoaAddressStr, roundNum, err)
 			return fmt.Errorf("failed to load COS for operator %s", eoaAddressStr)
@@ -150,15 +102,13 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 		orderedAddresses[i] = addresses[index]
 	}
 
-	// Add the new reveal order to the data map
-	data[roundNum] = map[string]interface{}{
-		"rv":            hex.EncodeToString(rv[:]),
-		"reveal_order":  revealOrder,
-		"ordered_nodes": orderedAddresses, // Save addresses in reveal order
+	revealOrderData := utils.RevealOrderData{
+		RevealOrder:  revealOrder,
+		OrderedNodes: orderedAddresses,
+		RV:           hex.EncodeToString(rv[:]),
 	}
 
-	// Save the updated data back to the file
-	err = saveRevealOrders(filePath, data)
+	err = database.AddRevealOrder(&revealOrderData)
 	if err != nil {
 		log.Printf("Failed to save reveal order for round %s: %v", roundNum, err)
 		return fmt.Errorf("failed to save reveal order for round %s", roundNum)
@@ -167,4 +117,3 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 	log.Printf("Reveal order determined and stored for round %s", roundNum)
 	return nil
 }
-

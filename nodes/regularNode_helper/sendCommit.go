@@ -2,7 +2,6 @@ package regularNode_helper
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -13,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -26,6 +26,7 @@ type CommitData struct {
 	SendCosToLeader bool              `json:"send_cos_to_leader"`
 	Sign            map[string]string `json:"sign"`
 }
+
 var Execution bool
 var commits map[string]CommitData
 var ActivatedOperator []string
@@ -35,17 +36,21 @@ func MonitorCommitRequest() {
 }
 
 var StartTime *big.Int
+
 type RoundData struct {
 	MerkleRoot   bool
 	RandomNumber bool
 }
+
 var RoundsData map[string]RoundData
 var Req RandomRequest
+
 type RandomRequest struct {
 	Round     *big.Int
 	StartTime *big.Int
 	State     *big.Int
 }
+
 var RequestQueue []RandomRequest
 var Round *big.Int
 var CurrentRound string
@@ -85,8 +90,8 @@ func receiveCommitRequest() {
 				switch vLog.Topics[0] {
 				case SubmitCVS:
 					eventData := struct {
-						StartTime *big.Int
-						PackedIndices   *big.Int
+						StartTime     *big.Int
+						PackedIndices *big.Int
 					}{}
 					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
 					if err != nil {
@@ -97,27 +102,27 @@ func receiveCommitRequest() {
 					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.PackedIndices)
 
 					processCommitRequest(eventData.PackedIndices)
-				
+
 				case StatusSig:
 					eventData := struct {
 						CurStartTime *big.Int
 						CurState     *big.Int
 					}{}
-	
+
 					err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
 					if err != nil {
 						log.Printf("Failed to decode Status event log: %v", err)
 						continue
 					}
-	
+
 					processRandomRequestNumber(eventData.CurStartTime, eventData.CurState)
 
-				case MerkleRootSubmittedSig: 
+				case MerkleRootSubmittedSig:
 					eventData := struct {
-						StartTime *big.Int
-						MerkleRoot     [32]byte
+						StartTime  *big.Int
+						MerkleRoot [32]byte
 					}{}
-					
+
 					err := parsedABI.UnpackIntoInterface(&eventData, "MerkleRootSubmitted", vLog.Data)
 					if err != nil {
 						log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
@@ -127,7 +132,7 @@ func receiveCommitRequest() {
 						eventData.StartTime, eventData.MerkleRoot, CurrentRound)
 
 					processMerkleRoot(CurrentRound)
-				
+
 				}
 			}
 		}
@@ -144,7 +149,7 @@ func processMerkleRoot(round string) {
 }
 
 func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
-	round, _ := fetchCurrentRound();
+	round, _ := fetchCurrentRound()
 	CurrentRound = round.String()
 	req := RandomRequest{
 		Round:     round,
@@ -165,7 +170,7 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 		RoundsData[round.String()] = roundData
 
 		Execution = false
-	}		
+	}
 }
 
 func processCommitRequest(packedIndices *big.Int) error {
@@ -217,42 +222,25 @@ func processCommitRequest(packedIndices *big.Int) error {
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
-	
-	file, err := os.ReadFile("commits.json")
-	if err != nil {
-		fmt.Println("Error reading file:", err)
-		return err
-	}
 
-	err = json.Unmarshal(file, &commits)
+	commitData, err := database.GetCommitByRound(CurrentRound)
 	if err != nil {
-		fmt.Println("Error parsing JSON:", err)
 		return err
 	}
-	var cvs []uint8
-	for key, data := range commits {
-		if CurrentRound == key {
-			cvs = data.Cvs[:]
-			break
-		}
-	}
-	cvsSlice := cvs[:]
-	var cv [32]byte
-	copy(cv[:], []byte(cvsSlice))
 
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
 		"submitCv",
 		big.NewInt(0),
-		cv,
+		commitData.Cvs,
 	)
 	if err != nil {
 		fmt.Println("It contains error")
 	}
+
 	return nil
 }
-
 
 func unpackRevealOrder(packedRevealOrder *big.Int) []*big.Int {
 	order := []*big.Int{}
@@ -263,11 +251,11 @@ func unpackRevealOrder(packedRevealOrder *big.Int) []*big.Int {
 		shifted := new(big.Int).Rsh(packedRevealOrder, shift)
 		value := new(big.Int).And(shifted, mask)
 
-		if i != 0  && value.Cmp(big.NewInt(0)) == 0 {
+		if i != 0 && value.Cmp(big.NewInt(0)) == 0 {
 			break
 		}
 		order = append(order, value)
-		i++;
+		i++
 	}
 	return order
 }
@@ -298,7 +286,7 @@ func FetchActivatedOperators(round string) ([]string, error) {
 	return strAddresses, nil
 }
 
-func fetchCurrentRound() (*big.Int, error){
+func fetchCurrentRound() (*big.Int, error) {
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	client, err := ethclient.Dial(ethRPCURL)
 	if err != nil {

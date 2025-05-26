@@ -3,7 +3,6 @@ package leaderNode_helper
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
@@ -14,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -124,7 +124,11 @@ func receiveCommit() {
 }
 
 func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
-	round, _ := fetchCurrentRound()
+	round, err := fetchCurrentRound()
+	if err != nil {
+		fmt.Printf("Failed to get current round: %v", err)
+	}
+
 	CurrentRound = round.String()
 	req := RandomRequest{
 		Round:     round,
@@ -156,32 +160,19 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 }
 
 func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
-	filePath := "leader_commits.json"
-	CommitMu.Lock()
-	defer CommitMu.Unlock()
-
-	var commitData map[string]LeaderCommitData
-	file, err := os.ReadFile(filePath)
-	if err == nil {
-		err = json.Unmarshal(file, &commitData)
-		if err != nil {
-			fmt.Println("Error parsing JSON:", err)
-			return err
-		}
-	} else {
-		commitData = make(map[string]LeaderCommitData)
-	}
-
 	round := CurrentRound
 	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
 	eoa := common.HexToAddress(eoaAddress)
-	key := fmt.Sprintf("%s+%s", round, eoa.Hex())
 	cvsHex := hex.EncodeToString(cvs[:])
-	cvsBytes, _ := hex.DecodeString(cvsHex)
 
-	copy(cvs[:], cvsBytes)
-	if _, exists := commitData[key]; !exists {
-		commitData[key] = LeaderCommitData{
+	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, eoa.Hex())
+	if err != nil {
+		signInfo := utils.SignInfo{
+			R: "",
+			S: "",
+			V: "",
+		}
+		leaderCommit := utils.LeaderCommitData{
 			Round:                 round,
 			EOAAddress:            eoa.Hex(),
 			Cvs:                   cvs,
@@ -190,28 +181,24 @@ func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 			CosHex:                "",
 			SecretValue:           [32]byte{},
 			SecretValueHex:        "",
-			Sign:                  make(map[string]string),
+			Sign:                  signInfo,
 			SubmitMerkleRootDone:  false,
 			RandomNumberGenerated: false,
 		}
+		err := database.AddLeaderCommit(&leaderCommit)
+		if err != nil {
+			fmt.Printf("Failed to add leader commit: %v", err)
+		}
 	} else {
-		data := commitData[key]
-		data.Cvs = cvs
-		data.CvsHex = cvsHex
-		commitData[key] = data
+		leaderCommitData.Cvs = cvs
+		leaderCommitData.CvsHex = cvsHex
+
+		err := database.UpdateLeaderCommit(leaderCommitData)
+		if err != nil {
+			fmt.Printf("Failed to update leader commit: %v", err)
+		}
 	}
 
-	updatedJSON, err := json.MarshalIndent(commitData, "", "  ")
-	if err != nil {
-		fmt.Println("Error serializing updated JSON:", err)
-		return err
-	}
-
-	err = os.WriteFile(filePath, updatedJSON, 0644)
-	if err != nil {
-		fmt.Println("Error writing updated JSON file:", err)
-		return err
-	}
 	updateCVS(round, eoa, cvs)
 	fmt.Printf("Successfully stored CVS for Round %s, EOA %s\n", round, eoa.Hex())
 	return nil
