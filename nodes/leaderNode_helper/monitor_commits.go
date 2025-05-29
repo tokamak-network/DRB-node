@@ -156,6 +156,75 @@ func FetchActivatedOperators(round string) ([]string, error) {
 	return strAddresses, nil
 }
 
+func LoadNodeData(round string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash) {
+	leaderCommits, err := loadLeaderCommits("leader_commits.json")
+	if err != nil {
+		log.Printf("Failed to load leader commits: %v", err)
+
+	}
+	var operatorAddresses []common.Address
+	for _, operator := range ActivatedOperator {
+		operatorAddresses = append(operatorAddresses, common.HexToAddress(operator))
+	}
+
+	// Collect secret values, signatures (v, r, s), and round info in the order of activated operators
+	var secrets [][]byte
+	var cos [][]byte
+	var cvs [][]byte
+	var vs []uint8
+	var rs []common.Hash
+	var ss []common.Hash
+	var index int
+	for i, operator := range operatorAddresses {
+		commitData := leaderCommits[round+"+"+operator.Hex()]
+
+		secrets = append(secrets, commitData.SecretValue[:])
+		cvs = append(cvs, commitData.Cvs[:])
+		cos = append(cos, commitData.Cos[:])
+		fmt.Println("CvOnChain", CvOnChain)
+		if CvOnChain {
+			if int64(i) <= Indices[index].Int64() {
+				if int64(i) == Indices[index].Int64() {
+					index++
+					continue
+				}
+			}
+		}
+
+		if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
+			log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
+			continue
+		}
+
+		vStr := commitData.Sign["v"]
+		vValue, err := strconv.ParseUint(vStr, 10, 8)
+		if err != nil {
+			log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
+			continue
+		}
+
+		vs = append(vs, uint8(vValue))
+		rs = append(rs, common.HexToHash(commitData.Sign["r"]))
+		fmt.Println("operator", operator)
+		fmt.Println("commitData.Cvs[:]", commitData.Cvs)
+		fmt.Println("commitData.Sign[v]", commitData.Sign["v"])
+		fmt.Println("commitData.Sign[r]", commitData.Sign["r"])
+		ss = append(ss, common.HexToHash(commitData.Sign["s"]))
+		rHex := commitData.Sign["r"]
+		rHash := common.HexToHash(rHex)
+		var r32 [32]byte
+		copy(r32[:], rHash.Bytes())
+		sHex := commitData.Sign["s"]
+		sHash := common.HexToHash(sHex)
+		var s32 [32]byte
+		copy(s32[:], sHash.Bytes())
+		fmt.Println("r32", r32)
+		fmt.Println("s32", s32)
+		fmt.Println("commitData.Sign[s])", commitData.Sign["s"])
+	}	
+	return cvs, cos, secrets, vs, rs, ss
+}
+
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
 func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumber...")

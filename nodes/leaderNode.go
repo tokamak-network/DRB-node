@@ -28,10 +28,19 @@ import (
 var submittingMerkleRoot = false
 var commitMu sync.Mutex
 var firstRequest leaderNode_helper.RandomRequest
+var cosTimerOnce = make(map[string]*sync.Once)
 
 // committedNodes and activatedOperators are authoritative in-memory states.
 // var committedNodes = make(map[string]map[common.Address]utils.LeaderCommitData)
 // var activatedOperators = make(map[string]map[common.Address]bool)
+type SigRS struct {
+	R [32]byte
+	S [32]byte
+}
+type CvAndSigRS struct {
+	Cv [32]byte
+	Rs SigRS
+}
 
 var roundFlag = make(map[string]uint64)
 var sendCommitRequest = make(map[string]bool)
@@ -181,6 +190,34 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	}
 	updateInMemoryData(roundNum, eoaAddress, *commitData)
 	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
+
+	if _, exists := cosTimerOnce[roundNum]; !exists {
+		cosTimerOnce[roundNum] = &sync.Once{}
+	}
+
+	cosTimerOnce[roundNum].Do(func() {
+		go func(rn string) {
+			log.Printf("Started 30s timer for missing COS for round %s", rn)
+			time.Sleep(15 * time.Second)
+			commitMu.Lock()
+			defer commitMu.Unlock()
+			ops := eth.ActivatedOperators
+			roundCommits, roundExists := utils.CommittedNodes[rn]
+			var missingIndices []*big.Int
+			if roundExists {
+				for idx, op := range ops {
+					data, ok := roundCommits[op]
+					if !ok || data.Cos == [32]byte{} {
+						missingIndices = append(missingIndices, big.NewInt(int64(idx)))
+					}
+				}
+			}
+			if len(missingIndices) > 0 {
+				log.Printf("Requesting on-chain for missing COS indices: %v for round %s", missingIndices, rn)
+				requestToSubmitCo(rn, missingIndices)
+			}
+		}(roundNum)
+	})
 
 	// Check if all commits are ready after this COS
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
@@ -599,6 +636,137 @@ func failToSubmitCv() {
 	}
 
 	log.Printf("Successfully submitted failToSubmitCv request for round %s", leaderNode_helper.CurrentRound)
+}
+
+func prepareArgumentsForRequestToSubmitCo(roundNum string, missingIndices []*big.Int) ([]CvAndSigRS, *big.Int, *big.Int, *big.Int) {
+	cvs, _, _, vs, rs, ss := leaderNode_helper.LoadNodeData(roundNum)
+	indicesLength := big.NewInt(int64(len(missingIndices)))
+
+	onChainCvIndices := make(map[int64]struct{})
+    if len(leaderNode_helper.Indices) > 0 {
+        for _, idx := range leaderNode_helper.Indices {
+            onChainCvIndices[idx.Int64()] = struct{}{}
+        }
+    }
+
+	orderedIndices := orderedPackedIndices(missingIndices)
+	packedOrederedIndices := packIndices(orderedIndices)
+	var cvOnChainCvAndSigRS []CvAndSigRS
+	var vsForNotOnChain []*big.Int
+	for _, idx := range missingIndices {
+		fmt.Println("idx", idx)
+		if _, isOnChain := onChainCvIndices[idx.Int64()]; !isOnChain {
+			fmt.Println("isOnChain", isOnChain, "idx", idx)
+			i := int(idx.Int64())
+			fmt.Println("value of i", i)
+			fmt.Println("length of cvs", cvs, len(cvs))
+			if i < 0 || i >= len(cvs) {
+				continue
+			}
+			vsForNotOnChain = append(vsForNotOnChain, big.NewInt(int64(vs[i])))
+			var cv32 [32]byte
+			copy(cv32[:], cvs[i])
+			var r32, s32 [32]byte
+			copy(r32[:], rs[i].Bytes())
+			copy(s32[:], ss[i].Bytes())
+			cvAndSigRS := CvAndSigRS{
+				Cv: cv32,
+				Rs: SigRS{
+					R: r32,
+					S: s32,
+				},
+			}
+			cvOnChainCvAndSigRS = append(cvOnChainCvAndSigRS, cvAndSigRS)
+		}
+	}
+	packedVs := packIndices(vsForNotOnChain)
+	return cvOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices
+}
+
+func orderedPackedIndices(missingIndices []*big.Int) []*big.Int {
+	onChainCvIndices := make(map[int64]struct{})
+	for _, idx := range leaderNode_helper.Indices {
+		onChainCvIndices[idx.Int64()] = struct{}{}
+	}
+
+	var notOnChain []*big.Int
+	var onChain []*big.Int
+
+	for _, idx := range missingIndices {
+		if _, isOnChain := onChainCvIndices[idx.Int64()]; !isOnChain {
+			notOnChain = append(notOnChain, idx)
+		} else {
+			onChain = append(onChain, idx)
+		}
+	}
+	return append(notOnChain, onChain...)
+}
+
+func requestToSubmitCo(roundNum string, missingIndices []*big.Int) {
+	fmt.Println("missingIndices",missingIndices)
+	cvOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices := prepareArgumentsForRequestToSubmitCo(roundNum, missingIndices)
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in environment variables.")
+	}
+
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		log.Printf("Failed to connect to Ethereum client: %v", err)
+		return
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode leader private key: %v", err)
+		return
+	}
+
+	clientUtils := &utils.Client{
+		Client:          client,
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	fmt.Println("cvOnChainCvAndSigRS", cvOnChainCvAndSigRS)
+	fmt.Println("packedVs", packedVs)
+	fmt.Println("indicesLength", indicesLength)
+	fmt.Println("packedOrederedIndices", packedOrederedIndices)
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		"requestToSubmitCo",
+		big.NewInt(0),
+		cvOnChainCvAndSigRS,
+		packedVs,
+		indicesLength,
+		packedOrederedIndices,
+	)
+	if err != nil {
+		log.Printf("Failed to submit commit request root for round %s: %v", roundNum, err)
+		return
+	}
+
+	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, leaderNode_helper.Indices)
 }
 
 func handleMissingCV(missingOperators []string, roundNum string) {
