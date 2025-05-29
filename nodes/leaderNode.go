@@ -642,48 +642,38 @@ func prepareArgumentsForRequestToSubmitCo(roundNum string, missingIndices []*big
 	cvs, _, _, vs, rs, ss := leaderNode_helper.LoadNodeData(roundNum)
 	indicesLength := big.NewInt(int64(len(missingIndices)))
 
-	onChainCvIndices := make(map[int64]struct{})
-    if len(leaderNode_helper.Indices) > 0 {
-        for _, idx := range leaderNode_helper.Indices {
-            onChainCvIndices[idx.Int64()] = struct{}{}
-        }
-    }
-
-	orderedIndices := orderedPackedIndices(missingIndices)
-	packedOrederedIndices := packIndices(orderedIndices)
+	notOnChainIndices, onChainIndices := orderedPackedIndices(missingIndices)
+	allOrderedIndices := append(notOnChainIndices, onChainIndices...)
+	packedOrderedIndices := packIndices(allOrderedIndices)
 	var cvOnChainCvAndSigRS []CvAndSigRS
 	var vsForNotOnChain []*big.Int
-	for _, idx := range missingIndices {
-		fmt.Println("idx", idx)
-		if _, isOnChain := onChainCvIndices[idx.Int64()]; !isOnChain {
-			fmt.Println("isOnChain", isOnChain, "idx", idx)
-			i := int(idx.Int64())
-			fmt.Println("value of i", i)
-			fmt.Println("length of cvs", cvs, len(cvs))
-			if i < 0 || i >= len(cvs) {
-				continue
-			}
-			vsForNotOnChain = append(vsForNotOnChain, big.NewInt(int64(vs[i])))
-			var cv32 [32]byte
-			copy(cv32[:], cvs[i])
-			var r32, s32 [32]byte
-			copy(r32[:], rs[i].Bytes())
-			copy(s32[:], ss[i].Bytes())
-			cvAndSigRS := CvAndSigRS{
-				Cv: cv32,
-				Rs: SigRS{
-					R: r32,
-					S: s32,
-				},
-			}
-			cvOnChainCvAndSigRS = append(cvOnChainCvAndSigRS, cvAndSigRS)
+	for _, idx := range notOnChainIndices {
+		i := int(idx.Int64())
+		fmt.Println("value of i", i)
+		fmt.Println("length of cvs", cvs, len(cvs))
+		if i < 0 || i >= len(cvs) {
+			continue
 		}
+		vsForNotOnChain = append(vsForNotOnChain, big.NewInt(int64(vs[i])))
+		var cv32 [32]byte
+		copy(cv32[:], cvs[i])
+		var r32, s32 [32]byte
+		copy(r32[:], rs[i].Bytes())
+		copy(s32[:], ss[i].Bytes())
+		cvAndSigRS := CvAndSigRS{
+			Cv: cv32,
+			Rs: SigRS{
+				R: r32,
+				S: s32,
+			},
+		}
+		cvOnChainCvAndSigRS = append(cvOnChainCvAndSigRS, cvAndSigRS)
 	}
 	packedVs := packIndices(vsForNotOnChain)
-	return cvOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices
+	return cvOnChainCvAndSigRS, packedVs, indicesLength, packedOrderedIndices
 }
 
-func orderedPackedIndices(missingIndices []*big.Int) []*big.Int {
+func orderedPackedIndices(missingIndices []*big.Int) ([]*big.Int, []*big.Int) {
 	onChainCvIndices := make(map[int64]struct{})
 	for _, idx := range leaderNode_helper.Indices {
 		onChainCvIndices[idx.Int64()] = struct{}{}
@@ -699,11 +689,11 @@ func orderedPackedIndices(missingIndices []*big.Int) []*big.Int {
 			onChain = append(onChain, idx)
 		}
 	}
-	return append(notOnChain, onChain...)
+	return notOnChain, onChain
 }
 
 func requestToSubmitCo(roundNum string, missingIndices []*big.Int) {
-	fmt.Println("missingIndices",missingIndices)
+	fmt.Println("missingIndices", missingIndices)
 	cvOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices := prepareArgumentsForRequestToSubmitCo(roundNum, missingIndices)
 	ethRPCURL := os.Getenv("ETH_RPC_URL")
 	if ethRPCURL == "" {
