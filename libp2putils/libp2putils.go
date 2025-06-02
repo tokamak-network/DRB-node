@@ -2,8 +2,10 @@ package libp2putils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -11,7 +13,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/tokamak-network/DRB-node/database"
 )
 
 var (
@@ -21,44 +22,41 @@ var (
 
 // CreateHost creates a new libp2p host with a given port and private key.
 func CreateHost(port string) (host.Host, peer.ID, error) {
-	nodeInfo, err := database.GetNodeInfo()
-	if nodeInfo.PeerID == "" {
-		log.Println("PeerID not found, generating a new one.")
+
+	filePath := "bootnode.bin"
+
+	if _, err := os.Stat(filePath); err == nil {
+		log.Println("Loading private key from file")
+		buff, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to load private key: %v", err)
+		}
+
+		privKey, err = crypto.UnmarshalPrivateKey(buff)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to unmarshal private key: %v", err)
+		}
+	} else if errors.Is(err, os.ErrNotExist) {
+		log.Println("Generating new private key")
+
 		privKey, _, err = crypto.GenerateKeyPair(crypto.Ed25519, 0)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to generate private key: %v", err)
 		}
 
-		peerID, err = peer.IDFromPrivateKey(privKey)
+		buff, err := crypto.MarshalPrivateKey(privKey)
 		if err != nil {
-			return nil, "", fmt.Errorf("failed to get PeerID from private key: %v", err)
+			return nil, "", fmt.Errorf("failed to marshal private key: %v", err)
 		}
 
-		// Convert the private key to bytes
-		privKeyBytes, err := crypto.MarshalPrivateKey(privKey)
+		err = os.WriteFile(filePath, buff, 0644)
 		if err != nil {
-			log.Printf("Failed to marshal private key: %v", err)
-			return nil, "", fmt.Errorf("Failed to marshal private key: %v", err)
+			return nil, "", fmt.Errorf("failed to write private key: %v", err)
 		}
-
-		nodeInfo.PrivateKey = privKeyBytes
-		nodeInfo.PeerID = string(peerID)
-
-		err = database.UpdateNodeInfo(nodeInfo)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to save nodeInfo: %v", err)
-		}
-	}
-
-	// Recreate the private key from the bytes
-	privKey, err = crypto.UnmarshalPrivateKey(nodeInfo.PrivateKey)
-	if err != nil {
-		log.Printf("Failed to unmarshal private key from bytes: %v", err)
-		return nil, "", err
 	}
 
 	// Generate the PeerID from the private key
-	peerID, err = peer.IDFromPrivateKey(privKey)
+	peerID, err := peer.IDFromPrivateKey(privKey)
 	if err != nil {
 		log.Printf("Failed to generate PeerID from private key: %v", err)
 		return nil, "", err
