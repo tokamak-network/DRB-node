@@ -14,6 +14,12 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+var HostInstance host.Host
+
+func SetHost(h host.Host) {
+    HostInstance = h
+}
+
 // CreateHost creates a new libp2p host with a given port and private key.
 func CreateHost(port string) (host.Host, peer.ID, error) {
 	privKey, peerID, err := utils.LoadPeerID()
