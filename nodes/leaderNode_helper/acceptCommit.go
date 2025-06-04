@@ -14,7 +14,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -81,9 +83,9 @@ func receiveCommit() {
 		log.Fatalf("Failed to subscribe to logs: %v", err)
 	}
 
-	cvsEventSig := parsedABI.Events["CvSubmitted"].ID
+	CvsEventSig := parsedABI.Events["CvSubmitted"].ID
 	StatusSig := parsedABI.Events["Status"].ID
-
+	CoSubmittedSig := parsedABI.Events["CoSubmitted"].ID
 	for {
 		select {
 		case err := <-sub.Err():
@@ -91,7 +93,7 @@ func receiveCommit() {
 
 		case vLog := <-logs:
 			switch vLog.Topics[0] {
-			case cvsEventSig:
+			case CvsEventSig:
 				eventData := struct {
 					StartTime *big.Int
 					Cv        [32]byte
@@ -105,6 +107,21 @@ func receiveCommit() {
 				fmt.Printf("CvSubmitted Event: Fetched successfully")
 
 				processCVS(eventData.Cv, eventData.Index)
+
+			case CoSubmittedSig:
+				eventData := struct {
+					StartTime *big.Int
+					Co        [32]byte
+					Index     *big.Int
+				}{}
+				err := parsedABI.UnpackIntoInterface(&eventData, "CoSubmitted", vLog.Data)
+				if err != nil {
+					log.Printf("Failed to decode CoSubmitted event log: %v", err)
+					continue
+				}
+				fmt.Printf("CoSubmitted Event: Fetched successfully")
+
+				processCOS(eventData.Co, eventData.Index)
 
 			case StatusSig:
 				eventData := struct {
@@ -152,6 +169,82 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 		data.RandomNumber = true
 		RoundsData[Round.String()] = data
 		Execution = false
+	}
+}
+
+func processCOS(cos [32]byte, activatedOperatorIndex *big.Int) error {
+	filePath := "leader_commits.json"
+	CommitMu.Lock()
+	defer CommitMu.Unlock()
+
+	var commitData map[string]LeaderCommitData
+	file, err := os.ReadFile(filePath)
+	if err == nil {
+		err = json.Unmarshal(file, &commitData)
+		if err != nil {
+			fmt.Println("Error parsing JSON:", err)
+			return err
+		}
+	} else {
+		commitData = make(map[string]LeaderCommitData)
+	}
+
+	round := CurrentRound
+	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
+	eoa := common.HexToAddress(eoaAddress)
+	key := fmt.Sprintf("%s+%s", round, eoa.Hex())
+	cosHex := hex.EncodeToString(cos[:])
+	cosBytes, _ := hex.DecodeString(cosHex)
+
+	copy(cos[:], cosBytes)
+
+	data := commitData[key]
+	data.Cos = cos
+	data.CosHex = cosHex
+	commitData[key] = data
+
+	updatedJSON, err := json.MarshalIndent(commitData, "", "  ")
+	if err != nil {
+		fmt.Println("Error serializing updated JSON:", err)
+		return err
+	}
+
+	err = os.WriteFile(filePath, updatedJSON, 0644)
+	if err != nil {
+		fmt.Println("Error writing updated JSON file:", err)
+		return err
+	}
+	updateCOS(round, eoa, cos)
+	fmt.Printf("Successfully stored COS for Round %s, EOA %s\n", round, eoa.Hex())
+	return nil
+}
+
+func updateCOS(round string, eoa common.Address, cos [32]byte) {
+	if _, exists := utils.CommittedNodes[round]; !exists {
+		utils.CommittedNodes[round] = make(map[common.Address]utils.LeaderCommitData)
+	}
+
+	commitData, exists := utils.CommittedNodes[round][eoa]
+	if !exists {
+		commitData = utils.LeaderCommitData{}
+	}
+
+	commitData.EOAAddress = eoa.Hex()
+	commitData.Round = round
+	commitData.Cos = cos
+	cosHex := hex.EncodeToString(cos[:])
+	commitData.CosHex = cosHex
+	utils.CommittedNodes[round][eoa] = commitData
+	fmt.Println(commitData, "commitData")
+
+	if AllCosReceivedUnlocked(round) {
+		log.Printf("All COS received for round %s.", round)
+		err := commitreveal2.DetermineRevealOrder(round, eth.ActivatedOperators)
+		if err != nil {
+			log.Printf("Failed to determine reveal order for round %s: %v", round, err)
+			return
+		}
+		StartSecretValueRequests(libp2putils.HostInstance, round)
 	}
 }
 
@@ -233,6 +326,28 @@ func updateCVS(round string, eoa common.Address, cvs [32]byte) {
 	cvsHex := hex.EncodeToString(cvs[:])
 	commitData.CvsHex = cvsHex
 	utils.CommittedNodes[round][eoa] = commitData
+
+}
+
+func AllCosReceivedUnlocked(roundNum string) bool {
+	fmt.Println("AllCosReceivedUnlocked")
+	ops := eth.ActivatedOperators
+	if len(ops) == 0 {
+		return false
+	}
+
+	roundCommits, roundExists := utils.CommittedNodes[roundNum]
+	if !roundExists || len(roundCommits) == 0 {
+		return false
+	}
+
+	for _, op := range ops {
+		data, ok := roundCommits[op]
+		if !ok || data.Cos == [32]byte{} {
+			return false
+		}
+	}
+	return true
 }
 
 func fetchCurrentRound() (*big.Int, error) {
