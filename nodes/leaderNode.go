@@ -60,7 +60,7 @@ func RunLeaderNode() {
 		log.Fatalf("Error creating host: %v", err)
 	}
 	defer h.Close()
-
+	libp2putils.SetHost(h)
 	h.SetStreamHandler("/register", handleRegistrationRequest)
 	h.SetStreamHandler("/cvs", handleCommitRequest)
 	h.SetStreamHandler("/cos", func(s network.Stream) {
@@ -756,7 +756,7 @@ func requestToSubmitCo(roundNum string, missingIndices []*big.Int) {
 		return
 	}
 
-	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, leaderNode_helper.Indices)
+	log.Printf("Successfully submitted cos request for round %s and indices %v", roundNum, missingIndices)
 }
 
 func handleMissingCV(missingOperators []string, roundNum string) {
