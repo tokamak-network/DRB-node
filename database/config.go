@@ -11,12 +11,12 @@ import (
 // Config holds the application configuration
 type Config struct {
 	// HistoryDB configuration
-	DBHost     string
-	DBPort     int
-	DBUser     string
-	DBPassword string
-	DBName     string
-	DBSSLMode  string
+	PostgresHost     string
+	PostgresPort     int
+	PostgresUser     string
+	PostgresPassword string
+	PostgresName     string
+	PostgresSSLMode  string
 }
 
 // LoadConfig loads configuration from environment variables
@@ -28,12 +28,12 @@ func LoadConfig() *Config {
 	}
 
 	config := &Config{
-		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBPort:     getEnvInt("DB_PORT", 5432),
-		DBUser:     getEnv("DB_USER", "postgres"),
-		DBPassword: getEnv("DB_PASSWORD", ""),
-		DBName:     getEnv("DB_NAME", "drb"),
-		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
+		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
+		PostgresPort:     getEnvInt("POSTGRES_PORT", 5432),
+		PostgresUser:     getEnv("POSTGRES_USER", "postgres"),
+		PostgresPassword: getEnv("POSTGRES_PASSWORD", ""),
+		PostgresName:     getEnv("POSTGRES_NAME", "postgres"),
+		PostgresSSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
 	}
 
 	return config

@@ -59,18 +59,26 @@ func MigrationsDown(db *sql.DB) error {
 // ConnectSQLDB connects to the SQL DB
 func InitSQLDB(port int, host, user, password, name string) error {
 	// Establish Connection
-	psqlConn := fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		host,
-		port,
-		user,
-		password,
-		name,
-	)
-	db, err := sql.Open("postgres", psqlConn)
+	// psqlConn := fmt.Sprintf(
+	// 	"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+	// 	host,
+	// 	port,
+	// 	user,
+	// 	password,
+	// 	name,
+	// )
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, password, host, port, name)
+
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return fmt.Errorf("failed to connect SQL DB, %v", err)
 	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		panic(fmt.Errorf("error pinging database for migration: %v", err))
+	}
+
 	// Run DB migrations
 	if err := MigrationsUp(db); err != nil {
 		return fmt.Errorf("failed to run migration up, %v", err)
@@ -81,7 +89,7 @@ func InitSQLDB(port int, host, user, password, name string) error {
 			User:                  user,
 			Password:              password,
 			Database:              name,
-			Addr:                  fmt.Sprintf("localhost:%d", port),
+			Addr:                  fmt.Sprintf("%s:%d", host, port),
 			MinIdleConns:          10,
 			MaxConnAge:            10 * time.Minute,
 			IdleTimeout:           5 * time.Minute,

@@ -1,17 +1,106 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  my-service:
+  leaderpostgres:
+    image: postgres:14.13
+    container_name: leaderpostgres
+    environment:
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - leaderpostgres-data:/var/lib/postgresql/data
+  leadernode:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: drb-node
+    container_name: leadernode
+    depends_on:
+      - leaderpostgres
     environment:
-      - CONFIG_BASE_PATH=/root/
+      LEADER_PORT: 61280
+      LEADER_PRIVATE_KEY: a71fb000785e78b05d639572d45facdd0b7d720297209258edbe5d5fd367a514
+      LEADER_EOA: 0xc0Aa32197B840991e197059f1f7F782EC077438D
+      NODE_TYPE: leader
+      POSTGRES_HOST: "leaderpostgres"
+      POSTGRES_PORT: 5432
+      POSTGRES_PASSWORD: password
+      ETH_RPC_URL: wss://yolo-lingering-haze.ethereum-sepolia.quiknode.pro/f828b666b24c1ba119726fdcd64a1c73e83a476e/
+      CONTRACT_ADDRESS: 0x619477497Ba4d0F509E939a8f7D79E70c3e9440D
     volumes:
+      - leadernode-key:/root/bootnode.bin
       - ./contract/abi/Commit2RevealDRB.json:/root/contract/abi/Commit2RevealDRB.json
-      - .env:/root/.env
     ports:
       - "61280:61280"
     stdin_open: true
     tty: true
+  regular1postgres:
+    image: postgres:14.13
+    container_name: regular1postgres
+    environment:
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - regular1postgres-data:/var/lib/postgresql/data
+  regular2postgres:
+    image: postgres:14.13
+    container_name: regular2postgres
+    environment:
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5434:5432"
+    volumes:
+      - regular2postgres-data:/var/lib/postgresql/data
+  regularnode1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: regularnode1
+    depends_on:
+      - regular1postgres
+    ports:
+      - "61281:61281"
+    environment:
+      LEADER_IP: 127.0.0.1
+      LEADER_PORT: 61280
+      LEADER_PEER_ID: 12D3KooWPcnmnTor3c4PP791se54CLpkBz8u6FrYPhtUXkUALWSV
+      LEADER_EOA: 0xc0Aa32197B840991e197059f1f7F782EC077438D
+      PORT: 61281
+      EOA_PRIVATE_KEY: 768effd1b4a451918e432ba6bd9c711b502faf2bef6d159310865ded92f7085a
+      NODE_TYPE: regular
+      POSTGRES_HOST: "regular1postgres"
+      POSTGRES_PORT: 5432
+      POSTGRES_PASSWORD: password
+      CHAIN_ID: 11155111
+      ETH_RPC_URL: wss://yolo-lingering-haze.ethereum-sepolia.quiknode.pro/f828b666b24c1ba119726fdcd64a1c73e83a476e/
+      CONTRACT_ADDRESS: 0x47fc10e1f36096a15a61e21d3f229e7a70ba054e
+  regularnode2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: regularnode2
+    depends_on:
+      - regular2postgres
+    ports:
+      - "61282:61282"
+    environment:
+      LEADER_IP: 127.0.0.1
+      LEADER_PORT: 61280
+      LEADER_PEER_ID: 12D3KooWPcnmnTor3c4PP791se54CLpkBz8u6FrYPhtUXkUALWSV
+      LEADER_EOA: 0xc0Aa32197B840991e197059f1f7F782EC077438D
+      PORT: 61282
+      EOA_PRIVATE_KEY: 4d539b1896a8f7064a7207fa005b13b64f90eff78564e278c14b1089d2d5f8de
+      NODE_TYPE: regular
+      POSTGRES_HOST: "regular2postgres"
+      POSTGRES_PORT: 5432
+      POSTGRES_PASSWORD: password
+      CHAIN_ID: 11155111
+      ETH_RPC_URL: wss://yolo-lingering-haze.ethereum-sepolia.quiknode.pro/f828b666b24c1ba119726fdcd64a1c73e83a476e/
+      CONTRACT_ADDRESS: 0x47fc10e1f36096a15a61e21d3f229e7a70ba054e
+
+volumes:
+  leaderpostgres-data:
+  regular1postgres-data:
+  regular2postgres-data:
+  leadernode-key:

@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.22-alpine AS build-env
+FROM golang:1.23-alpine AS build-env
 
 # Set environment variables
 ENV CONFIG_BASE_PATH /root/
@@ -22,17 +22,20 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./cmd/main.go
 # Final stage
 FROM alpine:latest
 
+# Install curl for healthcheck
+RUN apk add curl
+
 # Set the working directory
 WORKDIR /root/
 
-# Install necessary packages
-RUN apk --no-cache add ca-certificates
+# # Install necessary packages
+# RUN apk --no-cache add ca-certificates
 
 # Copy the binary from the build stage
 COPY --from=build-env /app/main .
 
-# Copy the .env file
-COPY .env .
+# Copy the migration file
+COPY database/migrations /root/migrations
 
 # Copy the ABI files
 COPY contract/abi/Commit2RevealDRB.json /root/contract/abi/Commit2RevealDRB.json
