@@ -74,6 +74,7 @@ func receiveCommitRequest() {
 	SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
 	StatusSig := parsedABI.Events["Status"].ID
 	MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
+	RequestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
 
 	for {
 		select {
@@ -128,6 +129,21 @@ func receiveCommitRequest() {
 
 					processMerkleRoot(CurrentRound)
 				
+				case RequestedToSubmitCoSig:
+					eventData := struct {
+						StartTime *big.Int
+						PackedIndices *big.Int
+					}{}
+					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCo", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode RequestedToSubmitCo event log: %v", err)
+						continue
+					}
+					fmt.Printf("RequestedToSubmitCo Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.PackedIndices)
+
+					processCosRequest(eventData.PackedIndices)
+				default:
+					fmt.Printf("Unknown event type: %s\n", vLog.Topics[0])
 				}
 			}
 		}
@@ -244,6 +260,91 @@ func processCommitRequest(packedIndices *big.Int) error {
 		context.Background(),
 		clientUtils,
 		"submitCv",
+		big.NewInt(0),
+		cv,
+	)
+	if err != nil {
+		fmt.Println("It contains error")
+	}
+	return nil
+}
+
+func processCosRequest(packedIndices *big.Int) error {
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Fatalf("Failed to decode Ethereum private key: %v", err)
+	}
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+
+	acitvatedOps := ActivatedOperator
+	indices := unpackRevealOrder(packedIndices)
+	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+	if !flag {
+		fmt.Println("Cos Request does not contain our EOA")
+		return nil
+	}
+
+	fmt.Printf("Processing RequestedToSubmitCo event for Round: %v\n", CurrentRound)
+
+	ethRPCURL := os.Getenv("ETH_RPC_URL")
+	if ethRPCURL == "" {
+		log.Fatal("ETH_RPC_URL is not set in the environment variables")
+	}
+	client, err := ethclient.Dial(ethRPCURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
+	}
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+
+	clientUtils := &utils.Client{
+		Client:          client,
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+	
+	file, err := os.ReadFile("commits.json")
+	if err != nil {
+		fmt.Println("Error reading file:", err)
+		return err
+	}
+
+	err = json.Unmarshal(file, &commits)
+	if err != nil {
+		fmt.Println("Error parsing JSON:", err)
+		return err
+	}
+	var cos []uint8
+	for key, data := range commits {
+		if CurrentRound == key {
+			cos = data.Cos[:]
+			break
+		}
+	}
+	cvsSlice := cos[:]
+	var cv [32]byte
+	copy(cv[:], []byte(cvsSlice))
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		"submitCo",
 		big.NewInt(0),
 		cv,
 	)
