@@ -9,11 +9,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 type Client struct {
-	Client          *ethclient.Client
 	ContractABI     abi.ABI
 	ContractAddress common.Address
 	PrivateKey      *ecdsa.PrivateKey // Explicitly use *ecdsa.PrivateKey

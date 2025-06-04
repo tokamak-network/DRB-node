@@ -42,7 +42,7 @@ LEADER_PRIVATE_KEY=<Your Leader Node Private Key>
 LEADER_EOA=<Your Leader Ethereum Address>
 NODE_TYPE=leader
 
-ETH_RPC_URL=<Your Ethereum RPC URL>
+ETH_RPC_URLS=<Your Ethereum RPC URLs>
 CONTRACT_ADDRESS=<Deployed DRB Contract Address>
 SUBGRAPH_URL=<Your Subgraph URL>
 ```
@@ -60,7 +60,7 @@ NODE_TYPE=regular
 PORT=61281
 CHAIN_ID=111551119090
 
-ETH_RPC_URL=<Your Ethereum RPC URL>
+ETH_RPC_URLS=<Your Ethereum RPC URLs>
 CONTRACT_ADDRESS=<Deployed DRB Contract Address>
 SUBGRAPH_URL=<Your Subgraph URL>
 ```
