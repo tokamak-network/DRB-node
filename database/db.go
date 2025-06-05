@@ -59,14 +59,6 @@ func MigrationsDown(db *sql.DB) error {
 // ConnectSQLDB connects to the SQL DB
 func InitSQLDB(port int, host, user, password, name string) error {
 	// Establish Connection
-	// psqlConn := fmt.Sprintf(
-	// 	"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-	// 	host,
-	// 	port,
-	// 	user,
-	// 	password,
-	// 	name,
-	// )
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, password, host, port, name)
 
 	db, err := sql.Open("postgres", dsn)

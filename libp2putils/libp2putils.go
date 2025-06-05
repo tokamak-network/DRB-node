@@ -23,7 +23,7 @@ var (
 // CreateHost creates a new libp2p host with a given port and private key.
 func CreateHost(port string) (host.Host, peer.ID, error) {
 
-	filePath := "bootnode.bin"
+	filePath := "leadernode.bin"
 
 	if _, err := os.Stat(filePath); err == nil {
 		log.Println("Loading private key from file")

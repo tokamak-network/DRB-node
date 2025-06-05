@@ -28,7 +28,7 @@ services:
       ETH_RPC_URL: wss://yolo-lingering-haze.ethereum-sepolia.quiknode.pro/f828b666b24c1ba119726fdcd64a1c73e83a476e/
       CONTRACT_ADDRESS: 0x619477497Ba4d0F509E939a8f7D79E70c3e9440D
     volumes:
-      - leadernode-key:/root/bootnode.bin
+      - leadernode-key:/root/leadernode.bin
       - ./contract/abi/Commit2RevealDRB.json:/root/contract/abi/Commit2RevealDRB.json
     ports:
       - "61280:61280"
@@ -64,7 +64,7 @@ services:
     environment:
       LEADER_IP: 127.0.0.1
       LEADER_PORT: 61280
-      LEADER_PEER_ID: 12D3KooWPcnmnTor3c4PP791se54CLpkBz8u6FrYPhtUXkUALWSV
+      LEADER_PEER_ID: 12D3KooWBvfsx5V5VHt8M9fgy8cAiugtrAZ3i2Lnnr3A3GzGtuVi
       LEADER_EOA: 0xc0Aa32197B840991e197059f1f7F782EC077438D
       PORT: 61281
       EOA_PRIVATE_KEY: 768effd1b4a451918e432ba6bd9c711b502faf2bef6d159310865ded92f7085a
@@ -87,7 +87,7 @@ services:
     environment:
       LEADER_IP: 127.0.0.1
       LEADER_PORT: 61280
-      LEADER_PEER_ID: 12D3KooWPcnmnTor3c4PP791se54CLpkBz8u6FrYPhtUXkUALWSV
+      LEADER_PEER_ID: 12D3KooWBvfsx5V5VHt8M9fgy8cAiugtrAZ3i2Lnnr3A3GzGtuVi
       LEADER_EOA: 0xc0Aa32197B840991e197059f1f7F782EC077438D
       PORT: 61282
       EOA_PRIVATE_KEY: 4d539b1896a8f7064a7207fa005b13b64f90eff78564e278c14b1089d2d5f8de
