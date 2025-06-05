@@ -5,16 +5,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"log"
 	"math/big"
 	"os"
 	"sync"
 
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
@@ -61,12 +61,7 @@ func ReceiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 }
 
 func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
-	rpcURL := os.Getenv("ETH_RPC_URL")
-	client, err := ethclient.Dial(rpcURL)
 	contractAddress := os.Getenv("CONTRACT_ADDRESS")
-	if err != nil {
-		log.Fatalf("Failed to connect to Ethereum node 2323: %v", err)
-	}
 	contractAddr := common.HexToAddress(contractAddress)
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
@@ -79,7 +74,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	}
 
 	logs := make(chan types.Log)
-	sub, err := client.SubscribeFilterLogs(context.Background(), query, logs)
+	sub, err := fallbackEthClient.SubscribeFilterLogs(context.Background(), query, logs)
 	if err != nil {
 		log.Fatalf("Failed to subscribe to logs: %v", err)
 	}
