@@ -1,13 +1,13 @@
 -- +migrate Up
 
 -- Create node_info schema
-CREATE TABLE IF NOT EXISTS node_info (
+CREATE TABLE IF NOT EXISTS node_infos (
     id SERIAL PRIMARY KEY,
     ip TEXT NOT NULL,
     port TEXT NOT NULL,
     peer_id TEXT NOT NULL,
     eoa_address TEXT NOT NULL,
-    private_key BYTEA NOT NULL
+    private_key BYTEA,
 );
 
 -- Create registered_nodes schema
@@ -60,6 +60,6 @@ CREATE TABLE IF NOT EXISTS reveal_orders (
 );
 
 -- +migrate Down
-DROP TABLE IF EXISTS node_info;
+DROP TABLE IF EXISTS node_infos;
 DROP TABLE IF EXISTS leader_commits;
 DROP TABLE IF EXISTS reveal_orders;

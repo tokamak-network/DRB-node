@@ -32,8 +32,12 @@ services:
       - ./contract/abi/Commit2RevealDRB.json:/root/contract/abi/Commit2RevealDRB.json
     ports:
       - "61280:61280"
-    stdin_open: true
-    tty: true
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "61280"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
   regular1postgres:
     image: postgres:14.13
     container_name: regular1postgres
@@ -58,6 +62,7 @@ services:
       dockerfile: Dockerfile
     container_name: regularnode1
     depends_on:
+      - leadernode
       - regular1postgres
     ports:
       - "61281:61281"
@@ -81,6 +86,7 @@ services:
       dockerfile: Dockerfile
     container_name: regularnode2
     depends_on:
+      - leadernode
       - regular2postgres
     ports:
       - "61282:61282"

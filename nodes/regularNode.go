@@ -35,7 +35,13 @@ func RunRegularNode() {
 	if port == "" {
 		log.Fatal("PORT not set in environment variables.")
 	}
-	h, peerID, err := libp2putils.CreateHost(port)
+
+	nodeType := os.Getenv("NODE_TYPE")
+	if nodeType == "" {
+		log.Fatal("NODE_TYPE is not set in environment variables.")
+	}
+
+	h, peerID, err := libp2putils.CreateHost(port, nodeType)
 	if err != nil {
 		log.Fatalf("Error creating host: %v", err)
 	}

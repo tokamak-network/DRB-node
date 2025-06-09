@@ -21,11 +21,11 @@ var (
 )
 
 // CreateHost creates a new libp2p host with a given port and private key.
-func CreateHost(port string) (host.Host, peer.ID, error) {
+func CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
 
 	filePath := "leadernode.bin"
 
-	if _, err := os.Stat(filePath); err == nil {
+	if _, err := os.Stat(filePath); err == nil && nodeType == "leader" {
 		log.Println("Loading private key from file")
 		buff, err := os.ReadFile(filePath)
 		if err != nil {
@@ -36,7 +36,7 @@ func CreateHost(port string) (host.Host, peer.ID, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to unmarshal private key: %v", err)
 		}
-	} else if errors.Is(err, os.ErrNotExist) {
+	} else if errors.Is(err, os.ErrNotExist) || nodeType == "regular" {
 		log.Println("Generating new private key")
 
 		privKey, _, err = crypto.GenerateKeyPair(crypto.Ed25519, 0)
@@ -73,7 +73,8 @@ func CreateHost(port string) (host.Host, peer.ID, error) {
 
 // ConnectToPeer connects to a specified peer using its multiaddress.
 func ConnectToPeer(h host.Host, leaderIP, leaderPort, leaderPeerID string) (*peer.AddrInfo, error) {
-	leaderAddrString := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
+	// leaderAddrString := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
+	leaderAddrString := fmt.Sprintf("/dns/leadernode/tcp/%s/p2p/%s", leaderPort, leaderPeerID)
 	log.Printf("Leader multiaddress: %s", leaderAddrString)
 
 	leaderAddr, err := multiaddr.NewMultiaddr(leaderAddrString)
