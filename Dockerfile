@@ -25,8 +25,8 @@ FROM alpine:latest
 # Set the working directory
 WORKDIR /app/
 
-# # Install necessary packages
-# RUN apk --no-cache add ca-certificates
+# Install necessary packages
+RUN apk add --no-cache netcat-openbsd
 
 # Copy the binary from the build stage
 COPY --from=build-env /build/main ./

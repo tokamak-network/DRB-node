@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS node_infos (
     port TEXT NOT NULL,
     peer_id TEXT NOT NULL,
     eoa_address TEXT NOT NULL,
-    private_key BYTEA,
+    private_key BYTEA
 );
 
 -- Create registered_nodes schema

@@ -4,6 +4,11 @@ services:
   leaderpostgres:
     image: postgres:14.13
     container_name: leaderpostgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       POSTGRES_PASSWORD: password
     ports:
@@ -16,7 +21,8 @@ services:
       dockerfile: Dockerfile
     container_name: leadernode
     depends_on:
-      - leaderpostgres
+      leaderpostgres:
+        condition: service_healthy
     environment:
       LEADER_PORT: 61280
       LEADER_PRIVATE_KEY: a71fb000785e78b05d639572d45facdd0b7d720297209258edbe5d5fd367a514
@@ -33,7 +39,7 @@ services:
     ports:
       - "61280:61280"
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "61280"]
+      test: ["CMD-SHELL", "nc -z localhost 61280"]
       interval: 15s
       timeout: 3s
       retries: 5
@@ -41,6 +47,11 @@ services:
   regular1postgres:
     image: postgres:14.13
     container_name: regular1postgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       POSTGRES_PASSWORD: password
     ports:
@@ -50,6 +61,11 @@ services:
   regular2postgres:
     image: postgres:14.13
     container_name: regular2postgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       POSTGRES_PASSWORD: password
     ports:
@@ -62,8 +78,10 @@ services:
       dockerfile: Dockerfile
     container_name: regularnode1
     depends_on:
-      - leadernode
-      - regular1postgres
+      leadernode:
+        condition: service_healthy
+      regular1postgres:
+        condition: service_healthy
     ports:
       - "61281:61281"
     environment:
@@ -86,8 +104,10 @@ services:
       dockerfile: Dockerfile
     container_name: regularnode2
     depends_on:
-      - leadernode
-      - regular2postgres
+      leadernode:
+        condition: service_healthy
+      regular2postgres:
+        condition: service_healthy
     ports:
       - "61282:61282"
     environment:
