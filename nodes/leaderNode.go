@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"log"
 	"math/big"
 	"os"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
@@ -63,7 +63,7 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	if err != nil {
 		log.Fatalf("Error creating host: %v", err)
 	}
-
+	
 	handler := &Handler{
 		fallbackEthClient: fallbackEthClient,
 	}
@@ -201,34 +201,6 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	}
 	updateInMemoryData(roundNum, eoaAddress, *commitData)
 	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
-
-	if _, exists := cosTimerOnce[roundNum]; !exists {
-		cosTimerOnce[roundNum] = &sync.Once{}
-	}
-
-	cosTimerOnce[roundNum].Do(func() {
-		go func(rn string) {
-			log.Printf("Started 30s timer for missing COS for round %s", rn)
-			time.Sleep(15 * time.Second)
-			commitMu.Lock()
-			defer commitMu.Unlock()
-			ops := eth.ActivatedOperators
-			roundCommits, roundExists := utils.CommittedNodes[rn]
-			var missingIndices []*big.Int
-			if roundExists {
-				for idx, op := range ops {
-					data, ok := roundCommits[op]
-					if !ok || data.Cos == [32]byte{} {
-						missingIndices = append(missingIndices, big.NewInt(int64(idx)))
-					}
-				}
-			}
-			if len(missingIndices) > 0 {
-				log.Printf("Requesting on-chain for missing COS indices: %v for round %s", missingIndices, rn)
-				requestToSubmitCo(fallbackEthClient, rn, missingIndices)
-			}
-		}(roundNum)
-	})
 
 	// Check if all commits are ready after this COS
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
@@ -490,6 +462,34 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 	}
 	leaderNode_helper.RoundsData[roundNum] = roundData
 	updateCommitDataAfterSubmit(roundNum)
+	
+	if _, exists := cosTimerOnce[roundNum]; !exists {
+		cosTimerOnce[roundNum] = &sync.Once{}
+	}
+
+	cosTimerOnce[roundNum].Do(func() {
+		go func(rn string) {
+			log.Printf("Started 30s timer for missing COS for round %s", rn)
+			time.Sleep(30 * time.Second)
+			commitMu.Lock()
+			defer commitMu.Unlock()
+			ops := eth.ActivatedOperators
+			roundCommits, roundExists := utils.CommittedNodes[rn]
+			var missingIndices []*big.Int
+			if roundExists {
+				for idx, op := range ops {
+					data, ok := roundCommits[op]
+					if !ok || data.Cos == [32]byte{} {
+						missingIndices = append(missingIndices, big.NewInt(int64(idx)))
+					}
+				}
+			}
+			if len(missingIndices) > 0 {
+				log.Printf("Requesting on-chain for missing COS indices: %v for round %s", missingIndices, rn)
+				requestToSubmitCo(fallbackEthClient, rn, missingIndices)
+			}
+		}(roundNum)
+	})
 }
 
 func updateCommitDataAfterSubmit(roundNum string) {
@@ -555,7 +555,6 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 					failToSubmitCv(fallbackEthClient)
 					revert()
 				} else if sendCommitRequest[roundNum] {
-					fmt.Println("inside sendCommitRequest[roundNum] condition")
 					missingOperators = append(missingOperators, op)
 					onChainExecution[roundNum]["CVS"][op]++
 					flag[roundNum] = true
@@ -575,7 +574,7 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 		} else {
 			log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
 			roundFlag[roundNum]++
-			if roundFlag[roundNum] >= 2 {
+			if roundFlag[roundNum] >= 1 {
 				sendCommitRequest[roundNum] = true
 			}
 		}
@@ -634,21 +633,16 @@ func prepareArgumentsForRequestToSubmitCo(roundNum string, missingIndices []*big
 	notOnChainIndices, onChainIndices := orderedPackedIndices(missingIndices)
 	allOrderedIndices := append(notOnChainIndices, onChainIndices...)
 	packedOrderedIndices := packIndices(allOrderedIndices)
-	var cvOnChainCvAndSigRS []CvAndSigRS
+	var cvNotOnChainCvAndSigRS []CvAndSigRS
 	var vsForNotOnChain []*big.Int
-	for _, idx := range notOnChainIndices {
-		i := int(idx.Int64())
-		fmt.Println("value of i", i)
-		fmt.Println("length of cvs", cvs, len(cvs))
-		if i < 0 || i >= len(cvs) {
-			continue
-		}
-		vsForNotOnChain = append(vsForNotOnChain, big.NewInt(int64(vs[i])))
+	for _, i := range notOnChainIndices {
+		index := int(i.Int64())
+		vsForNotOnChain = append(vsForNotOnChain, big.NewInt(int64(vs[index])))
 		var cv32 [32]byte
-		copy(cv32[:], cvs[i])
+		copy(cv32[:], cvs[index])
 		var r32, s32 [32]byte
-		copy(r32[:], rs[i].Bytes())
-		copy(s32[:], ss[i].Bytes())
+		copy(r32[:], rs[index].Bytes())
+		copy(s32[:], ss[index].Bytes())
 		cvAndSigRS := CvAndSigRS{
 			Cv: cv32,
 			Rs: SigRS{
@@ -656,10 +650,10 @@ func prepareArgumentsForRequestToSubmitCo(roundNum string, missingIndices []*big
 				S: s32,
 			},
 		}
-		cvOnChainCvAndSigRS = append(cvOnChainCvAndSigRS, cvAndSigRS)
+		cvNotOnChainCvAndSigRS = append(cvNotOnChainCvAndSigRS, cvAndSigRS)
 	}
 	packedVs := packIndices(vsForNotOnChain)
-	return cvOnChainCvAndSigRS, packedVs, indicesLength, packedOrderedIndices
+	return cvNotOnChainCvAndSigRS, packedVs, indicesLength, packedOrderedIndices
 }
 
 func orderedPackedIndices(missingIndices []*big.Int) ([]*big.Int, []*big.Int) {
@@ -682,8 +676,7 @@ func orderedPackedIndices(missingIndices []*big.Int) ([]*big.Int, []*big.Int) {
 }
 
 func requestToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string, missingIndices []*big.Int) {
-	fmt.Println("missingIndices", missingIndices)
-	cvOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices := prepareArgumentsForRequestToSubmitCo(roundNum, missingIndices)
+	cvNotOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices := prepareArgumentsForRequestToSubmitCo(roundNum, missingIndices)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -714,18 +707,13 @@ func requestToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 		ContractABI:     parsedABI,
 	}
 
-	fmt.Println("cvOnChainCvAndSigRS", cvOnChainCvAndSigRS)
-	fmt.Println("packedVs", packedVs)
-	fmt.Println("indicesLength", indicesLength)
-	fmt.Println("packedOrederedIndices", packedOrederedIndices)
-
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
 		fallbackEthClient,
 		"requestToSubmitCo",
 		big.NewInt(0),
-		cvOnChainCvAndSigRS,
+		cvNotOnChainCvAndSigRS,
 		packedVs,
 		indicesLength,
 		packedOrederedIndices,
