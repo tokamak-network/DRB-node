@@ -10,10 +10,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -86,7 +85,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 			secrets = append(secrets, commitData.SecretValue[:])
 			// if Cv values are on-chain, than check this condition
 			if CvOnChain {
-				if int64(i) <= Indices[index].Int64() {
+				if index < len(Indices) && int64(i) <= Indices[index].Int64() {
 					if int64(i) == Indices[index].Int64() {
 						index++
 						continue
@@ -184,7 +183,7 @@ func LoadNodeData(round string) ([][]byte, [][]byte, [][]byte, []uint8, []common
 		cos = append(cos, commitData.Cos[:])
 		fmt.Println("CvOnChain", CvOnChain)
 		if CvOnChain {
-			if int64(i) <= Indices[index].Int64() {
+			if index < len(Indices) && int64(i) <= Indices[index].Int64() {
 				if int64(i) == Indices[index].Int64() {
 					index++
 					continue
@@ -192,37 +191,35 @@ func LoadNodeData(round string) ([][]byte, [][]byte, [][]byte, []uint8, []common
 			}
 		}
 
-		if len(commitData.Sign["v"]) == 0 || len(commitData.Sign["r"]) == 0 || len(commitData.Sign["s"]) == 0 {
-			log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
-			continue
-		}
+		if len(commitData.Sign["v"]) == 0 {
+            log.Printf("Empty 'v' value for EOA %s in round %s", operator.Hex(), round)
+            vs = append(vs, 0)
+        } else {
+            vStr := commitData.Sign["v"]
+            vValue, err := strconv.ParseUint(vStr, 10, 8)
+            if err != nil {
+                log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
+                vs = append(vs, 0)
+            } else {
+                vs = append(vs, uint8(vValue))
+            }
+        }
 
-		vStr := commitData.Sign["v"]
-		vValue, err := strconv.ParseUint(vStr, 10, 8)
-		if err != nil {
-			log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
-			continue
-		}
+		if len(commitData.Sign["r"]) == 0 {
+            log.Printf("Empty 'r' value for EOA %s in round %s", operator.Hex(), round)
+            rs = append(rs, common.Hash{})
+        } else {
+            rs = append(rs, common.HexToHash(commitData.Sign["r"]))
+        }
 
-		vs = append(vs, uint8(vValue))
-		rs = append(rs, common.HexToHash(commitData.Sign["r"]))
-		fmt.Println("operator", operator)
-		fmt.Println("commitData.Cvs[:]", commitData.Cvs)
-		fmt.Println("commitData.Sign[v]", commitData.Sign["v"])
-		fmt.Println("commitData.Sign[r]", commitData.Sign["r"])
-		ss = append(ss, common.HexToHash(commitData.Sign["s"]))
-		rHex := commitData.Sign["r"]
-		rHash := common.HexToHash(rHex)
-		var r32 [32]byte
-		copy(r32[:], rHash.Bytes())
-		sHex := commitData.Sign["s"]
-		sHash := common.HexToHash(sHex)
-		var s32 [32]byte
-		copy(s32[:], sHash.Bytes())
-		fmt.Println("r32", r32)
-		fmt.Println("s32", s32)
-		fmt.Println("commitData.Sign[s])", commitData.Sign["s"])
-	}
+		if len(commitData.Sign["s"]) == 0 {
+            log.Printf("Empty 's' value for EOA %s in round %s", operator.Hex(), round)
+            ss = append(ss, common.Hash{})
+        } else {
+            ss = append(ss, common.HexToHash(commitData.Sign["s"]))
+        }
+
+	}	
 	return cvs, cos, secrets, vs, rs, ss
 }
 
