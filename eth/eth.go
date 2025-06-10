@@ -131,7 +131,7 @@ func ExecuteTransaction(
 	}
 
 	// Wait for the transaction to be mined
-	receipt, err := waitForTransactionSuccess(ctx, client, fallbackEthClient, signedTx)
+	receipt, err := waitForTransactionSuccess(ctx, fallbackEthClient, signedTx)
 	if err != nil {
 		log.Errorf("Transaction failed: %v", err)
 		return nil, nil, err
@@ -142,7 +142,7 @@ func ExecuteTransaction(
 }
 
 // waitForTransactionSuccess waits for the transaction to be mined and returns the receipt
-func waitForTransactionSuccess(ctx context.Context, client *utils.Client, fallbackEthClient *fallback_ethclient.FallbackRPCClient, tx *types.Transaction) (*types.Receipt, error) {
+func waitForTransactionSuccess(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, tx *types.Transaction) (*types.Receipt, error) {
 	for {
 		receipt, err := fallbackEthClient.TransactionReceipt(ctx, tx)
 		if err != nil {
