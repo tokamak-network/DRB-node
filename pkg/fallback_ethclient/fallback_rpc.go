@@ -29,6 +29,8 @@ type FallbackRPCClient struct {
 	logger     *logrus.Logger
 }
 
+var rpcURLPrinted = false
+
 // NewFallbackRPCClient creates a new FallbackRPCClient with the given RPC URLs
 func NewFallbackRPCClient(urls []string) (*FallbackRPCClient, error) {
 	if len(urls) == 0 {
@@ -72,12 +74,18 @@ func (f *FallbackRPCClient) switchToNextClient() {
 		"old_url": f.urls[oldIdx],
 		"new_url": f.urls[f.currentIdx],
 	}).Info("Switching to fallback RPC")
+	rpcURLPrinted = false
 }
 
 // getCurrentClient returns the current active client
 func (f *FallbackRPCClient) getCurrentClient() *ethclient.Client {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
+    if !rpcURLPrinted {
+        fmt.Println("Current RPC URL:", f.urls[f.currentIdx])
+        rpcURLPrinted = true
+    }
+
 	return f.clients[f.currentIdx]
 }
 
