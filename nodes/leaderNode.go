@@ -469,7 +469,7 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 
 	cosTimerOnce[roundNum].Do(func() {
 		go func(rn string) {
-			log.Printf("Started 30s timer for missing COS for round %s", rn)
+			log.Printf("Started 30s timer for COS for round %s", rn)
 			time.Sleep(30 * time.Second)
 			commitMu.Lock()
 			defer commitMu.Unlock()
