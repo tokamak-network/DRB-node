@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+
 	"github.com/sirupsen/logrus"
 	"github.com/tokamak-network/DRB-node/logger"
 )
@@ -76,6 +78,7 @@ func (f *FallbackRPCClient) switchToNextClient() {
 func (f *FallbackRPCClient) getCurrentClient() *ethclient.Client {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
+	fmt.Println("Current RPC URL:", f.urls[f.currentIdx])
 	return f.clients[f.currentIdx]
 }
 
@@ -112,11 +115,11 @@ func (f *FallbackRPCClient) SendTransaction(ctx context.Context, tx *types.Trans
 }
 
 // TransactionReceipt implements the ethereum.ContractTransactor interface
-func (f *FallbackRPCClient) TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
+func (f *FallbackRPCClient) TransactionReceipt(ctx context.Context, signedTx *types.Transaction) (*types.Receipt, error) {
 	var lastErr error
 	for i := 0; i < len(f.clients); i++ {
 		client := f.getCurrentClient()
-		receipt, err := client.TransactionReceipt(ctx, txHash)
+		receipt, err := bind.WaitMined(ctx, client, signedTx)
 		if err == nil {
 			return receipt, nil
 		}

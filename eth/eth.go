@@ -144,7 +144,7 @@ func ExecuteTransaction(
 // waitForTransactionSuccess waits for the transaction to be mined and returns the receipt
 func waitForTransactionSuccess(ctx context.Context, client *utils.Client, fallbackEthClient *fallback_ethclient.FallbackRPCClient, tx *types.Transaction) (*types.Receipt, error) {
 	for {
-		receipt, err := fallbackEthClient.TransactionReceipt(ctx, tx.Hash())
+		receipt, err := fallbackEthClient.TransactionReceipt(ctx, tx)
 		if err != nil {
 			// Check if it's just waiting for confirmation (receipt not yet available)
 			if err.Error() == "not found" {
