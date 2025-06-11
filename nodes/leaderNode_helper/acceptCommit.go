@@ -117,7 +117,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				}
 				fmt.Printf("CoSubmitted Event: Fetched successfully")
 
-				processCOS(eventData.Co, eventData.Index)
+				processCOS(fallbackEthClient, eventData.Co, eventData.Index)
 
 			case StatusSig:
 				eventData := struct {
@@ -168,7 +168,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 }
 
-func processCOS(cos [32]byte, activatedOperatorIndex *big.Int) error {
+func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, cos [32]byte, activatedOperatorIndex *big.Int) error {
 	filePath := "leader_commits.json"
 	CommitMu.Lock()
 	defer CommitMu.Unlock()
@@ -210,12 +210,12 @@ func processCOS(cos [32]byte, activatedOperatorIndex *big.Int) error {
 		fmt.Println("Error writing updated JSON file:", err)
 		return err
 	}
-	updateCOS(round, eoa, cos)
+	updateCOS(fallbackEthClient, round, eoa, cos)
 	fmt.Printf("Successfully stored COS for Round %s, EOA %s\n", round, eoa.Hex())
 	return nil
 }
 
-func updateCOS(round string, eoa common.Address, cos [32]byte) {
+func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, eoa common.Address, cos [32]byte) {
 	if _, exists := utils.CommittedNodes[round]; !exists {
 		utils.CommittedNodes[round] = make(map[common.Address]utils.LeaderCommitData)
 	}
@@ -240,7 +240,7 @@ func updateCOS(round string, eoa common.Address, cos [32]byte) {
 			log.Printf("Failed to determine reveal order for round %s: %v", round, err)
 			return
 		}
-		StartSecretValueRequests(libp2putils.HostInstance, round)
+		StartSecretValueRequests(libp2putils.HostInstance, fallbackEthClient, round)
 	}
 }
 

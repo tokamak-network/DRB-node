@@ -7,11 +7,15 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+// var SecretValue [][32]byte
+var RoundSecrets = make(map[string][][32]byte)
+
 // AcceptSecretValue processes and stores secret values sent by regular nodes.
-func AcceptSecretValue(h host.Host, s network.Stream) {
+func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	defer s.Close()
 
 	// Decode the incoming request
@@ -43,7 +47,12 @@ func AcceptSecretValue(h host.Host, s network.Stream) {
 			EOAAddress: req.EOAAddress,
 		}
 	}
-
+	var secretValueArray [32]byte
+	copy(secretValueArray[:], req.SecretValue[:]) // Convert req.SecretValue to [32]byte
+	if _, exists := RoundSecrets[req.Round]; !exists {
+		RoundSecrets[req.Round] = make([][32]byte, 0)
+	}
+	RoundSecrets[req.Round] = append(RoundSecrets[req.Round], secretValueArray)
 	// Store the secret value in both byte array and hex string formats
 	copy(commitData.SecretValue[:], req.SecretValue[:])
 	commitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
@@ -60,5 +69,5 @@ func AcceptSecretValue(h host.Host, s network.Stream) {
 	log.Printf("Successfully saved secret value for round %s and EOA %s", req.Round, req.EOAAddress)
 
 	// Continue requesting secret values from remaining nodes in the reveal order
-	HandleSecretValueResponse(h, req.Round, req.EOAAddress)
+	HandleSecretValueResponse(h, fallbackEthClient, req.Round, req.EOAAddress)
 }

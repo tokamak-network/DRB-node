@@ -1,21 +1,32 @@
 package leaderNode_helper
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
 	"os"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+type SigRS struct {
+	R [32]byte
+	S [32]byte
+}
 // Tracks EOAs that have been sent requests per round
 var revealRequestStatus = make(map[string][]string)
+var roundSecret = make(map[string]map[string]bool)
 
 // StartSecretValueRequests initializes the secret value request process for a given round
-func StartSecretValueRequests(h host.Host, roundNum string) {
+func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string) {
 	// Load reveal order for the round
 	revealData, err := loadRevealOrders("reveal_orders.json")
 	if err != nil {
@@ -51,12 +62,12 @@ func StartSecretValueRequests(h host.Host, roundNum string) {
 			continue
 		}
 
-		sendSecretValueRequestToNode(h, roundNum, eoa, nodeInfo)
+		sendSecretValueRequestToNode(h, fallbackEthClient, roundNum, eoa, nodeInfo)
 		break
 	}
 }
 
-func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, nodeInfo NodeInfo) {
+func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient,  roundNum string, eoa string, nodeInfo NodeInfo) {
 	// Load private key from environment variable
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -91,13 +102,127 @@ func sendSecretValueRequestToNode(h host.Host, roundNum string, eoa string, node
 	} else {
 		log.Printf("Secret value request sent to EOA %s for round %s", eoa, roundNum)
 
+		// Start a timer to track if the response is received within 15 seconds
+		go func() {
+			timer := time.NewTimer(15 * time.Second)
+			defer timer.Stop()
+
+			// Wait for the timer to expire
+			<-timer.C
+
+			// If the timer expires and the secret value is not received, call handleMissingSecretValue
+			if !roundSecret[roundNum][eoa] {
+				log.Printf("Secret value not received for EOA %s in round %s within 15 seconds. Handling missing secret value.", eoa, roundNum)
+				requestToSubmitS(fallbackEthClient, roundNum, eoa)
+			}
+		}()
+
 		// Mark this EOA as requested
 		revealRequestStatus[roundNum] = append(revealRequestStatus[roundNum], eoa)
 	}
 }
 
+
+func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string, eoa string) {
+	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := prepareArgumentsForRequestToSubmitS(roundNum, eoa)
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode leader private key: %v", err)
+		return
+	}
+
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"requestToSubmitCo",
+		big.NewInt(0),
+		allCos,
+		secretsReceivedOffchainInRevealOrder,
+		cvNotOnChainCvAndSigRS,
+		packedVs,
+		packedRevealOrders,
+	)
+	if err != nil {
+		log.Printf("Failed to submit commit request root for round %s: %v", roundNum, err)
+		return
+	}
+
+	log.Printf("Successfully submitted cos request for round %s", roundNum)
+}
+
+func prepareArgumentsForRequestToSubmitS(roundNum string, eoa string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
+	_, cos, _, vs, rs, ss := LoadNodeData(roundNum)
+
+	notOnChainIndices := Indices
+	var sigRSsForAllCvsNotOnChain []SigRS
+	var vsForNotOnChain []*big.Int
+	var allCos [][32]byte
+	for _, i := range notOnChainIndices {
+		index := int(i.Int64())
+		vsForNotOnChain = append(vsForNotOnChain, big.NewInt(int64(vs[index])))
+		var r32, s32, cos32 [32]byte
+		copy(r32[:], rs[index].Bytes())
+		copy(s32[:], ss[index].Bytes())
+		copy(cos32[:], cos[index])
+		cvAndSigRS := SigRS{
+			R: r32,
+			S: s32,
+		}
+		sigRSsForAllCvsNotOnChain = append(sigRSsForAllCvsNotOnChain, cvAndSigRS)
+	}
+
+	revealOrders, err := loadRevealOrders("reveal_orders.json")
+	if err != nil {
+		log.Printf("Failed to load reveal orders: %v", err)
+	}
+
+	roundRevealData, exists := revealOrders[roundNum]
+	if !exists {
+		log.Printf("No reveal order found for round %s.", roundNum)
+	}
+
+	order := roundRevealData.RevealOrder
+	packedRevealOrders := packRevealOrder(order)
+	packedVsForAllCvsNotOnChain := PackIndices(vsForNotOnChain)
+
+	return allCos, RoundSecrets[eoa], packedVsForAllCvsNotOnChain, sigRSsForAllCvsNotOnChain, packedRevealOrders
+}
+
+func PackIndices(indices []*big.Int) *big.Int {
+	packed := big.NewInt(0)
+	for i, index := range indices {
+		packed.Or(packed, new(big.Int).Lsh(index, uint(8*i)))
+	}
+	return packed
+}
+
 // handleSecretValueResponse processes a response and sends the next request if applicable
-func HandleSecretValueResponse(h host.Host, roundNum string, eoa string) {
+func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient,  roundNum string, eoa string) {
 	log.Printf("Secret value received for round %s from EOA %s", roundNum, eoa)
 
 	// Load reveal order for the round
@@ -134,7 +259,7 @@ func HandleSecretValueResponse(h host.Host, roundNum string, eoa string) {
 			}
 
 			// Send secret value request to the next node
-			sendSecretValueRequestToNode(h, roundNum, nodeEOA, nodeInfo)
+			sendSecretValueRequestToNode(h, fallbackEthClient, roundNum, nodeEOA, nodeInfo)
 			return
 		}
 	}

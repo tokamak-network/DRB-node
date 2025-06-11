@@ -15,13 +15,13 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -63,7 +63,7 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	if err != nil {
 		log.Fatalf("Error creating host: %v", err)
 	}
-	
+
 	handler := &Handler{
 		fallbackEthClient: fallbackEthClient,
 	}
@@ -76,7 +76,7 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		handleCOSRequest(fallbackEthClient, h, s)
 	})
 	h.SetStreamHandler("/secretValue", func(s network.Stream) {
-		leaderNode_helper.AcceptSecretValue(h, s)
+		leaderNode_helper.AcceptSecretValue(h, s, fallbackEthClient)
 	})
 
 	log.Printf("Leader node running on: %s", h.Addrs())
@@ -218,7 +218,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 			log.Printf("Failed to determine reveal order for round %s: %v", roundNum, err)
 			return
 		}
-		leaderNode_helper.StartSecretValueRequests(h, roundNum)
+		leaderNode_helper.StartSecretValueRequests(h, fallbackEthClient, roundNum)
 	}
 }
 
@@ -462,7 +462,7 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 	}
 	leaderNode_helper.RoundsData[roundNum] = roundData
 	updateCommitDataAfterSubmit(roundNum)
-	
+
 	if _, exists := cosTimerOnce[roundNum]; !exists {
 		cosTimerOnce[roundNum] = &sync.Once{}
 	}
@@ -632,7 +632,7 @@ func prepareArgumentsForRequestToSubmitCo(roundNum string, missingIndices []*big
 
 	notOnChainIndices, onChainIndices := orderedPackedIndices(missingIndices)
 	allOrderedIndices := append(notOnChainIndices, onChainIndices...)
-	packedOrderedIndices := packIndices(allOrderedIndices)
+	packedOrderedIndices := leaderNode_helper.PackIndices(allOrderedIndices)
 	var cvNotOnChainCvAndSigRS []CvAndSigRS
 	var vsForNotOnChain []*big.Int
 	for _, i := range notOnChainIndices {
@@ -652,7 +652,7 @@ func prepareArgumentsForRequestToSubmitCo(roundNum string, missingIndices []*big
 		}
 		cvNotOnChainCvAndSigRS = append(cvNotOnChainCvAndSigRS, cvAndSigRS)
 	}
-	packedVs := packIndices(vsForNotOnChain)
+	packedVs := leaderNode_helper.PackIndices(vsForNotOnChain)
 	return cvNotOnChainCvAndSigRS, packedVs, indicesLength, packedOrderedIndices
 }
 
@@ -742,7 +742,7 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 		return leaderNode_helper.Indices[i].Cmp(leaderNode_helper.Indices[j]) < 0
 	})
 
-	packedIndices := packIndices(leaderNode_helper.Indices)
+	packedIndices := leaderNode_helper.PackIndices(leaderNode_helper.Indices)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -788,14 +788,6 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 
 	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, leaderNode_helper.Indices)
 	requestCv = false
-}
-
-func packIndices(indices []*big.Int) *big.Int {
-	packed := big.NewInt(0)
-	for i, index := range indices {
-		packed.Or(packed, new(big.Int).Lsh(index, uint(8*i)))
-	}
-	return packed
 }
 
 func revert() {
