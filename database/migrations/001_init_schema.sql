@@ -1,7 +1,7 @@
 -- +migrate Up
 
 -- Create node_info schema
-CREATE TABLE IF NOT EXISTS node_infos (
+CREATE TABLE IF NOT EXISTS node_info_schemes (
     id SERIAL PRIMARY KEY,
     ip TEXT NOT NULL,
     port TEXT NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS node_infos (
 );
 
 -- Create registered_nodes schema
-CREATE TABLE IF NOT EXISTS registered_nodes (
+CREATE TABLE IF NOT EXISTS registered_node_schemes (
     id SERIAL PRIMARY KEY,
     ip TEXT NOT NULL,
     port TEXT NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS registered_nodes (
 );
 
 -- Create leader_commits schema
-CREATE TABLE IF NOT EXISTS leader_commits (
+CREATE TABLE IF NOT EXISTS leader_commit_schemes (
     id SERIAL PRIMARY KEY,
     round INT NOT NULL,
     eoa_address TEXT NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS leader_commits (
 );
 
 -- Create commits schema
-CREATE TABLE IF NOT EXISTS commits (
+CREATE TABLE IF NOT EXISTS commit_data_schemes (
     id SERIAL PRIMARY KEY,
     round INT NOT NULL,
     cvs BYTEA NOT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS commits (
 );
 
 -- Create reveal_orders schema
-CREATE TABLE IF NOT EXISTS reveal_orders (
+CREATE TABLE IF NOT EXISTS reveal_order_schemes (
     id SERIAL PRIMARY KEY,
     ordered_nodes TEXT[] NOT NULL,
     reveal_order INT[] NOT NULL,
@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS reveal_orders (
 );
 
 -- +migrate Down
-DROP TABLE IF EXISTS node_infos;
-DROP TABLE IF EXISTS leader_commits;
-DROP TABLE IF EXISTS reveal_orders;
+DROP TABLE IF EXISTS node_info_schemes;
+DROP TABLE IF EXISTS registered_node_schemes;
+DROP TABLE IF EXISTS leader_commit_schemes;
+DROP TABLE IF EXISTS commit_schemes;
+DROP TABLE IF EXISTS reveal_order_schemes;

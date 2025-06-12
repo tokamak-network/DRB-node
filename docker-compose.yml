@@ -32,7 +32,10 @@ services:
       POSTGRES_PORT: 5432
       POSTGRES_PASSWORD: password
       ETH_RPC_URL: wss://yolo-lingering-haze.ethereum-sepolia.quiknode.pro/f828b666b24c1ba119726fdcd64a1c73e83a476e/
-      CONTRACT_ADDRESS: 0x619477497Ba4d0F509E939a8f7D79E70c3e9440D
+      # ETH_RPC_URL: ws://127.0.0.1:8545/
+      # CONTRACT_ADDRESS: 0x619477497Ba4d0F509E939a8f7D79E70c3e9440D
+      # CONTRACT_ADDRESS: 0xfbfbfDdd6e35dA57b7B0F9a2C10E34Be70B3A4E9
+      CONTRACT_ADDRESS: 0x98c5d66c12870ba8b634363d7bc2aa1d8ed6e491
     volumes:
       - leadernode-key:/root/leadernode.bin
       - ./contract/abi/Commit2RevealDRB.json:/root/contract/abi/Commit2RevealDRB.json
@@ -97,7 +100,7 @@ services:
       POSTGRES_PASSWORD: password
       CHAIN_ID: 11155111
       ETH_RPC_URL: wss://yolo-lingering-haze.ethereum-sepolia.quiknode.pro/f828b666b24c1ba119726fdcd64a1c73e83a476e/
-      CONTRACT_ADDRESS: 0x47fc10e1f36096a15a61e21d3f229e7a70ba054e
+      CONTRACT_ADDRESS: 0x98c5d66c12870ba8b634363d7bc2aa1d8ed6e491
   regularnode2:
     build:
       context: .
@@ -123,7 +126,7 @@ services:
       POSTGRES_PASSWORD: password
       CHAIN_ID: 11155111
       ETH_RPC_URL: wss://yolo-lingering-haze.ethereum-sepolia.quiknode.pro/f828b666b24c1ba119726fdcd64a1c73e83a476e/
-      CONTRACT_ADDRESS: 0x47fc10e1f36096a15a61e21d3f229e7a70ba054e
+      CONTRACT_ADDRESS: 0x98c5d66c12870ba8b634363d7bc2aa1d8ed6e491
 
 volumes:
   leaderpostgres-data:

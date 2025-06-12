@@ -37,3 +37,9 @@ type SignInfo struct {
 	S string `json:"s"`
 	V string `json:"v"`
 }
+
+func ConvertByteArray(b []byte) [32]byte {
+	var arr [32]byte
+	copy(arr[:], b)
+	return arr
+}
