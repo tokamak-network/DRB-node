@@ -34,6 +34,14 @@ type CommitData struct {
 	Sign            map[string]string `json:"sign"` // New field for v, r, s
 }
 
+type PeerCommitData struct {
+	Round           string            `json:"round"`
+	SecretValue     [32]byte          `json:"secret_value"`
+	Cos             [32]byte          `json:"cos"`
+	Cvs             [32]byte          `json:"cvs"`
+	EOAAddress      string            `json:"eoa_address"`
+}
+
 type Request struct {
 	Round      string `json:"round"`
 	EOAAddress string `json:"eoa_address"`
