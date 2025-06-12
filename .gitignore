@@ -37,7 +37,7 @@ leader_peer_id.json
 regular_peer_id.json
 reveal_orders.json
 registered_nodes.json
-
+peerNodeInfo.json
 
 .idea
 .vscode

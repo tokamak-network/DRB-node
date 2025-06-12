@@ -82,7 +82,6 @@ func (f *FallbackRPCClient) getCurrentClient() *ethclient.Client {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
     if !rpcURLPrinted {
-        fmt.Println("Current RPC URL:", f.urls[f.currentIdx])
         rpcURLPrinted = true
     }
 
