@@ -12,14 +12,18 @@ import (
 )
 
 func broadCastS(h host.Host, roundNum string, eoaAddress string, secret [32]byte) {
-	eoa := common.HexToAddress(eoaAddress)
 	nodeInfo := libp2putils.GetConnectedPeers()
 
 	message := struct {
-		Secret [32]byte `json:"secret_value"`
+		Round      string   `json:"round"`
+		EOAAddress string   `json:"eoa_address"`
+		Secret     [32]byte `json:"secret_value"`
 	}{
-		Secret: secret,
+		Round:      roundNum,
+		EOAAddress: eoaAddress,
+		Secret:     secret,
 	}
+	eoa := common.HexToAddress(eoaAddress)
 	for _, op := range eth.ActivatedOperators {
 		if eoa == op {
 			continue
@@ -38,45 +42,15 @@ func broadCastS(h host.Host, roundNum string, eoaAddress string, secret [32]byte
 	}
 }
 
-func BroadCastCVS(h host.Host, roundNum string, eoaAddress common.Address, cvs [32]byte) {
-	nodeInfo := libp2putils.GetConnectedPeers()
-
-	message := struct {
-		RoundNum   string   `json:"round_num"`
-		EOAAddress string   `json:"eoa_address"`
-		CVS        [32]byte `json:"cvs"`
-	}{
-		RoundNum:   roundNum,
-		EOAAddress: eoaAddress.Hex(),
-		CVS:        cvs,
-	}
-	for _, op := range eth.ActivatedOperators {
-		if eoaAddress == op {
-			continue
-		}
-		stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, "/cvsBroadcast")
-		if err != nil {
-			log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
-			continue
-		}
-		if err := json.NewEncoder(stream).Encode(message); err != nil {
-			log.Printf("Failed to send CVS to regular node: %v", err)
-		} else {
-			log.Printf("CVS sent to regular node %v for round %s", op, roundNum)
-		}
-		stream.Close()
-	}
-}
-
 func BroadCastCOS(h host.Host, roundNum string, eoaAddress common.Address, cos [32]byte) {
 	nodeInfo := libp2putils.GetConnectedPeers()
 
 	message := struct {
-		RoundNum   string   `json:"round_num"`
+		Round      string   `json:"round"`
 		EOAAddress string   `json:"eoa_address"`
 		Cos        [32]byte `json:"cos"`
 	}{
-		RoundNum:   roundNum,
+		Round:      roundNum,
 		EOAAddress: eoaAddress.Hex(),
 		Cos:        cos,
 	}
@@ -93,6 +67,36 @@ func BroadCastCOS(h host.Host, roundNum string, eoaAddress common.Address, cos [
 			log.Printf("Failed to send CO to regular node: %v", err)
 		} else {
 			log.Printf("CO sent to regular node %v for round %s", op, roundNum)
+		}
+		stream.Close()
+	}
+}
+
+func BroadCastCVS(h host.Host, roundNum string, eoaAddress common.Address, cvs [32]byte) {
+	nodeInfo := libp2putils.GetConnectedPeers()
+
+	message := struct {
+		Round      string   `json:"round"`
+		EOAAddress string   `json:"eoa_address"`
+		CVS        [32]byte `json:"cvs"`
+	}{
+		Round:      roundNum,
+		EOAAddress: eoaAddress.Hex(),
+		CVS:        cvs,
+	}
+	for _, op := range eth.ActivatedOperators {
+		if eoaAddress == op {
+			continue
+		}
+		stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, "/cvsBroadcast")
+		if err != nil {
+			log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
+			continue
+		}
+		if err := json.NewEncoder(stream).Encode(message); err != nil {
+			log.Printf("Failed to send CVS to regular node: %v", err)
+		} else {
+			log.Printf("CVS sent to regular node %v for round %s", op, roundNum)
 		}
 		stream.Close()
 	}
