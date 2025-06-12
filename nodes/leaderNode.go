@@ -143,7 +143,7 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 	}
 	updateInMemoryData(roundNum, eoaAddress, *commitData)
 	log.Printf("Commit data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
-
+	broadCastCVS(libp2putils.HostInstance, roundNum, eoaAddress, commitData.Cvs)
 	// Check if all commits are ready after this update
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
 		log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
@@ -201,7 +201,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	}
 	updateInMemoryData(roundNum, eoaAddress, *commitData)
 	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
-
+	broadCastCOS(libp2putils.HostInstance, roundNum, eoaAddress, commitData.Cos)
 	// Check if all commits are ready after this COS
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
 		log.Printf("All CVS received for round %s after COS, generating Merkle root...", roundNum)
@@ -788,6 +788,66 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 
 	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, leaderNode_helper.Indices)
 	requestCv = false
+}
+
+func broadCastCVS(h host.Host, roundNum string, eoaAddress common.Address, cvs [32]byte) {
+	nodeInfo := libp2putils.GetConnectedPeers()
+
+	message := struct {
+		RoundNum   string   `json:"round_num"`
+		EOAAddress string   `json:"eoa_address"`
+		CVS        [32]byte `json:"cvs"`
+	}{
+		RoundNum:   roundNum,
+		EOAAddress: eoaAddress.Hex(),
+		CVS:        cvs,
+	}
+	for _, op := range eth.ActivatedOperators {
+		if eoaAddress == op {
+			continue
+		}
+		stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, "/cvsBroadcast")
+		if err != nil {
+			log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
+			continue
+		}
+		if err := json.NewEncoder(stream).Encode(message); err != nil {
+			log.Printf("Failed to send CVS commit to regular node: %v", err)
+		} else {
+			log.Printf("CVS commit sent to leader for round %s", roundNum)
+		}
+		stream.Close()
+	}
+}
+
+func broadCastCOS(h host.Host, roundNum string, eoaAddress common.Address, cos [32]byte) {
+	nodeInfo := libp2putils.GetConnectedPeers()
+
+	message := struct {
+		RoundNum   string   `json:"round_num"`
+		EOAAddress string   `json:"eoa_address"`
+		Cos        [32]byte `json:"cos"`
+	}{
+		RoundNum:   roundNum,
+		EOAAddress: eoaAddress.Hex(),
+		Cos:        cos,
+	}
+	for _, op := range eth.ActivatedOperators {
+		if eoaAddress == op {
+			continue
+		}
+		stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, "/cosBroadcast")
+		if err != nil {
+			log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
+			continue
+		}
+		if err := json.NewEncoder(stream).Encode(message); err != nil {
+			log.Printf("Failed to send CO to regular node: %v", err)
+		} else {
+			log.Printf("CO sent to leader for round %s", roundNum)
+		}
+		stream.Close()
+	}
 }
 
 func revert() {
