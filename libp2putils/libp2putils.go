@@ -2,8 +2,12 @@ package libp2putils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"sync"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -15,9 +19,11 @@ import (
 )
 
 var HostInstance host.Host
+var RegisteredNodes = make(map[string]peer.AddrInfo)
+var mu sync.Mutex
 
 func SetHost(h host.Host) {
-    HostInstance = h
+	HostInstance = h
 }
 
 // CreateHost creates a new libp2p host with a given port and private key.
@@ -67,4 +73,71 @@ func ConnectToPeer(h host.Host, leaderIP, leaderPort, leaderPeerID string) (*pee
 
 	h.Peerstore().AddAddrs(leaderInfo.ID, leaderInfo.Addrs, peerstore.PermanentAddrTTL)
 	return leaderInfo, h.Connect(context.Background(), *leaderInfo)
+}
+
+func GetConnectedPeers() map[string]struct {
+	IP     string  `json:"ip"`
+	Port   string  `json:"port"`
+	PeerID peer.ID `json:"peer_id"`
+} {
+	mu.Lock()
+	defer mu.Unlock()
+
+	filePath := "registered_nodes.json"
+	file, err := os.Open(filePath)
+	if err != nil {
+		log.Printf("Failed to open registered_nodes.json: %v", err)
+		return nil
+	}
+	defer file.Close()
+
+	var nodes map[string]struct {
+		IP     string `json:"ip"`
+		Port   string `json:"port"`
+		PeerID string `json:"peer_id"`
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		log.Printf("Failed to read registered_nodes.json: %v", err)
+		return nil
+	}
+
+	err = json.Unmarshal(data, &nodes)
+	if err != nil {
+		log.Printf("Failed to parse registered_nodes.json: %v", err)
+		return nil
+	}
+
+	finalNodes := make(map[string]struct {
+		IP     string  `json:"ip"`
+		Port   string  `json:"port"`
+		PeerID peer.ID `json:"peer_id"`
+	})
+
+	for eoa, node := range nodes {
+		multiAddrStr := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", node.IP, node.Port, node.PeerID)
+		multiAddr, err := multiaddr.NewMultiaddr(multiAddrStr)
+		if err != nil {
+			log.Printf("Failed to create multiaddress for EOA %s: %v", eoa, err)
+			continue
+		}
+
+		addrInfo, err := peer.AddrInfoFromP2pAddr(multiAddr)
+		if err != nil {
+			log.Printf("Failed to create AddrInfo for EOA %s: %v", eoa, err)
+			continue
+		}
+
+		finalNodes[eoa] = struct {
+			IP     string  `json:"ip"`
+			Port   string  `json:"port"`
+			PeerID peer.ID `json:"peer_id"`
+		}{
+			IP:     node.IP,
+			Port:   node.Port,
+			PeerID: addrInfo.ID,
+		}
+	}
+
+	return finalNodes
 }
