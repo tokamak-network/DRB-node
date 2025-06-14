@@ -77,7 +77,6 @@ func LoadRevealOrders(filePath string) (map[string]interface{}, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Return an empty map if the file doesn't exist
 			return make(map[string]interface{}), nil
 		}
 		return nil, fmt.Errorf("failed to open regular reveal order file: %v", err)
@@ -170,10 +169,6 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 }
 
 func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common.Address, filePath string) (bool, error) {
-	// File path for reveal order storage
-	// filePath := "reveal_orders.json"
-
-	// Load existing data
 	fmt.Println("inside DetermineRevealOrderForRegular")
 	fmt.Println("filePath",filePath)
 	data, err := LoadRevealOrders(filePath)
@@ -182,7 +177,6 @@ func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common
 		return false, err
 	}
 
-	// Check if the round already exists
 	if _, exists := data[roundNum]; exists {
 		log.Printf("Regular Reveal order already exists for round %s. Skipping calculation.", roundNum)
 		return false, nil

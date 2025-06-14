@@ -5,12 +5,21 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
+	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/utils"
 )
+
 var peerNodeInfo map[string]utils.PeerCommitData
 var CosRecevied = make(map[string]map[string]bool)
+
+var revealOrderLock sync.Mutex
+var revealOrder = make(map[string][]string)
+
+// HandleSecret processes incoming secret values and ensures they are accepted in the reveal order.
 func HandleCvs(s network.Stream) {
 	defer s.Close()
 
@@ -76,9 +85,7 @@ func HandleCos(s network.Stream) {
 		CosRecevied[message.Round] = make(map[string]bool)
 	}
 	CosRecevied[message.Round][message.EOAAddress] = true
-	// CosRecevied[message.Round]["0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"] = true
 	filePath := "peerNodeInfo.json"
-	// var peerNodeInfo map[string]utils.PeerCommitData
 
 	if _, err := os.Stat(filePath); err == nil {
 		file, err := os.Open(filePath)
@@ -120,55 +127,92 @@ func HandleCos(s network.Stream) {
 }
 
 func HandleSecret(s network.Stream) {
-    defer s.Close()
+	defer s.Close()
 
-    var message utils.PeerCommitData
+	var message utils.PeerCommitData
+	if err := json.NewDecoder(s).Decode(&message); err != nil {
+		log.Printf("Failed to decode secret message: %v", err)
+		return
+	}
 
-    if err := json.NewDecoder(s).Decode(&message); err != nil {
-        log.Printf("Failed to decode COS message: %v", err)
-        return
-    }
+	log.Printf("Received secret value for round %s from EOA %s", message.Round, message.EOAAddress)
 
-    log.Printf("Received Secret for round %s from EOA %s", message.Round, message.EOAAddress)
+	revealOrderLock.Lock()
+	defer revealOrderLock.Unlock()
 
-    filePath := "peerNodeInfo.json"
-    // var peerNodeInfo map[string]utils.PeerCommitData
+	filePath := "regular_reveal_order.json"
+	for {
+		data, err := commitreveal2.LoadRevealOrders(filePath)
+		if err != nil {
+			log.Printf("Failed to load reveal order: %v", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
 
-    if _, err := os.Stat(filePath); err == nil {
-        file, err := os.Open(filePath)
-        if err != nil {
-            log.Printf("Failed to open peerNodeInfo.json: %v", err)
-            return
-        }
-        defer file.Close()
+		roundData, exists := data[message.Round]
+		if exists {
+			if revealOrder[message.Round] == nil {
+				rawOrderedNodes := roundData.(map[string]interface{})["ordered_nodes"].([]interface{})
+				orderedNodes := make([]string, len(rawOrderedNodes))
+				for i, v := range rawOrderedNodes {
+					orderedNodes[i] = v.(string)
+				}
+				revealOrder[message.Round] = orderedNodes
+			}
+			break
+		}
 
-        if err := json.NewDecoder(file).Decode(&peerNodeInfo); err != nil {
-            log.Printf("Failed to decode peerNodeInfo.json: %v", err)
-            return
-        }
-    } else if os.IsNotExist(err) {
-        log.Printf("peerNodeInfo.json does not exist. Creating a new file.")
-        peerNodeInfo = make(map[string]utils.PeerCommitData)
-    } else {
-        log.Printf("Error checking peerNodeInfo.json: %v", err)
-        return
-    }
+		log.Printf("Reveal order not yet calculated for round %s. Waiting...", message.Round)
+		time.Sleep(2 * time.Second)
+	}
 
-    key := fmt.Sprintf("%s+%s", message.Round, message.EOAAddress)
-    data := peerNodeInfo[key]
+	log.Printf("Processing secret value for EOA %s in round %s", message.EOAAddress, message.Round)
+
+	if len(revealOrder[message.Round]) == 0 || revealOrder[message.Round][0] != message.EOAAddress {
+		log.Printf("EOA %s is not next in the reveal order for round %s", message.EOAAddress, message.Round)
+		return
+	}
+
+	log.Printf("Received Secret for round %s from EOA %s", message.Round, message.EOAAddress)
+
+	filePath = "peerNodeInfo.json"
+
+	if _, err := os.Stat(filePath); err == nil {
+		file, err := os.Open(filePath)
+		if err != nil {
+			log.Printf("Failed to open peerNodeInfo.json: %v", err)
+			return
+		}
+		defer file.Close()
+
+		if err := json.NewDecoder(file).Decode(&peerNodeInfo); err != nil {
+			log.Printf("Failed to decode peerNodeInfo.json: %v", err)
+			return
+		}
+	} else if os.IsNotExist(err) {
+		log.Printf("peerNodeInfo.json does not exist. Creating a new file.")
+		peerNodeInfo = make(map[string]utils.PeerCommitData)
+	} else {
+		log.Printf("Error checking peerNodeInfo.json: %v", err)
+		return
+	}
+
+	key := fmt.Sprintf("%s+%s", message.Round, message.EOAAddress)
+	data := peerNodeInfo[key]
 	data.SecretValue = message.SecretValue
 	peerNodeInfo[key] = data
-    file, err := os.Create(filePath)
-    if err != nil {
-        log.Printf("Failed to create peerNodeInfo.json: %v", err)
-        return
-    }
-    defer file.Close()
+	file, err := os.Create(filePath)
+	if err != nil {
+		log.Printf("Failed to create peerNodeInfo.json: %v", err)
+		return
+	}
+	defer file.Close()
 
-    if err := json.NewEncoder(file).Encode(peerNodeInfo); err != nil {
-        log.Printf("Failed to write to peerNodeInfo.json: %v", err)
-        return
-    }
+	if err := json.NewEncoder(file).Encode(peerNodeInfo); err != nil {
+		log.Printf("Failed to write to peerNodeInfo.json: %v", err)
+		return
+	}
 
-    log.Printf("Successfully saved Secret for round %s and EOA %s into peerNodeInfo.json", message.Round, message.EOAAddress)
+	log.Printf("Successfully saved Secret for round %s and EOA %s into peerNodeInfo.json", message.Round, message.EOAAddress)
+	revealOrder[message.Round] = revealOrder[message.Round][1:]
 }
