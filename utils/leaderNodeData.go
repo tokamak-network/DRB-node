@@ -11,6 +11,7 @@ import (
 )
 
 const leaderCommitDataFile = "leader_commits.json"
+const peerNodeInfoFile = "peerNodeInfo.json"
 
 var CommittedNodes = make(map[string]map[common.Address]LeaderCommitData)
 
@@ -71,6 +72,40 @@ func LoadLeaderCommitData(roundNum, eoaAddress string) (*LeaderCommitData, error
 	log.Printf("Loaded commit data for key: %s, CVS: %v", key, commitData.Cvs) // Debug log for loaded data
 
 	return &commitData, nil
+}
+func LoadCommitDataRegular(roundNum, eoaAddress string) (*PeerCommitData, error) {
+    // Open the commit file
+	fmt.Println("inside LoadCommitDataRegular")
+    file, err := os.Open(peerNodeInfoFile)
+    if err != nil {
+        if os.IsNotExist(err) {
+            return nil, fmt.Errorf("commit data not found")
+        }
+        return nil, fmt.Errorf("error opening peer node info file: %v", err)
+    }
+    defer file.Close()
+
+    // Decode JSON data
+    var commits map[string]PeerCommitData
+    decoder := json.NewDecoder(file)
+    err = decoder.Decode(&commits)
+    if err != nil {
+        return nil, fmt.Errorf("error decoding peer node info data: %v", err)
+    }
+
+    // Construct the composite key: ROUND+EOA
+    key := roundNum + "+" + eoaAddress
+    log.Printf("Loading commit data for key: %s", key) // Debug log for the key
+
+    // Check if commit data exists for the given key
+    commitData, exists := commits[key]
+    if !exists {
+        return nil, fmt.Errorf("commit data not found for key: %s", key)
+    }
+
+    log.Printf("Loaded commit data for key: %s, CVS: %v", key, commitData.Cvs) // Debug log for loaded data
+
+    return &commitData, nil
 }
 
 // SaveLeaderCommitData should save commit data in the correct format

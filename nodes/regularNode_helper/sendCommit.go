@@ -7,13 +7,15 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
+	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -26,6 +28,7 @@ type CommitData struct {
 	SendCosToLeader bool              `json:"send_cos_to_leader"`
 	Sign            map[string]string `json:"sign"`
 }
+
 var Execution bool
 var commits map[string]CommitData
 var ActivatedOperator []string
@@ -35,17 +38,21 @@ func MonitorCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 }
 
 var StartTime *big.Int
+
 type RoundData struct {
 	MerkleRoot   bool
 	RandomNumber bool
 }
+
 var RoundsData map[string]RoundData
 var Req RandomRequest
+
 type RandomRequest struct {
 	Round     *big.Int
 	StartTime *big.Int
 	State     *big.Int
 }
+
 var RequestQueue []RandomRequest
 var Round *big.Int
 var CurrentRound string
@@ -81,8 +88,8 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 				switch vLog.Topics[0] {
 				case SubmitCVS:
 					eventData := struct {
-						StartTime *big.Int
-						PackedIndices   *big.Int
+						StartTime     *big.Int
+						PackedIndices *big.Int
 					}{}
 					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
 					if err != nil {
@@ -93,27 +100,27 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.PackedIndices)
 
 					processCommitRequest(fallbackEthClient, eventData.PackedIndices)
-				
+
 				case StatusSig:
 					eventData := struct {
 						CurStartTime *big.Int
 						CurState     *big.Int
 					}{}
-	
+
 					err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
 					if err != nil {
 						log.Printf("Failed to decode Status event log: %v", err)
 						continue
 					}
-	
+
 					processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
 
-				case MerkleRootSubmittedSig: 
+				case MerkleRootSubmittedSig:
 					eventData := struct {
-						StartTime *big.Int
-						MerkleRoot     [32]byte
+						StartTime  *big.Int
+						MerkleRoot [32]byte
 					}{}
-					
+
 					err := parsedABI.UnpackIntoInterface(&eventData, "MerkleRootSubmitted", vLog.Data)
 					if err != nil {
 						log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
@@ -123,10 +130,10 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						eventData.StartTime, eventData.MerkleRoot, CurrentRound)
 
 					processMerkleRoot(CurrentRound)
-				
+
 				case RequestedToSubmitCoSig:
 					eventData := struct {
-						StartTime *big.Int
+						StartTime     *big.Int
 						IndicesLength *big.Int
 						PackedIndices *big.Int
 					}{}
@@ -135,7 +142,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						log.Printf("Failed to decode RequestedToSubmitCo event log: %v", err)
 						continue
 					}
-					fmt.Printf("RequestedToSubmitCo Event: startTime %v\n, indicesLength %v\n, indices %v\n", eventData.StartTime, eventData.IndicesLength,  eventData.PackedIndices)
+					fmt.Printf("RequestedToSubmitCo Event: startTime %v\n, indicesLength %v\n, indices %v\n", eventData.StartTime, eventData.IndicesLength, eventData.PackedIndices)
 
 					processCosRequest(fallbackEthClient, eventData.PackedIndices, eventData.IndicesLength)
 				}
@@ -154,6 +161,7 @@ func processMerkleRoot(round string) {
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, state *big.Int) {
+	eth.UpdateActivatedOperators(fallbackEthClient)
 	round, _ := fetchCurrentRound(fallbackEthClient)
 	CurrentRound = round.String()
 	req := RandomRequest{
@@ -175,7 +183,33 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		RoundsData[round.String()] = roundData
 
 		Execution = false
-	}		
+	}
+	go AllCosReceivedUnlocked(ActivatedOperator)
+}
+func AllCosReceivedUnlocked(ActivatedOperator []string) {
+	for {
+		round := CurrentRound
+		ops := eth.ActivatedOperators
+		fmt.Println("ops", ops)
+		if allCosReceivedUnlockedRegular(round, ops) {
+			flag, _ := commitreveal2.DetermineRevealOrderForRegular(round, ops, "regular_reveal_order.json")
+			if flag {
+				break
+			}
+			time.Sleep(5 * time.Second)
+
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func allCosReceivedUnlockedRegular(roundNum string, ops []common.Address) bool {
+	for _, op := range ops {
+		if !CosRecevied[roundNum][op.Hex()] {
+			return false
+		}
+	}
+	return true
 }
 
 func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int) error {
@@ -218,7 +252,7 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
-	
+
 	file, err := os.ReadFile("commits.json")
 	if err != nil {
 		fmt.Println("Error reading file:", err)
@@ -295,7 +329,7 @@ func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
-	
+
 	file, err := os.ReadFile("commits.json")
 	if err != nil {
 		fmt.Println("Error reading file:", err)
@@ -332,7 +366,6 @@ func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 	return nil
 }
 
-
 func unpackIndices(packedIndices *big.Int) []*big.Int {
 	order := []*big.Int{}
 	mask := big.NewInt(0xFF)
@@ -342,11 +375,11 @@ func unpackIndices(packedIndices *big.Int) []*big.Int {
 		shifted := new(big.Int).Rsh(packedIndices, shift)
 		value := new(big.Int).And(shifted, mask)
 
-		if i != 0  && value.Cmp(big.NewInt(0)) == 0 {
+		if i != 0 && value.Cmp(big.NewInt(0)) == 0 {
 			break
 		}
 		order = append(order, value)
-		i++;
+		i++
 	}
 	return order
 }
@@ -360,7 +393,7 @@ func unpackIndicesWithLength(unpackIndices *big.Int, indicesLength *big.Int) []*
 		shifted := new(big.Int).Rsh(unpackIndices, shift)
 		value := new(big.Int).And(shifted, mask)
 		order = append(order, value)
-		i++;
+		i++
 	}
 	return order
 }
@@ -391,7 +424,7 @@ func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCCl
 	return strAddresses, nil
 }
 
-func fetchCurrentRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient) (*big.Int, error){
+func fetchCurrentRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient) (*big.Int, error) {
 	abiFilePath := "contract/abi/Commit2RevealDRB.json"
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {

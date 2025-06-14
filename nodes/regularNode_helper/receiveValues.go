@@ -9,7 +9,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/tokamak-network/DRB-node/utils"
 )
-
+var peerNodeInfo map[string]utils.PeerCommitData
+var CosRecevied = make(map[string]map[string]bool)
 func HandleCvs(s network.Stream) {
 	defer s.Close()
 
@@ -21,7 +22,6 @@ func HandleCvs(s network.Stream) {
 	log.Printf("Received CVS for round %s from EOA %s", message.Round, message.EOAAddress)
 
 	filePath := "peerNodeInfo.json"
-	var peerNodeInfo map[string]utils.PeerCommitData
 
 	if _, err := os.Stat(filePath); err == nil {
 		file, err := os.Open(filePath)
@@ -72,9 +72,13 @@ func HandleCos(s network.Stream) {
 	}
 
 	log.Printf("Received COS for round %s from EOA %s", message.Round, message.EOAAddress)
-
+	if CosRecevied[message.Round] == nil {
+		CosRecevied[message.Round] = make(map[string]bool)
+	}
+	CosRecevied[message.Round][message.EOAAddress] = true
+	// CosRecevied[message.Round]["0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"] = true
 	filePath := "peerNodeInfo.json"
-	var peerNodeInfo map[string]utils.PeerCommitData
+	// var peerNodeInfo map[string]utils.PeerCommitData
 
 	if _, err := os.Stat(filePath); err == nil {
 		file, err := os.Open(filePath)
@@ -128,7 +132,7 @@ func HandleSecret(s network.Stream) {
     log.Printf("Received Secret for round %s from EOA %s", message.Round, message.EOAAddress)
 
     filePath := "peerNodeInfo.json"
-    var peerNodeInfo map[string]utils.PeerCommitData
+    // var peerNodeInfo map[string]utils.PeerCommitData
 
     if _, err := os.Stat(filePath); err == nil {
         file, err := os.Open(filePath)
