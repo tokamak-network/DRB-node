@@ -23,11 +23,7 @@ func broadCastS(h host.Host, roundNum string, eoaAddress string, secret [32]byte
 		EOAAddress: eoaAddress,
 		Secret:     secret,
 	}
-	eoa := common.HexToAddress(eoaAddress)
 	for _, op := range eth.ActivatedOperators {
-		if eoa == op {
-			continue
-		}
 		stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, "/secretBroadcast")
 		if err != nil {
 			log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
@@ -55,9 +51,6 @@ func BroadCastCOS(h host.Host, roundNum string, eoaAddress common.Address, cos [
 		Cos:        cos,
 	}
 	for _, op := range eth.ActivatedOperators {
-		if eoaAddress == op {
-			continue
-		}
 		stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, "/cosBroadcast")
 		if err != nil {
 			log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
@@ -85,9 +78,6 @@ func BroadCastCVS(h host.Host, roundNum string, eoaAddress common.Address, cvs [
 		CVS:        cvs,
 	}
 	for _, op := range eth.ActivatedOperators {
-		if eoaAddress == op {
-			continue
-		}
 		stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, "/cvsBroadcast")
 		if err != nil {
 			log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
