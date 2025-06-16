@@ -52,6 +52,11 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		time.Sleep(2 * time.Second)
 	}
 
+	if len(strictOrderWhileReceiving[req.Round]) == 0 || strictOrderWhileReceiving[req.Round][req.Order] != req.EOAAddress {
+		log.Printf("EOA %s is not next in the reveal order %v for round %s", req.EOAAddress, req.Order, req.Round)
+		return
+	}
+
 	// Fetch the leader's EOA address from the environment variables
 	leaderEOA := os.Getenv("LEADER_EOA")
 	if leaderEOA == "" {
@@ -99,7 +104,6 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 
 	SendSecretValue(h, leaderPeerID, req.Round)
-	strictOrderWhileSecretRequest[req.Round] = strictOrderWhileSecretRequest[req.Round][1:]
 }
 
 // SendSecretValue sends the secret value for a round to the leader node
