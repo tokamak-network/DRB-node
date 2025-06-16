@@ -5,13 +5,17 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/utils"
 )
+
+var strictOrderWhileSecretRequest = make(map[string][]string)
 
 // HandleSecretValueRequest processes secret value requests from the leader node
 func HandleSecretValueRequest(h host.Host, s network.Stream) {
@@ -22,6 +26,30 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	if err := json.NewDecoder(s).Decode(&req); err != nil {
 		log.Printf("Failed to decode secret value request: %v", err)
 		return
+	}
+	filePath := "regular_reveal_order.json"
+	for {
+		data, err := commitreveal2.LoadRevealOrders(filePath)
+		if err != nil {
+			log.Printf("Failed to load reveal order: %v", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		roundData, exists := data[req.Round]
+		if exists {
+			if strictOrderWhileSecretRequest[req.Round] == nil {
+				rawOrderedNodes := roundData.(map[string]interface{})["ordered_nodes"].([]interface{})
+				orderedNodes := make([]string, len(rawOrderedNodes))
+				for i, v := range rawOrderedNodes {
+					orderedNodes[i] = v.(string)
+				}
+				strictOrderWhileSecretRequest[req.Round] = orderedNodes
+			}
+			break
+		}
+
+		log.Printf("Reveal order not yet calculated for round %s. Waiting...", req.Round)
+		time.Sleep(2 * time.Second)
 	}
 
 	// Fetch the leader's EOA address from the environment variables
@@ -71,6 +99,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 
 	SendSecretValue(h, leaderPeerID, req.Round)
+	strictOrderWhileSecretRequest[req.Round] = strictOrderWhileSecretRequest[req.Round][1:]
 }
 
 // SendSecretValue sends the secret value for a round to the leader node
