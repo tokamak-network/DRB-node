@@ -78,6 +78,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	}
 
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+	regularNode_helper.Setup(eoaAddress)
 	log.Printf("EOA Address: %s", eoaAddress)
 
 	// Get the local IP address of the node
