@@ -54,7 +54,7 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 
 	// Send the request to the first node in the reveal order
-	for _, node := range roundRevealData.OrderedNodes {
+	for order, node := range roundRevealData.OrderedNodes {
 		eoa := node
 		nodeInfo, exists := nodes[eoa]
 		if !exists {
@@ -62,12 +62,12 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 			continue
 		}
 
-		sendSecretValueRequestToNode(h, fallbackEthClient, roundNum, eoa, nodeInfo)
+		sendSecretValueRequestToNode(h, fallbackEthClient, roundNum, eoa, nodeInfo, order)
 		break
 	}
 }
 
-func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient,  roundNum string, eoa string, nodeInfo NodeInfo) {
+func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient,  roundNum string, eoa string, nodeInfo NodeInfo, order int) {
 	// Load private key from environment variable
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -91,6 +91,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 		EOAAddress: eoaAddress, // Leader's EOA
 		Round:      roundNum,   // Round number
 		Signature:  signature,  // Signed round number
+		Order: order,
 	}
 
 	fmt.Println("Sending secret value request to EOA:", eoa)
@@ -249,7 +250,7 @@ func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclien
 	}
 
 	// Check which node is next in the reveal order
-	for _, node := range orderedNodes {
+	for order, node := range orderedNodes {
 		nodeEOA := node
 		if !contains(revealRequestStatus[roundNum], nodeEOA) {
 			nodeInfo, exists := nodes[nodeEOA]
@@ -259,7 +260,7 @@ func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclien
 			}
 
 			// Send secret value request to the next node
-			sendSecretValueRequestToNode(h, fallbackEthClient, roundNum, nodeEOA, nodeInfo)
+			sendSecretValueRequestToNode(h, fallbackEthClient, roundNum, nodeEOA, nodeInfo, order)
 			return
 		}
 	}
