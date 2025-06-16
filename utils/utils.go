@@ -18,6 +18,7 @@ type SecretValueRequest struct {
 	Round      string `json:"round"`       // Round number
 	Signature  []byte `json:"signature"`   // Signature
 	SecretValue []byte  `json:"secret_value"`
+	Order int `json:"order"` // Order in the reveal sequence
 }
 
 // VerifySignature checks if the signature matches the EOA address
