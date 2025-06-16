@@ -104,7 +104,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 
 		// Start a timer to track if the response is received within 15 seconds
 		go func() {
-			timer := time.NewTimer(15 * time.Second)
+			timer := time.NewTimer(45 * time.Second)
 			defer timer.Stop()
 
 			// Wait for the timer to expire

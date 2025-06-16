@@ -192,7 +192,7 @@ func AllCosReceivedUnlocked(ActivatedOperator []string) {
 		ops := eth.ActivatedOperators
 		fmt.Println("ops", ops)
 		if allCosReceivedUnlockedRegular(round, ops) {
-			flag, _ := commitreveal2.DetermineRevealOrderForRegular(round, ops, "regular_reveal_order.json")
+			flag, _ := commitreveal2.DetermineRevealOrderForRegular(CurrentRound, ops, "regular_reveal_order.json")
 			if flag {
 				break
 			}
