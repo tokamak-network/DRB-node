@@ -67,6 +67,10 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	}
 
 	log.Printf("Successfully saved secret value for round %s and EOA %s", req.Round, req.RegularEoaAddress)
+	if _, exists := roundSecret[CurrentRound]; !exists {
+		roundSecret[req.Round] = make(map[string]bool)
+	}
+	roundSecret[CurrentRound][req.RegularEoaAddress] = true
 	broadCastS(h, req.Round, req.RegularEoaAddress, commitData.SecretValue)
 	// Continue requesting secret values from remaining nodes in the reveal order
 	HandleSecretValueResponse(h, fallbackEthClient, req.Round, req.RegularEoaAddress)

@@ -162,7 +162,7 @@ func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 		context.Background(),
 		clientUtils,
 		fallbackEthClient,
-		"requestToSubmitCo",
+		"requestToSubmitS",
 		big.NewInt(0),
 		allCos,
 		secretsReceivedOffchainInRevealOrder,
