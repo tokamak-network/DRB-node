@@ -2,7 +2,6 @@ package fallback_ethclient
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/big"
 	"sync"
@@ -13,8 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-
-	"github.com/sirupsen/logrus"
 	"github.com/tokamak-network/DRB-node/logger"
 )
 
@@ -26,7 +23,6 @@ type FallbackRPCClient struct {
 	mu         sync.RWMutex
 	maxRetries int
 	retryDelay time.Duration
-	logger     *logrus.Logger
 }
 
 var rpcURLPrinted = false
@@ -46,19 +42,12 @@ func NewFallbackRPCClient(urls []string) (*FallbackRPCClient, error) {
 		clients[i] = client
 	}
 
-	l := logger.Log
-
-	if l == nil {
-		return nil, errors.New("logger not found")
-	}
-
 	return &FallbackRPCClient{
 		clients:    clients,
 		urls:       urls,
 		currentIdx: 0,
 		maxRetries: 3,
 		retryDelay: time.Second * 2,
-		logger:     logger.Log,
 	}, nil
 }
 
@@ -70,10 +59,7 @@ func (f *FallbackRPCClient) switchToNextClient() {
 	oldIdx := f.currentIdx
 	f.currentIdx = (f.currentIdx + 1) % len(f.clients)
 
-	f.logger.WithFields(logrus.Fields{
-		"old_url": f.urls[oldIdx],
-		"new_url": f.urls[f.currentIdx],
-	}).Info("Switching to fallback RPC")
+	logger.Infof("Switching to fallback RPC, old_url: %s, new_url: %s", f.urls[oldIdx], f.urls[f.currentIdx])
 	rpcURLPrinted = false
 }
 
@@ -81,9 +67,9 @@ func (f *FallbackRPCClient) switchToNextClient() {
 func (f *FallbackRPCClient) getCurrentClient() *ethclient.Client {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-    if !rpcURLPrinted {
-        rpcURLPrinted = true
-    }
+	if !rpcURLPrinted {
+		rpcURLPrinted = true
+	}
 
 	return f.clients[f.currentIdx]
 }
@@ -98,7 +84,7 @@ func (f *FallbackRPCClient) CallContract(ctx context.Context, msg ethereum.CallM
 			return result, nil
 		}
 		lastErr = err
-		f.logger.WithError(err).Warn("RPC call failed, switching to fallback")
+		logger.Errorf("RPC call failed, switching to fallback, err: %v", err)
 		f.switchToNextClient()
 	}
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
@@ -114,7 +100,7 @@ func (f *FallbackRPCClient) SendTransaction(ctx context.Context, tx *types.Trans
 			return nil
 		}
 		lastErr = err
-		f.logger.WithError(err).Warn("RPC send transaction failed, switching to fallback")
+		logger.Errorf("RPC send transaction failed, switching to fallback, err: %v", err)
 		f.switchToNextClient()
 	}
 	return fmt.Errorf("all RPCs failed: %v", lastErr)
@@ -130,7 +116,7 @@ func (f *FallbackRPCClient) TransactionReceipt(ctx context.Context, signedTx *ty
 			return receipt, nil
 		}
 		lastErr = err
-		f.logger.WithError(err).Warn("RPC get receipt failed, switching to fallback")
+		logger.Errorf("RPC get receipt failed, switching to fallback, err: %v", err)
 		f.switchToNextClient()
 	}
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
@@ -146,7 +132,7 @@ func (f *FallbackRPCClient) NetworkID(ctx context.Context) (*big.Int, error) {
 			return id, nil
 		}
 		lastErr = err
-		f.logger.WithError(err).Warn("RPC get network ID failed, switching to fallback")
+		logger.Errorf("RPC get network ID failed, switching to fallback, err: %v", err)
 		f.switchToNextClient()
 	}
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
@@ -162,7 +148,7 @@ func (f *FallbackRPCClient) PendingNonceAt(ctx context.Context, account common.A
 			return nonce, nil
 		}
 		lastErr = err
-		f.logger.WithError(err).Warn("RPC get nonce failed, switching to fallback")
+		logger.Errorf("RPC get nonce failed, switching to fallback, err: %v", err)
 		f.switchToNextClient()
 	}
 	return 0, fmt.Errorf("all RPCs failed: %v", lastErr)
@@ -178,7 +164,7 @@ func (f *FallbackRPCClient) SuggestGasPrice(ctx context.Context) (*big.Int, erro
 			return price, nil
 		}
 		lastErr = err
-		f.logger.WithError(err).Warn("RPC get gas price failed, switching to fallback")
+		logger.Errorf("RPC get gas price failed, switching to fallback, err: %v", err)
 		f.switchToNextClient()
 	}
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
@@ -194,7 +180,7 @@ func (f *FallbackRPCClient) EstimateGas(ctx context.Context, msg ethereum.CallMs
 			return gas, nil
 		}
 		lastErr = err
-		f.logger.WithError(err).Warn("RPC estimate gas failed, switching to fallback")
+		logger.Errorf("RPC estimate gas failed, switching to fallback, err: %v", err)
 		f.switchToNextClient()
 	}
 	return 0, fmt.Errorf("all RPCs failed: %v", lastErr)
@@ -210,7 +196,7 @@ func (f *FallbackRPCClient) SubscribeFilterLogs(ctx context.Context, q ethereum.
 			return sub, nil
 		}
 		lastErr = err
-		f.logger.WithError(err).Warn("RPC subscribe filter logs failed, switching to fallback")
+		logger.Errorf("RPC subscribe filter logs failed, switching to fallback, err: %v", err)
 		f.switchToNextClient()
 	}
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
@@ -226,7 +212,7 @@ func (f *FallbackRPCClient) BalanceAt(ctx context.Context, account common.Addres
 			return balance, nil
 		}
 		lastErr = err
-		f.logger.WithError(err).Warn("RPC get balance failed, switching to fallback")
+		logger.Errorf("RPC get balance failed, switching to fallback, err: %v", err)
 		f.switchToNextClient()
 	}
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)

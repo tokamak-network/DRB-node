@@ -2,9 +2,9 @@ package utils
 
 import (
 	"crypto/ecdsa"
-	"log"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/tokamak-network/DRB-node/logger"
 )
 
 type RegistrationRequest struct {
@@ -27,13 +27,13 @@ func VerifySignature(req RegistrationRequest) bool {
 	hash := crypto.Keccak256Hash([]byte(req.EOAAddress))
 	pubKey, err := crypto.SigToPub(hash.Bytes(), req.Signature)
 	if err != nil {
-		log.Printf("Error recovering public key: %v", err)
+		logger.Infof("Error recovering public key: %v", err)
 		return false
 	}
 
 	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
-	log.Printf("recoveredAddress........:%s", recoveredAddress)
-	log.Printf("req.EOAAddress........:%s", req.EOAAddress)
+	logger.Infof("recoveredAddress........:%s", recoveredAddress)
+	logger.Infof("req.EOAAddress........:%s", req.EOAAddress)
 
 	return recoveredAddress == req.EOAAddress
 }
@@ -43,7 +43,7 @@ func SignData(data string, privateKey *ecdsa.PrivateKey) []byte {
 	hash := crypto.Keccak256Hash([]byte(data))
 	signature, err := crypto.Sign(hash.Bytes(), privateKey)
 	if err != nil {
-		log.Fatalf("Failed to sign data: %v", err)
+		logger.Fatalf("Failed to sign data: %v", err)
 	}
 	return signature
 }

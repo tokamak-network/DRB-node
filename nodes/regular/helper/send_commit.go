@@ -1,0 +1,452 @@
+package regularNode_helper
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"math/big"
+	"os"
+	"time"
+
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
+	"github.com/tokamak-network/DRB-node/utils"
+)
+
+type CommitData struct {
+	Round           string            `json:"round"`
+	SecretValue     [32]byte          `json:"secret_value"`
+	Cos             [32]byte          `json:"cos"`
+	Cvs             [32]byte          `json:"cvs"`
+	SendToLeader    bool              `json:"send_to_leader"`
+	SendCosToLeader bool              `json:"send_cos_to_leader"`
+	Sign            map[string]string `json:"sign"`
+}
+
+var Execution bool
+var commits map[string]CommitData
+var ActivatedOperator []string
+
+func MonitorCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+	receiveCommitRequest(fallbackEthClient)
+}
+
+var StartTime *big.Int
+
+type RoundData struct {
+	MerkleRoot   bool
+	RandomNumber bool
+}
+
+var RoundsData map[string]RoundData
+var Req RandomRequest
+
+type RandomRequest struct {
+	Round     *big.Int
+	StartTime *big.Int
+	State     *big.Int
+}
+
+var RequestQueue []RandomRequest
+var Round *big.Int
+var CurrentRound string
+
+func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+	contractAddress := os.Getenv("CONTRACT_ADDRESS")
+	contractAddr := common.HexToAddress(contractAddress)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		logger.Fatalf("Failed to parse contract ABI: %v", err)
+	}
+	query := ethereum.FilterQuery{
+		Addresses: []common.Address{contractAddr},
+	}
+	logs := make(chan types.Log)
+	sub, err := fallbackEthClient.SubscribeFilterLogs(context.Background(), query, logs)
+	if err != nil {
+		logger.Fatalf("Failed to subscribe to logs: %v", err)
+	}
+	SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
+	StatusSig := parsedABI.Events["Status"].ID
+	MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
+	RequestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
+
+	for {
+		select {
+		case err := <-sub.Err():
+			logger.Fatalf("Error in event subscription: %v", err)
+
+		case vLog := <-logs:
+			{
+				switch vLog.Topics[0] {
+				case SubmitCVS:
+					eventData := struct {
+						StartTime     *big.Int
+						PackedIndices *big.Int
+					}{}
+					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
+					if err != nil {
+						logger.Infof("Failed to decode event log: %v", err)
+						continue
+					}
+
+					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.PackedIndices)
+
+					processCommitRequest(fallbackEthClient, eventData.PackedIndices)
+
+				case StatusSig:
+					eventData := struct {
+						CurStartTime *big.Int
+						CurState     *big.Int
+					}{}
+
+					err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
+					if err != nil {
+						logger.Infof("Failed to decode Status event log: %v", err)
+						continue
+					}
+
+					processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
+
+				case MerkleRootSubmittedSig:
+					eventData := struct {
+						StartTime  *big.Int
+						MerkleRoot [32]byte
+					}{}
+
+					err := parsedABI.UnpackIntoInterface(&eventData, "MerkleRootSubmitted", vLog.Data)
+					if err != nil {
+						logger.Infof("Failed to decode MerkleRootSubmitted event log: %v", err)
+						continue
+					}
+					fmt.Printf("MerkleRootSubmitted Event:\n StartTime: %v\n MerkleRoot: %v\n Round: %v\n",
+						eventData.StartTime, eventData.MerkleRoot, CurrentRound)
+
+					processMerkleRoot(CurrentRound)
+
+				case RequestedToSubmitCoSig:
+					eventData := struct {
+						StartTime     *big.Int
+						IndicesLength *big.Int
+						PackedIndices *big.Int
+					}{}
+					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCo", vLog.Data)
+					if err != nil {
+						logger.Infof("Failed to decode RequestedToSubmitCo event log: %v", err)
+						continue
+					}
+					fmt.Printf("RequestedToSubmitCo Event: startTime %v\n, indicesLength %v\n, indices %v\n", eventData.StartTime, eventData.IndicesLength, eventData.PackedIndices)
+
+					processCosRequest(fallbackEthClient, eventData.PackedIndices, eventData.IndicesLength)
+				}
+			}
+		}
+	}
+}
+
+func processMerkleRoot(round string) {
+	if RoundsData == nil {
+		RoundsData = make(map[string]RoundData)
+	}
+	roundData := RoundsData[round]
+	roundData.MerkleRoot = true
+	RoundsData[round] = roundData
+}
+
+func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, state *big.Int) {
+	eth.UpdateActivatedOperators(fallbackEthClient)
+	round, _ := fetchCurrentRound(fallbackEthClient)
+	CurrentRound = round.String()
+	req := RandomRequest{
+		Round:     round,
+		StartTime: startTime,
+		State:     state,
+	}
+	if state.Cmp(big.NewInt(1)) == 0 {
+		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
+			startTime, state, round)
+		ActivatedOperator, _ = FetchActivatedOperators(fallbackEthClient, CurrentRound)
+		Req = req
+
+		Execution = true
+	}
+	if state.Cmp(big.NewInt(2)) == 0 {
+		roundData := RoundsData[round.String()]
+		roundData.RandomNumber = true
+		RoundsData[round.String()] = roundData
+
+		Execution = false
+	}
+	go AllCosReceivedUnlocked(ActivatedOperator)
+}
+func AllCosReceivedUnlocked(ActivatedOperator []string) {
+	for {
+		round := CurrentRound
+		ops := eth.ActivatedOperators
+		fmt.Println("ops", ops)
+		if allCosReceivedUnlockedRegular(round, ops) {
+			flag, _ := commitreveal2.DetermineRevealOrderForRegular(CurrentRound, ops, "regular_reveal_order.json")
+			if flag {
+				break
+			}
+			time.Sleep(5 * time.Second)
+
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func allCosReceivedUnlockedRegular(roundNum string, ops []common.Address) bool {
+	for _, op := range ops {
+		if !CosRecevied[roundNum][op.Hex()] {
+			return false
+		}
+	}
+	return true
+}
+
+func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int) error {
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		logger.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		logger.Fatalf("Failed to decode Ethereum private key: %v", err)
+	}
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+
+	acitvatedOps := ActivatedOperator
+	indices := unpackIndices(packedIndices)
+	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+	if !flag {
+		fmt.Println("Cv Request does not contain our EOA")
+		return nil
+	}
+
+	fmt.Printf("Processing RequestedToSubmitCv event for Round: %v\n", CurrentRound)
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		logger.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	file, err := os.ReadFile("commits.json")
+	if err != nil {
+		fmt.Println("Error reading file:", err)
+		return err
+	}
+
+	err = json.Unmarshal(file, &commits)
+	if err != nil {
+		fmt.Println("Error parsing JSON:", err)
+		return err
+	}
+	var cvs []uint8
+	for key, data := range commits {
+		if CurrentRound == key {
+			cvs = data.Cvs[:]
+			break
+		}
+	}
+	cvsSlice := cvs[:]
+	var cv [32]byte
+	copy(cv[:], []byte(cvsSlice))
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"submitCv",
+		big.NewInt(0),
+		cv,
+	)
+	if err != nil {
+		fmt.Println("It contains error")
+	}
+	return nil
+}
+
+func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int, indicesLength *big.Int) error {
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		logger.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		logger.Fatalf("Failed to decode Ethereum private key: %v", err)
+	}
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+
+	acitvatedOps := ActivatedOperator
+	indices := unpackIndicesWithLength(packedIndices, indicesLength)
+	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+	if !flag {
+		fmt.Println("Cos Request does not contain our EOA")
+		return nil
+	}
+
+	fmt.Printf("Processing RequestedToSubmitCo event for Round: %v\n", CurrentRound)
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		logger.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	file, err := os.ReadFile("commits.json")
+	if err != nil {
+		fmt.Println("Error reading file:", err)
+		return err
+	}
+
+	err = json.Unmarshal(file, &commits)
+	if err != nil {
+		fmt.Println("Error parsing JSON:", err)
+		return err
+	}
+	var cos []uint8
+	for key, data := range commits {
+		if CurrentRound == key {
+			cos = data.Cos[:]
+			break
+		}
+	}
+	cvsSlice := cos[:]
+	var cv [32]byte
+	copy(cv[:], []byte(cvsSlice))
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"submitCo",
+		big.NewInt(0),
+		cv,
+	)
+	if err != nil {
+		fmt.Println("It contains error")
+	}
+	return nil
+}
+
+func unpackIndices(packedIndices *big.Int) []*big.Int {
+	order := []*big.Int{}
+	mask := big.NewInt(0xFF)
+	i := 0
+	for {
+		shift := uint(8 * i)
+		shifted := new(big.Int).Rsh(packedIndices, shift)
+		value := new(big.Int).And(shifted, mask)
+
+		if i != 0 && value.Cmp(big.NewInt(0)) == 0 {
+			break
+		}
+		order = append(order, value)
+		i++
+	}
+	return order
+}
+
+func unpackIndicesWithLength(unpackIndices *big.Int, indicesLength *big.Int) []*big.Int {
+	order := []*big.Int{}
+	mask := big.NewInt(0xFF)
+	i := 0
+	for i < int(indicesLength.Int64()) {
+		shift := uint(8 * i)
+		shifted := new(big.Int).Rsh(unpackIndices, shift)
+		value := new(big.Int).And(shifted, mask)
+		order = append(order, value)
+		i++
+	}
+	return order
+}
+
+func findEOAAddress(indices []*big.Int, activatedOps []string, eoaAddress string) (bool, error) {
+	if len(indices) > len(activatedOps) {
+		return false, fmt.Errorf("indices length is greater than activated operators")
+	}
+	for _, index := range indices {
+		if eoaAddress == activatedOps[index.Int64()] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string) ([]string, error) {
+	var result []string
+	activatedOperators, err := eth.GetActivatedOperators(fallbackEthClient)
+	if err != nil {
+		logger.Infof("Error fetching the activated operators %v", err)
+		return result, err
+	}
+	strAddresses := make([]string, len(activatedOperators))
+	for i, addr := range activatedOperators {
+		strAddresses[i] = addr.Hex()
+	}
+	return strAddresses, nil
+}
+
+func fetchCurrentRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient) (*big.Int, error) {
+	abiFilePath := "contract/abi/Commit2RevealDRB.json"
+	parsedABI, err := utils.LoadContractABI(abiFilePath)
+	if err != nil {
+		logger.Fatalf("Failed to load contract ABI: %v", err)
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		logger.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	result, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_currentRound", contractAddress)
+	if err != nil {
+		logger.Infof("Failed to fetch activated operators: %v", err)
+		return nil, err
+	}
+	currentRound, ok := result.(*big.Int)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type: expected *big.Int, got %v", result)
+	}
+
+	return currentRound, nil
+}

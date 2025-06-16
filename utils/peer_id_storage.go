@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
-	"log"
 	"os"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/tokamak-network/DRB-node/logger"
 )
 
 // PeerIDStorage structure to store PeerID's private key as bytes
@@ -35,7 +35,7 @@ func SavePeerID(privKey crypto.PrivKey) error {
 	// Convert the private key to bytes
 	privKeyBytes, err := crypto.MarshalPrivateKey(privKey)
 	if err != nil {
-		log.Printf("Failed to marshal private key: %v", err)
+		logger.Infof("Failed to marshal private key: %v", err)
 		return err
 	}
 
@@ -46,17 +46,17 @@ func SavePeerID(privKey crypto.PrivKey) error {
 	fileName := getPeerIDFileName()
 	data, err := json.MarshalIndent(peerIDStorage, "", "  ")
 	if err != nil {
-		log.Printf("Failed to marshal private key bytes: %v", err)
+		logger.Infof("Failed to marshal private key bytes: %v", err)
 		return err
 	}
 
 	err = ioutil.WriteFile(fileName, data, 0644)
 	if err != nil {
-		log.Printf("Failed to write private key bytes to %s: %v", fileName, err)
+		logger.Infof("Failed to write private key bytes to %s: %v", fileName, err)
 		return err
 	}
 
-	log.Printf("Private key saved to %s", fileName)
+	logger.Infof("Private key saved to %s", fileName)
 	return nil
 }
 
@@ -69,7 +69,7 @@ func LoadPeerID() (crypto.PrivKey, peer.ID, error) {
 	data, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		// If the file does not exist, return an error
-		log.Printf("Failed to read %s: %v", fileName, err)
+		logger.Infof("Failed to read %s: %v", fileName, err)
 		return nil, "", err
 	}
 
@@ -77,30 +77,30 @@ func LoadPeerID() (crypto.PrivKey, peer.ID, error) {
 	var peerIDStorage PeerIDStorage
 	err = json.Unmarshal(data, &peerIDStorage)
 	if err != nil {
-		log.Printf("Failed to unmarshal private key bytes from %s: %v", fileName, err)
+		logger.Infof("Failed to unmarshal private key bytes from %s: %v", fileName, err)
 		return nil, "", err
 	}
 
 	// Ensure the private key bytes exist
 	if peerIDStorage.PrivateKeyBytes == nil {
-		log.Printf("Private key bytes are missing in the file.")
+		logger.Infof("Private key bytes are missing in the file.")
 		return nil, "", errors.New("private key bytes are empty in storage")
 	}
 
 	// Recreate the private key from the bytes
 	privKey, err := crypto.UnmarshalPrivateKey(peerIDStorage.PrivateKeyBytes)
 	if err != nil {
-		log.Printf("Failed to unmarshal private key from bytes: %v", err)
+		logger.Infof("Failed to unmarshal private key from bytes: %v", err)
 		return nil, "", err
 	}
 
 	// Generate the PeerID from the private key
 	peerID, err := peer.IDFromPrivateKey(privKey)
 	if err != nil {
-		log.Printf("Failed to generate PeerID from private key: %v", err)
+		logger.Infof("Failed to generate PeerID from private key: %v", err)
 		return nil, "", err
 	}
 
-	log.Printf("Loaded private key and PeerID successfully from %s", fileName)
+	logger.Infof("Loaded private key and PeerID successfully from %s", fileName)
 	return privKey, peerID, nil
 }

@@ -3,7 +3,8 @@ package utils
 import (
 	"encoding/json"
 	"io/ioutil"
-	"log"
+
+	"github.com/tokamak-network/DRB-node/logger"
 )
 
 // NodeInfo structure to store information about the node
@@ -26,6 +27,6 @@ func SaveNodeInfo(nodeInfos []NodeInfo) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Node info saved to %s", fileName)
+	logger.Infof("Node info saved to %s", fileName)
 	return nil
 }

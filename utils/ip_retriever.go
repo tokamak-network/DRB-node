@@ -2,22 +2,23 @@ package utils
 
 import (
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
+
+	"github.com/tokamak-network/DRB-node/logger"
 )
 
 // GetLocalIP returns the local IP address of the node
 func GetLocalIP() string {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		log.Fatalf("Failed to get network interfaces: %v", err)
+		logger.Fatalf("Failed to get network interfaces: %v", err)
 	}
 
 	for _, iface := range interfaces {
 		addrs, err := iface.Addrs()
 		if err != nil {
-			log.Printf("Failed to get addresses for interface %s: %v", iface.Name, err)
+			logger.Infof("Failed to get addresses for interface %s: %v", iface.Name, err)
 			continue
 		}
 		for _, addr := range addrs {
@@ -34,14 +35,14 @@ func GetLocalIP() string {
 func GetPublicIP() string {
 	resp, err := http.Get("http://checkip.amazonaws.com/")
 	if err != nil {
-		log.Printf("Failed to get public IP: %v", err)
+		logger.Infof("Failed to get public IP: %v", err)
 		return "0.0.0.0"
 	}
 	defer resp.Body.Close()
 
 	publicIP, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("Failed to read public IP response: %v", err)
+		logger.Infof("Failed to read public IP response: %v", err)
 		return "0.0.0.0"
 	}
 

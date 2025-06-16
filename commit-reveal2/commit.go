@@ -3,11 +3,11 @@ package commitreveal2
 import (
 	"encoding/hex"
 	"fmt"
-	"log"
 	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/tokamak-network/DRB-node/logger"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -42,9 +42,9 @@ func GenerateCommit(round string, operator string) ([32]byte, [32]byte, [32]byte
 	copy(cvsBytes32[:], cvs)
 
 	// Print results
-	log.Printf("Secret Value (bytes32): 0x%s", hex.EncodeToString(secretValue))
-	log.Printf("COS (bytes32): 0x%s", hex.EncodeToString(cos))
-	log.Printf("CVS (bytes32): 0x%s", hex.EncodeToString(cvs))
+	logger.Infof("Secret Value (bytes32): 0x%s", hex.EncodeToString(secretValue))
+	logger.Infof("COS (bytes32): 0x%s", hex.EncodeToString(cos))
+	logger.Infof("CVS (bytes32): 0x%s", hex.EncodeToString(cvs))
 
 	return secretValueBytes32, cosBytes32, cvsBytes32, nil
 }
