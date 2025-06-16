@@ -3,6 +3,7 @@ package regularNode_helper
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -35,25 +36,27 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		roundData, exists := data[req.Round]
+		roundData, exists := data[CurrentRound]
 		if exists {
-			if strictOrderWhileSecretRequest[req.Round] == nil {
+			if strictOrderWhileSecretRequest[CurrentRound] == nil {
 				rawOrderedNodes := roundData.(map[string]interface{})["ordered_nodes"].([]interface{})
 				orderedNodes := make([]string, len(rawOrderedNodes))
 				for i, v := range rawOrderedNodes {
 					orderedNodes[i] = v.(string)
 				}
-				strictOrderWhileSecretRequest[req.Round] = orderedNodes
+				strictOrderWhileSecretRequest[CurrentRound] = orderedNodes
 			}
 			break
 		}
 
-		log.Printf("Reveal order not yet calculated for round %s. Waiting...", req.Round)
+		log.Printf("Reveal order not yet calculated for round %s. Waiting...", CurrentRound)
 		time.Sleep(2 * time.Second)
 	}
-
-	if len(strictOrderWhileReceiving[req.Round]) == 0 || strictOrderWhileReceiving[req.Round][req.Order] != req.EOAAddress {
-		log.Printf("EOA %s is not next in the reveal order %v for round %s", req.EOAAddress, req.Order, req.Round)
+	fmt.Println("strictOrderWhileReceiving[CurrentRound][req.Order]", strictOrderWhileSecretRequest[CurrentRound][req.Order])
+	fmt.Println("req.RegularEoaAddress", req.RegularEoaAddress)
+	fmt.Println("len(strictOrderWhileReceiving[CurrentRound])", len(strictOrderWhileSecretRequest[CurrentRound]))
+	if len(strictOrderWhileSecretRequest[CurrentRound]) == 0 || strictOrderWhileSecretRequest[CurrentRound][req.Order] != req.RegularEoaAddress {
+		log.Printf("EOA %s is not next in the reveal order %v for round %s", req.RegularEoaAddress, req.Order, CurrentRound)
 		return
 	}
 
@@ -66,29 +69,29 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 
 	// Use the existing signature verification mechanism
 	verifyReq := utils.RegistrationRequest{
-		EOAAddress: req.EOAAddress, // Sender's address
+		EOAAddress: req.LeaderEoaAddress, // Sender's address
 		Signature:  req.Signature,  // Signature
 	}
 
 	// Verify the signature
 	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for secret value request: expected %s, got %s", leaderEOA, req.EOAAddress)
+		log.Printf("Signature verification failed for secret value request: expected %s, got %s", leaderEOA, req.LeaderEoaAddress)
 		return
 	}
 
 	// Log the request details
-	log.Printf("Verified secret value request for round %s from leader %s", req.Round, req.EOAAddress)
+	log.Printf("Verified secret value request for round %s from leader %s", CurrentRound, req.LeaderEoaAddress)
 
 	// Fetch the secret value for the specified round
-	commitData, err := utils.LoadCommitData(req.Round)
+	commitData, err := utils.LoadCommitData(CurrentRound)
 	if err != nil {
-		log.Printf("Failed to load commit data for round %s: %v", req.Round, err)
+		log.Printf("Failed to load commit data for round %s: %v", CurrentRound, err)
 		return
 	}
 
 	// Check if the secret value exists
 	if commitData.SecretValue == [32]byte{} {
-		log.Printf("No secret value found for round %s", req.Round)
+		log.Printf("No secret value found for round %s", CurrentRound)
 		return
 	}
 
@@ -103,7 +106,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		return
 	}
 
-	SendSecretValue(h, leaderPeerID, req.Round)
+	SendSecretValue(h, leaderPeerID, CurrentRound)
 }
 
 // SendSecretValue sends the secret value for a round to the leader node
@@ -134,7 +137,7 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 
 	// Create the secret value request
 	req := utils.SecretValueRequest{
-		EOAAddress:  eoaAddress, // Regular node's Ethereum address
+		RegularEoaAddress:  eoaAddress, // Regular node's Ethereum address
 		Signature:   signature,
 		SecretValue: commitData.SecretValue[:],
 		Round:       roundNum,

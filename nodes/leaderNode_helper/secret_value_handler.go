@@ -27,24 +27,24 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 
 	// Verify the EOA signature
 	verifyReq := utils.RegistrationRequest{
-		EOAAddress: req.EOAAddress,
+		EOAAddress: req.RegularEoaAddress,
 		Signature:  req.Signature,
 	}
 
 	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for secret value request from EOA: %s", req.EOAAddress)
+		log.Printf("Signature verification failed for secret value request from EOA: %s", req.RegularEoaAddress)
 		return
 	}
 
-	log.Printf("Successfully verified signature for EOA: %s", req.EOAAddress)
+	log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 
 	// Fetch or initialize the leader commit data for the given round and EOA
-	commitData, err := utils.LoadLeaderCommitData(req.Round, req.EOAAddress)
+	commitData, err := utils.LoadLeaderCommitData(req.Round, req.RegularEoaAddress)
 	if err != nil {
-		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", req.Round, req.EOAAddress)
+		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", req.Round, req.RegularEoaAddress)
 		commitData = &utils.LeaderCommitData{
 			Round:      req.Round,
-			EOAAddress: req.EOAAddress,
+			EOAAddress: req.RegularEoaAddress,
 		}
 	}
 	var secretValueArray [32]byte
@@ -58,16 +58,16 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	commitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
 
 	log.Printf("Received and stored secret value for round %s and EOA %s: byte=%x, hex=%s",
-		req.Round, req.EOAAddress, commitData.SecretValue, commitData.SecretValueHex)
+		req.Round, req.RegularEoaAddress, commitData.SecretValue, commitData.SecretValueHex)
 
 	// Save the updated commit data
 	if err := utils.SaveLeaderCommitData(*commitData); err != nil {
-		log.Printf("Failed to save leader commit data for round %s and EOA %s: %v", req.Round, req.EOAAddress, err)
+		log.Printf("Failed to save leader commit data for round %s and EOA %s: %v", req.Round, req.RegularEoaAddress, err)
 		return
 	}
 
-	log.Printf("Successfully saved secret value for round %s and EOA %s", req.Round, req.EOAAddress)
-	broadCastS(h, req.Round, req.EOAAddress, commitData.SecretValue)
+	log.Printf("Successfully saved secret value for round %s and EOA %s", req.Round, req.RegularEoaAddress)
+	broadCastS(h, req.Round, req.RegularEoaAddress, commitData.SecretValue)
 	// Continue requesting secret values from remaining nodes in the reveal order
-	HandleSecretValueResponse(h, fallbackEthClient, req.Round, req.EOAAddress)
+	HandleSecretValueResponse(h, fallbackEthClient, req.Round, req.RegularEoaAddress)
 }

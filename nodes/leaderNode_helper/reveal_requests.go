@@ -67,7 +67,7 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 }
 
-func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient,  roundNum string, eoa string, nodeInfo NodeInfo, order int) {
+func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient,  roundNum string, regularEoa string, nodeInfo NodeInfo, order int) {
 	// Load private key from environment variable
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -80,28 +80,30 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 		return
 	}
 
-	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	log.Printf("EOA Address: %s", eoaAddress)
+	leaderEoa := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+	log.Printf("EOA Address: %s", leaderEoa)
 
 	// Sign the round number
-	signature := utils.SignData(eoaAddress, privateKey)
+	signature := utils.SignData(leaderEoa, privateKey)
 
 	// Create the secret value request
 	req := utils.SecretValueRequest{
-		EOAAddress: eoaAddress, // Leader's EOA
+		LeaderEoaAddress: leaderEoa, // Leader's EOA
+		RegularEoaAddress: regularEoa,
 		Round:      roundNum,   // Round number
 		Signature:  signature,  // Signed round number
 		Order: order,
+		
 	}
 
-	fmt.Println("Sending secret value request to EOA:", eoa)
+	fmt.Println("Sending secret value request to EOA:", regularEoa)
 
 	// Send the request
 	err = sendToRegularNode(h, nodeInfo, "/sendSecretValue", req)
 	if err != nil {
-		log.Printf("Failed to send secret value request to EOA %s for round %s: %v", eoa, roundNum, err)
+		log.Printf("Failed to send secret value request to EOA %s for round %s: %v", regularEoa, roundNum, err)
 	} else {
-		log.Printf("Secret value request sent to EOA %s for round %s", eoa, roundNum)
+		log.Printf("Secret value request sent to EOA %s for round %s", regularEoa, roundNum)
 
 		// Start a timer to track if the response is received within 15 seconds
 		go func() {
@@ -112,14 +114,14 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 			<-timer.C
 
 			// If the timer expires and the secret value is not received, call handleMissingSecretValue
-			if !roundSecret[roundNum][eoa] {
-				log.Printf("Secret value not received for EOA %s in round %s within 15 seconds. Handling missing secret value.", eoa, roundNum)
-				requestToSubmitS(fallbackEthClient, roundNum, eoa)
+			if !roundSecret[roundNum][regularEoa] {
+				log.Printf("Secret value not received for EOA %s in round %s within 15 seconds. Handling missing secret value.", regularEoa, roundNum)
+				requestToSubmitS(fallbackEthClient, roundNum, regularEoa)
 			}
 		}()
 
 		// Mark this EOA as requested
-		revealRequestStatus[roundNum] = append(revealRequestStatus[roundNum], eoa)
+		revealRequestStatus[roundNum] = append(revealRequestStatus[roundNum], regularEoa)
 	}
 }
 

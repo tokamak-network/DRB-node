@@ -169,7 +169,7 @@ func HandleSecret(s network.Stream) {
 	log.Printf("Processing secret value for EOA %s in round %s", message.EOAAddress, message.Round)
 
 	if len(strictOrderWhileReceiving[message.Round]) == 0 || strictOrderWhileReceiving[message.Round][0] != message.EOAAddress {
-		log.Printf("EOA %s is not next in the reveal order for round %s", message.EOAAddress, message.Round)
+		log.Printf("EOA %s is not next in the reveal order for broadcasting for round %s", message.EOAAddress, message.Round)
 		return
 	}
 
