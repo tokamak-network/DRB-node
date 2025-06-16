@@ -17,7 +17,7 @@ var peerNodeInfo map[string]utils.PeerCommitData
 var CosRecevied = make(map[string]map[string]bool)
 
 var revealOrderLock sync.Mutex
-var revealOrder = make(map[string][]string)
+var strictOrderWhileReceiving = make(map[string][]string)
 
 // HandleSecret processes incoming secret values and ensures they are accepted in the reveal order.
 func HandleCvs(s network.Stream) {
@@ -151,13 +151,13 @@ func HandleSecret(s network.Stream) {
 
 		roundData, exists := data[message.Round]
 		if exists {
-			if revealOrder[message.Round] == nil {
+			if strictOrderWhileReceiving[message.Round] == nil {
 				rawOrderedNodes := roundData.(map[string]interface{})["ordered_nodes"].([]interface{})
 				orderedNodes := make([]string, len(rawOrderedNodes))
 				for i, v := range rawOrderedNodes {
 					orderedNodes[i] = v.(string)
 				}
-				revealOrder[message.Round] = orderedNodes
+				strictOrderWhileReceiving[message.Round] = orderedNodes
 			}
 			break
 		}
@@ -168,7 +168,7 @@ func HandleSecret(s network.Stream) {
 
 	log.Printf("Processing secret value for EOA %s in round %s", message.EOAAddress, message.Round)
 
-	if len(revealOrder[message.Round]) == 0 || revealOrder[message.Round][0] != message.EOAAddress {
+	if len(strictOrderWhileReceiving[message.Round]) == 0 || strictOrderWhileReceiving[message.Round][0] != message.EOAAddress {
 		log.Printf("EOA %s is not next in the reveal order for round %s", message.EOAAddress, message.Round)
 		return
 	}
@@ -214,5 +214,5 @@ func HandleSecret(s network.Stream) {
 	}
 
 	log.Printf("Successfully saved Secret for round %s and EOA %s into peerNodeInfo.json", message.Round, message.EOAAddress)
-	revealOrder[message.Round] = revealOrder[message.Round][1:]
+	strictOrderWhileReceiving[message.Round] = strictOrderWhileReceiving[message.Round][1:]
 }
