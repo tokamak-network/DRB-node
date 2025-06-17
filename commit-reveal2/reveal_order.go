@@ -73,7 +73,6 @@ func saveRevealOrders(filePath string, data map[string]interface{}) error {
 }
 
 func LoadRevealOrders(filePath string) (map[string]interface{}, error) {
-	fmt.Println("inside LoadRevealOrders")
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -169,8 +168,6 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 }
 
 func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common.Address, filePath string) (bool, error) {
-	fmt.Println("inside DetermineRevealOrderForRegular")
-	fmt.Println("filePath", filePath)
 	data, err := LoadRevealOrders(filePath)
 	if err != nil {
 		logger.Infof("Failed to load existing reveal orders: %v", err)
@@ -185,7 +182,6 @@ func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common
 	logger.Infof("Determining Regular reveal order for round %s...", roundNum)
 
 	operators := eth.ActivatedOperators
-	fmt.Println("operators", operators)
 	if len(operators) == 0 {
 		logger.Infof("No activated operators found for round sfsf %s", roundNum)
 		return false, fmt.Errorf("no activated operators found for round %s", roundNum)

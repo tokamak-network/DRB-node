@@ -75,7 +75,6 @@ func LoadLeaderCommitData(roundNum, eoaAddress string) (*LeaderCommitData, error
 }
 func LoadCommitDataRegular(roundNum, eoaAddress string) (*PeerCommitData, error) {
 	// Open the commit file
-	fmt.Println("inside LoadCommitDataRegular")
 	file, err := os.Open(peerNodeInfoFile)
 	if err != nil {
 		if os.IsNotExist(err) {

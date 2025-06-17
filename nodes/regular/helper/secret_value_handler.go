@@ -3,7 +3,6 @@ package regularNode_helper
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"time"
 
@@ -52,9 +51,6 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		logger.Infof("Reveal order not yet calculated for round %s. Waiting...", CurrentRound)
 		time.Sleep(2 * time.Second)
 	}
-	fmt.Println("strictOrderWhileReceiving[CurrentRound][req.Order]", strictOrderWhileSecretRequest[CurrentRound][req.Order])
-	fmt.Println("req.RegularEoaAddress", req.RegularEoaAddress)
-	fmt.Println("len(strictOrderWhileReceiving[CurrentRound])", len(strictOrderWhileSecretRequest[CurrentRound]))
 	if len(strictOrderWhileSecretRequest[CurrentRound]) == 0 || strictOrderWhileSecretRequest[CurrentRound][req.Order] != req.RegularEoaAddress {
 		logger.Infof("EOA %s is not next in the reveal order %v for round %s", req.RegularEoaAddress, req.Order, CurrentRound)
 		return
