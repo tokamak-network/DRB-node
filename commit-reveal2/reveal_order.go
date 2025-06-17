@@ -179,7 +179,7 @@ func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common
 
 	if _, exists := data[roundNum]; exists {
 		log.Printf("Regular Reveal order already exists for round %s. Skipping calculation.", roundNum)
-		return false, nil
+		return true, nil
 	}
 
 	log.Printf("Determining Regular reveal order for round %s...", roundNum)
