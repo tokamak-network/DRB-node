@@ -10,7 +10,7 @@ services:
       timeout: 5s
       retries: 5
     environment:
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     ports:
       - "5432:5432"
     volumes:
@@ -23,19 +23,17 @@ services:
     depends_on:
       leaderpostgres:
         condition: service_healthy
+    env_file: ./.env
     environment:
       LEADER_PORT: 61280
-      LEADER_PRIVATE_KEY: a71fb000785e78b05d639572d45facdd0b7d720297209258edbe5d5fd367a514
-      LEADER_EOA: 0xc0Aa32197B840991e197059f1f7F782EC077438D
+      LEADER_PRIVATE_KEY: $LEADER_PRIVATE_KEY
+      LEADER_EOA: $LEADER_EOA
       NODE_TYPE: leader
       POSTGRES_HOST: "leaderpostgres"
       POSTGRES_PORT: 5432
-      POSTGRES_PASSWORD: password
-      ETH_RPC_URL: wss://yolo-lingering-haze.ethereum-sepolia.quiknode.pro/f828b666b24c1ba119726fdcd64a1c73e83a476e/
-      # ETH_RPC_URL: ws://127.0.0.1:8545/
-      # CONTRACT_ADDRESS: 0x619477497Ba4d0F509E939a8f7D79E70c3e9440D
-      # CONTRACT_ADDRESS: 0xfbfbfDdd6e35dA57b7B0F9a2C10E34Be70B3A4E9
-      CONTRACT_ADDRESS: 0x98c5d66c12870ba8b634363d7bc2aa1d8ed6e491
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      ETH_RPC_URL: $ETH_RPC_URL
+      CONTRACT_ADDRESS: $CONTRACT_ADDRESS
     volumes:
       - leadernode-key:/root/leadernode.bin
       - ./contract/abi/Commit2RevealDRB.json:/root/contract/abi/Commit2RevealDRB.json
@@ -87,20 +85,21 @@ services:
         condition: service_healthy
     ports:
       - "61281:61281"
+    env_file: ./.env
     environment:
       LEADER_IP: 127.0.0.1
       LEADER_PORT: 61280
-      LEADER_PEER_ID: 12D3KooWBvfsx5V5VHt8M9fgy8cAiugtrAZ3i2Lnnr3A3GzGtuVi
-      LEADER_EOA: 0xc0Aa32197B840991e197059f1f7F782EC077438D
+      LEADER_PEER_ID: $LEADER_PEER_ID
+      LEADER_EOA: $LEADER_EOA
       PORT: 61281
-      EOA_PRIVATE_KEY: 768effd1b4a451918e432ba6bd9c711b502faf2bef6d159310865ded92f7085a
+      EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_1
       NODE_TYPE: regular
       POSTGRES_HOST: "regular1postgres"
       POSTGRES_PORT: 5432
-      POSTGRES_PASSWORD: password
-      CHAIN_ID: 11155111
-      ETH_RPC_URL: wss://yolo-lingering-haze.ethereum-sepolia.quiknode.pro/f828b666b24c1ba119726fdcd64a1c73e83a476e/
-      CONTRACT_ADDRESS: 0x98c5d66c12870ba8b634363d7bc2aa1d8ed6e491
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      CHAIN_ID: $CHAIN_ID
+      ETH_RPC_URL: $ETH_RPC_URL
+      CONTRACT_ADDRESS: $CONTRACT_ADDRESS
   regularnode2:
     build:
       context: .
@@ -113,20 +112,21 @@ services:
         condition: service_healthy
     ports:
       - "61282:61282"
+    env_file: ./.env
     environment:
       LEADER_IP: 127.0.0.1
       LEADER_PORT: 61280
-      LEADER_PEER_ID: 12D3KooWBvfsx5V5VHt8M9fgy8cAiugtrAZ3i2Lnnr3A3GzGtuVi
-      LEADER_EOA: 0xc0Aa32197B840991e197059f1f7F782EC077438D
+      LEADER_PEER_ID: $LEADER_PEER_ID
+      LEADER_EOA: $LEADER_EOA
       PORT: 61282
-      EOA_PRIVATE_KEY: 4d539b1896a8f7064a7207fa005b13b64f90eff78564e278c14b1089d2d5f8de
+      EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_2
       NODE_TYPE: regular
       POSTGRES_HOST: "regular2postgres"
       POSTGRES_PORT: 5432
-      POSTGRES_PASSWORD: password
-      CHAIN_ID: 11155111
-      ETH_RPC_URL: wss://yolo-lingering-haze.ethereum-sepolia.quiknode.pro/f828b666b24c1ba119726fdcd64a1c73e83a476e/
-      CONTRACT_ADDRESS: 0x98c5d66c12870ba8b634363d7bc2aa1d8ed6e491
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      CHAIN_ID: $CHAIN_ID
+      ETH_RPC_URL: $ETH_RPC_URL
+      CONTRACT_ADDRESS: $CONTRACT_ADDRESS
 
 volumes:
   leaderpostgres-data:
