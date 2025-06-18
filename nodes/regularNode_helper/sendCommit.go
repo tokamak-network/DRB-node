@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"os"
@@ -77,7 +78,8 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	StatusSig := parsedABI.Events["Status"].ID
 	MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
 	RequestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
-
+	RequestedToSubmitSFromIndexKSig := parsedABI.Events["RequestedToSubmitSFromIndexK"].ID
+	fmt.Println(RequestedToSubmitSFromIndexKSig, "RequestedToSubmitSFromIndexKSig")
 	for {
 		select {
 		case err := <-sub.Err():
@@ -145,12 +147,122 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 					fmt.Printf("RequestedToSubmitCo Event: startTime %v\n, indicesLength %v\n, indices %v\n", eventData.StartTime, eventData.IndicesLength, eventData.PackedIndices)
 
 					processCosRequest(fallbackEthClient, eventData.PackedIndices, eventData.IndicesLength)
+
+				case RequestedToSubmitSFromIndexKSig:
+					eventData := struct {
+						StartTime *big.Int
+						IndexK    *big.Int
+					}{}
+
+					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitSFromIndexK", vLog.Data)
+
+					if err != nil {
+						log.Printf("Failed to decode RequestedToSubmitSFromIndexK event log: %v", err)
+						continue
+					}
+					fmt.Printf("RequestedToSubmitSFromIndexK Event:\n startTime %v\n indexK %v\n", eventData.StartTime, eventData.IndexK)
+
+					processSecretRequest(fallbackEthClient, eventData.IndexK)
+				default:
+					fmt.Println("vLog.Topics[0]", vLog.Topics[0])
 				}
 			}
 		}
 	}
 }
 
+func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, indexK *big.Int) {
+	data, _ := commitreveal2.LoadRevealOrders("regular_reveal_order.json")
+	order := data[CurrentRound].(map[string]interface{})["ordered_nodes"].([]interface{})
+	if indexK.Int64() >= int64(len(order)) {
+		log.Printf("IndexK %d is out of bounds for the ordered nodes length %d", indexK.Int64(), len(order))
+		return
+	}
+	length := int64(len(eth.ActivatedOperators))
+	for i := indexK.Int64(); i < length; i++ {
+
+	}
+	regularEoaAddress := order[indexK.Int64()].(string)
+	if EoaAddress == regularEoaAddress {
+		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", CurrentRound, regularEoaAddress)
+		submitS(fallbackEthClient)
+	}
+
+}
+
+func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+	filePath := "commits.json"
+	file, err := os.Open(filePath)
+	if err != nil {
+		log.Fatalf("Failed to open commits.json: %v", err)
+	}
+
+	defer file.Close()
+	var commits map[string]interface{}
+
+	byteValue, err := io.ReadAll(file)
+	if err != nil {
+		log.Fatalf("Failed to read commits.json: %v", err)
+	}
+	err = json.Unmarshal(byteValue, &commits)
+	if err != nil {
+		log.Fatalf("Failed to parse commits.json: %v", err)
+	}
+
+	roundData, exists := commits[CurrentRound]
+	if !exists {
+		log.Fatalf("Round 0 not found in commits.json")
+	}
+	secretValueArray := roundData.(map[string]interface{})["secret_value"].([]interface{})
+
+	var secretValueBytes [32]byte
+	for i, v := range secretValueArray {
+		secretValueBytes[i] = byte(v.(float64))
+	}
+
+	fmt.Printf("Extracted secret_value as bytes32: %x\n", secretValueBytes)
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Fatalf("Failed to load contract ABI: %v", err)
+	}
+
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Fatalf("Failed to decode leader private key: %v", err)
+	}
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"submitS",
+		big.NewInt(0),
+		secretValueBytes,
+	)
+	if err != nil {
+		log.Printf("Failed to submit secret_value: %v", err)
+		return
+	}
+
+	log.Printf("Successfully submitted secret_value: %x", secretValueBytes)
+}
 func processMerkleRoot(round string) {
 	if RoundsData == nil {
 		RoundsData = make(map[string]RoundData)
