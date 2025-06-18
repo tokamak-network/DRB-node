@@ -21,6 +21,7 @@ type SigRS struct {
 	R [32]byte
 	S [32]byte
 }
+
 // Tracks EOAs that have been sent requests per round
 var revealRequestStatus = make(map[string][]string)
 var roundSecret = make(map[string]map[string]bool)
@@ -67,7 +68,7 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 }
 
-func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient,  roundNum string, regularEoa string, nodeInfo NodeInfo, order int) {
+func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string, regularEoa string, nodeInfo NodeInfo, order int) {
 	// Load private key from environment variable
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -88,12 +89,11 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 
 	// Create the secret value request
 	req := utils.SecretValueRequest{
-		LeaderEoaAddress: leaderEoa, // Leader's EOA
+		LeaderEoaAddress:  leaderEoa, // Leader's EOA
 		RegularEoaAddress: regularEoa,
-		Round:      roundNum,   // Round number
-		Signature:  signature,  // Signed round number
-		Order: order,
-		
+		Round:             roundNum,  // Round number
+		Signature:         signature, // Signed round number
+		Order:             order,
 	}
 
 	fmt.Println("Sending secret value request to EOA:", regularEoa)
@@ -107,7 +107,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 
 		// Start a timer to track if the response is received within 15 seconds
 		go func() {
-			timer := time.NewTimer(45 * time.Second)
+			timer := time.NewTimer(20 * time.Second)
 			defer timer.Stop()
 
 			// Wait for the timer to expire
@@ -116,7 +116,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 			// If the timer expires and the secret value is not received, call handleMissingSecretValue
 			if !roundSecret[roundNum][regularEoa] {
 				log.Printf("Secret value not received for EOA %s in round %s within 15 seconds. Handling missing secret value.", regularEoa, roundNum)
-				requestToSubmitS(fallbackEthClient, roundNum, regularEoa)
+				requestToSubmitS(fallbackEthClient, roundNum)
 			}
 		}()
 
@@ -125,9 +125,8 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 	}
 }
 
-
-func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string, eoa string) {
-	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := prepareArgumentsForRequestToSubmitS(roundNum, eoa)
+func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string) {
+	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := prepareArgumentsForRequestToSubmitS(roundNum)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -166,8 +165,8 @@ func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 		big.NewInt(0),
 		allCos,
 		secretsReceivedOffchainInRevealOrder,
-		cvNotOnChainCvAndSigRS,
 		packedVs,
+		cvNotOnChainCvAndSigRS,
 		packedRevealOrders,
 	)
 	if err != nil {
@@ -178,20 +177,37 @@ func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 	log.Printf("Successfully submitted cos request for round %s", roundNum)
 }
 
-func prepareArgumentsForRequestToSubmitS(roundNum string, eoa string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
+func prepareArgumentsForRequestToSubmitS(roundNum string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
 	_, cos, _, vs, rs, ss := LoadNodeData(roundNum)
+	var notOnChainIndices []*big.Int
+	i := big.NewInt(0)
+	j := 0
+	length := big.NewInt(int64(len(eth.ActivatedOperators)))
 
-	notOnChainIndices := Indices
+	for i.Cmp(length) < 0 {
+		if j < len(Indices) && i.Cmp(Indices[j]) == 0 {
+			i = new(big.Int).Add(i, big.NewInt(1))
+			j++
+		} else {
+			notOnChainIndices = append(notOnChainIndices, new(big.Int).Set(i))
+			i = new(big.Int).Add(i, big.NewInt(1))
+		}
+	}
+
 	var sigRSsForAllCvsNotOnChain []SigRS
-	var vsForNotOnChain []*big.Int
+	var vsForNotOnChain []uint8
 	var allCos [][32]byte
+	for i := range cos {
+		var cos32 [32]byte
+		copy(cos32[:], cos[i])
+		allCos = append(allCos, cos32)
+	}
 	for _, i := range notOnChainIndices {
 		index := int(i.Int64())
-		vsForNotOnChain = append(vsForNotOnChain, big.NewInt(int64(vs[index])))
-		var r32, s32, cos32 [32]byte
+		vsForNotOnChain = append(vsForNotOnChain, uint8(vs[index]))
+		var r32, s32 [32]byte
 		copy(r32[:], rs[index].Bytes())
 		copy(s32[:], ss[index].Bytes())
-		copy(cos32[:], cos[index])
 		cvAndSigRS := SigRS{
 			R: r32,
 			S: s32,
@@ -211,9 +227,9 @@ func prepareArgumentsForRequestToSubmitS(roundNum string, eoa string) ([][32]byt
 
 	order := roundRevealData.RevealOrder
 	packedRevealOrders := packRevealOrder(order)
-	packedVsForAllCvsNotOnChain := PackIndices(vsForNotOnChain)
+	packedVsForAllCvsNotOnChain := packVsValues(vsForNotOnChain)
 
-	return allCos, RoundSecrets[eoa], packedVsForAllCvsNotOnChain, sigRSsForAllCvsNotOnChain, packedRevealOrders
+	return allCos, RoundSecrets[roundNum], packedVsForAllCvsNotOnChain, sigRSsForAllCvsNotOnChain, packedRevealOrders
 }
 
 func PackIndices(indices []*big.Int) *big.Int {
@@ -225,7 +241,7 @@ func PackIndices(indices []*big.Int) *big.Int {
 }
 
 // handleSecretValueResponse processes a response and sends the next request if applicable
-func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient,  roundNum string, eoa string) {
+func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string, eoa string) {
 	log.Printf("Secret value received for round %s from EOA %s", roundNum, eoa)
 
 	// Load reveal order for the round
