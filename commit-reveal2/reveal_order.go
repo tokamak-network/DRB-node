@@ -73,7 +73,6 @@ func saveRevealOrders(filePath string, data map[string]interface{}) error {
 }
 
 func LoadRevealOrders(filePath string) (map[string]interface{}, error) {
-	fmt.Println("inside LoadRevealOrders")
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -169,8 +168,6 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 }
 
 func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common.Address, filePath string) (bool, error) {
-	fmt.Println("inside DetermineRevealOrderForRegular")
-	fmt.Println("filePath",filePath)
 	data, err := LoadRevealOrders(filePath)
 	if err != nil {
 		log.Printf("Failed to load existing reveal orders: %v", err)
@@ -185,7 +182,6 @@ func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common
 	log.Printf("Determining Regular reveal order for round %s...", roundNum)
 
 	operators := eth.ActivatedOperators
-	fmt.Println("operators", operators)
 	if  len(operators) == 0 {
 		log.Printf("No activated operators found for round sfsf %s", roundNum)
 		return false, fmt.Errorf("no activated operators found for round %s", roundNum)
@@ -195,7 +191,6 @@ func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common
 	var cosValues [][]byte
 	var addresses []string
 	for _, eoaAddress := range operators {
-		fmt.Println(operators)
 		eoaAddressStr := eoaAddress.Hex()
 
 		commitData, err := utils.LoadCommitDataRegular(roundNum, eoaAddressStr)
@@ -213,8 +208,6 @@ func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common
 		cosValues = append(cosValues, commitData.Cos[:])
 		addresses = append(addresses, eoaAddressStr)
 	}
-	fmt.Println("cvsValues", cvsValues)
-	fmt.Println("cosValues", cosValues)
 
 	// Calculate the RV and determine the reveal order
 	rv := calculateRV(cosValues)

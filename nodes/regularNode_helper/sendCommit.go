@@ -79,7 +79,8 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
 	RequestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
 	RequestedToSubmitSFromIndexKSig := parsedABI.Events["RequestedToSubmitSFromIndexK"].ID
-	fmt.Println(RequestedToSubmitSFromIndexKSig, "RequestedToSubmitSFromIndexKSig")
+	SSubmittedSig := parsedABI.Events["SSubmitted"].ID
+
 	for {
 		select {
 		case err := <-sub.Err():
@@ -163,26 +164,41 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 					fmt.Printf("RequestedToSubmitSFromIndexK Event:\n startTime %v\n indexK %v\n", eventData.StartTime, eventData.IndexK)
 
 					processSecretRequest(fallbackEthClient, eventData.IndexK)
-				default:
-					fmt.Println("vLog.Topics[0]", vLog.Topics[0])
+
+				case SSubmittedSig:
+					eventData := struct {
+						StartTime *big.Int
+						S         [32]byte
+						Index     *big.Int
+					}{}
+
+					err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
+
+					if err != nil {
+						log.Printf("Failed to decode SSubmitted event log: %v", err)
+						continue
+					}
+					fmt.Printf("SSubmitted Event:\n startTime %v\n Secret %v\n, indexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
+					// index := new(big.Int).Add(eventData.Index, big.NewInt(1))
+					processSecretRequest(fallbackEthClient, big.NewInt(1))
 				}
 			}
 		}
 	}
 }
 
-func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, indexK *big.Int) {
+func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int) {
 	data, _ := commitreveal2.LoadRevealOrders("regular_reveal_order.json")
 	order := data[CurrentRound].(map[string]interface{})["ordered_nodes"].([]interface{})
-	if indexK.Int64() >= int64(len(order)) {
-		log.Printf("IndexK %d is out of bounds for the ordered nodes length %d", indexK.Int64(), len(order))
+	if index.Int64() >= int64(len(order)) {
+		log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(order))
 		return
 	}
 	length := int64(len(eth.ActivatedOperators))
-	for i := indexK.Int64(); i < length; i++ {
+	for i := index.Int64(); i < length; i++ {
 
 	}
-	regularEoaAddress := order[indexK.Int64()].(string)
+	regularEoaAddress := order[index.Int64()].(string)
 	if EoaAddress == regularEoaAddress {
 		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", CurrentRound, regularEoaAddress)
 		submitS(fallbackEthClient)
@@ -302,7 +318,6 @@ func AllCosReceivedUnlocked(ActivatedOperator []string) {
 	for {
 		round := CurrentRound
 		ops := eth.ActivatedOperators
-		fmt.Println("ops", ops)
 		if allCosReceivedUnlockedRegular(round, ops) {
 			flag, _ := commitreveal2.DetermineRevealOrderForRegular(CurrentRound, ops, "regular_reveal_order.json")
 			if flag {

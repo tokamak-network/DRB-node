@@ -231,7 +231,6 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 	cosHex := hex.EncodeToString(cos[:])
 	commitData.CosHex = cosHex
 	utils.CommittedNodes[round][eoa] = commitData
-	fmt.Println(commitData, "commitData")
 
 	if AllCosReceivedUnlocked(round) {
 		log.Printf("All COS received for round %s.", round)
@@ -326,7 +325,6 @@ func updateCVS(round string, eoa common.Address, cvs [32]byte) {
 }
 
 func AllCosReceivedUnlocked(roundNum string) bool {
-	fmt.Println("AllCosReceivedUnlocked")
 	ops := eth.ActivatedOperators
 	if len(ops) == 0 {
 		return false
