@@ -14,6 +14,12 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+type RevealOrder struct {
+	OrderedNodes []string `json:"ordered_nodes"`
+	RevealOrder  []int    `json:"reveal_order"`
+	RV           string   `json:"rv"`
+}
+
 // calculateRV hashes all COS values into a single RV value
 func calculateRV(cosValues [][]byte) [32]byte {
 	var concatenated []byte
@@ -46,7 +52,7 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].value.Cmp(entries[j].value) > 0
 	})
-		
+
 	var order []int
 	for _, entry := range entries {
 		order = append(order, entry.index)
@@ -91,6 +97,33 @@ func LoadRevealOrders(filePath string) (map[string]interface{}, error) {
 	return data, nil
 }
 
+func LoadRevealOrder(filepath string, round string) (*RevealOrder, error) {
+	// Open the JSON file
+	fmt.Println("filepath", filepath)
+	file, err := os.Open(filepath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %v", filepath, err)
+	}
+	defer file.Close()
+
+	// Decode the JSON data
+	var data map[string]RevealOrder
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode JSON data: %v", err)
+	}
+
+	// Retrieve the reveal order for the specified round
+	revealOrder, exists := data[round]
+	if !exists {
+		return nil, fmt.Errorf("reveal order not found for round %s", round)
+	}
+	fmt.Println("data", data)
+	fmt.Println(revealOrder, revealOrder)
+	return &revealOrder, nil
+}
+
 func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) error {
 	// File path for reveal order storage
 	filePath := "reveal_orders.json"
@@ -111,8 +144,8 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 	log.Printf("Determining reveal order for round %s...", roundNum)
 
 	operators := eth.ActivatedOperators
-	
-	if  len(operators) == 0 {
+
+	if len(operators) == 0 {
 		log.Printf("No activated operators found for round %s", roundNum)
 		return fmt.Errorf("no activated operators found for round %s", roundNum)
 	}
@@ -182,7 +215,7 @@ func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common
 	log.Printf("Determining Regular reveal order for round %s...", roundNum)
 
 	operators := eth.ActivatedOperators
-	if  len(operators) == 0 {
+	if len(operators) == 0 {
 		log.Printf("No activated operators found for round sfsf %s", roundNum)
 		return false, fmt.Errorf("no activated operators found for round %s", roundNum)
 	}
