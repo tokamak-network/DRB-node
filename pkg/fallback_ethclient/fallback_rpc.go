@@ -81,9 +81,9 @@ func (f *FallbackRPCClient) switchToNextClient() {
 func (f *FallbackRPCClient) getCurrentClient() *ethclient.Client {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-    if !rpcURLPrinted {
-        rpcURLPrinted = true
-    }
+	if !rpcURLPrinted {
+		rpcURLPrinted = true
+	}
 
 	return f.clients[f.currentIdx]
 }
@@ -227,6 +227,36 @@ func (f *FallbackRPCClient) BalanceAt(ctx context.Context, account common.Addres
 		}
 		lastErr = err
 		f.logger.WithError(err).Warn("RPC get balance failed, switching to fallback")
+		f.switchToNextClient()
+	}
+	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
+}
+
+func (f *FallbackRPCClient) SubscribeNewHead(ctx context.Context, ch chan<- *types.Header) (ethereum.Subscription, error) {
+	var lastErr error
+	for i := 0; i < len(f.clients); i++ {
+		client := f.getCurrentClient()
+		sub, err := client.SubscribeNewHead(ctx, ch)
+		if err == nil {
+			return sub, nil
+		}
+		lastErr = err
+		f.logger.WithError(err).Warn("RPC subscribe new heads failed, switching to fallback")
+		f.switchToNextClient()
+	}
+	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
+}
+
+func (f *FallbackRPCClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]types.Log, error) {
+	var lastErr error
+	for i := 0; i < len(f.clients); i++ {
+		client := f.getCurrentClient()
+		logs, err := client.FilterLogs(ctx, q)
+		if err == nil {
+			return logs, nil
+		}
+		lastErr = err
+		f.logger.WithError(err).Warn("RPC filter logs failed, switching to fallback")
 		f.switchToNextClient()
 	}
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)

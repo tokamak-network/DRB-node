@@ -72,12 +72,8 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		log.Fatalf("Failed to parse contract ABI: %v", err)
 	}
 
-	query := ethereum.FilterQuery{
-		Addresses: []common.Address{contractAddr},
-	}
-
-	logs := make(chan types.Log)
-	sub, err := fallbackEthClient.SubscribeFilterLogs(context.Background(), query, logs)
+	headChanges := make(chan *types.Header, 64)
+	sub, err := fallbackEthClient.SubscribeNewHead(context.Background(), headChanges)
 	if err != nil {
 		log.Fatalf("Failed to subscribe to logs: %v", err)
 	}
@@ -87,71 +83,111 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	CoSubmittedSig := parsedABI.Events["CoSubmitted"].ID
 	SSubmittedSig := parsedABI.Events["SSubmitted"].ID
 
+	log.Println("Subscribed to new heads")
+
+	var latestHeader *types.Header
+
 	for {
 		select {
 		case err := <-sub.Err():
 			log.Fatalf("Error in event subscription: %v", err)
 
-		case vLog := <-logs:
-			switch vLog.Topics[0] {
-			case CvsEventSig:
-				eventData := struct {
-					StartTime *big.Int
-					Cv        [32]byte
-					Index     *big.Int
-				}{}
-				err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
-				if err != nil {
-					log.Printf("Failed to decode CvSubmitted event log: %v", err)
+		case newHeader := <-headChanges:
+			if newHeader == nil {
+				log.Fatal("New header is nil. Exiting...")
+			}
+
+			if latestHeader == nil {
+				latestHeader = newHeader
+			} else {
+				// Handle reorg blocks
+				if latestHeader.Number.Uint64()+1 != newHeader.Number.Uint64() {
+					log.Fatalf("Unexpected header number: %v, latest header: %v", newHeader.Number, latestHeader.Number)
+				}
+
+				if latestHeader.Hash() != newHeader.ParentHash {
+					log.Fatalf("Reorg detected. Latest header: %v, New header: %v", latestHeader.Hash(), newHeader.ParentHash)
+				}
+
+				log.Printf("Received new block: %v", newHeader.Number)
+				latestHeader = newHeader
+			}
+			// Get logs from the new block
+			logs, err := fallbackEthClient.FilterLogs(context.Background(), ethereum.FilterQuery{
+				FromBlock: newHeader.Number,
+				ToBlock:   newHeader.Number,
+				Addresses: []common.Address{contractAddr},
+			})
+			if err != nil {
+				log.Fatalf("Failed to get logs: %v", err)
+			}
+
+			// Process logs
+			for _, vLog := range logs {
+				if len(vLog.Topics) == 0 {
 					continue
 				}
-				fmt.Printf("CvSubmitted Event: Fetched successfully")
+				firstTopic := vLog.Topics[0]
+				switch firstTopic {
+				case CvsEventSig:
+					eventData := struct {
+						StartTime *big.Int
+						Cv        [32]byte
+						Index     *big.Int
+					}{}
+					err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode CvSubmitted event log: %v", err)
+						continue
+					}
+					fmt.Printf("CvSubmitted Event: Fetched successfully")
 
-				processCVS(eventData.Cv, eventData.Index)
+					processCVS(eventData.Cv, eventData.Index)
 
-			case CoSubmittedSig:
-				eventData := struct {
-					StartTime *big.Int
-					Co        [32]byte
-					Index     *big.Int
-				}{}
-				err := parsedABI.UnpackIntoInterface(&eventData, "CoSubmitted", vLog.Data)
-				if err != nil {
-					log.Printf("Failed to decode CoSubmitted event log: %v", err)
-					continue
+				case CoSubmittedSig:
+					eventData := struct {
+						StartTime *big.Int
+						Co        [32]byte
+						Index     *big.Int
+					}{}
+					err := parsedABI.UnpackIntoInterface(&eventData, "CoSubmitted", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode CoSubmitted event log: %v", err)
+						continue
+					}
+					fmt.Printf("CoSubmitted Event: Fetched successfully")
+
+					processCOS(fallbackEthClient, eventData.Co, eventData.Index)
+
+				case StatusSig:
+					eventData := struct {
+						CurStartTime *big.Int
+						CurState     *big.Int
+					}{}
+
+					err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode Status event log: %v", err)
+						continue
+					}
+					processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
+
+				case SSubmittedSig:
+					eventData := struct {
+						StartTime *big.Int
+						S         [32]byte
+						Index     *big.Int
+					}{}
+
+					err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
+
+					if err != nil {
+						log.Printf("Failed to decode SSubmitted event log: %v", err)
+						continue
+					}
+					fmt.Printf("SSubmitted Event:\n StartTime %v\n Secret %v\n IndexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
+					processSubmittedSecretRequest(eventData.S, eventData.Index)
 				}
-				fmt.Printf("CoSubmitted Event: Fetched successfully")
-
-				processCOS(fallbackEthClient, eventData.Co, eventData.Index)
-
-			case StatusSig:
-				eventData := struct {
-					CurStartTime *big.Int
-					CurState     *big.Int
-				}{}
-
-				err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
-				if err != nil {
-					log.Printf("Failed to decode Status event log: %v", err)
-					continue
-				}
-				processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
-
-			case SSubmittedSig:
-				eventData := struct {
-					StartTime *big.Int
-					S         [32]byte
-					Index     *big.Int
-				}{}
-
-				err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
-
-				if err != nil {
-					log.Printf("Failed to decode SSubmitted event log: %v", err)
-					continue
-				}
-				fmt.Printf("SSubmitted Event:\n StartTime %v\n Secret %v\n IndexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
-				processSubmittedSecretRequest(eventData.S, eventData.Index)
 			}
 		}
 	}
