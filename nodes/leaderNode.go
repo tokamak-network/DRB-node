@@ -121,13 +121,14 @@ func handleCommitRequest(s network.Stream) {
 		commitData.Sign = req.Sign
 		log.Printf("Storing CVS and signature for round %s EOA %s", roundNum, eoaAddress.Hex())
 	}
+	updateInMemoryData(roundNum, eoaAddress, *commitData)
+	log.Printf("Commit data saved and updated in-memory for round %s EOA %s", roundNum, commitData.EOAAddress)
 
+	// Update database for commit data from regular node
 	if err := database.AddLeaderCommit(commitData); err != nil {
-		log.Printf("Error saving commit data for round %s EOA %s: %v", roundNum, eoaAddress.Hex(), err)
+		log.Printf("Error saving commit data for round %s EOA %s: %v", roundNum, commitData.EOAAddress, err)
 		return
 	}
-	updateInMemoryData(roundNum, eoaAddress, *commitData)
-	log.Printf("Commit data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	// Check if all commits are ready after this update
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
@@ -159,6 +160,7 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	commitMu.Lock()
 	defer commitMu.Unlock()
 
+	// Update in-memory data for leaderCommit's COS
 	commitData := getOrCreateLeaderCommitData(roundNum, eoaAddress)
 	if commitData.Cvs == [32]byte{} {
 		log.Printf("No CVS found for round %s EOA %s, rejecting COS.", roundNum, eoaAddress.Hex())
@@ -180,12 +182,24 @@ func handleCOSRequest(h host.Host, s network.Stream) {
 	commitData.CosHex = hex.EncodeToString(req.Cos[:])
 	log.Printf("Storing COS for round %s EOA %s", roundNum, eoaAddress.Hex())
 
-	if err := database.AddLeaderCommit(commitData); err != nil {
+	updateInMemoryData(roundNum, eoaAddress, *commitData)
+	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
+
+	// Update database for leaderCommit's COS
+	leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, req.EOAAddress)
+	if err != nil {
+		log.Printf("Error loading leaderCommit data from database for round: %s, and eoaAddress: %s, error: %v", roundNum, eoaAddress.Hex(), err)
+		return
+	}
+
+	leaderCommitDBData.Cos = req.Cos
+	leaderCommitDBData.CosHex = hex.EncodeToString(req.Cos[:])
+
+	if err := database.UpdateLeaderCommit(leaderCommitDBData); err != nil {
 		log.Printf("Error saving COS data for round %s EOA %s: %v", roundNum, eoaAddress.Hex(), err)
 		return
 	}
-	updateInMemoryData(roundNum, eoaAddress, *commitData)
-	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
+	log.Printf("COS data saved and updated database for round %s EOA %s", roundNum, eoaAddress.Hex())
 
 	// Check if all commits are ready after this COS
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
@@ -470,12 +484,22 @@ func updateCommitDataAfterSubmit(roundNum string) {
 	}
 
 	for eoaAddress, data := range roundMap {
-		data.SubmitMerkleRootDone = true
 		log.Printf("Setting submit_merkle_root_done = true for key: %s+%s", roundNum, eoaAddress.Hex())
 
-		if err := database.AddLeaderCommit(&data); err != nil {
+		// Update database with marked submitmerkleroot as done
+		leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, eoaAddress.Hex())
+		if err != nil {
+			log.Printf("Error loading leaderCommit data from database for round: %s, and eoaAddress: %s, error: %v", roundNum, eoaAddress.Hex(), err)
+			return
+		}
+
+		leaderCommitDBData.SubmitMerkleRootDone = true
+
+		if err := database.UpdateLeaderCommit(leaderCommitDBData); err != nil {
 			log.Printf("Failed to save updated commit data for %s in round %s: %v", eoaAddress.Hex(), roundNum, err)
+			return
 		} else {
+			data.SubmitMerkleRootDone = true
 			roundMap[eoaAddress] = data
 		}
 	}

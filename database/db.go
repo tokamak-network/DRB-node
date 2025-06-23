@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"strconv"
 	"sync"
 	"time"
 
@@ -171,13 +170,8 @@ func GetNodeInfo() (*utils.NodeInfo, error) {
 }
 
 func AddLeaderCommit(leaderCommits *utils.LeaderCommitData) error {
-	round, err := strconv.Atoi(leaderCommits.Round)
-	if err != nil {
-		return fmt.Errorf("Conversion error: %v", err)
-	}
-
 	leaderCommit := LeaderCommitScheme{
-		Round:                 round,
+		Round:                 leaderCommits.Round,
 		EOAAddress:            leaderCommits.EOAAddress,
 		Cvs:                   leaderCommits.Cvs[:],
 		Cos:                   leaderCommits.Cos[:],
@@ -200,7 +194,7 @@ func AddLeaderCommit(leaderCommits *utils.LeaderCommitData) error {
 		leaderCommit.SecretValueHex = hex.EncodeToString(leaderCommit.SecretValue)
 	}
 
-	_, err = GetDB().Model(&leaderCommit).Insert()
+	_, err := GetDB().Model(&leaderCommit).Insert()
 	if err != nil {
 		return err
 	}
@@ -208,15 +202,9 @@ func AddLeaderCommit(leaderCommits *utils.LeaderCommitData) error {
 	return nil
 }
 
-func GetLeaderCommitByRoundAndEoaAddr(roundStr string, eoaAddr string) (*utils.LeaderCommitData, error) {
-	// Convert round from string to int
-	round, err := strconv.Atoi(roundStr)
-	if err != nil {
-		return nil, err
-	}
-
+func GetLeaderCommitByRoundAndEoaAddr(round string, eoaAddr string) (*utils.LeaderCommitData, error) {
 	var leaderCommit LeaderCommitScheme
-	err = GetDB().Model(&leaderCommit).
+	err := GetDB().Model(&leaderCommit).
 		Where("round = ? AND eoa_address = ?", round, eoaAddr).
 		Limit(1).
 		Select()
@@ -232,7 +220,7 @@ func GetLeaderCommitByRoundAndEoaAddr(roundStr string, eoaAddr string) (*utils.L
 
 	// Map LeaderCommit to utils.LeaderCommitData
 	leaderCommitData := &utils.LeaderCommitData{
-		Round:                 strconv.Itoa(leaderCommit.Round),
+		Round:                 leaderCommit.Round,
 		EOAAddress:            leaderCommit.EOAAddress,
 		Cvs:                   utils.ConvertByteArray(leaderCommit.Cvs),
 		CvsHex:                leaderCommit.CvsHex,
@@ -248,17 +236,11 @@ func GetLeaderCommitByRoundAndEoaAddr(roundStr string, eoaAddr string) (*utils.L
 	return leaderCommitData, nil
 }
 
-func GetLeaderCommitsByRound(roundStr string) ([]*utils.LeaderCommitData, error) {
-	// Convert round string to int
-	round, err := strconv.Atoi(roundStr)
-	if err != nil {
-		return nil, err
-	}
-
+func GetLeaderCommitsByRound(round string) ([]*utils.LeaderCommitData, error) {
 	// Slice to hold DB model results
 	var leaderCommitModels []LeaderCommitScheme
 
-	err = GetDB().Model(&leaderCommitModels).
+	err := GetDB().Model(&leaderCommitModels).
 		Where("round = ?", round).
 		Select()
 	if err != nil {
@@ -275,7 +257,7 @@ func GetLeaderCommitsByRound(roundStr string) ([]*utils.LeaderCommitData, error)
 		}
 
 		commitData := &utils.LeaderCommitData{
-			Round:                 roundStr,
+			Round:                 round,
 			EOAAddress:            model.EOAAddress,
 			Cvs:                   utils.ConvertByteArray(model.Cvs),
 			CvsHex:                model.CvsHex,
@@ -314,7 +296,7 @@ func GetRoundsToProcess() ([]*utils.LeaderCommitData, error) {
 		}
 
 		commitData := &utils.LeaderCommitData{
-			Round:                 strconv.Itoa(model.Round),
+			Round:                 model.Round,
 			EOAAddress:            model.EOAAddress,
 			Cvs:                   utils.ConvertByteArray(model.Cvs),
 			CvsHex:                model.CvsHex,
@@ -333,15 +315,9 @@ func GetRoundsToProcess() ([]*utils.LeaderCommitData, error) {
 }
 
 func UpdateLeaderCommit(leaderCommit *utils.LeaderCommitData) error {
-	// Convert round string to int
-	round, err := strconv.Atoi(leaderCommit.Round)
-	if err != nil {
-		return err
-	}
-
 	// Convert utils.LeaderCommitData to DB model LeaderCommit
 	model := LeaderCommitScheme{
-		Round:                 round,
+		Round:                 leaderCommit.Round,
 		EOAAddress:            leaderCommit.EOAAddress,
 		Cvs:                   leaderCommit.Cvs[:], // convert [32]byte to []byte
 		CvsHex:                leaderCommit.CvsHex,
@@ -356,24 +332,18 @@ func UpdateLeaderCommit(leaderCommit *utils.LeaderCommitData) error {
 		RandomNumberGenerated: leaderCommit.RandomNumberGenerated,
 	}
 
-	_, err = GetDB().Model(&model).WherePK().Update()
+	_, err := GetDB().Model(&model).Where("round = ? AND eoa_address = ?", leaderCommit.Round, leaderCommit.EOAAddress).Update()
 	return err
 }
 
-func UpdateLeaderCommitRandomNumberGenerated(roundStr string) error {
-	// Convert round string to int (assuming round is stored as int in DB)
-	round, err := strconv.Atoi(roundStr)
-	if err != nil {
-		return err
-	}
-
+func UpdateLeaderCommitRandomNumberGenerated(round string) error {
 	// Create a model instance with only the updated field set
 	leaderCommit := LeaderCommitScheme{
 		RandomNumberGenerated: true,
 	}
 
 	// Update only the "random_number_generated" column where round matches
-	_, err = GetDB().Model(&leaderCommit).
+	_, err := GetDB().Model(&leaderCommit).
 		Column("random_number_generated").
 		Where("round = ?", round).
 		Update()
@@ -409,19 +379,14 @@ func GetRegisteredNodes() ([]*utils.NodeInfo, error) {
 }
 
 func AddRevealOrder(revealOrder *utils.RevealOrderData) error {
-	round, err := strconv.Atoi(revealOrder.Round)
-	if err != nil {
-		return err
-	}
-
 	model := RevealOrderScheme{
-		Round:        round,
+		Round:        revealOrder.Round,
 		OrderedNodes: revealOrder.OrderedNodes,
 		RevealOrder:  revealOrder.RevealOrder,
 		RV:           revealOrder.RV,
 	}
 
-	_, err = GetDB().Model(&model).Insert()
+	_, err := GetDB().Model(&model).Insert()
 	return err
 }
 
@@ -435,7 +400,7 @@ func GetRevealOrders() ([]*utils.RevealOrderData, error) {
 	revealOrders := make([]*utils.RevealOrderData, 0, len(models))
 	for _, m := range models {
 		revealOrders = append(revealOrders, &utils.RevealOrderData{
-			Round:        strconv.Itoa(m.Round),
+			Round:        m.Round,
 			OrderedNodes: m.OrderedNodes,
 			RevealOrder:  m.RevealOrder,
 			RV:           m.RV,
@@ -466,14 +431,9 @@ func GetRevealOrder(round string) (*utils.RevealOrderData, error) {
 }
 
 func AddCommit(commit *utils.CommitData) error {
-	// Convert domain CommitData to DB model CommitDataModel
-	roundInt, err := strconv.Atoi(commit.Round)
-	if err != nil {
-		return err
-	}
 
 	model := CommitDataScheme{
-		Round:           roundInt,
+		Round:           commit.Round,
 		Cvs:             commit.Cvs[:], // convert [32]byte to []byte
 		Cos:             commit.Cos[:],
 		SecretValue:     commit.SecretValue[:],
@@ -484,19 +444,15 @@ func AddCommit(commit *utils.CommitData) error {
 		SendCosToLeader: commit.SendCosToLeader,
 	}
 
-	_, err = GetDB().Model(&model).Insert()
+	_, err := GetDB().Model(&model).Insert()
 	return err
 }
 
 func GetCommitByRound(round string) (*utils.CommitData, error) {
-	roundInt, err := strconv.Atoi(round)
-	if err != nil {
-		return nil, err
-	}
-
 	var model CommitDataScheme
-	err = GetDB().Model(&model).Where("round = ?", roundInt).Limit(1).Select()
+	err := GetDB().Model(&model).Where("round = ?", round).Limit(1).Select()
 	if err != nil {
+		log.Printf("Failed to get commit info: %v", err)
 		return nil, err
 	}
 

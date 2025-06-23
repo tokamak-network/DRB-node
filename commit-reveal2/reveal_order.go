@@ -103,6 +103,7 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 	}
 
 	revealOrderData := utils.RevealOrderData{
+		Round:        roundNum,
 		RevealOrder:  revealOrder,
 		OrderedNodes: orderedAddresses,
 		RV:           hex.EncodeToString(rv[:]),

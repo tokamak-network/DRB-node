@@ -190,7 +190,7 @@ func RunRegularNode() {
 		merkleRootSubmitted := regularNode_helper.RoundsData[round].MerkleRoot
 		randomNumberSubmitted := regularNode_helper.RoundsData[round].RandomNumber
 
-		log.Printf("Checking round...")
+		log.Printf("Checking round %s ...", round)
 		// Check if Merkle Root and Random Number are already generated (not nil)
 		if merkleRootSubmitted && randomNumberSubmitted {
 			// If both MerkleRoot and RandomNumber are generated, skip this round
@@ -203,7 +203,7 @@ func RunRegularNode() {
 
 			// Check if this round has already been committed (store it locally)
 			commitData, err := database.GetCommitByRound(round)
-			if err != nil && err.Error() != "commit not found" {
+			if err != nil && err.Error() != "pg: no rows in result set" {
 				log.Printf("Error loading commit data: %v", err)
 				continue
 			}

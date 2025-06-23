@@ -21,39 +21,41 @@ CREATE TABLE IF NOT EXISTS registered_node_schemes (
 
 -- Create leader_commits schema
 CREATE TABLE IF NOT EXISTS leader_commit_schemes (
-    id SERIAL PRIMARY KEY,
-    round INT NOT NULL,
+    id SERIAL,
+    round TEXT NOT NULL,
     eoa_address TEXT NOT NULL,
     cvs BYTEA NOT NULL,
-    cvs_hex TEXT NOT NULL,
+    cvs_hex TEXT,
     cos BYTEA NOT NULL,
-    cos_hex TEXT NOT NULL,
+    cos_hex TEXT,
     secret_value BYTEA NOT NULL,
-    secret_value_hex TEXT NOT NULL,
-    sign_r TEXT NOT NULL,
-    sign_s TEXT NOT NULL,
-    sign_v TEXT NOT NULL,
-    submit_merkle_root_done BOOLEAN NOT NULL,
-    random_number_generated BOOLEAN NOT NULL
+    secret_value_hex TEXT,
+    sign_r TEXT,
+    sign_s TEXT,
+    sign_v TEXT,
+    submit_merkle_root_done BOOLEAN,
+    random_number_generated BOOLEAN,
+    PRIMARY KEY (round, eoa_address)
 );
 
 -- Create commits schema
 CREATE TABLE IF NOT EXISTS commit_data_schemes (
     id SERIAL PRIMARY KEY,
-    round INT NOT NULL,
+    round TEXT NOT NULL,
     cvs BYTEA NOT NULL,
     cos BYTEA NOT NULL,
     secret_value BYTEA NOT NULL,
-    sign_r TEXT NOT NULL,
-    sign_s TEXT NOT NULL,
-    sign_v TEXT NOT NULL,
-    send_to_leader BOOLEAN NOT NULL,
-    send_cos_to_leader BOOLEAN NOT NULL
+    sign_r TEXT,
+    sign_s TEXT,
+    sign_v TEXT,
+    send_to_leader BOOLEAN,
+    send_cos_to_leader BOOLEAN
 );
 
 -- Create reveal_orders schema
 CREATE TABLE IF NOT EXISTS reveal_order_schemes (
     id SERIAL PRIMARY KEY,
+    round TEXT NOT NULL,
     ordered_nodes TEXT[] NOT NULL,
     reveal_order INT[] NOT NULL,
     rv TEXT NOT NULL
