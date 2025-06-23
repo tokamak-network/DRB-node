@@ -12,8 +12,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -117,10 +117,12 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 		if allEOAsSubmitted {
 			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round)
 			var err error
-			if !CvOnChain {
-				err = generateRandomNumberTransaction(fallbackEthClient, round, secrets, vs, rs, ss)
-			} else {
-				err = generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient, round, secrets, vs, rs, ss)
+			if !secretsOnChain[round] {
+				if !CvOnChain {
+					err = generateRandomNumberTransaction(fallbackEthClient, round, secrets, vs, rs, ss)
+				} else {
+					err = generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient, round, secrets, vs, rs, ss)
+				}
 			}
 			if err != nil {
 				log.Printf("Failed to execute random number generation transaction for round %s: %v", round, err)
@@ -174,52 +176,58 @@ func LoadNodeData(round string) ([][]byte, [][]byte, [][]byte, []uint8, []common
 	var vs []uint8
 	var rs []common.Hash
 	var ss []common.Hash
-	var index int
-	for i, operator := range operatorAddresses {
+	// var index int
+	for _, operator := range operatorAddresses {
 		commitData := leaderCommits[round+"+"+operator.Hex()]
 
 		secrets = append(secrets, commitData.SecretValue[:])
 		cvs = append(cvs, commitData.Cvs[:])
 		cos = append(cos, commitData.Cos[:])
 		fmt.Println("CvOnChain", CvOnChain)
-		if CvOnChain {
-			if index < len(Indices) && int64(i) <= Indices[index].Int64() {
-				if int64(i) == Indices[index].Int64() {
-					index++
-					continue
-				}
+		// if CvOnChain {
+		// 	if index < len(Indices) && int64(i) <= Indices[index].Int64() {
+		// 		if int64(i) == Indices[index].Int64() {
+		// 			index++
+		// 			continue
+		// 		}
+		// 	}
+		// }
+
+		if len(commitData.Sign["v"]) == 0 {
+			log.Printf("Empty 'v' value for EOA %s in round %s", operator.Hex(), round)
+			vs = append(vs, 0)
+		} else {
+			vStr := commitData.Sign["v"]
+			vValue, err := strconv.ParseUint(vStr, 10, 8)
+			if err != nil {
+				log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
+				vs = append(vs, 0)
+			} else {
+				vs = append(vs, uint8(vValue))
 			}
 		}
 
-		if len(commitData.Sign["v"]) == 0 {
-            log.Printf("Empty 'v' value for EOA %s in round %s", operator.Hex(), round)
-            vs = append(vs, 0)
-        } else {
-            vStr := commitData.Sign["v"]
-            vValue, err := strconv.ParseUint(vStr, 10, 8)
-            if err != nil {
-                log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
-                vs = append(vs, 0)
-            } else {
-                vs = append(vs, uint8(vValue))
-            }
-        }
-
 		if len(commitData.Sign["r"]) == 0 {
-            log.Printf("Empty 'r' value for EOA %s in round %s", operator.Hex(), round)
-            rs = append(rs, common.Hash{})
-        } else {
-            rs = append(rs, common.HexToHash(commitData.Sign["r"]))
-        }
+			log.Printf("Empty 'r' value for EOA %s in round %s", operator.Hex(), round)
+			rs = append(rs, common.Hash{})
+		} else {
+			rs = append(rs, common.HexToHash(commitData.Sign["r"]))
+		}
 
 		if len(commitData.Sign["s"]) == 0 {
-            log.Printf("Empty 's' value for EOA %s in round %s", operator.Hex(), round)
-            ss = append(ss, common.Hash{})
-        } else {
-            ss = append(ss, common.HexToHash(commitData.Sign["s"]))
-        }
+			log.Printf("Empty 's' value for EOA %s in round %s", operator.Hex(), round)
+			ss = append(ss, common.Hash{})
+		} else {
+			ss = append(ss, common.HexToHash(commitData.Sign["s"]))
+		}
 
-	}	
+	}
+	fmt.Println("cvs", cvs)
+	fmt.Println("cos", cos)
+	fmt.Println("secrets", secrets)
+	fmt.Println("vs", vs)
+	fmt.Println("rs", rs)
+	fmt.Println("ss", ss)
 	return cvs, cos, secrets, vs, rs, ss
 }
 
@@ -411,6 +419,8 @@ func packVsValues(vs []uint8) *big.Int {
 
 // markRoundCompleted updates the leader_commits.json file to mark a round as completed.
 func markRoundCompleted(leaderCommits map[string]utils.LeaderCommitData, round string) {
+	fmt.Println("inside markRoundCompleted")
+
 	for key, commitData := range leaderCommits {
 		if commitData.Round == round {
 			commitData.RandomNumberGenerated = true
@@ -510,6 +520,7 @@ func loadLeaderCommits(filePath string) (map[string]utils.LeaderCommitData, erro
 
 // Helper: Save leader commits
 func saveLeaderCommits(filePath string, data map[string]utils.LeaderCommitData) error {
+	fmt.Println("kar raha hu save")
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create leader commit file: %v", err)
