@@ -175,6 +175,9 @@ func processSubmittedSecretRequest(secret [32]byte, index *big.Int) {
 	if err != nil {
 		log.Printf("Failed to save updated leader commits: %v", err)
 	}
+
+	// Broadcast the secret value to all activated regular nodes
+	BroadCastS(libp2putils.HostInstance, SecretRequestSentForWhichRound, regularNodeAddress.Hex(), secret)
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, state *big.Int) {
@@ -257,6 +260,10 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, cos [32
 	}
 	updateCOS(fallbackEthClient, round, eoa, cos)
 	fmt.Printf("Successfully stored COS for Round %s, EOA %s\n", round, eoa.Hex())
+
+	// Broadcast the COS value to all activated regular nodes
+	BroadCastCOS(libp2putils.HostInstance, round, eoa, cos)
+
 	return nil
 }
 
@@ -347,6 +354,10 @@ func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 	}
 	updateCVS(round, eoa, cvs)
 	fmt.Printf("Successfully stored CVS for Round %s, EOA %s\n", round, eoa.Hex())
+
+	// Broadcast the CVS value to all activated regular nodes
+	BroadCastCVS(libp2putils.HostInstance, round, eoa, cvs)
+
 	return nil
 }
 

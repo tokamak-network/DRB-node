@@ -11,7 +11,7 @@ import (
 	"github.com/tokamak-network/DRB-node/libp2putils"
 )
 
-func broadCastS(h host.Host, roundNum string, eoaAddress string, secret [32]byte) {
+func BroadCastS(h host.Host, roundNum string, eoaAddress string, secret [32]byte) {
 	nodeInfo := libp2putils.GetConnectedPeers()
 
 	message := struct {
