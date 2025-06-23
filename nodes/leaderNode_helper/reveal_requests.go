@@ -21,6 +21,7 @@ type SigRS struct {
 	R [32]byte
 	S [32]byte
 }
+var secretsOnChain = make(map[string]bool)
 
 // Tracks EOAs that have been sent requests per round
 var revealRequestStatus = make(map[string][]string)
@@ -116,6 +117,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 			// If the timer expires and the secret value is not received, call handleMissingSecretValue
 			if !roundSecret[roundNum][regularEoa] {
 				log.Printf("Secret value not received for EOA %s in round %s within 15 seconds. Handling missing secret value.", regularEoa, roundNum)
+				secretsOnChain[roundNum] = true
 				requestToSubmitS(fallbackEthClient, roundNum)
 			}
 		}()
@@ -126,6 +128,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 }
 
 func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string) {
+	SecretRequestSentForWhichRound = CurrentRound
 	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := prepareArgumentsForRequestToSubmitS(roundNum)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
@@ -183,7 +186,7 @@ func prepareArgumentsForRequestToSubmitS(roundNum string) ([][32]byte, [][32]byt
 	i := big.NewInt(0)
 	j := 0
 	length := big.NewInt(int64(len(eth.ActivatedOperators)))
-
+	fmt.Println("length", length)
 	for i.Cmp(length) < 0 {
 		if j < len(Indices) && i.Cmp(Indices[j]) == 0 {
 			i = new(big.Int).Add(i, big.NewInt(1))
@@ -193,7 +196,7 @@ func prepareArgumentsForRequestToSubmitS(roundNum string) ([][32]byte, [][32]byt
 			i = new(big.Int).Add(i, big.NewInt(1))
 		}
 	}
-
+	fmt.Println(notOnChainIndices, "notOnChainIndices")
 	var sigRSsForAllCvsNotOnChain []SigRS
 	var vsForNotOnChain []uint8
 	var allCos [][32]byte
@@ -202,6 +205,7 @@ func prepareArgumentsForRequestToSubmitS(roundNum string) ([][32]byte, [][32]byt
 		copy(cos32[:], cos[i])
 		allCos = append(allCos, cos32)
 	}
+
 	for _, i := range notOnChainIndices {
 		index := int(i.Int64())
 		vsForNotOnChain = append(vsForNotOnChain, uint8(vs[index]))
