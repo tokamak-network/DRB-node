@@ -62,7 +62,7 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 }
 
 // saveRevealOrder stores the RV and reveal order in a file
-func saveRevealOrders(filePath string, data map[string]interface{}) error {
+func saveRevealOrders(filePath string, data map[string]RevealOrder) error {
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create reveal order file: %v", err)
@@ -78,17 +78,17 @@ func saveRevealOrders(filePath string, data map[string]interface{}) error {
 	return nil
 }
 
-func LoadRevealOrders(filePath string) (map[string]interface{}, error) {
+func LoadRevealOrders(filePath string) (map[string]RevealOrder, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return make(map[string]interface{}), nil
+			return make(map[string]RevealOrder), nil
 		}
 		return nil, fmt.Errorf("failed to open regular reveal order file: %v", err)
 	}
 	defer file.Close()
 
-	var data map[string]interface{}
+	var data map[string]RevealOrder
 	err = json.NewDecoder(file).Decode(&data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode reveal order file: %v", err)
@@ -183,10 +183,10 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 	}
 
 	// Add the new reveal order to the data map
-	data[roundNum] = map[string]interface{}{
-		"rv":            hex.EncodeToString(rv[:]),
-		"reveal_order":  revealOrder,
-		"ordered_nodes": orderedAddresses, // Save addresses in reveal order
+	data[roundNum] = RevealOrder{
+		OrderedNodes: orderedAddresses,
+		RevealOrder:  revealOrder,
+		RV:           hex.EncodeToString(rv[:]),
 	}
 
 	// Save the updated data back to the file
@@ -253,10 +253,10 @@ func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common
 	}
 
 	// Add the new reveal order to the data map
-	data[roundNum] = map[string]interface{}{
-		"rv":            hex.EncodeToString(rv[:]),
-		"reveal_order":  revealOrder,
-		"ordered_nodes": orderedAddresses, // Save addresses in reveal order
+	data[roundNum] = RevealOrder{
+		OrderedNodes: orderedAddresses,
+		RevealOrder:  revealOrder,
+		RV:           hex.EncodeToString(rv[:]),
 	}
 
 	// Save the updated data back to the file
