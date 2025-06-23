@@ -152,12 +152,7 @@ func HandleSecret(s network.Stream) {
 		roundData, exists := data[message.Round]
 		if exists {
 			if strictOrderWhileReceiving[message.Round] == nil {
-				rawOrderedNodes := roundData.(map[string]interface{})["ordered_nodes"].([]interface{})
-				orderedNodes := make([]string, len(rawOrderedNodes))
-				for i, v := range rawOrderedNodes {
-					orderedNodes[i] = v.(string)
-				}
-				strictOrderWhileReceiving[message.Round] = orderedNodes
+				strictOrderWhileReceiving[message.Round] = roundData.OrderedNodes
 			}
 			break
 		}

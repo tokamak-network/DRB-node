@@ -37,12 +37,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		roundData, exists := data[CurrentRound]
 		if exists {
 			if strictOrderWhileSecretRequest[CurrentRound] == nil {
-				rawOrderedNodes := roundData.(map[string]interface{})["ordered_nodes"].([]interface{})
-				orderedNodes := make([]string, len(rawOrderedNodes))
-				for i, v := range rawOrderedNodes {
-					orderedNodes[i] = v.(string)
-				}
-				strictOrderWhileSecretRequest[CurrentRound] = orderedNodes
+				strictOrderWhileSecretRequest[CurrentRound] = roundData.OrderedNodes
 			}
 			break
 		}
