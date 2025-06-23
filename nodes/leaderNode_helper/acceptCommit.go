@@ -38,7 +38,8 @@ type RoundData struct {
 
 var RoundsData map[string]RoundData
 
-var Round *big.Int
+// In case last SSubmitted event also get's emmitted with Status event and curState is IN_PROGRESS then CurrentRound vairable will not be consistent
+var SecretRequestSentForWhichRound string
 var CurrentRound string
 var Req RandomRequest
 
@@ -82,6 +83,8 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	CvsEventSig := parsedABI.Events["CvSubmitted"].ID
 	StatusSig := parsedABI.Events["Status"].ID
 	CoSubmittedSig := parsedABI.Events["CoSubmitted"].ID
+	SSubmittedSig := parsedABI.Events["SSubmitted"].ID
+
 	for {
 		select {
 		case err := <-sub.Err():
@@ -131,8 +134,46 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					continue
 				}
 				processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
+
+			case SSubmittedSig:
+				eventData := struct {
+					StartTime *big.Int
+					S         [32]byte
+					Index     *big.Int
+				}{}
+
+				err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
+
+				if err != nil {
+					log.Printf("Failed to decode SSubmitted event log: %v", err)
+					continue
+				}
+				fmt.Printf("SSubmitted Event:\n startTime %v\n Secret %v\n, indexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
+				processSubmittedSecretRequest(eventData.S, eventData.Index)
 			}
 		}
+	}
+}
+
+func processSubmittedSecretRequest(secret [32]byte, index *big.Int) {
+
+	intValue := int(index.Int64())
+	fmt.Println("intValue", intValue)
+	regularNodeAddress := eth.ActivatedOperators[intValue]
+	fmt.Println("regularNodeAddress", regularNodeAddress)
+	key := SecretRequestSentForWhichRound + "+" + regularNodeAddress.Hex()
+	fmt.Println(key)
+	leaderCommits, _ := loadLeaderCommits("leader_commits.json")
+	data := leaderCommits[key]
+	data.SecretValue = secret
+	secretHex := hex.EncodeToString(secret[:])
+	data.SecretValueHex = secretHex
+	leaderCommits[key] = data
+	fmt.Println("Secret Value Hex:", secretHex)
+
+	err := saveLeaderCommits("leader_commits.json", leaderCommits)
+	if err != nil {
+		log.Printf("Failed to save updated leader commits: %v", err)
 	}
 }
 
@@ -155,15 +196,19 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 			return
 		}
 		eth.UpdateActivatedOperators(fallbackEthClient)
+		// leaderCommits, _ := loadLeaderCommits("leader_commits.json")
+		// markRoundCompleted(leaderCommits, round.Sub(round, big.NewInt(1)).String())
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
 		if RoundsData == nil {
 			RoundsData = make(map[string]RoundData)
 		}
-		data := RoundsData[Round.String()]
+		data := RoundsData[CurrentRound]
 		data.RandomNumber = true
-		RoundsData[Round.String()] = data
+		RoundsData[CurrentRound] = data
+		// leaderCommits, _ := loadLeaderCommits("leader_commits.json")
+		// markRoundCompleted(leaderCommits, CurrentRound)
 		Execution = false
 	}
 }
