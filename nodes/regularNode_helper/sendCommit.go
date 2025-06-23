@@ -188,7 +188,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 }
 
 func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int) {
-	data, _ := commitreveal2.LoadRevealOrder("reveal_orders.json", CurrentRound)
+	data, _ := commitreveal2.LoadRevealOrder("regular_reveal_order.json", CurrentRound)
 	fmt.Println("data", data)
 	orderedNodes := data.OrderedNodes
 	revealOrder := data.RevealOrder
