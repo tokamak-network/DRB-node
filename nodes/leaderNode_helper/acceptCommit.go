@@ -196,8 +196,6 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 			return
 		}
 		eth.UpdateActivatedOperators(fallbackEthClient)
-		// leaderCommits, _ := loadLeaderCommits("leader_commits.json")
-		// markRoundCompleted(leaderCommits, round.Sub(round, big.NewInt(1)).String())
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
@@ -207,16 +205,14 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		data := RoundsData[CurrentRound]
 		data.RandomNumber = true
 		RoundsData[CurrentRound] = data
-		// leaderCommits, _ := loadLeaderCommits("leader_commits.json")
-		// markRoundCompleted(leaderCommits, CurrentRound)
 		Execution = false
 	}
 }
 
 func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, cos [32]byte, activatedOperatorIndex *big.Int) error {
 	filePath := "leader_commits.json"
-	CommitMu.Lock()
-	defer CommitMu.Unlock()
+	utils.LeaderCommitsMutex.Lock()
+	defer utils.LeaderCommitsMutex.Unlock()
 
 	var commitData map[string]LeaderCommitData
 	file, err := os.ReadFile(filePath)
@@ -294,8 +290,8 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 
 func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 	filePath := "leader_commits.json"
-	CommitMu.Lock()
-	defer CommitMu.Unlock()
+	utils.LeaderCommitsMutex.Lock()
+	defer utils.LeaderCommitsMutex.Unlock()
 
 	var commitData map[string]LeaderCommitData
 	file, err := os.ReadFile(filePath)

@@ -213,7 +213,7 @@ func LoadNodeData(round string) ([][]byte, [][]byte, [][]byte, []uint8, []common
 		}
 
 	}
-	
+
 	return cvs, cos, secrets, vs, rs, ss
 }
 
@@ -505,6 +505,9 @@ func loadLeaderCommits(filePath string) (map[string]utils.LeaderCommitData, erro
 
 // Helper: Save leader commits
 func saveLeaderCommits(filePath string, data map[string]utils.LeaderCommitData) error {
+	utils.LeaderCommitsMutex.Lock()
+	defer utils.LeaderCommitsMutex.Unlock()
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create leader commit file: %v", err)
