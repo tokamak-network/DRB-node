@@ -194,8 +194,6 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		}
 
 		if allAcknowledged {
-			log.Printf("All nodes acknowledged %s for round %s, EOA %s",
-				broadcastType, tracker.Round, tracker.EOAAddress)
 			break
 		}
 
@@ -230,6 +228,21 @@ func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
 	if ack.Status == "received" {
 		// Mark acknowledgment from the sender (regular node that sent the ack)
 		tracker.Acknowledged[ack.EOAAddress] = true
+
+		// Check if all nodes have acknowledged
+		allAcknowledged := true
+		for _, acknowledged := range tracker.Acknowledged {
+			if !acknowledged {
+				allAcknowledged = false
+				break
+			}
+		}
+
+		// Log immediately when all nodes have acknowledged
+		if allAcknowledged {
+			log.Printf("All nodes acknowledged %s for round %s, EOA %s",
+				ack.Type, tracker.Round, tracker.EOAAddress)
+		}
 	} else {
 		log.Printf("Received error acknowledgment from %s for %s broadcast (message ID: %s): %s",
 			ack.EOAAddress, ack.Type, ack.MessageID, ack.Status)
