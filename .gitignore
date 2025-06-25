@@ -39,6 +39,7 @@ reveal_orders.json
 registered_nodes.json
 peerNodeInfo.json
 regular_reveal_order.json
+broadcast_trackers.json
 
 .idea
 .vscode
