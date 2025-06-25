@@ -177,7 +177,7 @@ func processSubmittedSecretRequest(secret [32]byte, index *big.Int) {
 	}
 
 	// Broadcast the secret value to all activated regular nodes
-	BroadCastS(libp2putils.HostInstance, SecretRequestSentForWhichRound, regularNodeAddress.Hex(), secret)
+	ReliableBroadCastS(libp2putils.HostInstance, SecretRequestSentForWhichRound, regularNodeAddress.Hex(), secret)
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, state *big.Int) {
@@ -262,7 +262,7 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, cos [32
 	fmt.Printf("Successfully stored COS for Round %s, EOA %s\n", round, eoa.Hex())
 
 	// Broadcast the COS value to all activated regular nodes
-	BroadCastCOS(libp2putils.HostInstance, round, eoa, cos)
+	ReliableBroadCastCOS(libp2putils.HostInstance, round, eoa, cos)
 
 	return nil
 }
@@ -356,7 +356,7 @@ func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 	fmt.Printf("Successfully stored CVS for Round %s, EOA %s\n", round, eoa.Hex())
 
 	// Broadcast the CVS value to all activated regular nodes
-	BroadCastCVS(libp2putils.HostInstance, round, eoa, cvs)
+	ReliableBroadCastCVS(libp2putils.HostInstance, round, eoa, cvs)
 
 	return nil
 }

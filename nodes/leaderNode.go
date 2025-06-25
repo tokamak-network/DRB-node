@@ -147,7 +147,7 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 	}
 	updateInMemoryData(roundNum, eoaAddress, *commitData)
 	log.Printf("Commit data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
-	leaderNode_helper.BroadCastCVS(libp2putils.HostInstance, roundNum, eoaAddress, commitData.Cvs)
+	leaderNode_helper.ReliableBroadCastCVS(libp2putils.HostInstance, roundNum, eoaAddress, commitData.Cvs)
 	// Check if all commits are ready after this update
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
 		log.Printf("All CVS received for round %s. Generating Merkle root...", roundNum)
@@ -205,7 +205,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	}
 	updateInMemoryData(roundNum, eoaAddress, *commitData)
 	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
-	leaderNode_helper.BroadCastCOS(libp2putils.HostInstance, roundNum, eoaAddress, commitData.Cos)
+	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, roundNum, eoaAddress, commitData.Cos)
 	// Check if all commits are ready after this COS
 	if !isMerkleRootSubmitted(roundNum) && allCommitsReceivedUnlocked(roundNum) {
 		log.Printf("All CVS received for round %s after COS, generating Merkle root...", roundNum)
