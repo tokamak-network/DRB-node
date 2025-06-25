@@ -17,6 +17,7 @@ var revealRequestStatus = make(map[string][]string)
 
 // StartSecretValueRequests initializes the secret value request process for a given round
 func StartSecretValueRequests(h host.Host, roundNum string) {
+	log.Println("Starting secret value request...")
 	// Load reveal order for the round
 	roundRevealData, err := database.GetRevealOrder(roundNum)
 	if err != nil {

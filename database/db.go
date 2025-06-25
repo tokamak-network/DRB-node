@@ -356,7 +356,7 @@ func UpdateLeaderCommitRandomNumberGenerated(round string) error {
 
 func GetRegisteredNodes() ([]*utils.NodeInfo, error) {
 	// Query DB model structs
-	var registeredNodes []RegisteredNodeScheme
+	var registeredNodes []NodeInfoScheme
 
 	err := GetDB().Model(&registeredNodes).Select()
 	if err != nil {

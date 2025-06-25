@@ -6,16 +6,6 @@ CREATE TABLE IF NOT EXISTS node_info_schemes (
     ip TEXT NOT NULL,
     port TEXT NOT NULL,
     peer_id TEXT NOT NULL,
-    eoa_address TEXT NOT NULL,
-    private_key BYTEA
-);
-
--- Create registered_nodes schema
-CREATE TABLE IF NOT EXISTS registered_node_schemes (
-    id SERIAL PRIMARY KEY,
-    ip TEXT NOT NULL,
-    port TEXT NOT NULL,
-    peer_id TEXT NOT NULL,
     eoa_address TEXT NOT NULL
 );
 

@@ -36,25 +36,24 @@ func AcceptSecretValue(h host.Host, s network.Stream) {
 	log.Printf("Successfully verified signature for EOA: %s", req.EOAAddress)
 
 	// Fetch or initialize the leader commit data for the given round and EOA
-	commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(req.Round, req.EOAAddress)
+	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(req.Round, req.EOAAddress)
 	if err != nil {
 		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", req.Round, req.EOAAddress)
-		commitData = &utils.LeaderCommitData{
+		leaderCommitData = &utils.LeaderCommitData{
 			Round:      req.Round,
 			EOAAddress: req.EOAAddress,
 		}
 	}
 
 	// Store the secret value in both byte array and hex string formats
-	copy(commitData.SecretValue[:], req.SecretValue[:])
-	commitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
+	copy(leaderCommitData.SecretValue[:], req.SecretValue[:])
+	leaderCommitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
 
-	log.Printf("Received and stored secret value for round %s and EOA %s: byte=%x, hex=%s",
-		req.Round, req.EOAAddress, commitData.SecretValue, commitData.SecretValueHex)
+	log.Printf("Received secret value for round %s and EOA %s: byte=%x, hex=%s",
+		req.Round, req.EOAAddress, leaderCommitData.SecretValue, leaderCommitData.SecretValueHex)
 
-	// Save the updated commit data
-	if err := database.AddLeaderCommit(commitData); err != nil {
-		log.Printf("Failed to save leader commit data for round %s and EOA %s: %v", req.Round, req.EOAAddress, err)
+	if err := database.UpdateLeaderCommit(leaderCommitData); err != nil {
+		log.Printf("Failed to save updated commit data for %s in round %s: %v", req.EOAAddress, req.Round, err)
 		return
 	}
 
