@@ -71,7 +71,7 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 		roundSecret[req.Round] = make(map[string]bool)
 	}
 	roundSecret[CurrentRound][req.RegularEoaAddress] = true
-	BroadCastS(h, req.Round, req.RegularEoaAddress, commitData.SecretValue)
+	ReliableBroadCastS(h, req.Round, req.RegularEoaAddress, commitData.SecretValue)
 	// Continue requesting secret values from remaining nodes in the reveal order
 	HandleSecretValueResponse(h, fallbackEthClient, req.Round, req.RegularEoaAddress)
 }

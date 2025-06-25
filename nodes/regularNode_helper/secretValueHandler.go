@@ -1,6 +1,7 @@
 package regularNode_helper
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"os"
@@ -102,7 +103,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 // SendSecretValue sends the secret value for a round to the leader node
 func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 	// Load the commit data for the specified round
-	_, err := utils.LoadCommitData(roundNum)
+	commitData, err := utils.LoadCommitData(roundNum)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s: %v", roundNum, err)
 		return
@@ -123,30 +124,30 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 	log.Printf("EOA Address: %s", eoaAddress)
 
 	// Sign the round number using the regular node's private key
-	// signature := utils.SignData(eoaAddress, privateKey)
+	signature := utils.SignData(eoaAddress, privateKey)
 
 	// Create the secret value request
-	// req := utils.SecretValueRequest{
-	// 	RegularEoaAddress:  eoaAddress, // Regular node's Ethereum address
-	// 	Signature:   signature,
-	// 	SecretValue: commitData.SecretValue[:],
-	// 	Round:       roundNum,
-	// }
+	req := utils.SecretValueRequest{
+		RegularEoaAddress: eoaAddress, // Regular node's Ethereum address
+		Signature:         signature,
+		SecretValue:       commitData.SecretValue[:],
+		Round:             roundNum,
+	}
 
 	// Open a stream to the leader node
-	// stream, err := h.NewStream(context.Background(), leaderPeerID, "/secretValue")
-	// if err != nil {
-	// 	log.Printf("Failed to create stream to leader node: %v", err)
-	// 	return
-	// }
-	// defer stream.Close()
+	stream, err := h.NewStream(context.Background(), leaderPeerID, "/secretValue")
+	if err != nil {
+		log.Printf("Failed to create stream to leader node: %v", err)
+		return
+	}
+	defer stream.Close()
 
-	// // Send the request
-	// encoder := json.NewEncoder(stream)
-	// if err := encoder.Encode(req); err != nil {
-	// 	log.Printf("Failed to send secret value request: %v", err)
-	// 	return
-	// }
+	// Send the request
+	encoder := json.NewEncoder(stream)
+	if err := encoder.Encode(req); err != nil {
+		log.Printf("Failed to send secret value request: %v", err)
+		return
+	}
 
 	log.Printf("Secret value sent for round %s to leader node", roundNum)
 }
