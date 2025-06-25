@@ -44,9 +44,15 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	h.SetStreamHandler("/sendSecretValue", func(s network.Stream) {
 		regularNode_helper.HandleSecretValueRequest(h, s)
 	})
-	h.SetStreamHandler("/cvsBroadcast", regularNode_helper.HandleCvs)
-	h.SetStreamHandler("/cosBroadcast", regularNode_helper.HandleCos)
-	h.SetStreamHandler("/secretBroadcast", regularNode_helper.HandleSecret)
+	h.SetStreamHandler("/cvsBroadcast", func(s network.Stream) {
+		regularNode_helper.HandleCvs(h, s)
+	})
+	h.SetStreamHandler("/cosBroadcast", func(s network.Stream) {
+		regularNode_helper.HandleCos(h, s)
+	})
+	h.SetStreamHandler("/secretBroadcast", func(s network.Stream) {
+		regularNode_helper.HandleSecret(h, s)
+	})
 
 	go regularNode_helper.MonitorCommitRequest(fallbackEthClient)
 
@@ -79,6 +85,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 	regularNode_helper.Setup(eoaAddress)
+	regularNode_helper.SetRegularNodeEOA(eoaAddress)
 	log.Printf("EOA Address: %s", eoaAddress)
 
 	// Get the local IP address of the node

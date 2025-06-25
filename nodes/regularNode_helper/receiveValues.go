@@ -1,15 +1,17 @@
 package regularNode_helper
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"sync"
-	"time"
 
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
-	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -19,19 +21,61 @@ var CosRecevied = make(map[string]map[string]bool)
 var revealOrderLock sync.Mutex
 var strictOrderWhileReceiving = make(map[string][]string)
 
-// HandleSecret processes incoming secret values and ensures they are accepted in the reveal order.
-func HandleCvs(s network.Stream) {
-	defer s.Close()
+// Global variable to store the regular node's EOA address
+var regularNodeEOA string
 
-	var message utils.PeerCommitData
-	if err := json.NewDecoder(s).Decode(&message); err != nil {
-		log.Printf("Failed to decode CVS message: %v", err)
+// SetRegularNodeEOA sets the regular node's EOA address
+func SetRegularNodeEOA(eoa string) {
+	regularNodeEOA = eoa
+}
+
+// getRegularNodeEOA returns the regular node's own EOA address
+func getRegularNodeEOA() string {
+	if regularNodeEOA == "" {
+		log.Printf("Regular node EOA address not set")
+		return ""
+	}
+	return regularNodeEOA
+}
+
+// sendAcknowledgment sends an acknowledgment back to the leader
+func sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack utils.AcknowledgmentMessage) {
+	stream, err := h.NewStream(context.Background(), leaderPeerID, protocol.ID("/acknowledgment"))
+	if err != nil {
+		log.Printf("Failed to create acknowledgment stream: %v", err)
 		return
 	}
-	log.Printf("Received CVS for round %s from EOA %s", message.Round, message.EOAAddress)
+	defer stream.Close()
 
+	if err := json.NewEncoder(stream).Encode(ack); err != nil {
+		log.Printf("Failed to send acknowledgment: %v", err)
+	} else {
+		log.Printf("Acknowledgment sent for %s broadcast (message ID: %s)", ack.Type, ack.MessageID)
+	}
+}
+
+// HandleCvs processes incoming CVS values and sends acknowledgment
+func HandleCvs(h host.Host, s network.Stream) {
+	defer s.Close()
+
+	var message utils.BroadcastMessage
+	if err := json.NewDecoder(s).Decode(&message); err != nil {
+		log.Printf("Failed to decode CVS broadcast message: %v", err)
+		return
+	}
+
+	log.Printf("Received CVS broadcast for round %s from EOA %s (message ID: %s)",
+		message.Round, message.EOAAddress, message.MessageID)
+
+	// Process the CVS data
+	peerCommitData := utils.PeerCommitData{
+		Round:      message.Round,
+		EOAAddress: message.EOAAddress,
+		Cvs:        message.Data,
+	}
+
+	// Save to file
 	filePath := "peerNodeInfo.json"
-
 	if _, err := os.Stat(filePath); err == nil {
 		file, err := os.Open(filePath)
 		if err != nil {
@@ -53,7 +97,7 @@ func HandleCvs(s network.Stream) {
 	}
 
 	key := fmt.Sprintf("%s+%s", message.Round, message.EOAAddress)
-	peerNodeInfo[key] = message
+	peerNodeInfo[key] = peerCommitData
 
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -68,25 +112,52 @@ func HandleCvs(s network.Stream) {
 	}
 
 	log.Printf("Successfully saved CVS data for round %s and EOA %s into peerNodeInfo.json", message.Round, message.EOAAddress)
-}
 
-func HandleCos(s network.Stream) {
-	defer s.Close()
+	// Send acknowledgment
+	ack := utils.AcknowledgmentMessage{
+		Round:      message.Round,
+		EOAAddress: getRegularNodeEOA(),
+		MessageID:  message.MessageID,
+		Type:       message.Type,
+		Status:     "received",
+	}
 
-	var message utils.PeerCommitData
-
-	if err := json.NewDecoder(s).Decode(&message); err != nil {
-		log.Printf("Failed to decode COS message: %v", err)
+	// Get leader peer ID from environment or connection
+	leaderPeerIDStr := os.Getenv("LEADER_PEER_ID")
+	if leaderPeerIDStr == "" {
+		log.Printf("LEADER_PEER_ID not set, cannot send acknowledgment")
 		return
 	}
 
-	log.Printf("Received COS for round %s from EOA %s", message.Round, message.EOAAddress)
+	leaderPeerID, err := peer.Decode(leaderPeerIDStr)
+	if err != nil {
+		log.Printf("Failed to decode leader peer ID: %v", err)
+		return
+	}
+
+	sendAcknowledgment(h, leaderPeerID, ack)
+}
+
+// HandleCos processes incoming COS values and sends acknowledgment
+func HandleCos(h host.Host, s network.Stream) {
+	defer s.Close()
+
+	var message utils.BroadcastMessage
+	if err := json.NewDecoder(s).Decode(&message); err != nil {
+		log.Printf("Failed to decode COS broadcast message: %v", err)
+		return
+	}
+
+	log.Printf("Received COS broadcast for round %s from EOA %s (message ID: %s)",
+		message.Round, message.EOAAddress, message.MessageID)
+
+	// Process the COS data
 	if CosRecevied[message.Round] == nil {
 		CosRecevied[message.Round] = make(map[string]bool)
 	}
 	CosRecevied[message.Round][message.EOAAddress] = true
-	filePath := "peerNodeInfo.json"
 
+	filePath := "peerNodeInfo.json"
 	if _, err := os.Stat(filePath); err == nil {
 		file, err := os.Open(filePath)
 		if err != nil {
@@ -109,8 +180,9 @@ func HandleCos(s network.Stream) {
 
 	key := fmt.Sprintf("%s+%s", message.Round, message.EOAAddress)
 	data := peerNodeInfo[key]
-	data.Cos = message.Cos
+	data.Cos = message.Data
 	peerNodeInfo[key] = data
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		log.Printf("Failed to create peerNodeInfo.json: %v", err)
@@ -124,54 +196,47 @@ func HandleCos(s network.Stream) {
 	}
 
 	log.Printf("Successfully saved COS data for round %s and EOA %s into peerNodeInfo.json", message.Round, message.EOAAddress)
+
+	// Send acknowledgment
+	ack := utils.AcknowledgmentMessage{
+		Round:      message.Round,
+		EOAAddress: getRegularNodeEOA(),
+		MessageID:  message.MessageID,
+		Type:       message.Type,
+		Status:     "received",
+	}
+
+	// Get leader peer ID from environment or connection
+	leaderPeerIDStr := os.Getenv("LEADER_PEER_ID")
+	if leaderPeerIDStr == "" {
+		log.Printf("LEADER_PEER_ID not set, cannot send acknowledgment")
+		return
+	}
+
+	leaderPeerID, err := peer.Decode(leaderPeerIDStr)
+	if err != nil {
+		log.Printf("Failed to decode leader peer ID: %v", err)
+		return
+	}
+
+	sendAcknowledgment(h, leaderPeerID, ack)
 }
 
-func HandleSecret(s network.Stream) {
+// HandleSecret processes incoming secret values and sends acknowledgment
+func HandleSecret(h host.Host, s network.Stream) {
 	defer s.Close()
 
-	var message utils.PeerCommitData
+	var message utils.BroadcastMessage
 	if err := json.NewDecoder(s).Decode(&message); err != nil {
-		log.Printf("Failed to decode secret message: %v", err)
+		log.Printf("Failed to decode secret broadcast message: %v", err)
 		return
 	}
 
-	log.Printf("Received secret value for round %s from EOA %s", message.Round, message.EOAAddress)
+	log.Printf("Received secret broadcast for round %s from EOA %s (message ID: %s)",
+		message.Round, message.EOAAddress, message.MessageID)
 
-	revealOrderLock.Lock()
-	defer revealOrderLock.Unlock()
-
-	filePath := "regular_reveal_order.json"
-	for {
-		data, err := commitreveal2.LoadRevealOrders(filePath)
-		if err != nil {
-			log.Printf("Failed to load reveal order: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		roundData, exists := data[message.Round]
-		if exists {
-			if strictOrderWhileReceiving[message.Round] == nil {
-				strictOrderWhileReceiving[message.Round] = roundData.OrderedNodes
-			}
-			break
-		}
-
-		log.Printf("Reveal order not yet calculated for round %s. Waiting...", message.Round)
-		time.Sleep(2 * time.Second)
-	}
-
-	log.Printf("Processing secret value for EOA %s in round %s", message.EOAAddress, message.Round)
-
-	if len(strictOrderWhileReceiving[message.Round]) == 0 || strictOrderWhileReceiving[message.Round][0] != message.EOAAddress {
-		log.Printf("EOA %s is not next in the reveal order for broadcasting for round %s", message.EOAAddress, message.Round)
-		return
-	}
-
-	log.Printf("Received Secret for round %s from EOA %s", message.Round, message.EOAAddress)
-
-	filePath = "peerNodeInfo.json"
-
+	// Process the secret data
+	filePath := "peerNodeInfo.json"
 	if _, err := os.Stat(filePath); err == nil {
 		file, err := os.Open(filePath)
 		if err != nil {
@@ -194,8 +259,9 @@ func HandleSecret(s network.Stream) {
 
 	key := fmt.Sprintf("%s+%s", message.Round, message.EOAAddress)
 	data := peerNodeInfo[key]
-	data.SecretValue = message.SecretValue
+	data.SecretValue = message.Data
 	peerNodeInfo[key] = data
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		log.Printf("Failed to create peerNodeInfo.json: %v", err)
@@ -208,6 +274,29 @@ func HandleSecret(s network.Stream) {
 		return
 	}
 
-	log.Printf("Successfully saved Secret for round %s and EOA %s into peerNodeInfo.json", message.Round, message.EOAAddress)
-	strictOrderWhileReceiving[message.Round] = strictOrderWhileReceiving[message.Round][1:]
+	log.Printf("Successfully saved secret data for round %s and EOA %s into peerNodeInfo.json", message.Round, message.EOAAddress)
+
+	// Send acknowledgment
+	ack := utils.AcknowledgmentMessage{
+		Round:      message.Round,
+		EOAAddress: getRegularNodeEOA(),
+		MessageID:  message.MessageID,
+		Type:       message.Type,
+		Status:     "received",
+	}
+
+	// Get leader peer ID from environment or connection
+	leaderPeerIDStr := os.Getenv("LEADER_PEER_ID")
+	if leaderPeerIDStr == "" {
+		log.Printf("LEADER_PEER_ID not set, cannot send acknowledgment")
+		return
+	}
+
+	leaderPeerID, err := peer.Decode(leaderPeerIDStr)
+	if err != nil {
+		log.Printf("Failed to decode leader peer ID: %v", err)
+		return
+	}
+
+	sendAcknowledgment(h, leaderPeerID, ack)
 }
