@@ -183,15 +183,6 @@ func LoadNodeData(round string) ([][]byte, [][]byte, [][]byte, []uint8, []common
 		secrets = append(secrets, commitData.SecretValue[:])
 		cvs = append(cvs, commitData.Cvs[:])
 		cos = append(cos, commitData.Cos[:])
-		fmt.Println("CvOnChain", CvOnChain)
-		// if CvOnChain {
-		// 	if index < len(Indices) && int64(i) <= Indices[index].Int64() {
-		// 		if int64(i) == Indices[index].Int64() {
-		// 			index++
-		// 			continue
-		// 		}
-		// 	}
-		// }
 
 		if len(commitData.Sign["v"]) == 0 {
 			log.Printf("Empty 'v' value for EOA %s in round %s", operator.Hex(), round)
@@ -222,12 +213,7 @@ func LoadNodeData(round string) ([][]byte, [][]byte, [][]byte, []uint8, []common
 		}
 
 	}
-	fmt.Println("cvs", cvs)
-	fmt.Println("cos", cos)
-	fmt.Println("secrets", secrets)
-	fmt.Println("vs", vs)
-	fmt.Println("rs", rs)
-	fmt.Println("ss", ss)
+	
 	return cvs, cos, secrets, vs, rs, ss
 }
 
@@ -419,7 +405,6 @@ func packVsValues(vs []uint8) *big.Int {
 
 // markRoundCompleted updates the leader_commits.json file to mark a round as completed.
 func markRoundCompleted(leaderCommits map[string]utils.LeaderCommitData, round string) {
-	fmt.Println("inside markRoundCompleted")
 
 	for key, commitData := range leaderCommits {
 		if commitData.Round == round {
@@ -520,7 +505,6 @@ func loadLeaderCommits(filePath string) (map[string]utils.LeaderCommitData, erro
 
 // Helper: Save leader commits
 func saveLeaderCommits(filePath string, data map[string]utils.LeaderCommitData) error {
-	fmt.Println("kar raha hu save")
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create leader commit file: %v", err)

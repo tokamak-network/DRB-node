@@ -148,7 +148,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					log.Printf("Failed to decode SSubmitted event log: %v", err)
 					continue
 				}
-				fmt.Printf("SSubmitted Event:\n startTime %v\n Secret %v\n, indexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
+				fmt.Printf("SSubmitted Event:\n StartTime %v\n Secret %v\n IndexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
 				processSubmittedSecretRequest(eventData.S, eventData.Index)
 			}
 		}
@@ -158,18 +158,15 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 func processSubmittedSecretRequest(secret [32]byte, index *big.Int) {
 
 	intValue := int(index.Int64())
-	fmt.Println("intValue", intValue)
 	regularNodeAddress := eth.ActivatedOperators[intValue]
-	fmt.Println("regularNodeAddress", regularNodeAddress)
 	key := SecretRequestSentForWhichRound + "+" + regularNodeAddress.Hex()
-	fmt.Println(key)
+
 	leaderCommits, _ := loadLeaderCommits("leader_commits.json")
 	data := leaderCommits[key]
 	data.SecretValue = secret
 	secretHex := hex.EncodeToString(secret[:])
 	data.SecretValueHex = secretHex
 	leaderCommits[key] = data
-	fmt.Println("Secret Value Hex:", secretHex)
 
 	err := saveLeaderCommits("leader_commits.json", leaderCommits)
 	if err != nil {

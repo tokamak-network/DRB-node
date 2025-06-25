@@ -186,7 +186,7 @@ func prepareArgumentsForRequestToSubmitS(roundNum string) ([][32]byte, [][32]byt
 	i := big.NewInt(0)
 	j := 0
 	length := big.NewInt(int64(len(eth.ActivatedOperators)))
-	fmt.Println("length", length)
+	
 	for i.Cmp(length) < 0 {
 		if j < len(Indices) && i.Cmp(Indices[j]) == 0 {
 			i = new(big.Int).Add(i, big.NewInt(1))
@@ -196,7 +196,6 @@ func prepareArgumentsForRequestToSubmitS(roundNum string) ([][32]byte, [][32]byt
 			i = new(big.Int).Add(i, big.NewInt(1))
 		}
 	}
-	fmt.Println(notOnChainIndices, "notOnChainIndices")
 	var sigRSsForAllCvsNotOnChain []SigRS
 	var vsForNotOnChain []uint8
 	var allCos [][32]byte

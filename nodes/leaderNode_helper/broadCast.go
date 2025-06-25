@@ -230,8 +230,6 @@ func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
 	if ack.Status == "received" {
 		// Mark acknowledgment from the sender (regular node that sent the ack)
 		tracker.Acknowledged[ack.EOAAddress] = true
-		log.Printf("Received acknowledgment from %s for %s broadcast (message ID: %s)",
-			ack.EOAAddress, ack.Type, ack.MessageID)
 	} else {
 		log.Printf("Received error acknowledgment from %s for %s broadcast (message ID: %s): %s",
 			ack.EOAAddress, ack.Type, ack.MessageID, ack.Status)
