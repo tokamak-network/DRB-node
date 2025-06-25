@@ -78,12 +78,16 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	h.SetStreamHandler("/secretValue", func(s network.Stream) {
 		leaderNode_helper.AcceptSecretValue(h, s, fallbackEthClient)
 	})
+	h.SetStreamHandler("/acknowledgment", func(s network.Stream) {
+		handleAcknowledgment(s)
+	})
 
 	log.Printf("Leader node running on: %s", h.Addrs())
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
 	go leaderNode_helper.MonitorCommits(fallbackEthClient)
 	go leaderNode_helper.ReceiveCommit(fallbackEthClient)
+	leaderNode_helper.StartBroadcastCleanup()
 	for {
 		if !leaderNode_helper.Execution {
 			time.Sleep(10 * time.Second)
@@ -792,4 +796,20 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 
 func revert() {
 
+}
+
+func handleAcknowledgment(s network.Stream) {
+	defer s.Close()
+
+	var ack utils.AcknowledgmentMessage
+	if err := json.NewDecoder(s).Decode(&ack); err != nil {
+		log.Printf("Failed to decode acknowledgment message: %v", err)
+		return
+	}
+
+	log.Printf("Received acknowledgment from %s for %s broadcast (message ID: %s, status: %s)",
+		ack.EOAAddress, ack.Type, ack.MessageID, ack.Status)
+
+	// Process the acknowledgment
+	leaderNode_helper.HandleAcknowledgment(ack)
 }
