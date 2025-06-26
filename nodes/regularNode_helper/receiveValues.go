@@ -14,7 +14,6 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-var peerNodeInfo map[string]utils.PeerCommitData
 var CosRecevied = make(map[string]map[string]bool)
 
 // Global variable to store the regular node's EOA address
@@ -71,39 +70,18 @@ func HandleCvs(h host.Host, s network.Stream) {
 	}
 
 	// Save to file
-	filePath := "peerNodeInfo.json"
-	if _, err := os.Stat(filePath); err == nil {
-		file, err := os.Open(filePath)
-		if err != nil {
-			log.Printf("Failed to open peerNodeInfo.json: %v", err)
-			return
-		}
-		defer file.Close()
-
-		if err := json.NewDecoder(file).Decode(&peerNodeInfo); err != nil {
-			log.Printf("Failed to decode peerNodeInfo.json: %v", err)
-			return
-		}
-	} else if os.IsNotExist(err) {
-		log.Printf("peerNodeInfo.json does not exist. Creating a new file.")
-		peerNodeInfo = make(map[string]utils.PeerCommitData)
-	} else {
-		log.Printf("Error checking peerNodeInfo.json: %v", err)
+	peerNodeInfo, err := utils.LoadPeerNodeInfo()
+	if err != nil {
+		log.Printf("Failed to load peerNodeInfo.json: %v", err)
 		return
 	}
 
 	key := fmt.Sprintf("%s+%s", message.Round, message.EOAAddress)
 	peerNodeInfo[key] = peerCommitData
 
-	file, err := os.Create(filePath)
+	err = utils.SavePeerNodeInfo(peerNodeInfo)
 	if err != nil {
-		log.Printf("Failed to create peerNodeInfo.json: %v", err)
-		return
-	}
-	defer file.Close()
-
-	if err := json.NewEncoder(file).Encode(peerNodeInfo); err != nil {
-		log.Printf("Failed to write to peerNodeInfo.json: %v", err)
+		log.Printf("Failed to save to peerNodeInfo.json: %v", err)
 		return
 	}
 
@@ -153,24 +131,9 @@ func HandleCos(h host.Host, s network.Stream) {
 	}
 	CosRecevied[message.Round][message.EOAAddress] = true
 
-	filePath := "peerNodeInfo.json"
-	if _, err := os.Stat(filePath); err == nil {
-		file, err := os.Open(filePath)
-		if err != nil {
-			log.Printf("Failed to open peerNodeInfo.json: %v", err)
-			return
-		}
-		defer file.Close()
-
-		if err := json.NewDecoder(file).Decode(&peerNodeInfo); err != nil {
-			log.Printf("Failed to decode peerNodeInfo.json: %v", err)
-			return
-		}
-	} else if os.IsNotExist(err) {
-		log.Printf("peerNodeInfo.json does not exist. Creating a new file.")
-		peerNodeInfo = make(map[string]utils.PeerCommitData)
-	} else {
-		log.Printf("Error checking peerNodeInfo.json: %v", err)
+	peerNodeInfo, err := utils.LoadPeerNodeInfo()
+	if err != nil {
+		log.Printf("Failed to load peerNodeInfo.json: %v", err)
 		return
 	}
 
@@ -179,15 +142,9 @@ func HandleCos(h host.Host, s network.Stream) {
 	data.Cos = message.Data
 	peerNodeInfo[key] = data
 
-	file, err := os.Create(filePath)
+	err = utils.SavePeerNodeInfo(peerNodeInfo)
 	if err != nil {
-		log.Printf("Failed to create peerNodeInfo.json: %v", err)
-		return
-	}
-	defer file.Close()
-
-	if err := json.NewEncoder(file).Encode(peerNodeInfo); err != nil {
-		log.Printf("Failed to write to peerNodeInfo.json: %v", err)
+		log.Printf("Failed to save to peerNodeInfo.json: %v", err)
 		return
 	}
 
@@ -232,24 +189,9 @@ func HandleSecret(h host.Host, s network.Stream) {
 		message.Round, message.EOAAddress, message.MessageID)
 
 	// Process the secret data
-	filePath := "peerNodeInfo.json"
-	if _, err := os.Stat(filePath); err == nil {
-		file, err := os.Open(filePath)
-		if err != nil {
-			log.Printf("Failed to open peerNodeInfo.json: %v", err)
-			return
-		}
-		defer file.Close()
-
-		if err := json.NewDecoder(file).Decode(&peerNodeInfo); err != nil {
-			log.Printf("Failed to decode peerNodeInfo.json: %v", err)
-			return
-		}
-	} else if os.IsNotExist(err) {
-		log.Printf("peerNodeInfo.json does not exist. Creating a new file.")
-		peerNodeInfo = make(map[string]utils.PeerCommitData)
-	} else {
-		log.Printf("Error checking peerNodeInfo.json: %v", err)
+	peerNodeInfo, err := utils.LoadPeerNodeInfo()
+	if err != nil {
+		log.Printf("Failed to load peerNodeInfo.json: %v", err)
 		return
 	}
 
@@ -258,15 +200,9 @@ func HandleSecret(h host.Host, s network.Stream) {
 	data.SecretValue = message.Data
 	peerNodeInfo[key] = data
 
-	file, err := os.Create(filePath)
+	err = utils.SavePeerNodeInfo(peerNodeInfo)
 	if err != nil {
-		log.Printf("Failed to create peerNodeInfo.json: %v", err)
-		return
-	}
-	defer file.Close()
-
-	if err := json.NewEncoder(file).Encode(peerNodeInfo); err != nil {
-		log.Printf("Failed to write to peerNodeInfo.json: %v", err)
+		log.Printf("Failed to save to peerNodeInfo.json: %v", err)
 		return
 	}
 

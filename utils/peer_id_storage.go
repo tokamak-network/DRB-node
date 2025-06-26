@@ -3,7 +3,6 @@ package utils
 import (
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"log"
 	"os"
 
@@ -50,7 +49,7 @@ func SavePeerID(privKey crypto.PrivKey) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(fileName, data, 0644)
+	err = os.WriteFile(fileName, data, 0644)
 	if err != nil {
 		log.Printf("Failed to write private key bytes to %s: %v", fileName, err)
 		return err
@@ -66,7 +65,7 @@ func LoadPeerID() (crypto.PrivKey, peer.ID, error) {
 	fileName := getPeerIDFileName()
 
 	// Attempt to read the file containing the private key bytes
-	data, err := ioutil.ReadFile(fileName)
+	data, err := os.ReadFile(fileName)
 	if err != nil {
 		// If the file does not exist, return an error
 		log.Printf("Failed to read %s: %v", fileName, err)

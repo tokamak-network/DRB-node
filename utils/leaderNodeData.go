@@ -19,6 +19,9 @@ var CommittedNodes = make(map[string]map[common.Address]LeaderCommitData)
 // Global read-write mutex for protecting leader_commits.json file access
 var LeaderCommitsMutex sync.RWMutex
 
+// Global mutex for protecting peerNodeInfo.json file access
+var PeerNodeInfoMutex sync.Mutex
+
 // LeaderCommitData defines the structure for storing commit data in the leader node.
 type LeaderCommitData struct {
 	Round                 string            `json:"round"`
@@ -79,21 +82,9 @@ func LoadLeaderCommitData(roundNum, eoaAddress string) (*LeaderCommitData, error
 }
 
 func LoadCommitDataRegular(roundNum, eoaAddress string) (*PeerCommitData, error) {
-	file, err := os.Open(peerNodeInfoFile)
+	commits, err := LoadPeerNodeInfo()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("commit data not found")
-		}
-		return nil, fmt.Errorf("error opening peer node info file: %v", err)
-	}
-	defer file.Close()
-
-	// Decode JSON data
-	var commits map[string]PeerCommitData
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&commits)
-	if err != nil {
-		return nil, fmt.Errorf("error decoding peer node info data: %v", err)
+		return nil, err
 	}
 
 	// Construct the composite key: ROUND+EOA
@@ -157,5 +148,50 @@ func SaveLeaderCommitData(commitData LeaderCommitData) error {
 	}
 
 	log.Printf("Saved commit data for key: %s", key) // Debug log for commit save
+	return nil
+}
+
+// LoadPeerNodeInfo loads all peer node info data from the file
+func LoadPeerNodeInfo() (map[string]PeerCommitData, error) {
+	file, err := os.Open(peerNodeInfoFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]PeerCommitData), nil
+		}
+		return nil, fmt.Errorf("error opening peer node info file: %v", err)
+	}
+	defer file.Close()
+
+	var data map[string]PeerCommitData
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&data)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding peer node info data: %v", err)
+	}
+
+	if data == nil {
+		data = make(map[string]PeerCommitData)
+	}
+
+	return data, nil
+}
+
+// SavePeerNodeInfo saves peer node info data to the file
+func SavePeerNodeInfo(data map[string]PeerCommitData) error {
+	PeerNodeInfoMutex.Lock()
+	defer PeerNodeInfoMutex.Unlock()
+
+	file, err := os.Create(peerNodeInfoFile)
+	if err != nil {
+		return fmt.Errorf("error creating peer node info file: %v", err)
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(data)
+	if err != nil {
+		return fmt.Errorf("error encoding peer node info data: %v", err)
+	}
+
 	return nil
 }
