@@ -186,18 +186,14 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 
 func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int) {
 	data, _ := commitreveal2.LoadRevealOrder("regular_reveal_order.json", CurrentRound)
-	fmt.Println("data", data)
 	orderedNodes := data.OrderedNodes
 	revealOrder := data.RevealOrder
 	if index.Int64() >= int64(len(orderedNodes)) {
 		log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(orderedNodes))
 		return
 	}
-	fmt.Println("revealOrder", revealOrder)
-	fmt.Println("orderedNodes", orderedNodes)
-	temp := 987
+	var temp int
 	intValue := int(index.Int64())
-	fmt.Println("intValue", intValue)
 	for i, order := range revealOrder {
 		if order == intValue {
 			temp = i
@@ -205,19 +201,13 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 	}
 
 	if temp+1 < len(revealOrder) {
-
 		if temp+1 < len(orderedNodes) {
-			fmt.Println("inside orderedNodes")
 			regularEoaAddress := orderedNodes[temp+1]
-			fmt.Println("regularEoaAddress", regularEoaAddress)
-			fmt.Println("EoaAddress", EoaAddress)
 			if EoaAddress == regularEoaAddress {
 				fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", CurrentRound, regularEoaAddress)
 				submitS(fallbackEthClient)
 			}
 		}
-	} else {
-		fmt.Println("HEHEHHEHEHEHEHH")
 	}
 }
 
@@ -233,10 +223,7 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(revealOrder.OrderedNodes))
 		return
 	}
-	// length := int64(len(eth.ActivatedOperators))
-	// for i := index.Int64(); i < length; i++ {
-
-	// }
+	
 	regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
 	if EoaAddress == regularEoaAddress {
 		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", CurrentRound, regularEoaAddress)
