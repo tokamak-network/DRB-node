@@ -39,7 +39,6 @@ type CvAndSigRS struct {
 	Rs SigRS
 }
 
-var roundFlag = make(map[string]uint64)
 var sendCommitRequest = make(map[string]bool)
 var onChainExecution = make(map[string]map[string]map[string]int)
 var flag = make(map[string]bool)
@@ -579,10 +578,7 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 			generateMerkleRoot(fallbackEthClient, roundNum)
 		} else {
 			log.Printf("Not all CVS received for round %s. Waiting for remaining commits.", roundNum)
-			roundFlag[roundNum]++
-			if roundFlag[roundNum] >= 1 {
-				sendCommitRequest[roundNum] = true
-			}
+			sendCommitRequest[roundNum] = true
 		}
 	}
 }
