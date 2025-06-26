@@ -32,7 +32,7 @@ func ReliableBroadCastS(h host.Host, roundNum string, eoaAddress string, secret 
 		MaxAttempts:  3,
 		Acknowledged: make(map[string]bool),
 		LastSent:     time.Now().Unix(),
-		Timeout:      30, // 30 seconds timeout
+		Timeout:      3, // 30 seconds timeout
 	}
 
 	for _, op := range eth.ActivatedOperators {
@@ -66,7 +66,7 @@ func ReliableBroadCastCOS(h host.Host, roundNum string, eoaAddress common.Addres
 		MaxAttempts:  3,
 		Acknowledged: make(map[string]bool),
 		LastSent:     time.Now().Unix(),
-		Timeout:      30, // 30 seconds timeout
+		Timeout:      3, // 30 seconds timeout
 	}
 
 	for _, op := range eth.ActivatedOperators {
@@ -100,7 +100,7 @@ func ReliableBroadCastCVS(h host.Host, roundNum string, eoaAddress common.Addres
 		MaxAttempts:  3,
 		Acknowledged: make(map[string]bool),
 		LastSent:     time.Now().Unix(),
-		Timeout:      30, // 30 seconds timeout
+		Timeout:      3, // 3 seconds timeout
 	}
 
 	for _, op := range eth.ActivatedOperators {
@@ -263,6 +263,63 @@ func StartBroadcastCleanup() {
 			cleanupOldBroadcasts()
 		}
 	}()
+}
+func StartLeaderCommitCleanup() {
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute) // Clean up every 5 minutes
+		defer ticker.Stop()
+
+		for range ticker.C {
+			cleanupOldLeaderCommits()
+		}
+	}()
+}
+
+// cleanupOldLeaderCommits removes leader commit data older than 1 hour
+func cleanupOldLeaderCommits() {
+	CommitMu.Lock()
+	defer CommitMu.Unlock()
+
+	currentTime := time.Now().Unix()
+	cutoffTime := currentTime - 3600*12 // 12 hours ago
+
+	// Clean up in-memory leader commits
+	for roundNum, roundMap := range utils.CommittedNodes {
+		for eoaAddress, commitData := range roundMap {
+			if commitData.CreatedAt < cutoffTime {
+				delete(roundMap, eoaAddress)
+				log.Printf("Cleaned up old leader commit data: round %s, EOA %s", roundNum, eoaAddress.Hex())
+			}
+		}
+		// Remove empty round maps
+		if len(roundMap) == 0 {
+			delete(utils.CommittedNodes, roundNum)
+			log.Printf("Removed empty round map for round %s", roundNum)
+		}
+	}
+
+	// Clean up file-based leader commits
+	commits, err := utils.LoadAllLeaderCommitData()
+	if err != nil {
+		log.Printf("Failed to load leader commit data for cleanup: %v", err)
+		return
+	}
+
+	cleaned := false
+	for key, commitData := range commits {
+		if commitData.CreatedAt < cutoffTime {
+			delete(commits, key)
+			cleaned = true
+			log.Printf("Cleaned up old leader commit data from file: %s", key)
+		}
+	}
+
+	if cleaned {
+		// Save cleaned commits back to file
+		if err := utils.SaveAllLeaderCommitData(commits); err != nil {
+			log.Printf("Failed to save cleaned leader commit data: %v", err)
+		}
+	}
 }
 
 // cleanupOldBroadcasts removes broadcast trackers older than 1 hour

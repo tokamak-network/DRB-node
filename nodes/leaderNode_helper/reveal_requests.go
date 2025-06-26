@@ -21,11 +21,9 @@ type SigRS struct {
 	R [32]byte
 	S [32]byte
 }
-var secretsOnChain = make(map[string]bool)
 
 // Tracks EOAs that have been sent requests per round
 var revealRequestStatus = make(map[string][]string)
-var roundSecret = make(map[string]map[string]bool)
 
 // StartSecretValueRequests initializes the secret value request process for a given round
 func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string) {

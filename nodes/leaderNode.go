@@ -30,9 +30,6 @@ var commitMu sync.Mutex
 var firstRequest leaderNode_helper.RandomRequest
 var cosTimerOnce = make(map[string]*sync.Once)
 
-// committedNodes and activatedOperators are authoritative in-memory states.
-// var committedNodes = make(map[string]map[common.Address]utils.LeaderCommitData)
-// var activatedOperators = make(map[string]map[common.Address]bool)
 type SigRS struct {
 	R [32]byte
 	S [32]byte
@@ -88,6 +85,7 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	go leaderNode_helper.MonitorCommits(fallbackEthClient)
 	go leaderNode_helper.ReceiveCommit(fallbackEthClient)
 	leaderNode_helper.StartBroadcastCleanup()
+	leaderNode_helper.StartLeaderCommitCleanup()
 	for {
 		if !leaderNode_helper.Execution {
 			time.Sleep(10 * time.Second)
@@ -336,7 +334,11 @@ func getOrCreateLeaderCommitData(roundNum string, eoaAddress common.Address) *ut
 
 	data, existsData := roundMap[eoaAddress]
 	if !existsData {
-		data = utils.LeaderCommitData{Round: roundNum, EOAAddress: eoaAddress.Hex()}
+		data = utils.LeaderCommitData{
+			Round:      roundNum,
+			EOAAddress: eoaAddress.Hex(),
+			CreatedAt:  time.Now().Unix(),
+		}
 		roundMap[eoaAddress] = data
 	}
 	return &data

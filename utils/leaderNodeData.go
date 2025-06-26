@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -35,6 +36,7 @@ type LeaderCommitData struct {
 	Sign                  map[string]string `json:"sign"` // New field for v, r, s
 	SubmitMerkleRootDone  bool              `json:"submit_merkle_root_done"`
 	RandomNumberGenerated bool              `json:"random_number_generated"`
+	CreatedAt             int64             `json:"created_at"` // Unix timestamp when this commit was created
 }
 
 // LoadLeaderCommitData should load data from the file and return the commit data for a specific round and EOA
@@ -135,6 +137,11 @@ func SaveLeaderCommitData(commitData LeaderCommitData) error {
 		commitData.CvsHex = hex.EncodeToString(commitData.Cvs[:]) // Convert Cvs byte array to hex string
 	}
 
+	// Set CreatedAt timestamp if not already set (for new commits)
+	if commitData.CreatedAt == 0 {
+		commitData.CreatedAt = time.Now().Unix()
+	}
+
 	commits[key] = commitData
 
 	// Seek to the beginning of the file to overwrite it
@@ -191,6 +198,54 @@ func SavePeerNodeInfo(data map[string]PeerCommitData) error {
 	err = encoder.Encode(data)
 	if err != nil {
 		return fmt.Errorf("error encoding peer node info data: %v", err)
+	}
+
+	return nil
+}
+
+// LoadAllLeaderCommitData loads all leader commit data from the file
+func LoadAllLeaderCommitData() (map[string]LeaderCommitData, error) {
+	LeaderCommitsMutex.RLock()
+	defer LeaderCommitsMutex.RUnlock()
+
+	file, err := os.Open(leaderCommitDataFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]LeaderCommitData), nil
+		}
+		return nil, fmt.Errorf("error opening leader commit data file: %v", err)
+	}
+	defer file.Close()
+
+	var commits map[string]LeaderCommitData
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&commits)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding leader commit data: %v", err)
+	}
+
+	if commits == nil {
+		commits = make(map[string]LeaderCommitData)
+	}
+
+	return commits, nil
+}
+
+// SaveAllLeaderCommitData saves all leader commit data to the file
+func SaveAllLeaderCommitData(commits map[string]LeaderCommitData) error {
+	LeaderCommitsMutex.Lock()
+	defer LeaderCommitsMutex.Unlock()
+
+	file, err := os.Create(leaderCommitDataFile)
+	if err != nil {
+		return fmt.Errorf("error creating leader commit data file: %v", err)
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(commits)
+	if err != nil {
+		return fmt.Errorf("error encoding leader commit data: %v", err)
 	}
 
 	return nil

@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 
@@ -55,6 +56,7 @@ type LeaderCommitData struct {
 	Sign                  map[string]string `json:"sign"`
 	SubmitMerkleRootDone  bool              `json:"submit_merkle_root_done"`
 	RandomNumberGenerated bool              `json:"random_number_generated"`
+	CreatedAt             int64             `json:"created_at"`
 }
 
 func ReceiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
@@ -326,6 +328,7 @@ func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 			Sign:                  make(map[string]string),
 			SubmitMerkleRootDone:  false,
 			RandomNumberGenerated: false,
+			CreatedAt:             time.Now().Unix(),
 		}
 	} else {
 		data := commitData[key]

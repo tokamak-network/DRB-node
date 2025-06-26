@@ -18,7 +18,6 @@ import (
 )
 
 var CvOnChain bool
-var Indices []*big.Int
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
 func MonitorCommits(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {

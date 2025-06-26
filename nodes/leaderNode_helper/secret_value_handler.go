@@ -4,6 +4,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
+	"math/big"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -13,6 +15,9 @@ import (
 
 // var SecretValue [][32]byte
 var RoundSecrets = make(map[string][][32]byte)
+var roundSecret = make(map[string]map[string]bool)
+var secretsOnChain = make(map[string]bool)
+var Indices []*big.Int
 
 // AcceptSecretValue processes and stores secret values sent by regular nodes.
 func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
@@ -45,6 +50,7 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 		commitData = &utils.LeaderCommitData{
 			Round:      req.Round,
 			EOAAddress: req.RegularEoaAddress,
+			CreatedAt:  time.Now().Unix(),
 		}
 	}
 	var secretValueArray [32]byte
