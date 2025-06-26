@@ -8,11 +8,15 @@ import (
 	"math/big"
 	"os"
 	"sort"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
+
+// Global mutex for protecting reveal_orders.json file access
+var RevealOrdersMutex sync.Mutex
 
 type RevealOrder struct {
 	OrderedNodes []string `json:"ordered_nodes"`
@@ -63,6 +67,9 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 
 // saveRevealOrder stores the RV and reveal order in a file
 func saveRevealOrders(filePath string, data map[string]RevealOrder) error {
+	RevealOrdersMutex.Lock()
+	defer RevealOrdersMutex.Unlock()
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create reveal order file: %v", err)
