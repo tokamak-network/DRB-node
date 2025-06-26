@@ -6,10 +6,14 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/tokamak-network/DRB-node/utils"
 )
+
+// Global mutex for protecting registered_nodes.json file access
+var RegisteredNodesMutex sync.Mutex
 
 // NodeInfo stores the information for a registered node
 type NodeInfo struct {
@@ -41,6 +45,9 @@ func LoadRegisteredNodes(filePath string) (map[string]NodeInfo, error) {
 
 // SaveRegisteredNodes saves the registered nodes to a JSON file.
 func SaveRegisteredNodes(filePath string, data map[string]NodeInfo) error {
+	RegisteredNodesMutex.Lock()
+	defer RegisteredNodesMutex.Unlock()
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to create registered nodes file: %v", err)
@@ -102,4 +109,3 @@ func RegisterNode(s network.Stream, filePath, abiFilePath string) error {
 
 	return nil
 }
-

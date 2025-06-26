@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"sync"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -20,7 +19,6 @@ import (
 
 var HostInstance host.Host
 var RegisteredNodes = make(map[string]peer.AddrInfo)
-var mu sync.Mutex
 
 func SetHost(h host.Host) {
 	HostInstance = h
@@ -80,9 +78,6 @@ func GetConnectedPeers() map[string]struct {
 	Port   string  `json:"port"`
 	PeerID peer.ID `json:"peer_id"`
 } {
-	mu.Lock()
-	defer mu.Unlock()
-
 	filePath := "registered_nodes.json"
 	file, err := os.Open(filePath)
 	if err != nil {
