@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sync"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -17,9 +16,6 @@ import (
 
 var peerNodeInfo map[string]utils.PeerCommitData
 var CosRecevied = make(map[string]map[string]bool)
-
-var revealOrderLock sync.Mutex
-var strictOrderWhileReceiving = make(map[string][]string)
 
 // Global variable to store the regular node's EOA address
 var regularNodeEOA string

@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 )
 
 const commitDataFile = "commits.json"
 const broadcastTrackerFile = "broadcast_trackers.json"
+
+// Global mutex for protecting commits.json file access
+var CommitsMutex sync.Mutex
 
 type CommitRequest struct {
 	Round      string            `json:"round"`
@@ -111,8 +115,38 @@ func LoadCommitData(roundNum string) (*CommitData, error) {
 	return &commitData, nil
 }
 
+// LoadRegularCommits loads all commit data from the file
+func LoadRegularCommits() (map[string]CommitData, error) {
+	// Open the commit file
+	file, err := os.Open(commitDataFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]CommitData), nil // Return empty map if file doesn't exist
+		}
+		return nil, fmt.Errorf("error opening commit data file: %v", err)
+	}
+	defer file.Close()
+
+	// Decode JSON data
+	var commits map[string]CommitData
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&commits)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding commit data: %v", err)
+	}
+
+	if commits == nil {
+		commits = make(map[string]CommitData)
+	}
+
+	return commits, nil
+}
+
 // saveCommitData saves the commit data to a file
 func SaveCommitData(commitData CommitData) error {
+	CommitsMutex.Lock()
+	defer CommitsMutex.Unlock()
+
 	// Open the commit file (create if doesn't exist)
 	file, err := os.OpenFile(commitDataFile, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {

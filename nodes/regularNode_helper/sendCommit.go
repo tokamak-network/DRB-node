@@ -2,9 +2,7 @@ package regularNode_helper
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math/big"
 	"os"
@@ -31,7 +29,6 @@ type CommitData struct {
 }
 
 var Execution bool
-var commits map[string]CommitData
 var ActivatedOperator []string
 
 func MonitorCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
@@ -206,9 +203,9 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 			temp = i
 		}
 	}
-	fmt.Println("temp", temp)
+
 	if temp+1 < len(revealOrder) {
-		fmt.Println("inside revealOrder")
+
 		if temp+1 < len(orderedNodes) {
 			fmt.Println("inside orderedNodes")
 			regularEoaAddress := orderedNodes[temp+1]
@@ -249,34 +246,17 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 }
 
 func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
-	filePath := "commits.json"
-	file, err := os.Open(filePath)
+	commits, err := utils.LoadRegularCommits()
 	if err != nil {
-		log.Fatalf("Failed to open commits.json: %v", err)
-	}
-
-	defer file.Close()
-	var commits map[string]interface{}
-
-	byteValue, err := io.ReadAll(file)
-	if err != nil {
-		log.Fatalf("Failed to read commits.json: %v", err)
-	}
-	err = json.Unmarshal(byteValue, &commits)
-	if err != nil {
-		log.Fatalf("Failed to parse commits.json: %v", err)
+		log.Fatalf("Failed to load commits: %v", err)
 	}
 
 	roundData, exists := commits[CurrentRound]
 	if !exists {
-		log.Fatalf("Round 0 not found in commits.json")
+		log.Fatalf("Round %s not found in commits.json", CurrentRound)
 	}
-	secretValueArray := roundData.(map[string]interface{})["secret_value"].([]interface{})
 
-	var secretValueBytes [32]byte
-	for i, v := range secretValueArray {
-		secretValueBytes[i] = byte(v.(float64))
-	}
+	secretValueBytes := roundData.SecretValue
 
 	fmt.Printf("Extracted secret_value as bytes32: %x\n", secretValueBytes)
 
@@ -321,6 +301,7 @@ func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 	log.Printf("Successfully submitted secret_value: %x", secretValueBytes)
 }
+
 func processMerkleRoot(round string) {
 	if RoundsData == nil {
 		RoundsData = make(map[string]RoundData)
@@ -356,6 +337,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 	go AllCosReceivedUnlocked(ActivatedOperator)
 }
+
 func AllCosReceivedUnlocked(ActivatedOperator []string) {
 	for {
 		round := CurrentRound
@@ -422,17 +404,12 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		ContractABI:     parsedABI,
 	}
 
-	file, err := os.ReadFile("commits.json")
+	commits, err := utils.LoadRegularCommits()
 	if err != nil {
-		fmt.Println("Error reading file:", err)
+		fmt.Println("Error loading commits:", err)
 		return err
 	}
 
-	err = json.Unmarshal(file, &commits)
-	if err != nil {
-		fmt.Println("Error parsing JSON:", err)
-		return err
-	}
 	var cvs []uint8
 	for key, data := range commits {
 		if CurrentRound == key {
@@ -499,17 +476,12 @@ func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 		ContractABI:     parsedABI,
 	}
 
-	file, err := os.ReadFile("commits.json")
+	commits, err := utils.LoadRegularCommits()
 	if err != nil {
-		fmt.Println("Error reading file:", err)
+		fmt.Println("Error loading commits:", err)
 		return err
 	}
 
-	err = json.Unmarshal(file, &commits)
-	if err != nil {
-		fmt.Println("Error parsing JSON:", err)
-		return err
-	}
 	var cos []uint8
 	for key, data := range commits {
 		if CurrentRound == key {
