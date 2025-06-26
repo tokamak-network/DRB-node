@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"os"
 	"sync"
 	"time"
 
@@ -298,17 +297,9 @@ func cleanupOldBroadcasts() {
 	}
 
 	if cleaned {
-		// Save cleaned trackers back to file
-		file, err := os.Create("broadcast_trackers.json")
-		if err != nil {
-			log.Printf("Failed to create broadcast tracker file for cleanup: %v", err)
-			return
-		}
-		defer file.Close()
-
-		encoder := json.NewEncoder(file)
-		if err := encoder.Encode(trackers); err != nil {
-			log.Printf("Failed to encode cleaned broadcast trackers: %v", err)
+		// Save cleaned trackers back to file using helper function
+		if err := utils.SaveAllBroadcastTrackers(trackers); err != nil {
+			log.Printf("Failed to save cleaned broadcast trackers: %v", err)
 		}
 	}
 }

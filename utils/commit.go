@@ -14,6 +14,9 @@ const broadcastTrackerFile = "broadcast_trackers.json"
 // Global mutex for protecting commits.json file access
 var CommitsMutex sync.Mutex
 
+// Global mutex for protecting broadcast_trackers.json file access
+var BroadcastTrackersMutex sync.Mutex
+
 type CommitRequest struct {
 	Round      string            `json:"round"`
 	Cvs        [32]byte          `json:"cvs"`
@@ -183,6 +186,9 @@ func SaveCommitData(commitData CommitData) error {
 
 // SaveBroadcastTracker saves a broadcast tracker to file
 func SaveBroadcastTracker(tracker BroadcastTracker) error {
+	BroadcastTrackersMutex.Lock()
+	defer BroadcastTrackersMutex.Unlock()
+
 	// Load existing trackers
 	var trackers map[string]BroadcastTracker
 	file, err := os.OpenFile(broadcastTrackerFile, os.O_CREATE|os.O_RDWR, 0666)
@@ -244,6 +250,9 @@ func LoadBroadcastTrackers() (map[string]BroadcastTracker, error) {
 
 // UpdateBroadcastTracker updates an existing broadcast tracker
 func UpdateBroadcastTracker(tracker BroadcastTracker) error {
+	BroadcastTrackersMutex.Lock()
+	defer BroadcastTrackersMutex.Unlock()
+
 	trackers, err := LoadBroadcastTrackers()
 	if err != nil {
 		return err
@@ -253,6 +262,25 @@ func UpdateBroadcastTracker(tracker BroadcastTracker) error {
 	trackers[key] = tracker
 
 	// Save updated trackers
+	file, err := os.Create(broadcastTrackerFile)
+	if err != nil {
+		return fmt.Errorf("error creating broadcast tracker file: %v", err)
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	if err := encoder.Encode(trackers); err != nil {
+		return fmt.Errorf("error encoding broadcast trackers: %v", err)
+	}
+
+	return nil
+}
+
+// SaveAllBroadcastTrackers saves all broadcast trackers to the file (for bulk operations like cleanup)
+func SaveAllBroadcastTrackers(trackers map[string]BroadcastTracker) error {
+	BroadcastTrackersMutex.Lock()
+	defer BroadcastTrackersMutex.Unlock()
+
 	file, err := os.Create(broadcastTrackerFile)
 	if err != nil {
 		return fmt.Errorf("error creating broadcast tracker file: %v", err)
