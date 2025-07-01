@@ -28,9 +28,9 @@ var Execution bool
 var ActivatedOperator []string
 
 type RandomRequest struct {
-	Round     *big.Int
-	StartTime *big.Int
-	State     *big.Int
+	Round *big.Int
+	Trail *big.Int
+	State *big.Int
 }
 type RoundData struct {
 	MerkleRoot   bool
@@ -43,6 +43,7 @@ var RoundsData map[string]RoundData
 var SecretRequestSentForWhichRound string
 var CurrentRound string
 var Req RandomRequest
+var LastRequest RandomRequest
 
 type LeaderCommitData struct {
 	Round                 string            `json:"round"`
@@ -127,13 +128,17 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				if len(vLog.Topics) == 0 {
 					continue
 				}
+
+				isReorg := vLog.Removed
+
 				firstTopic := vLog.Topics[0]
 				switch firstTopic {
 				case CvsEventSig:
 					eventData := struct {
-						StartTime *big.Int
-						Cv        [32]byte
-						Index     *big.Int
+						Round *big.Int
+						Trail *big.Int
+						Cv    [32]byte
+						Index *big.Int
 					}{}
 					err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
 					if err != nil {
@@ -142,13 +147,14 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					}
 					fmt.Printf("CvSubmitted Event: Fetched successfully")
 
-					processCVS(eventData.Cv, eventData.Index)
+					processCVS(eventData.Cv, eventData.Index, isReorg)
 
 				case CoSubmittedSig:
 					eventData := struct {
-						StartTime *big.Int
-						Co        [32]byte
-						Index     *big.Int
+						Round *big.Int
+						Trail *big.Int
+						Co    [32]byte
+						Index *big.Int
 					}{}
 					err := parsedABI.UnpackIntoInterface(&eventData, "CoSubmitted", vLog.Data)
 					if err != nil {
@@ -157,12 +163,13 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					}
 					fmt.Printf("CoSubmitted Event: Fetched successfully")
 
-					processCOS(fallbackEthClient, eventData.Co, eventData.Index)
+					processCOS(fallbackEthClient, eventData.Co, eventData.Index, isReorg)
 
 				case StatusSig:
 					eventData := struct {
-						CurStartTime *big.Int
-						CurState     *big.Int
+						CurState *big.Int
+						CurRound *big.Int
+						CurTrail *big.Int
 					}{}
 
 					err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
@@ -170,13 +177,14 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 						log.Printf("Failed to decode Status event log: %v", err)
 						continue
 					}
-					processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
+					processRandomRequestNumber(fallbackEthClient, eventData.CurRound, eventData.CurTrail, eventData.CurState, isReorg)
 
 				case SSubmittedSig:
 					eventData := struct {
-						StartTime *big.Int
-						S         [32]byte
-						Index     *big.Int
+						Round *big.Int
+						Trail *big.Int
+						S     [32]byte
+						Index *big.Int
 					}{}
 
 					err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
@@ -185,48 +193,60 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 						log.Printf("Failed to decode SSubmitted event log: %v", err)
 						continue
 					}
-					fmt.Printf("SSubmitted Event:\n StartTime %v\n Secret %v\n IndexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
-					processSubmittedSecretRequest(eventData.S, eventData.Index)
+					fmt.Printf("SSubmitted Event:\n Round %v\n Trail %v\n Secret %v\n IndexK %v\n ", eventData.Round, eventData.Trail, eventData.S, eventData.Index)
+					processSubmittedSecretRequest(eventData.S, eventData.Index, isReorg)
 				}
 			}
 		}
 	}
 }
 
-func processSubmittedSecretRequest(secret [32]byte, index *big.Int) {
+func processSubmittedSecretRequest(secret [32]byte, index *big.Int, isReorg bool) {
+	if isReorg {
+		return
+	} else {
+		intValue := int(index.Int64())
+		regularNodeAddress := eth.ActivatedOperators[intValue]
+		key := SecretRequestSentForWhichRound + "+" + regularNodeAddress.Hex()
 
-	intValue := int(index.Int64())
-	regularNodeAddress := eth.ActivatedOperators[intValue]
-	key := SecretRequestSentForWhichRound + "+" + regularNodeAddress.Hex()
+		leaderCommits, _ := loadLeaderCommits("leader_commits.json")
+		data := leaderCommits[key]
+		data.SecretValue = secret
+		secretHex := hex.EncodeToString(secret[:])
+		data.SecretValueHex = secretHex
+		leaderCommits[key] = data
 
-	leaderCommits, _ := loadLeaderCommits("leader_commits.json")
-	data := leaderCommits[key]
-	data.SecretValue = secret
-	secretHex := hex.EncodeToString(secret[:])
-	data.SecretValueHex = secretHex
-	leaderCommits[key] = data
+		err := saveLeaderCommits("leader_commits.json", leaderCommits)
+		if err != nil {
+			log.Printf("Failed to save updated leader commits: %v", err)
+		}
 
-	err := saveLeaderCommits("leader_commits.json", leaderCommits)
-	if err != nil {
-		log.Printf("Failed to save updated leader commits: %v", err)
+		// Broadcast the secret value to all activated regular nodes
+		ReliableBroadCastS(libp2putils.HostInstance, SecretRequestSentForWhichRound, regularNodeAddress.Hex(), secret)
 	}
-
-	// Broadcast the secret value to all activated regular nodes
-	ReliableBroadCastS(libp2putils.HostInstance, SecretRequestSentForWhichRound, regularNodeAddress.Hex(), secret)
 }
 
-func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, state *big.Int) {
-	round, _ := fetchCurrentRound(fallbackEthClient)
-	CurrentRound = round.String()
-	req := RandomRequest{
-		Round:     round,
-		StartTime: startTime,
-		State:     state,
+func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trail *big.Int, state *big.Int, isReorg bool) {
+	// If the reorg happens, we need to fetch the current round from the blockchain
+	if isReorg {
+		CurrentRound = LastRequest.Round.String()
+	} else {
+		CurrentRound = round.String()
 	}
+
 	if state.Cmp(big.NewInt(1)) == 0 {
-		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
-			startTime, state, round)
-		Req = req
+		fmt.Printf("Status Event:\n Trail: %v\n State: %v\n Round: %v\n",
+			trail, state, round)
+		if isReorg {
+			Req = LastRequest
+		} else {
+			LastRequest = Req
+			Req = RandomRequest{
+				Round: round,
+				Trail: trail,
+				State: state,
+			}
+		}
 		var err error
 		ActivatedOperator, err = FetchActivatedOperators(fallbackEthClient, CurrentRound)
 		if err != nil {
@@ -247,55 +267,59 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 }
 
-func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, cos [32]byte, activatedOperatorIndex *big.Int) error {
-	filePath := "leader_commits.json"
-	utils.LeaderCommitsMutex.Lock()
-	defer utils.LeaderCommitsMutex.Unlock()
+func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, cos [32]byte, activatedOperatorIndex *big.Int, isReorg bool) error {
+	if isReorg {
+		return nil
+	} else {
+		filePath := "leader_commits.json"
+		utils.LeaderCommitsMutex.Lock()
+		defer utils.LeaderCommitsMutex.Unlock()
 
-	var commitData map[string]LeaderCommitData
-	file, err := os.ReadFile(filePath)
-	if err == nil {
-		err = json.Unmarshal(file, &commitData)
+		var commitData map[string]LeaderCommitData
+		file, err := os.ReadFile(filePath)
+		if err == nil {
+			err = json.Unmarshal(file, &commitData)
+			if err != nil {
+				fmt.Println("Error parsing JSON:", err)
+				return err
+			}
+		} else {
+			commitData = make(map[string]LeaderCommitData)
+		}
+
+		round := CurrentRound
+		eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
+		eoa := common.HexToAddress(eoaAddress)
+		key := fmt.Sprintf("%s+%s", round, eoa.Hex())
+		cosHex := hex.EncodeToString(cos[:])
+		cosBytes, _ := hex.DecodeString(cosHex)
+
+		copy(cos[:], cosBytes)
+
+		data := commitData[key]
+		data.Cos = cos
+		data.CosHex = cosHex
+		commitData[key] = data
+
+		updatedJSON, err := json.MarshalIndent(commitData, "", "  ")
 		if err != nil {
-			fmt.Println("Error parsing JSON:", err)
+			fmt.Println("Error serializing updated JSON:", err)
 			return err
 		}
-	} else {
-		commitData = make(map[string]LeaderCommitData)
+
+		err = os.WriteFile(filePath, updatedJSON, 0644)
+		if err != nil {
+			fmt.Println("Error writing updated JSON file:", err)
+			return err
+		}
+		updateCOS(fallbackEthClient, round, eoa, cos)
+		fmt.Printf("Successfully stored COS for Round %s, EOA %s\n", round, eoa.Hex())
+
+		// Broadcast the COS value to all activated regular nodes
+		ReliableBroadCastCOS(libp2putils.HostInstance, round, eoa, cos)
+
+		return nil
 	}
-
-	round := CurrentRound
-	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
-	eoa := common.HexToAddress(eoaAddress)
-	key := fmt.Sprintf("%s+%s", round, eoa.Hex())
-	cosHex := hex.EncodeToString(cos[:])
-	cosBytes, _ := hex.DecodeString(cosHex)
-
-	copy(cos[:], cosBytes)
-
-	data := commitData[key]
-	data.Cos = cos
-	data.CosHex = cosHex
-	commitData[key] = data
-
-	updatedJSON, err := json.MarshalIndent(commitData, "", "  ")
-	if err != nil {
-		fmt.Println("Error serializing updated JSON:", err)
-		return err
-	}
-
-	err = os.WriteFile(filePath, updatedJSON, 0644)
-	if err != nil {
-		fmt.Println("Error writing updated JSON file:", err)
-		return err
-	}
-	updateCOS(fallbackEthClient, round, eoa, cos)
-	fmt.Printf("Successfully stored COS for Round %s, EOA %s\n", round, eoa.Hex())
-
-	// Broadcast the COS value to all activated regular nodes
-	ReliableBroadCastCOS(libp2putils.HostInstance, round, eoa, cos)
-
-	return nil
 }
 
 func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, eoa common.Address, cos [32]byte) {
@@ -326,71 +350,75 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 	}
 }
 
-func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
-	filePath := "leader_commits.json"
-	utils.LeaderCommitsMutex.Lock()
-	defer utils.LeaderCommitsMutex.Unlock()
+func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int, isReorg bool) error {
+	if isReorg {
+		return nil
+	} else {
+		filePath := "leader_commits.json"
+		utils.LeaderCommitsMutex.Lock()
+		defer utils.LeaderCommitsMutex.Unlock()
 
-	var commitData map[string]LeaderCommitData
-	file, err := os.ReadFile(filePath)
-	if err == nil {
-		err = json.Unmarshal(file, &commitData)
+		var commitData map[string]LeaderCommitData
+		file, err := os.ReadFile(filePath)
+		if err == nil {
+			err = json.Unmarshal(file, &commitData)
+			if err != nil {
+				fmt.Println("Error parsing JSON:", err)
+				return err
+			}
+		} else {
+			commitData = make(map[string]LeaderCommitData)
+		}
+
+		round := CurrentRound
+		eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
+		eoa := common.HexToAddress(eoaAddress)
+		key := fmt.Sprintf("%s+%s", round, eoa.Hex())
+		cvsHex := hex.EncodeToString(cvs[:])
+		cvsBytes, _ := hex.DecodeString(cvsHex)
+
+		copy(cvs[:], cvsBytes)
+		if _, exists := commitData[key]; !exists {
+			commitData[key] = LeaderCommitData{
+				Round:                 round,
+				EOAAddress:            eoa.Hex(),
+				Cvs:                   cvs,
+				CvsHex:                cvsHex,
+				Cos:                   [32]byte{},
+				CosHex:                "",
+				SecretValue:           [32]byte{},
+				SecretValueHex:        "",
+				Sign:                  make(map[string]string),
+				SubmitMerkleRootDone:  false,
+				RandomNumberGenerated: false,
+				CreatedAt:             time.Now().Unix(),
+			}
+		} else {
+			data := commitData[key]
+			data.Cvs = cvs
+			data.CvsHex = cvsHex
+			commitData[key] = data
+		}
+
+		updatedJSON, err := json.MarshalIndent(commitData, "", "  ")
 		if err != nil {
-			fmt.Println("Error parsing JSON:", err)
+			fmt.Println("Error serializing updated JSON:", err)
 			return err
 		}
-	} else {
-		commitData = make(map[string]LeaderCommitData)
-	}
 
-	round := CurrentRound
-	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
-	eoa := common.HexToAddress(eoaAddress)
-	key := fmt.Sprintf("%s+%s", round, eoa.Hex())
-	cvsHex := hex.EncodeToString(cvs[:])
-	cvsBytes, _ := hex.DecodeString(cvsHex)
-
-	copy(cvs[:], cvsBytes)
-	if _, exists := commitData[key]; !exists {
-		commitData[key] = LeaderCommitData{
-			Round:                 round,
-			EOAAddress:            eoa.Hex(),
-			Cvs:                   cvs,
-			CvsHex:                cvsHex,
-			Cos:                   [32]byte{},
-			CosHex:                "",
-			SecretValue:           [32]byte{},
-			SecretValueHex:        "",
-			Sign:                  make(map[string]string),
-			SubmitMerkleRootDone:  false,
-			RandomNumberGenerated: false,
-			CreatedAt:             time.Now().Unix(),
+		err = os.WriteFile(filePath, updatedJSON, 0644)
+		if err != nil {
+			fmt.Println("Error writing updated JSON file:", err)
+			return err
 		}
-	} else {
-		data := commitData[key]
-		data.Cvs = cvs
-		data.CvsHex = cvsHex
-		commitData[key] = data
+		updateCVS(round, eoa, cvs)
+		fmt.Printf("Successfully stored CVS for Round %s, EOA %s\n", round, eoa.Hex())
+
+		// Broadcast the CVS value to all activated regular nodes
+		ReliableBroadCastCVS(libp2putils.HostInstance, round, eoa, cvs)
+
+		return nil
 	}
-
-	updatedJSON, err := json.MarshalIndent(commitData, "", "  ")
-	if err != nil {
-		fmt.Println("Error serializing updated JSON:", err)
-		return err
-	}
-
-	err = os.WriteFile(filePath, updatedJSON, 0644)
-	if err != nil {
-		fmt.Println("Error writing updated JSON file:", err)
-		return err
-	}
-	updateCVS(round, eoa, cvs)
-	fmt.Printf("Successfully stored CVS for Round %s, EOA %s\n", round, eoa.Hex())
-
-	// Broadcast the CVS value to all activated regular nodes
-	ReliableBroadCastCVS(libp2putils.HostInstance, round, eoa, cvs)
-
-	return nil
 }
 
 func updateCVS(round string, eoa common.Address, cvs [32]byte) {

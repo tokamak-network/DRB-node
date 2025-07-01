@@ -44,11 +44,12 @@ type RoundData struct {
 
 var RoundsData map[string]RoundData
 var Req RandomRequest
+var LastRequest RandomRequest
 
 type RandomRequest struct {
-	Round     *big.Int
-	StartTime *big.Int
-	State     *big.Int
+	Round *big.Int
+	Trail *big.Int
+	State *big.Int
 }
 
 var RequestQueue []RandomRequest
@@ -119,11 +120,15 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 					if len(vLog.Topics) == 0 {
 						continue
 					}
+
+					isReorg := vLog.Removed
+
 					firstTopic := vLog.Topics[0]
 					switch firstTopic {
 					case SubmitCVS:
 						eventData := struct {
-							StartTime     *big.Int
+							Round         *big.Int
+							Trail         *big.Int
 							PackedIndices *big.Int
 						}{}
 						err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
@@ -132,14 +137,15 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							continue
 						}
 
-						fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.PackedIndices)
+						fmt.Printf("CommitRequest Event: round %v\n, trail %v\n, indices %v, isReorg %v\n", eventData.Round, eventData.Trail, eventData.PackedIndices, isReorg)
 
-						processCommitRequest(fallbackEthClient, eventData.PackedIndices)
+						processCommitRequest(fallbackEthClient, eventData.PackedIndices, isReorg)
 
 					case StatusSig:
 						eventData := struct {
-							CurStartTime *big.Int
-							CurState     *big.Int
+							CurRound *big.Int
+							CurTrail *big.Int
+							CurState *big.Int
 						}{}
 
 						err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
@@ -148,11 +154,12 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							continue
 						}
 
-						processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
+						processRandomRequestNumber(fallbackEthClient, eventData.CurRound, eventData.CurTrail, eventData.CurState, isReorg)
 
 					case MerkleRootSubmittedSig:
 						eventData := struct {
-							StartTime  *big.Int
+							Round      *big.Int
+							Trail      *big.Int
 							MerkleRoot [32]byte
 						}{}
 
@@ -161,14 +168,15 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
 							continue
 						}
-						fmt.Printf("MerkleRootSubmitted Event:\n StartTime: %v\n MerkleRoot: %v\n Round: %v\n",
-							eventData.StartTime, eventData.MerkleRoot, CurrentRound)
+						fmt.Printf("MerkleRootSubmitted Event:\n Trail: %v\n MerkleRoot: %v\n Round: %v\n isReorg %v\n",
+							eventData.Trail, eventData.MerkleRoot, CurrentRound, isReorg)
 
-						processMerkleRoot(CurrentRound)
+						processMerkleRoot(CurrentRound, isReorg)
 
 					case RequestedToSubmitCoSig:
 						eventData := struct {
-							StartTime     *big.Int
+							Round         *big.Int
+							Trail         *big.Int
 							IndicesLength *big.Int
 							PackedIndices *big.Int
 						}{}
@@ -177,14 +185,15 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to decode RequestedToSubmitCo event log: %v", err)
 							continue
 						}
-						fmt.Printf("RequestedToSubmitCo Event: startTime %v\n, indicesLength %v\n, indices %v\n", eventData.StartTime, eventData.IndicesLength, eventData.PackedIndices)
+						fmt.Printf("RequestedToSubmitCo Event: round %v\n, trail %v\n, indicesLength %v\n, indices %v\n isReorg %v\n", eventData.Round, eventData.Trail, eventData.IndicesLength, eventData.PackedIndices, isReorg)
 
-						processCosRequest(fallbackEthClient, eventData.PackedIndices, eventData.IndicesLength)
+						processCosRequest(fallbackEthClient, eventData.PackedIndices, eventData.IndicesLength, isReorg)
 
 					case RequestedToSubmitSFromIndexKSig:
 						eventData := struct {
-							StartTime *big.Int
-							IndexK    *big.Int
+							Round  *big.Int
+							Trail  *big.Int
+							IndexK *big.Int
 						}{}
 
 						err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitSFromIndexK", vLog.Data)
@@ -193,15 +202,16 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to decode RequestedToSubmitSFromIndexK event log: %v", err)
 							continue
 						}
-						fmt.Printf("RequestedToSubmitSFromIndexK Event:\n startTime %v\n indexK %v\n", eventData.StartTime, eventData.IndexK)
+						fmt.Printf("RequestedToSubmitSFromIndexK Event:\n round %v\n trail %v\n indexK %v\n isReorg %v\n", eventData.Round, eventData.Trail, eventData.IndexK, isReorg)
 
-						processSecretRequest(fallbackEthClient, eventData.IndexK)
+						processSecretRequest(fallbackEthClient, eventData.IndexK, isReorg)
 
 					case SSubmittedSig:
 						eventData := struct {
-							StartTime *big.Int
-							S         [32]byte
-							Index     *big.Int
+							Round *big.Int
+							Trail *big.Int
+							S     [32]byte
+							Index *big.Int
 						}{}
 
 						err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
@@ -210,9 +220,9 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to decode SSubmitted event log: %v", err)
 							continue
 						}
-						fmt.Printf("SSubmitted Event:\n startTime %v\n Secret %v\n, indexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
+						fmt.Printf("SSubmitted Event:\n round %v\n trail %v\n Secret %v\n, indexK %v\n isReorg %v\n", eventData.Round, eventData.Trail, eventData.S, eventData.Index, isReorg)
 						// index := new(big.Int).Add(eventData.Index, big.NewInt(1))
-						processSubmittedSecretRequest(fallbackEthClient, eventData.Index)
+						processSubmittedSecretRequest(fallbackEthClient, eventData.Index, isReorg)
 					}
 				}
 			}
@@ -220,52 +230,59 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	}
 }
 
-func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int) {
-	data, _ := commitreveal2.LoadRevealOrder("regular_reveal_order.json", CurrentRound)
-	orderedNodes := data.OrderedNodes
-	revealOrder := data.RevealOrder
-	if index.Int64() >= int64(len(orderedNodes)) {
-		log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(orderedNodes))
+func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int, isReorg bool) {
+	if isReorg {
 		return
-	}
-	var temp int
-	intValue := int(index.Int64())
-	for i, order := range revealOrder {
-		if order == intValue {
-			temp = i
+	} else {
+		data, _ := commitreveal2.LoadRevealOrder("regular_reveal_order.json", CurrentRound)
+		orderedNodes := data.OrderedNodes
+		revealOrder := data.RevealOrder
+		if index.Int64() >= int64(len(orderedNodes)) {
+			log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(orderedNodes))
+			return
 		}
-	}
+		var temp int
+		intValue := int(index.Int64())
+		for i, order := range revealOrder {
+			if order == intValue {
+				temp = i
+			}
+		}
 
-	if temp+1 < len(revealOrder) {
-		if temp+1 < len(orderedNodes) {
-			regularEoaAddress := orderedNodes[temp+1]
-			if EoaAddress == regularEoaAddress {
-				fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", CurrentRound, regularEoaAddress)
-				submitS(fallbackEthClient)
+		if temp+1 < len(revealOrder) {
+			if temp+1 < len(orderedNodes) {
+				regularEoaAddress := orderedNodes[temp+1]
+				if EoaAddress == regularEoaAddress {
+					fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", CurrentRound, regularEoaAddress)
+					submitS(fallbackEthClient)
+				}
 			}
 		}
 	}
 }
 
-func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int) {
-	data, _ := commitreveal2.LoadRevealOrders("regular_reveal_order.json")
-	revealOrder, exists := data[CurrentRound]
-	if !exists {
-		log.Printf("No reveal order found for round %s", CurrentRound)
+func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int, isReorg bool) {
+	if isReorg {
 		return
-	}
+	} else {
+		data, _ := commitreveal2.LoadRevealOrders("regular_reveal_order.json")
+		revealOrder, exists := data[CurrentRound]
+		if !exists {
+			log.Printf("No reveal order found for round %s", CurrentRound)
+			return
+		}
 
-	if index.Int64() >= int64(len(revealOrder.OrderedNodes)) {
-		log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(revealOrder.OrderedNodes))
-		return
-	}
+		if index.Int64() >= int64(len(revealOrder.OrderedNodes)) {
+			log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(revealOrder.OrderedNodes))
+			return
+		}
 
-	regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
-	if EoaAddress == regularEoaAddress {
-		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", CurrentRound, regularEoaAddress)
-		submitS(fallbackEthClient)
+		regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
+		if EoaAddress == regularEoaAddress {
+			fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", CurrentRound, regularEoaAddress)
+			submitS(fallbackEthClient)
+		}
 	}
-
 }
 
 func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
@@ -325,29 +342,41 @@ func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	log.Printf("Successfully submitted secret_value: %x", secretValueBytes)
 }
 
-func processMerkleRoot(round string) {
-	if RoundsData == nil {
-		RoundsData = make(map[string]RoundData)
+func processMerkleRoot(round string, isReorg bool) {
+	if isReorg {
+		delete(RoundsData, round)
+	} else {
+		if RoundsData == nil {
+			RoundsData = make(map[string]RoundData)
+		}
+		roundData := RoundsData[round]
+		roundData.MerkleRoot = true
+		RoundsData[round] = roundData
 	}
-	roundData := RoundsData[round]
-	roundData.MerkleRoot = true
-	RoundsData[round] = roundData
 }
 
-func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, state *big.Int) {
+func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trail *big.Int, state *big.Int, isReorg bool) {
 	eth.UpdateActivatedOperators(fallbackEthClient)
-	round, _ := fetchCurrentRound(fallbackEthClient)
-	CurrentRound = round.String()
-	req := RandomRequest{
-		Round:     round,
-		StartTime: startTime,
-		State:     state,
+	if !isReorg {
+		CurrentRound = round.String()
+	} else {
+		CurrentRound = LastRequest.Round.String()
 	}
+
 	if state.Cmp(big.NewInt(1)) == 0 {
-		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
-			startTime, state, round)
+		fmt.Printf("Status Event:\n Trail: %v\n State: %v\n Round: %v\n",
+			trail, state, round)
 		ActivatedOperator, _ = FetchActivatedOperators(fallbackEthClient, CurrentRound)
-		Req = req
+		if isReorg {
+			Req = LastRequest
+		} else {
+			LastRequest = Req
+			Req = RandomRequest{
+				Round: round,
+				Trail: trail,
+				State: state,
+			}
+		}
 
 		Execution = true
 	}
@@ -386,148 +415,156 @@ func allCosReceivedUnlockedRegular(roundNum string, ops []common.Address) bool {
 	return true
 }
 
-func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int) error {
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
-	if privateKeyHex == "" {
-		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
-	}
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Fatalf("Failed to decode Ethereum private key: %v", err)
-	}
-	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int, isReorg bool) error {
+	if isReorg {
+		return nil
+	} else {
+		privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+		if privateKeyHex == "" {
+			log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+		}
+		privateKey, err := crypto.HexToECDSA(privateKeyHex)
+		if err != nil {
+			log.Fatalf("Failed to decode Ethereum private key: %v", err)
+		}
+		eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 
-	acitvatedOps := ActivatedOperator
-	indices := unpackIndices(packedIndices)
-	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
+		acitvatedOps := ActivatedOperator
+		indices := unpackIndices(packedIndices)
+		flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
 
-	if err != nil {
-		fmt.Println(err)
-	}
-	if !flag {
-		fmt.Println("Cv Request does not contain our EOA")
+		if err != nil {
+			fmt.Println(err)
+		}
+		if !flag {
+			fmt.Println("Cv Request does not contain our EOA")
+			return nil
+		}
+
+		fmt.Printf("Processing RequestedToSubmitCv event for Round: %v\n", CurrentRound)
+
+		contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+		if contractAddressStr == "" {
+			log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+		}
+		contractAddress := common.HexToAddress(contractAddressStr)
+		parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+		if err != nil {
+			return fmt.Errorf("failed to load contract ABI: %v", err)
+		}
+
+		clientUtils := &utils.Client{
+			ContractAddress: contractAddress,
+			PrivateKey:      privateKey,
+			ContractABI:     parsedABI,
+		}
+
+		commits, err := utils.LoadRegularCommits()
+		if err != nil {
+			fmt.Println("Error loading commits:", err)
+			return err
+		}
+
+		var cvs []uint8
+		for key, data := range commits {
+			if CurrentRound == key {
+				cvs = data.Cvs[:]
+				break
+			}
+		}
+		cvsSlice := cvs[:]
+		var cv [32]byte
+		copy(cv[:], []byte(cvsSlice))
+
+		_, _, err = eth.ExecuteTransaction(
+			context.Background(),
+			clientUtils,
+			fallbackEthClient,
+			"submitCv",
+			big.NewInt(0),
+			cv,
+		)
+		if err != nil {
+			fmt.Println("It contains error")
+		}
 		return nil
 	}
-
-	fmt.Printf("Processing RequestedToSubmitCv event for Round: %v\n", CurrentRound)
-
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to load contract ABI: %v", err)
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
-	}
-
-	commits, err := utils.LoadRegularCommits()
-	if err != nil {
-		fmt.Println("Error loading commits:", err)
-		return err
-	}
-
-	var cvs []uint8
-	for key, data := range commits {
-		if CurrentRound == key {
-			cvs = data.Cvs[:]
-			break
-		}
-	}
-	cvsSlice := cvs[:]
-	var cv [32]byte
-	copy(cv[:], []byte(cvsSlice))
-
-	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
-		clientUtils,
-		fallbackEthClient,
-		"submitCv",
-		big.NewInt(0),
-		cv,
-	)
-	if err != nil {
-		fmt.Println("It contains error")
-	}
-	return nil
 }
 
-func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int, indicesLength *big.Int) error {
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
-	if privateKeyHex == "" {
-		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
-	}
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Fatalf("Failed to decode Ethereum private key: %v", err)
-	}
-	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int, indicesLength *big.Int, isReorg bool) error {
+	if isReorg {
+		return nil
+	} else {
+		privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+		if privateKeyHex == "" {
+			log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+		}
+		privateKey, err := crypto.HexToECDSA(privateKeyHex)
+		if err != nil {
+			log.Fatalf("Failed to decode Ethereum private key: %v", err)
+		}
+		eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 
-	acitvatedOps := ActivatedOperator
-	indices := unpackIndicesWithLength(packedIndices, indicesLength)
-	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
+		acitvatedOps := ActivatedOperator
+		indices := unpackIndicesWithLength(packedIndices, indicesLength)
+		flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
 
-	if err != nil {
-		fmt.Println(err)
-	}
-	if !flag {
-		fmt.Println("Cos Request does not contain our EOA")
+		if err != nil {
+			fmt.Println(err)
+		}
+		if !flag {
+			fmt.Println("Cos Request does not contain our EOA")
+			return nil
+		}
+
+		fmt.Printf("Processing RequestedToSubmitCo event for Round: %v\n", CurrentRound)
+
+		contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+		if contractAddressStr == "" {
+			log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+		}
+		contractAddress := common.HexToAddress(contractAddressStr)
+		parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+		if err != nil {
+			return fmt.Errorf("failed to load contract ABI: %v", err)
+		}
+
+		clientUtils := &utils.Client{
+			ContractAddress: contractAddress,
+			PrivateKey:      privateKey,
+			ContractABI:     parsedABI,
+		}
+
+		commits, err := utils.LoadRegularCommits()
+		if err != nil {
+			fmt.Println("Error loading commits:", err)
+			return err
+		}
+
+		var cos []uint8
+		for key, data := range commits {
+			if CurrentRound == key {
+				cos = data.Cos[:]
+				break
+			}
+		}
+		cvsSlice := cos[:]
+		var cv [32]byte
+		copy(cv[:], []byte(cvsSlice))
+
+		_, _, err = eth.ExecuteTransaction(
+			context.Background(),
+			clientUtils,
+			fallbackEthClient,
+			"submitCo",
+			big.NewInt(0),
+			cv,
+		)
+		if err != nil {
+			fmt.Println("It contains error")
+		}
 		return nil
 	}
-
-	fmt.Printf("Processing RequestedToSubmitCo event for Round: %v\n", CurrentRound)
-
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to load contract ABI: %v", err)
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
-	}
-
-	commits, err := utils.LoadRegularCommits()
-	if err != nil {
-		fmt.Println("Error loading commits:", err)
-		return err
-	}
-
-	var cos []uint8
-	for key, data := range commits {
-		if CurrentRound == key {
-			cos = data.Cos[:]
-			break
-		}
-	}
-	cvsSlice := cos[:]
-	var cv [32]byte
-	copy(cv[:], []byte(cvsSlice))
-
-	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
-		clientUtils,
-		fallbackEthClient,
-		"submitCo",
-		big.NewInt(0),
-		cv,
-	)
-	if err != nil {
-		fmt.Println("It contains error")
-	}
-	return nil
 }
 
 func unpackIndices(packedIndices *big.Int) []*big.Int {
