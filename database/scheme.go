@@ -21,8 +21,8 @@ type LeaderCommitScheme struct {
 	SignR                 string `pg:"sign_r"`
 	SignS                 string `pg:"sign_s"`
 	SignV                 string `pg:"sign_v"`
-	SubmitMerkleRootDone  bool   `pg:"submit_merkle_root_done"`
-	RandomNumberGenerated bool   `pg:"random_number_generated"`
+	SubmitMerkleRootDone  bool   `pg:"submit_merkle_root_done,notnull,use_zero"`
+	RandomNumberGenerated bool   `pg:"random_number_generated,notnull,use_zero"`
 }
 
 type CommitDataScheme struct {

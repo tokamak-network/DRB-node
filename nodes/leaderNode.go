@@ -119,6 +119,8 @@ func handleCommitRequest(s network.Stream) {
 		commitData.Cvs = req.Cvs
 		commitData.CvsHex = hex.EncodeToString(req.Cvs[:])
 		commitData.Sign = req.Sign
+		commitData.SubmitMerkleRootDone = false
+		commitData.RandomNumberGenerated = false
 		log.Printf("Storing CVS and signature for round %s EOA %s", roundNum, eoaAddress.Hex())
 	}
 	updateInMemoryData(roundNum, eoaAddress, *commitData)

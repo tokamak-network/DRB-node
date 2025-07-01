@@ -169,18 +169,18 @@ func GetNodeInfo() (*utils.NodeInfo, error) {
 	return nodeInfo, nil
 }
 
-func AddLeaderCommit(leaderCommits *utils.LeaderCommitData) error {
+func AddLeaderCommit(commitData *utils.LeaderCommitData) error {
 	leaderCommit := LeaderCommitScheme{
-		Round:                 leaderCommits.Round,
-		EOAAddress:            leaderCommits.EOAAddress,
-		Cvs:                   leaderCommits.Cvs[:],
-		Cos:                   leaderCommits.Cos[:],
-		SecretValue:           leaderCommits.SecretValue[:],
-		SignR:                 leaderCommits.Sign.R,
-		SignS:                 leaderCommits.Sign.S,
-		SignV:                 leaderCommits.Sign.V,
-		SubmitMerkleRootDone:  leaderCommits.SubmitMerkleRootDone,
-		RandomNumberGenerated: leaderCommits.RandomNumberGenerated,
+		Round:                 commitData.Round,
+		EOAAddress:            commitData.EOAAddress,
+		Cvs:                   commitData.Cvs[:],
+		Cos:                   commitData.Cos[:],
+		SecretValue:           commitData.SecretValue[:],
+		SignR:                 commitData.Sign.R,
+		SignS:                 commitData.Sign.S,
+		SignV:                 commitData.Sign.V,
+		SubmitMerkleRootDone:  commitData.SubmitMerkleRootDone,
+		RandomNumberGenerated: commitData.RandomNumberGenerated,
 	}
 
 	// Convert byte arrays to hex strings

@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS leader_commit_schemes (
     sign_r TEXT,
     sign_s TEXT,
     sign_v TEXT,
-    submit_merkle_root_done BOOLEAN,
-    random_number_generated BOOLEAN,
+    submit_merkle_root_done BOOLEAN NOT NULL,
+    random_number_generated BOOLEAN NOT NULL,
     PRIMARY KEY (round, eoa_address)
 );
 
