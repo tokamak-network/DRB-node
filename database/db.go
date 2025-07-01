@@ -448,6 +448,23 @@ func AddCommit(commit *utils.CommitData) error {
 	return err
 }
 
+func UpdateCommit(commit *utils.CommitData) error {
+	model := CommitDataScheme{
+		Round:           commit.Round,
+		Cvs:             commit.Cvs[:],
+		Cos:             commit.Cos[:],
+		SecretValue:     commit.SecretValue[:],
+		SignR:           commit.Sign.R,
+		SignS:           commit.Sign.S,
+		SignV:           commit.Sign.V,
+		SendToLeader:    commit.SendToLeader,
+		SendCosToLeader: commit.SendCosToLeader,
+	}
+
+	_, err := GetDB().Model(&model).Where("round = ?", commit.Round).Update()
+	return err
+}
+
 func GetCommitByRound(round string) (*utils.CommitData, error) {
 	var model CommitDataScheme
 	err := GetDB().Model(&model).Where("round = ?", round).Limit(1).Select()

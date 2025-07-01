@@ -230,7 +230,7 @@ func RunRegularNode() {
 					SecretValue:     secretValue,
 					Cos:             cos,
 					Cvs:             cvs,
-					SendToLeader:    true,  // Mark commit to be sent to leader
+					SendToLeader:    true, // Initially false, will be set to true after sending
 					SendCosToLeader: false, // Initially false, to allow sending COS
 				}
 
@@ -252,15 +252,6 @@ func RunRegularNode() {
 					log.Printf("Merkle Root is set but Random Number is not. Sending COS for round %s.", round)
 					// Send COS to leader
 					sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress, privateKey)
-
-					// Update SendCosToLeader flag
-					commitData.SendCosToLeader = true
-
-					// Save updated commit data to prevent re-sending COS
-					err := database.AddCommit(commitData)
-					if err != nil {
-						log.Printf("Error saving updated commit data after sending COS: %v", err)
-					}
 				}
 				continue
 			}
@@ -299,6 +290,12 @@ func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitD
 		log.Printf("Failed to send COS commit to leader: %v", err)
 	} else {
 		log.Printf("COS commit sent to leader for round %s", commitData.Round)
+
+		// Update SendCosToLeader flag to true after successful send
+		commitData.SendCosToLeader = true
+		if err := database.UpdateCommit(&commitData); err != nil {
+			log.Printf("Failed to update SendCosToLeader flag: %v", err)
+		}
 	}
 }
 
@@ -510,7 +507,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 
 	// Save commit data locally with v, r, s
 	commitData.Sign = req.Sign
-	if err := database.AddCommit(&commitData); err != nil {
+	if err := database.UpdateCommit(&commitData); err != nil {
 		log.Printf("Failed to save commit data locally: %v", err)
 		return
 	}
@@ -528,6 +525,12 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 		log.Printf("Failed to send commit to leader for round %s: %v", req.Round, err)
 	} else {
 		log.Printf("Commit successfully sent to leader for round %s", req.Round)
+
+		// Update SendToLeader flag to true after successful send
+		commitData.SendToLeader = true
+		if err := database.UpdateCommit(&commitData); err != nil {
+			log.Printf("Failed to update SendToLeader flag: %v", err)
+		}
 	}
 }
 
