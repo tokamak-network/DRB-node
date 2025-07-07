@@ -84,7 +84,7 @@ func ExecuteTransaction(
 		log.Errorf("Failed to suggest gas price: %v", err)
 		return nil, nil, fmt.Errorf("failed to suggest gas price: %v", err)
 	}
-	auth.GasPrice = new(big.Int).Mul(gasPrice, big.NewInt(3))
+	auth.GasPrice = new(big.Int).Mul(gasPrice, big.NewInt(2))
 
 	packedData, err := client.ContractABI.Pack(functionName, params...)
 	if err != nil {

@@ -155,11 +155,17 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		}
 
 		// Send to all activated operators
+		broadcastMutex.Lock()
+		operatorsToSend := make([]common.Address, 0)
 		for _, op := range eth.ActivatedOperators {
 			if tracker.Acknowledged[op.Hex()] {
 				continue // Skip already acknowledged nodes
 			}
+			operatorsToSend = append(operatorsToSend, op)
+		}
+		broadcastMutex.Unlock()
 
+		for _, op := range operatorsToSend {
 			stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, streamProtocol)
 			if err != nil {
 				log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
@@ -184,6 +190,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		time.Sleep(time.Duration(tracker.Timeout) * time.Second)
 
 		// Check if all nodes have acknowledged
+		broadcastMutex.Lock()
 		allAcknowledged := true
 		for _, acknowledged := range tracker.Acknowledged {
 			if !acknowledged {
@@ -193,6 +200,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		}
 
 		if allAcknowledged {
+			broadcastMutex.Unlock()
 			break
 		}
 
@@ -205,6 +213,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 				}
 			}
 		}
+		broadcastMutex.Unlock()
 	}
 
 	// Clean up from memory
