@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -14,6 +15,8 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+var strictOrderWhileSecretRequest = make(map[string][]string)
+
 // HandleSecretValueRequest processes secret value requests from the leader node
 func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	defer s.Close()
@@ -22,6 +25,25 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	var req utils.SecretValueRequest
 	if err := json.NewDecoder(s).Decode(&req); err != nil {
 		log.Printf("Failed to decode secret value request: %v", err)
+		return
+	}
+	for {
+		roundData, err := database.GetRevealOrder(CurrentRound)
+		if err != nil {
+			log.Printf("Failed to load reveal order: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
+		if strictOrderWhileSecretRequest[CurrentRound] == nil {
+			strictOrderWhileSecretRequest[CurrentRound] = roundData.OrderedNodes
+		}
+
+		log.Printf("Reveal order not yet calculated for round %s. Waiting...", CurrentRound)
+		time.Sleep(5 * time.Second)
+	}
+	if len(strictOrderWhileSecretRequest[CurrentRound]) == 0 || strictOrderWhileSecretRequest[CurrentRound][req.Order] != req.RegularEoaAddress {
+		log.Printf("EOA %s is not next in the reveal order %v for round %s", req.RegularEoaAddress, req.Order, CurrentRound)
 		return
 	}
 
@@ -34,29 +56,29 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 
 	// Use the existing signature verification mechanism
 	verifyReq := utils.RegistrationRequest{
-		EOAAddress: req.EOAAddress, // Sender's address
-		Signature:  req.Signature,  // Signature
+		EOAAddress: req.LeaderEoaAddress, // Sender's address
+		Signature:  req.Signature,        // Signature
 	}
 
 	// Verify the signature
 	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for secret value request: expected %s, got %s", leaderEOA, req.EOAAddress)
+		log.Printf("Signature verification failed for secret value request: expected %s, got %s", leaderEOA, req.LeaderEoaAddress)
 		return
 	}
 
 	// Log the request details
-	log.Printf("Verified secret value request for round %s from leader %s", req.Round, req.EOAAddress)
+	log.Printf("Verified secret value request for round %s from leader %s", CurrentRound, req.LeaderEoaAddress)
 
 	// Fetch the secret value for the specified round
 	commitData, err := database.GetCommitByRound(req.Round)
 	if err != nil {
-		log.Printf("Failed to load commit data for round %s: %v", req.Round, err)
+		log.Printf("Failed to load commit data for round %s: %v", CurrentRound, err)
 		return
 	}
 
 	// Check if the secret value exists
 	if commitData.SecretValue == [32]byte{} {
-		log.Printf("No secret value found for round %s", req.Round)
+		log.Printf("No secret value found for round %s", CurrentRound)
 		return
 	}
 
@@ -71,7 +93,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		return
 	}
 
-	SendSecretValue(h, leaderPeerID, req.Round)
+	SendSecretValue(h, leaderPeerID, CurrentRound)
 }
 
 // SendSecretValue sends the secret value for a round to the leader node
@@ -102,10 +124,10 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 
 	// Create the secret value request
 	req := utils.SecretValueRequest{
-		EOAAddress:  eoaAddress, // Regular node's Ethereum address
-		Signature:   signature,
-		SecretValue: commitData.SecretValue[:],
-		Round:       roundNum,
+		RegularEoaAddress: eoaAddress, // Regular node's Ethereum address
+		Signature:         signature,
+		SecretValue:       commitData.SecretValue[:],
+		Round:             roundNum,
 	}
 
 	// Open a stream to the leader node

@@ -14,13 +14,15 @@ type RegistrationRequest struct {
 }
 
 type SecretValueRequest struct {
-	EOAAddress string `json:"eoa_address"` // Sender's EOA address
-	Round      string `json:"round"`       // Round number
-	Signature  []byte `json:"signature"`   // Signature
-	SecretValue []byte  `json:"secret_value"`
+	LeaderEoaAddress  string `json:"leader_eoa"`  // Sender's EOA address
+	RegularEoaAddress string `json:"regular_eoa"` // EOA address of the node sending the request
+	Round             string `json:"round"`       // Round number
+	Signature         []byte `json:"signature"`   // Signature
+	SecretValue       []byte `json:"secret_value"`
+	Order             int    `json:"order"` // Order in the reveal sequence
 }
 
-// VerifySignature checks if the signature matches the EOA address
+// VerifySignature checks if the signature matches the EOA addressp
 func VerifySignature(req RegistrationRequest) bool {
 	hash := crypto.Keccak256Hash([]byte(req.EOAAddress))
 	pubKey, err := crypto.SigToPub(hash.Bytes(), req.Signature)

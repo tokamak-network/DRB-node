@@ -4,15 +4,24 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
+	"math/big"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/tokamak-network/DRB-node/database"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+// var SecretValue [][32]byte
+var RoundSecrets = make(map[string][][32]byte)
+var roundSecret = make(map[string]map[string]bool)
+var secretsOnChain = make(map[string]bool)
+var Indices []*big.Int
+
 // AcceptSecretValue processes and stores secret values sent by regular nodes.
-func AcceptSecretValue(h host.Host, s network.Stream) {
+func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	defer s.Close()
 
 	// Decode the incoming request
@@ -24,41 +33,51 @@ func AcceptSecretValue(h host.Host, s network.Stream) {
 
 	// Verify the EOA signature
 	verifyReq := utils.RegistrationRequest{
-		EOAAddress: req.EOAAddress,
+		EOAAddress: req.RegularEoaAddress,
 		Signature:  req.Signature,
 	}
 
 	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for secret value request from EOA: %s", req.EOAAddress)
+		log.Printf("Signature verification failed for secret value request from EOA: %s", req.RegularEoaAddress)
 		return
 	}
 
-	log.Printf("Successfully verified signature for EOA: %s", req.EOAAddress)
+	log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 
 	// Fetch or initialize the leader commit data for the given round and EOA
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(req.Round, req.EOAAddress)
+	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(req.Round, req.RegularEoaAddress)
 	if err != nil {
-		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", req.Round, req.EOAAddress)
+		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", req.Round, req.RegularEoaAddress)
 		leaderCommitData = &utils.LeaderCommitData{
 			Round:      req.Round,
-			EOAAddress: req.EOAAddress,
+			EOAAddress: req.RegularEoaAddress,
+			CreatedAt:  time.Now().Unix(),
 		}
 	}
-
+	var secretValueArray [32]byte
+	copy(secretValueArray[:], req.SecretValue[:]) // Convert req.SecretValue to [32]byte
+	if _, exists := RoundSecrets[req.Round]; !exists {
+		RoundSecrets[req.Round] = make([][32]byte, 0)
+	}
+	RoundSecrets[req.Round] = append(RoundSecrets[req.Round], secretValueArray)
 	// Store the secret value in both byte array and hex string formats
 	copy(leaderCommitData.SecretValue[:], req.SecretValue[:])
 	leaderCommitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
 
 	log.Printf("Received secret value for round %s and EOA %s: byte=%x, hex=%s",
-		req.Round, req.EOAAddress, leaderCommitData.SecretValue, leaderCommitData.SecretValueHex)
+		req.Round, req.RegularEoaAddress, leaderCommitData.SecretValue, leaderCommitData.SecretValueHex)
 
 	if err := database.UpdateLeaderCommit(leaderCommitData); err != nil {
-		log.Printf("Failed to save updated commit data for %s in round %s: %v", req.EOAAddress, req.Round, err)
+		log.Printf("Failed to save updated commit data for %s in round %s: %v", req.RegularEoaAddress, req.Round, err)
 		return
 	}
 
-	log.Printf("Successfully saved secret value for round %s and EOA %s", req.Round, req.EOAAddress)
-
+	log.Printf("Successfully saved secret value for round %s and EOA %s", req.Round, req.RegularEoaAddress)
+	if _, exists := roundSecret[CurrentRound]; !exists {
+		roundSecret[req.Round] = make(map[string]bool)
+	}
+	roundSecret[CurrentRound][req.RegularEoaAddress] = true
+	ReliableBroadCastS(h, req.Round, req.RegularEoaAddress, leaderCommitData.SecretValue)
 	// Continue requesting secret values from remaining nodes in the reveal order
-	HandleSecretValueResponse(h, req.Round, req.EOAAddress)
+	HandleSecretValueResponse(h, fallbackEthClient, req.Round, req.RegularEoaAddress)
 }

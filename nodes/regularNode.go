@@ -12,7 +12,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 	core "github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -22,13 +21,14 @@ import (
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/regularNode_helper"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 const abiFilePath = "contract/abi/Commit2RevealDRB.json"
 
 // RunRegularNode handles the behavior for a regular node
-func RunRegularNode() {
+func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	ctx := context.Background()
 
 	port := os.Getenv("PORT")
@@ -51,8 +51,17 @@ func RunRegularNode() {
 	h.SetStreamHandler("/sendSecretValue", func(s network.Stream) {
 		regularNode_helper.HandleSecretValueRequest(h, s)
 	})
+	h.SetStreamHandler("/cvsBroadcast", func(s network.Stream) {
+		regularNode_helper.HandleCvs(h, s)
+	})
+	h.SetStreamHandler("/cosBroadcast", func(s network.Stream) {
+		regularNode_helper.HandleCos(h, s)
+	})
+	h.SetStreamHandler("/secretBroadcast", func(s network.Stream) {
+		regularNode_helper.HandleSecret(h, s)
+	})
 
-	go regularNode_helper.MonitorCommitRequest()
+	go regularNode_helper.MonitorCommitRequest(fallbackEthClient)
 
 	// Get leader's multiaddress
 	leaderIP := os.Getenv("LEADER_IP")
@@ -82,6 +91,8 @@ func RunRegularNode() {
 	}
 
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+	regularNode_helper.Setup(eoaAddress)
+	regularNode_helper.SetRegularNodeEOA(eoaAddress)
 	log.Printf("EOA Address: %s", eoaAddress)
 
 	// Get the local IP address of the node
@@ -105,16 +116,6 @@ func RunRegularNode() {
 		log.Fatalf("Error connecting to leader: %v", err)
 	}
 
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	if ethRPCURL == "" {
-		log.Fatal("ETH_RPC_URL is not set in the environment variables")
-	}
-
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to Ethereum client: %v", err)
-	}
-
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
@@ -127,7 +128,6 @@ func RunRegularNode() {
 	}
 
 	clientUtils := &utils.Client{
-		Client:          client,
 		ContractAddress: contractAddress,
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
@@ -140,14 +140,14 @@ func RunRegularNode() {
 		}
 
 		// Check activation status
-		isActivated := checkActivationStatus(clientUtils, eoaAddress)
+		isActivated := checkActivationStatus(fallbackEthClient, clientUtils, eoaAddress)
 		if isActivated {
 			log.Println("Node is activated. No further action required.")
 		} else {
 			log.Println("Node is not activated. Checking deposit amount...")
 
 			// Check and ensure deposit is sufficient
-			depositSufficient, err := checkDepositAmount(clientUtils, eoaAddress)
+			depositSufficient, err := checkDepositAmount(fallbackEthClient, clientUtils, eoaAddress)
 			if err != nil {
 				log.Printf("Error checking deposit amount: %v", err)
 				time.Sleep(30 * time.Second)
@@ -156,7 +156,7 @@ func RunRegularNode() {
 
 			if !depositSufficient {
 				log.Println("Deposit insufficient. Initiating deposit transaction...")
-				txSent, err := depositAndCheckActivation(ctx, eoaAddress, privateKey)
+				txSent, err := depositAndCheckActivation(ctx, fallbackEthClient, eoaAddress, privateKey)
 				if err != nil {
 					log.Printf("Error during deposit transaction: %v", err)
 					time.Sleep(30 * time.Second)
@@ -168,7 +168,7 @@ func RunRegularNode() {
 				}
 			}
 
-			err = activateOnChain(abiFilePath)
+			err = activateOnChain(fallbackEthClient, abiFilePath)
 			if err != nil {
 				log.Printf("failed to activate EOA %s on-chain: %v", eoaAddress, err)
 				time.Sleep(30 * time.Second)
@@ -242,7 +242,7 @@ func RunRegularNode() {
 				}
 
 				// Send commit to leader
-				sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, eoaAddress)
+				sendCommitToLeader(ctx, fallbackEthClient, h, leaderInfo.ID, commitData, eoaAddress)
 			}
 
 			// If commit data exists and SendCosToLeader is false, send COS to leader
@@ -258,11 +258,10 @@ func RunRegularNode() {
 		}
 
 		// Wait before rechecking activation status
-		time.Sleep(30 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 }
 
-// sendCOSToLeader sends the COS to the leader node
 func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	// Create commit request structure with signed COS and round data
 	req := utils.CosRequest{
@@ -313,8 +312,8 @@ func isEOAActivated(eoaAddress string) bool {
 	return false
 }
 
-func checkActivationStatus(client *utils.Client, eoaAddress string) bool {
-	activatedOperatorsResult, err := eth.CallSmartContract(client.Client, client.ContractABI, "getActivatedOperators", client.ContractAddress)
+func checkActivationStatus(fallbackEthClient *fallback_ethclient.FallbackRPCClient, client *utils.Client, eoaAddress string) bool {
+	activatedOperatorsResult, err := eth.CallSmartContract(fallbackEthClient, client.ContractABI, "getActivatedOperators", client.ContractAddress)
 	if err != nil {
 		log.Printf("Failed to call getActivatedOperators: %v", err)
 		return false
@@ -353,17 +352,7 @@ func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID 
 	}
 }
 
-func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	if ethRPCURL == "" {
-		log.Fatal("ETH_RPC_URL is not set in environment variables.")
-	}
-
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		return false, fmt.Errorf("failed to connect to Ethereum client: %v", err)
-	}
-
+func depositAndCheckActivation(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
@@ -377,14 +366,14 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 	}
 
 	// Fetch deposit amount
-	depositAmountResult, err := eth.CallSmartContract(client, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := eth.CallSmartContract(client, parsedABI, "s_activationThreshold", contractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_activationThreshold", contractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -396,7 +385,7 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 		log.Printf("Deposit insufficient. Adding remaining: %s", remaining.String())
 
 		// Check account balance
-		balance, err := client.BalanceAt(ctx, common.HexToAddress(eoaAddress), nil)
+		balance, err := fallbackEthClient.BalanceAt(ctx, common.HexToAddress(eoaAddress), nil)
 		if err != nil {
 			return false, fmt.Errorf("failed to fetch account balance: %v", err)
 		}
@@ -410,11 +399,11 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 		_, _, err = eth.ExecuteTransaction(
 			ctx,
 			&utils.Client{
-				Client:          client,
 				ContractAddress: contractAddress,
 				PrivateKey:      privateKey,
 				ContractABI:     parsedABI,
 			},
+			fallbackEthClient,
 			"deposit",
 			remaining,
 		)
@@ -429,16 +418,16 @@ func depositAndCheckActivation(ctx context.Context, eoaAddress string, privateKe
 	return false, nil
 }
 
-func checkDepositAmount(client *utils.Client, eoaAddress string) (bool, error) {
+func checkDepositAmount(fallbackEthClient *fallback_ethclient.FallbackRPCClient, client *utils.Client, eoaAddress string) (bool, error) {
 	// Fetch deposit amount
-	depositAmountResult, err := eth.CallSmartContract(client.Client, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.CallSmartContract(fallbackEthClient, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := eth.CallSmartContract(client.Client, client.ContractABI, "s_activationThreshold", client.ContractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(fallbackEthClient, client.ContractABI, "s_activationThreshold", client.ContractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -455,7 +444,7 @@ func checkDepositAmount(client *utils.Client, eoaAddress string) (bool, error) {
 }
 
 // sendCommitToLeader sends the generated commit to the leader node
-func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
+func sendCommitToLeader(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
 	// Create commit request structure with signed round value and CVS
 	req := utils.CommitRequest{
 		Round:      commitData.Round,
@@ -477,8 +466,6 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	signedRequest := utils.SignData(eoaAddress, privateKey)
 
 	req.Signature = signedRequest
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	client, _ := ethclient.Dial(ethRPCURL)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -487,7 +474,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	contractAddress := common.HexToAddress(contractAddressStr)
 
 	parsedABI, _ := utils.LoadContractABI(abiFilePath)
-	result, err := eth.CallSmartContract(client, parsedABI, "getCurStartTime", contractAddress)
+	result, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "getCurStartTime", contractAddress)
 	if err != nil {
 		fmt.Println("error", err)
 	}
@@ -534,17 +521,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	}
 }
 
-func activateOnChain(abiFilePath string) error {
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	if ethRPCURL == "" {
-		log.Fatal("ETH_RPC_URL is not set in the environment variables")
-	}
-
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
-	}
-
+func activateOnChain(fallbackEthClient *fallback_ethclient.FallbackRPCClient, abiFilePath string) error {
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
@@ -566,7 +543,6 @@ func activateOnChain(abiFilePath string) error {
 	}
 
 	clientUtils := &utils.Client{
-		Client:          client,
 		ContractAddress: contractAddress,
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
@@ -575,6 +551,7 @@ func activateOnChain(abiFilePath string) error {
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
+		fallbackEthClient,
 		"activate",
 		big.NewInt(0),
 	)

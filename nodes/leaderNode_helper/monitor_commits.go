@@ -11,19 +11,18 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 var CvOnChain bool
-var Indices []*big.Int
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
-func MonitorCommits() {
+func MonitorCommits(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	for {
-		checkRoundsForCompletion()
+		checkRoundsForCompletion(fallbackEthClient)
 		time.Sleep(10 * time.Second) // Adjust the interval as needed
 	}
 }
@@ -38,7 +37,7 @@ type RevealOrderData struct {
 
 type RevealOrders map[string]RevealOrderData
 
-func checkRoundsForCompletion() {
+func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	// Fetch rounds to process
 	roundsToProcess, err := database.GetRoundsToProcess()
 	if err != nil {
@@ -70,7 +69,7 @@ func checkRoundsForCompletion() {
 			secrets = append(secrets, commitData.SecretValue[:])
 			// if Cv values are on-chain, than check this condition
 			if CvOnChain {
-				if int64(i) <= Indices[index].Int64() {
+				if index < len(Indices) && int64(i) <= Indices[index].Int64() {
 					if int64(i) == Indices[index].Int64() {
 						index++
 						continue
@@ -102,10 +101,12 @@ func checkRoundsForCompletion() {
 		if allEOAsSubmitted {
 			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round.Round)
 			var err error
-			if !CvOnChain {
-				err = generateRandomNumberTransaction(round.Round, secrets, vs, rs, ss)
-			} else {
-				err = generateRandomNumberTransactionSomeCvOnChain(round.Round, secrets, vs, rs, ss)
+			if !secretsOnChain[round.Round] {
+				if !CvOnChain {
+					err = generateRandomNumberTransaction(fallbackEthClient, round.Round, secrets, vs, rs, ss)
+				} else {
+					err = generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient, round.Round, secrets, vs, rs, ss)
+				}
 			}
 			if err != nil {
 				log.Printf("Failed to execute random number generation transaction for round %s: %v", round.Round, err)
@@ -120,9 +121,9 @@ func checkRoundsForCompletion() {
 }
 
 // Fetch activated operators for a specific round
-func FetchActivatedOperators(round string) ([]string, error) {
+func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string) ([]string, error) {
 	var result []string
-	activatedOperators, err := eth.GetActivatedOperators()
+	activatedOperators, err := eth.GetActivatedOperators(fallbackEthClient)
 	if err != nil {
 		log.Printf("Error fetching the activated operators %v", err)
 		return result, err
@@ -134,19 +135,68 @@ func FetchActivatedOperators(round string) ([]string, error) {
 	return strAddresses, nil
 }
 
-// generateRandomNumberTransaction sends a transaction to generate a random number for a round.
-func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
-	log.Printf("Preparing to execute generateRandomNumber...")
-
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	if ethRPCURL == "" {
-		log.Fatal("ETH_RPC_URL is not set in environment variables.")
-	}
-	client, err := ethclient.Dial(ethRPCURL)
+func LoadNodeData(round string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash) {
+	// leaderCommits, err := loadLeaderCommits("leader_commits.json")
+	leaderCommits, err := database.GetLeaderCommitsByRound(round)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
+		log.Printf("Failed to load leader commits: %v", err)
+
 	}
-	defer client.Close()
+	var operatorAddresses []common.Address
+	for _, operator := range ActivatedOperator {
+		operatorAddresses = append(operatorAddresses, common.HexToAddress(operator))
+	}
+
+	// Collect secret values, signatures (v, r, s), and round info in the order of activated operators
+	var secrets [][]byte
+	var cos [][]byte
+	var cvs [][]byte
+	var vs []uint8
+	var rs []common.Hash
+	var ss []common.Hash
+	// var index int
+	for _, commitData := range leaderCommits {
+		// commitData := leaderCommits
+
+		secrets = append(secrets, commitData.SecretValue[:])
+		cvs = append(cvs, commitData.Cvs[:])
+		cos = append(cos, commitData.Cos[:])
+
+		if len(commitData.Sign.V) == 0 {
+			log.Printf("Empty 'v' value for EOA %s in round %s", commitData.EOAAddress, round)
+			vs = append(vs, 0)
+		} else {
+			vStr := commitData.Sign.V
+			vValue, err := strconv.ParseUint(vStr, 10, 8)
+			if err != nil {
+				log.Printf("Error parsing v value for EOA %s in round %s: %v", commitData.EOAAddress, round, err)
+				vs = append(vs, 0)
+			} else {
+				vs = append(vs, uint8(vValue))
+			}
+		}
+
+		if len(commitData.Sign.R) == 0 {
+			log.Printf("Empty 'r' value for EOA %s in round %s", commitData.EOAAddress, round)
+			rs = append(rs, common.Hash{})
+		} else {
+			rs = append(rs, common.HexToHash(commitData.Sign.R))
+		}
+
+		if len(commitData.Sign.S) == 0 {
+			log.Printf("Empty 's' value for EOA %s in round %s", commitData.EOAAddress, round)
+			ss = append(ss, common.Hash{})
+		} else {
+			ss = append(ss, common.HexToHash(commitData.Sign.S))
+		}
+	}
+
+	return cvs, cos, secrets, vs, rs, ss
+}
+
+// generateRandomNumberTransaction sends a transaction to generate a random number for a round.
+func generateRandomNumberTransaction(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
+	log.Printf("Preparing to execute generateRandomNumber...")
 
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -168,7 +218,6 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 		return fmt.Errorf("failed to load contract ABI: %v", err)
 	}
 	clientUtils := &utils.Client{
-		Client:          client,
 		ContractAddress: contractAddress,
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
@@ -211,6 +260,7 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 	tx, _, err := eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
+		fallbackEthClient,
 		"generateRandomNumber",
 		big.NewInt(0),
 		secretSigRSs,
@@ -225,18 +275,8 @@ func generateRandomNumberTransaction(round string, secrets [][]byte, vs []uint8,
 	return nil
 }
 
-func generateRandomNumberTransactionSomeCvOnChain(round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
+func generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumberTransactionSomeCvOnChain...")
-
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	if ethRPCURL == "" {
-		log.Fatal("ETH_RPC_URL is not set in environment variables.")
-	}
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Ethereum client: %v", err)
-	}
-	defer client.Close()
 
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -258,7 +298,6 @@ func generateRandomNumberTransactionSomeCvOnChain(round string, secrets [][]byte
 		return fmt.Errorf("failed to load contract ABI: %v", err)
 	}
 	clientUtils := &utils.Client{
-		Client:          client,
 		ContractAddress: contractAddress,
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
@@ -294,6 +333,7 @@ func generateRandomNumberTransactionSomeCvOnChain(round string, secrets [][]byte
 	tx, _, err := eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
+		fallbackEthClient,
 		"generateRandomNumberWhenSomeCvsAreOnChain",
 		big.NewInt(0),
 		allSecrets,

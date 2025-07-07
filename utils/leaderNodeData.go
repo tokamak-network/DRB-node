@@ -1,12 +1,26 @@
 package utils
 
 import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"sync"
+
 	"github.com/ethereum/go-ethereum/common"
 )
 
 const leaderCommitDataFile = "leader_commits.json"
+const peerNodeInfoFile = "peerNodeInfo.json"
 
 var CommittedNodes = make(map[string]map[common.Address]LeaderCommitData)
+
+// Global read-write mutex for protecting leader_commits.json file access
+var LeaderCommitsMutex sync.RWMutex
+
+// Global mutex for protecting peerNodeInfo.json file access
+var PeerNodeInfoMutex sync.Mutex
 
 // LeaderCommitData defines the structure for storing commit data in the leader node.
 type LeaderCommitData struct {
@@ -21,4 +35,188 @@ type LeaderCommitData struct {
 	Sign                  SignInfo `json:"sign"` // New field for v, r, s
 	SubmitMerkleRootDone  bool     `json:"submit_merkle_root_done"`
 	RandomNumberGenerated bool     `json:"random_number_generated"`
+	CreatedAt             int64    `json:"created_at"` // Unix timestamp when this commit was created
+}
+
+// LoadLeaderCommitData should load data from the file and return the commit data for a specific round and EOA
+func LoadLeaderCommitData(roundNum, eoaAddress string) (*LeaderCommitData, error) {
+	// Open the commit file
+	file, err := os.Open(leaderCommitDataFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("commit data not found")
+		}
+		return nil, fmt.Errorf("error opening leader commit data file: %v", err)
+	}
+	defer file.Close()
+
+	// Decode JSON data
+	var commits map[string]LeaderCommitData // Use LeaderCommitData
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&commits)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding leader commit data: %v", err)
+	}
+
+	// Construct the composite key: ROUND+EOA
+	key := roundNum + "+" + eoaAddress
+	log.Printf("Loading commit data for key: %s", key) // Debug log for the key
+
+	// Check if commit data exists for the given key
+	commitData, exists := commits[key]
+	if !exists {
+		return nil, fmt.Errorf("commit data not found for key: %s", key)
+	}
+
+	// Convert the CVS hex string back to a byte array
+	if commitData.CvsHex != "" {
+		cvsBytes, err := hex.DecodeString(commitData.CvsHex)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode CVS hex string: %v", err)
+		}
+		copy(commitData.Cvs[:], cvsBytes)
+	}
+
+	log.Printf("Loaded commit data for key: %s, CVS: %v", key, commitData.Cvs) // Debug log for loaded data
+
+	return &commitData, nil
+}
+
+// SaveLeaderCommitData should save commit data in the correct format
+func SaveLeaderCommitData(commitData LeaderCommitData) error {
+	// Open the commit file (create if doesn't exist)
+	file, err := os.OpenFile(leaderCommitDataFile, os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		return fmt.Errorf("error opening leader commit data file for writing: %v", err)
+	}
+	defer file.Close()
+
+	// Read existing commits
+	var commits map[string]LeaderCommitData
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&commits)
+	if err != nil && err.Error() != "EOF" {
+		return fmt.Errorf("error decoding existing leader commit data: %v", err)
+	}
+
+	// Construct the composite key: ROUND+EOA
+	key := commitData.Round + "+" + commitData.EOAAddress
+
+	// Add or update the commit data
+	if commits == nil {
+		commits = make(map[string]LeaderCommitData)
+	}
+
+	// If Cvs is present, also store the hex value
+	if commitData.Cvs != [32]byte{} {
+		commitData.CvsHex = hex.EncodeToString(commitData.Cvs[:]) // Convert Cvs byte array to hex string
+	}
+
+	commits[key] = commitData
+
+	// Seek to the beginning of the file to overwrite it
+	file.Seek(0, 0)
+
+	// Encode and save the updated commit data
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(commits)
+	if err != nil {
+		return fmt.Errorf("error encoding leader commit data: %v", err)
+	}
+
+	log.Printf("Saved commit data for key: %s", key) // Debug log for commit save
+	return nil
+}
+
+// LoadPeerNodeInfo loads all peer node info data from the file
+func LoadPeerNodeInfo() (map[string]PeerCommitData, error) {
+	file, err := os.Open(peerNodeInfoFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]PeerCommitData), nil
+		}
+		return nil, fmt.Errorf("error opening peer node info file: %v", err)
+	}
+	defer file.Close()
+
+	var data map[string]PeerCommitData
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&data)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding peer node info data: %v", err)
+	}
+
+	if data == nil {
+		data = make(map[string]PeerCommitData)
+	}
+
+	return data, nil
+}
+
+// SavePeerNodeInfo saves peer node info data to the file
+func SavePeerNodeInfo(data map[string]PeerCommitData) error {
+	PeerNodeInfoMutex.Lock()
+	defer PeerNodeInfoMutex.Unlock()
+
+	file, err := os.Create(peerNodeInfoFile)
+	if err != nil {
+		return fmt.Errorf("error creating peer node info file: %v", err)
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(data)
+	if err != nil {
+		return fmt.Errorf("error encoding peer node info data: %v", err)
+	}
+
+	return nil
+}
+
+// LoadAllLeaderCommitData loads all leader commit data from the file
+func LoadAllLeaderCommitData() (map[string]LeaderCommitData, error) {
+	LeaderCommitsMutex.RLock()
+	defer LeaderCommitsMutex.RUnlock()
+
+	file, err := os.Open(leaderCommitDataFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]LeaderCommitData), nil
+		}
+		return nil, fmt.Errorf("error opening leader commit data file: %v", err)
+	}
+	defer file.Close()
+
+	var commits map[string]LeaderCommitData
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&commits)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding leader commit data: %v", err)
+	}
+
+	if commits == nil {
+		commits = make(map[string]LeaderCommitData)
+	}
+
+	return commits, nil
+}
+
+// SaveAllLeaderCommitData saves all leader commit data to the file
+func SaveAllLeaderCommitData(commits map[string]LeaderCommitData) error {
+	LeaderCommitsMutex.Lock()
+	defer LeaderCommitsMutex.Unlock()
+
+	file, err := os.Create(leaderCommitDataFile)
+	if err != nil {
+		return fmt.Errorf("error creating leader commit data file: %v", err)
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(commits)
+	if err != nil {
+		return fmt.Errorf("error encoding leader commit data: %v", err)
+	}
+
+	return nil
 }

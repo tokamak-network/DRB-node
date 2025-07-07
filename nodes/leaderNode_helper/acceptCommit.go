@@ -8,13 +8,17 @@ import (
 	"math/big"
 	"os"
 	"sync"
+	"time"
+
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
+	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -35,7 +39,8 @@ type RoundData struct {
 
 var RoundsData map[string]RoundData
 
-var Round *big.Int
+// In case last SSubmitted event also get's emmitted with Status event and curState is IN_PROGRESS then CurrentRound vairable will not be consistent
+var SecretRequestSentForWhichRound string
 var CurrentRound string
 var Req RandomRequest
 
@@ -51,19 +56,15 @@ type LeaderCommitData struct {
 	Sign                  map[string]string `json:"sign"`
 	SubmitMerkleRootDone  bool              `json:"submit_merkle_root_done"`
 	RandomNumberGenerated bool              `json:"random_number_generated"`
+	CreatedAt             int64             `json:"created_at"`
 }
 
-func ReceiveCommit() {
-	receiveCommit()
+func ReceiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+	receiveCommit(fallbackEthClient)
 }
 
-func receiveCommit() {
-	rpcURL := os.Getenv("ETH_RPC_URL")
-	client, err := ethclient.Dial(rpcURL)
+func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	contractAddress := os.Getenv("CONTRACT_ADDRESS")
-	if err != nil {
-		log.Fatalf("Failed to connect to Ethereum node 2323: %v", err)
-	}
 	contractAddr := common.HexToAddress(contractAddress)
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
@@ -76,13 +77,15 @@ func receiveCommit() {
 	}
 
 	logs := make(chan types.Log)
-	sub, err := client.SubscribeFilterLogs(context.Background(), query, logs)
+	sub, err := fallbackEthClient.SubscribeFilterLogs(context.Background(), query, logs)
 	if err != nil {
 		log.Fatalf("Failed to subscribe to logs: %v", err)
 	}
 
-	cvsEventSig := parsedABI.Events["CvSubmitted"].ID
+	CvsEventSig := parsedABI.Events["CvSubmitted"].ID
 	StatusSig := parsedABI.Events["Status"].ID
+	CoSubmittedSig := parsedABI.Events["CoSubmitted"].ID
+	SSubmittedSig := parsedABI.Events["SSubmitted"].ID
 
 	for {
 		select {
@@ -91,7 +94,7 @@ func receiveCommit() {
 
 		case vLog := <-logs:
 			switch vLog.Topics[0] {
-			case cvsEventSig:
+			case CvsEventSig:
 				eventData := struct {
 					StartTime *big.Int
 					Cv        [32]byte
@@ -106,6 +109,21 @@ func receiveCommit() {
 
 				processCVS(eventData.Cv, eventData.Index)
 
+			case CoSubmittedSig:
+				eventData := struct {
+					StartTime *big.Int
+					Co        [32]byte
+					Index     *big.Int
+				}{}
+				err := parsedABI.UnpackIntoInterface(&eventData, "CoSubmitted", vLog.Data)
+				if err != nil {
+					log.Printf("Failed to decode CoSubmitted event log: %v", err)
+					continue
+				}
+				fmt.Printf("CoSubmitted Event: Fetched successfully")
+
+				processCOS(fallbackEthClient, eventData.Co, eventData.Index)
+
 			case StatusSig:
 				eventData := struct {
 					CurStartTime *big.Int
@@ -117,18 +135,53 @@ func receiveCommit() {
 					log.Printf("Failed to decode Status event log: %v", err)
 					continue
 				}
-				processRandomRequestNumber(eventData.CurStartTime, eventData.CurState)
+				processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
+
+			case SSubmittedSig:
+				eventData := struct {
+					StartTime *big.Int
+					S         [32]byte
+					Index     *big.Int
+				}{}
+
+				err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
+
+				if err != nil {
+					log.Printf("Failed to decode SSubmitted event log: %v", err)
+					continue
+				}
+				fmt.Printf("SSubmitted Event:\n StartTime %v\n Secret %v\n IndexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
+				processSubmittedSecretRequest(eventData.S, eventData.Index)
 			}
 		}
 	}
 }
 
-func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
-	round, err := fetchCurrentRound()
+func processSubmittedSecretRequest(secret [32]byte, index *big.Int) {
+
+	regularNodeAddress := eth.ActivatedOperators[int(index.Int64())]
+
+	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(SecretRequestSentForWhichRound, regularNodeAddress.Hex())
 	if err != nil {
-		fmt.Printf("Failed to get current round: %v", err)
+		log.Printf("Failed to get leadercommit data from database by round and eoaAddress %v", err)
 	}
 
+	// Update leader commit data with secretValue
+	leaderCommits.SecretValue = secret
+	secretHex := hex.EncodeToString(secret[:])
+	leaderCommits.SecretValueHex = secretHex
+
+	err = database.UpdateLeaderCommit(leaderCommits)
+	if err != nil {
+		log.Printf("Failed to save updated leader commits: %v", err)
+	}
+
+	// Broadcast the secret value to all activated regular nodes
+	ReliableBroadCastS(libp2putils.HostInstance, SecretRequestSentForWhichRound, regularNodeAddress.Hex(), secret)
+}
+
+func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, state *big.Int) {
+	round, _ := fetchCurrentRound(fallbackEthClient)
 	CurrentRound = round.String()
 	req := RandomRequest{
 		Round:     round,
@@ -140,22 +193,100 @@ func processRandomRequestNumber(startTime *big.Int, state *big.Int) {
 			startTime, state, round)
 		Req = req
 		var err error
-		ActivatedOperator, err = FetchActivatedOperators(CurrentRound)
+		ActivatedOperator, err = FetchActivatedOperators(fallbackEthClient, CurrentRound)
 		if err != nil {
 			log.Printf("Failed to fetch activated operators: %v", err)
 			return
 		}
-		eth.UpdateActivatedOperators()
+		eth.UpdateActivatedOperators(fallbackEthClient)
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
 		if RoundsData == nil {
 			RoundsData = make(map[string]RoundData)
 		}
-		data := RoundsData[Round.String()]
+		data := RoundsData[CurrentRound]
 		data.RandomNumber = true
-		RoundsData[Round.String()] = data
+		RoundsData[CurrentRound] = data
 		Execution = false
+	}
+}
+
+func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, cos [32]byte, activatedOperatorIndex *big.Int) error {
+	round := CurrentRound
+	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
+	eoa := common.HexToAddress(eoaAddress)
+	cosHex := hex.EncodeToString(cos[:])
+
+	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, eoa.Hex())
+	if err != nil {
+		signInfo := utils.SignInfo{
+			R: "",
+			S: "",
+			V: "",
+		}
+		leaderCommit := utils.LeaderCommitData{
+			Round:                 round,
+			EOAAddress:            eoa.Hex(),
+			Cvs:                   [32]byte{},
+			CvsHex:                "",
+			Cos:                   [32]byte{},
+			CosHex:                "",
+			SecretValue:           [32]byte{},
+			SecretValueHex:        "",
+			Sign:                  signInfo,
+			SubmitMerkleRootDone:  false,
+			RandomNumberGenerated: false,
+			CreatedAt:             time.Now().Unix(),
+		}
+		err := database.AddLeaderCommit(&leaderCommit)
+		if err != nil {
+			fmt.Printf("Failed to add leader commit: %v", err)
+		}
+	} else {
+		leaderCommitData.Cos = cos
+		leaderCommitData.CosHex = cosHex
+
+		err := database.UpdateLeaderCommit(leaderCommitData)
+		if err != nil {
+			fmt.Printf("Failed to update leader commit: %v", err)
+		}
+	}
+
+	updateCOS(fallbackEthClient, round, eoa, cos)
+	fmt.Printf("Successfully stored COS for Round %s, EOA %s\n", round, eoa.Hex())
+
+	// Broadcast the COS value to all activated regular nodes
+	ReliableBroadCastCOS(libp2putils.HostInstance, round, eoa, cos)
+
+	return nil
+}
+
+func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, eoa common.Address, cos [32]byte) {
+	if _, exists := utils.CommittedNodes[round]; !exists {
+		utils.CommittedNodes[round] = make(map[common.Address]utils.LeaderCommitData)
+	}
+
+	commitData, exists := utils.CommittedNodes[round][eoa]
+	if !exists {
+		commitData = utils.LeaderCommitData{}
+	}
+
+	commitData.EOAAddress = eoa.Hex()
+	commitData.Round = round
+	commitData.Cos = cos
+	cosHex := hex.EncodeToString(cos[:])
+	commitData.CosHex = cosHex
+	utils.CommittedNodes[round][eoa] = commitData
+
+	if AllCosReceivedUnlocked(round) {
+		log.Printf("All COS received for round %s.", round)
+		err := commitreveal2.DetermineRevealOrder(round, eth.ActivatedOperators)
+		if err != nil {
+			log.Printf("Failed to determine reveal order for round %s: %v", round, err)
+			return
+		}
+		StartSecretValueRequests(libp2putils.HostInstance, fallbackEthClient, round)
 	}
 }
 
@@ -184,6 +315,7 @@ func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 			Sign:                  signInfo,
 			SubmitMerkleRootDone:  false,
 			RandomNumberGenerated: false,
+			CreatedAt:             time.Now().Unix(),
 		}
 		err := database.AddLeaderCommit(&leaderCommit)
 		if err != nil {
@@ -201,6 +333,10 @@ func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
 
 	updateCVS(round, eoa, cvs)
 	fmt.Printf("Successfully stored CVS for Round %s, EOA %s\n", round, eoa.Hex())
+
+	// Broadcast the CVS value to all activated regular nodes
+	ReliableBroadCastCVS(libp2putils.HostInstance, round, eoa, cvs)
+
 	return nil
 }
 
@@ -220,15 +356,30 @@ func updateCVS(round string, eoa common.Address, cvs [32]byte) {
 	cvsHex := hex.EncodeToString(cvs[:])
 	commitData.CvsHex = cvsHex
 	utils.CommittedNodes[round][eoa] = commitData
+
 }
 
-func fetchCurrentRound() (*big.Int, error) {
-	ethRPCURL := os.Getenv("ETH_RPC_URL")
-	client, err := ethclient.Dial(ethRPCURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to Ethereum RPC: %v", err)
+func AllCosReceivedUnlocked(roundNum string) bool {
+	ops := eth.ActivatedOperators
+	if len(ops) == 0 {
+		return false
 	}
 
+	roundCommits, roundExists := utils.CommittedNodes[roundNum]
+	if !roundExists || len(roundCommits) == 0 {
+		return false
+	}
+
+	for _, op := range ops {
+		data, ok := roundCommits[op]
+		if !ok || data.Cos == [32]byte{} {
+			return false
+		}
+	}
+	return true
+}
+
+func fetchCurrentRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient) (*big.Int, error) {
 	abiFilePath := "contract/abi/Commit2RevealDRB.json"
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
@@ -242,7 +393,7 @@ func fetchCurrentRound() (*big.Int, error) {
 
 	contractAddress := common.HexToAddress(contractAddressStr)
 
-	result, err := eth.CallSmartContract(client, parsedABI, "s_currentRound", contractAddress)
+	result, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_currentRound", contractAddress)
 	if err != nil {
 		log.Printf("Failed to fetch activated operators: %v", err)
 		return nil, err

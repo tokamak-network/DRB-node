@@ -3,11 +3,14 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
+
+	"github.com/tokamak-network/DRB-node/nodes"
 
 	"github.com/joho/godotenv"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/logger"
-	"github.com/tokamak-network/DRB-node/nodes"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 )
 
 func main() {
@@ -29,11 +32,18 @@ func main() {
 
 	nodeType := os.Getenv("NODE_TYPE") // Expecting 'leader' or 'regular'
 
+	// Initialize the fallback ethclient
+	rpcUrls := strings.Split(os.Getenv("ETH_RPC_URLS"), ",")
+	fallbackEthClient, err := fallback_ethclient.NewFallbackRPCClient(rpcUrls)
+	if err != nil {
+		log.Fatal("Failed to init the fallback ethclient", "err", err)
+	}
+
 	switch nodeType {
 	case "leader":
-		nodes.RunLeaderNode()
+		nodes.RunLeaderNode(fallbackEthClient)
 	case "regular":
-		nodes.RunRegularNode()
+		nodes.RunRegularNode(fallbackEthClient)
 	default:
 		log.Fatal("NODE_TYPE must be set to either 'leader' or 'regular'")
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
+var EoaAddress string
 // GenerateCvsSignature generates the EIP-712 signature components (v, r, s) for a given round and CVS value.
 func GenerateCvsSignature(startTimeStr string, cvs [32]byte) (uint8, string, string, error) {
 	// Convert CVS to string for internal usage (optional, depending on use case)
@@ -76,7 +77,6 @@ func GenerateCvsSignature(startTimeStr string, cvs [32]byte) (uint8, string, str
 
 	// Step 2: Compute message hash
 	messageTypeHash := crypto.Keccak256Hash([]byte("Message(uint256 timestamp,bytes32 cv)"))
-	fmt.Println("messageTypeHash", messageTypeHash)
 	messageHash := crypto.Keccak256Hash(
 		abiEncode(
 			messageTypeHash.Bytes(),
@@ -132,4 +132,8 @@ func abiEncodePacked(elements ...[]byte) []byte {
 // Helper: intToBytes converts a *big.Int to its padded big-endian byte representation.
 func intToBytes(n *big.Int) []byte {
 	return common.LeftPadBytes(n.Bytes(), 32)
+}
+
+func Setup(eoaAddress string) {
+	EoaAddress = eoaAddress
 }
