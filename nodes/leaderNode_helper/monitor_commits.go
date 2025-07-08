@@ -84,8 +84,9 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 			secrets = append(secrets, commitData.SecretValue[:])
 			// if Cv values are on-chain, than check this condition
 			if CvOnChain {
-				if index < len(Indices) && int64(i) <= Indices[index].Int64() {
-					if int64(i) == Indices[index].Int64() {
+				indices := GetIndices()
+				if index < len(indices) && int64(i) <= indices[index].Int64() {
+					if int64(i) == indices[index].Int64() {
 						index++
 						continue
 					}

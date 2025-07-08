@@ -199,6 +199,10 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		}
 		eth.UpdateActivatedOperators(fallbackEthClient)
 		Execution = true
+
+		// Reset Indices array for the new round
+		ResetIndicesForNewRound()
+		log.Printf("Reset Indices array for new round %s", CurrentRound)
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
 		if RoundsData == nil {
