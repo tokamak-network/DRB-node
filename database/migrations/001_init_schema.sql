@@ -51,6 +51,21 @@ CREATE TABLE IF NOT EXISTS reveal_order_schemes (
     rv TEXT NOT NULL
 );
 
+-- Create broadcast_trackers schema
+CREATE TABLE broadcast_tracker_schemes (
+    id SERIAL PRIMARY KEY,
+    round TEXT NOT NULL,
+    eoa_address TEXT NOT NULL,
+    type TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    data BYTEA,
+    attempts INTEGER DEFAULT 0,
+    max_attempts INTEGER DEFAULT 0,
+    acknowledged JSONB,
+    last_sent BIGINT,
+    timeout BIGINT
+);
+
 -- +migrate Down
 DROP TABLE IF EXISTS node_info_schemes;
 DROP TABLE IF EXISTS registered_node_schemes;

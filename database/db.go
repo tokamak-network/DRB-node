@@ -495,3 +495,88 @@ func GetCommitByRound(round string) (*utils.CommitData, error) {
 
 	return commit, nil
 }
+
+func AddBroadcastTracker(trackerData *utils.BroadcastTracker) error {
+	tracker := BroadcastTrackerScheme{
+		Round:        trackerData.Round,
+		EOAAddress:   trackerData.EOAAddress,
+		Type:         trackerData.Type,
+		MessageID:    trackerData.MessageID,
+		Data:         trackerData.Data[:],
+		Attempts:     trackerData.Attempts,
+		MaxAttempts:  trackerData.MaxAttempts,
+		Acknowledged: trackerData.Acknowledged,
+		LastSent:     trackerData.LastSent,
+		Timeout:      trackerData.Timeout,
+	}
+
+	_, err := GetDB().Model(&tracker).Insert()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func GetBroadcastTrackers() ([]*utils.BroadcastTracker, error) {
+	var broadcastTrackerModels []BroadcastTrackerScheme
+
+	err := GetDB().Model(&broadcastTrackerModels).Select()
+	if err != nil {
+		return nil, err
+	}
+
+	broadcastTrackers := make([]*utils.BroadcastTracker, 0, len(broadcastTrackerModels))
+	for _, model := range broadcastTrackerModels {
+		broadcastTracker := &utils.BroadcastTracker{
+			Round:        model.Round,
+			EOAAddress:   model.EOAAddress,
+			Type:         model.Type,
+			MessageID:    model.MessageID,
+			Data:         utils.ConvertByteArray(model.Data),
+			Attempts:     model.Attempts,
+			MaxAttempts:  model.MaxAttempts,
+			Acknowledged: model.Acknowledged,
+			LastSent:     model.LastSent,
+			Timeout:      model.Timeout,
+		}
+		broadcastTrackers = append(broadcastTrackers, broadcastTracker)
+	}
+
+	return broadcastTrackers, nil
+}
+
+func UpdateBroadcastTracker(tracker *utils.BroadcastTracker) error {
+	model := BroadcastTrackerScheme{
+		Round:        tracker.Round,
+		EOAAddress:   tracker.EOAAddress,
+		Type:         tracker.Type,
+		MessageID:    tracker.MessageID,
+		Data:         tracker.Data[:],
+		Attempts:     tracker.Attempts,
+		MaxAttempts:  tracker.MaxAttempts,
+		Acknowledged: tracker.Acknowledged,
+		LastSent:     tracker.LastSent,
+		Timeout:      tracker.Timeout,
+	}
+
+	_, err := GetDB().Model(&model).Where("round = ? AND eoa_address = ? AND type = ? AND message_id = ?", tracker.Round, tracker.EOAAddress, tracker.Type, tracker.MessageID).Update()
+	return err
+}
+
+func AddAllBroadcastTrackers(trackers []*utils.BroadcastTracker) error {
+	for _, tracker := range trackers {
+		err := AddBroadcastTracker(tracker)
+		if err != nil {
+			return fmt.Errorf("Failed to add broadcast tracker data for %s_%s_%s_%s", tracker.Round, tracker.EOAAddress, tracker.Type, tracker.MessageID)
+		}
+	}
+
+	return nil
+}
+
+func DeleteBroadcastTracker(tracker *utils.BroadcastTracker) error {
+	model := BroadcastTrackerScheme{}
+	_, err := GetDB().Model(&model).Where("round = ? AND eoa_address = ? AND type = ? AND message_id = ?", tracker.Round, tracker.EOAAddress, tracker.Type, tracker.MessageID).Delete()
+	return err
+}

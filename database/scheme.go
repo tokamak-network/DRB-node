@@ -45,3 +45,17 @@ type RevealOrderScheme struct {
 	RevealOrder  []int    `pg:"reveal_order,array,notnull"`
 	RV           string   `pg:"rv,notnull"`
 }
+
+type BroadcastTrackerScheme struct {
+	ID           int             `pg:"id,pk"`
+	Round        string          `pg:"round,notnull"`
+	EOAAddress   string          `pg:"eoa_address,notnull"`
+	Type         string          `pg:"type,notnull"`
+	MessageID    string          `pg:"message_id,notnull"`
+	Data         []byte          `pg:"data,type:bytea"`
+	Attempts     int             `pg:"attempts"`
+	MaxAttempts  int             `pg:"max_attempts"`
+	Acknowledged map[string]bool `pg:"acknowledged,type:jsonb"`
+	LastSent     int64           `pg:"last_sent"`
+	Timeout      int64           `pg:"timeout"`
+}
