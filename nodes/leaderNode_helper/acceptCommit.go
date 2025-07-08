@@ -281,7 +281,7 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 
 	if AllCosReceivedUnlocked(round) {
 		log.Printf("All COS received for round %s.", round)
-		err := commitreveal2.DetermineRevealOrder(round, eth.ActivatedOperators)
+		_, err := commitreveal2.DetermineRevealOrder(round, eth.ActivatedOperators)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s: %v", round, err)
 			return
