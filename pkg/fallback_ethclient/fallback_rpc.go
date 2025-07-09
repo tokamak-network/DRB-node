@@ -81,9 +81,9 @@ func (f *FallbackRPCClient) switchToNextClient() {
 func (f *FallbackRPCClient) getCurrentClient() *ethclient.Client {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-    if !rpcURLPrinted {
-        rpcURLPrinted = true
-    }
+	if !rpcURLPrinted {
+		rpcURLPrinted = true
+	}
 
 	return f.clients[f.currentIdx]
 }
@@ -227,6 +227,22 @@ func (f *FallbackRPCClient) BalanceAt(ctx context.Context, account common.Addres
 		}
 		lastErr = err
 		f.logger.WithError(err).Warn("RPC get balance failed, switching to fallback")
+		f.switchToNextClient()
+	}
+	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
+}
+
+// BlockByNumber implements the ethereum.ContractCaller interface
+func (f *FallbackRPCClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*types.Block, error) {
+	var lastErr error
+	for i := 0; i < len(f.clients); i++ {
+		client := f.getCurrentClient()
+		block, err := client.BlockByNumber(ctx, blockNumber)
+		if err == nil {
+			return block, nil
+		}
+		lastErr = err
+		f.logger.WithError(err).Warn("RPC get block failed, switching to fallback")
 		f.switchToNextClient()
 	}
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
