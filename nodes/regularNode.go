@@ -179,6 +179,9 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		}
 		time.Sleep(5 * time.Second)
 
+		// Check and start leader monitoring
+		regularNode_helper.CheckAndStartMonitoring(fallbackEthClient)
+
 		round := regularNode_helper.CurrentRound
 		merkleRootSubmitted := regularNode_helper.RoundsData[round].MerkleRoot
 		randomNumberSubmitted := regularNode_helper.RoundsData[round].RandomNumber
