@@ -197,7 +197,7 @@ func (f *FallbackRPCClient) EstimateGas(ctx context.Context, msg ethereum.CallMs
 		f.logger.WithError(err).Warn("RPC estimate gas failed, switching to fallback")
 		f.switchToNextClient()
 	}
-	return 0, fmt.Errorf("all RPCs failed: %v", lastErr)
+	return 0, lastErr
 }
 
 // SubscribeFilterLogs implements the ethereum.ContractTransactor interface
@@ -232,20 +232,20 @@ func (f *FallbackRPCClient) BalanceAt(ctx context.Context, account common.Addres
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
 }
 
-// BlockByNumber implements the ethereum.ContractCaller interface
-func (f *FallbackRPCClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*types.Block, error) {
+// BlockTimestamp gets the timestamp of a specific block
+func (f *FallbackRPCClient) BlockTimestamp(ctx context.Context, blockNumber *big.Int) (uint64, error) {
 	var lastErr error
 	for i := 0; i < len(f.clients); i++ {
 		client := f.getCurrentClient()
-		block, err := client.BlockByNumber(ctx, blockNumber)
+		header, err := client.HeaderByNumber(ctx, blockNumber)
 		if err == nil {
-			return block, nil
+			return header.Time, nil
 		}
 		lastErr = err
-		f.logger.WithError(err).Warn("RPC get block failed, switching to fallback")
+		f.logger.WithError(err).Warn("RPC get block header failed, switching to fallback")
 		f.switchToNextClient()
 	}
-	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
+	return 0, fmt.Errorf("all RPCs failed: %v", lastErr)
 }
 
 // Close closes all RPC client connections

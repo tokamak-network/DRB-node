@@ -58,7 +58,6 @@ var CurrentRound string
 // Add new variables for monitoring
 var (
 	leaderMonitoringActive bool
-	monitoringStartTime    *big.Int
 	monitoringTimer        *time.Timer
 	// Event tracking variables
 	cvRequestedEventEmitted         bool
@@ -73,6 +72,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	if err != nil {
 		log.Fatalf("Failed to parse contract ABI: %v", err)
 	}
+
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddr},
 	}
@@ -81,6 +81,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	if err != nil {
 		log.Fatalf("Failed to subscribe to logs: %v", err)
 	}
+
 	SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
 	StatusSig := parsedABI.Events["Status"].ID
 	MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
@@ -127,15 +128,14 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						continue
 					}
 
-					// Get the block timestamp from the block header
-					block, err := fallbackEthClient.BlockByNumber(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+					// Get the actual block timestamp
+					blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
 					if err != nil {
-						log.Printf("Failed to get block %d: %v", vLog.BlockNumber, err)
+						log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
 						continue
 					}
-					blockTimestamp := big.NewInt(int64(block.Time()))
 
-					processRandomRequestNumber(fallbackEthClient, blockTimestamp, eventData.CurState)
+					processRandomRequestNumber(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.CurState)
 
 				case MerkleRootSubmittedSig:
 					eventData := struct {
@@ -361,6 +361,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	if RoundsData == nil {
 		RoundsData = make(map[string]RoundData)
 	}
+
 	RoundsData[CurrentRound] = RoundData{
 		MerkleRoot:   false,
 		RandomNumber: false,
@@ -613,22 +614,27 @@ func fetchCurrentRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient) 
 		return nil, fmt.Errorf("failed to call s_currentRound: %v", err)
 	}
 
-	return result.(*big.Int), nil
+	currentRound := result.(*big.Int)
+	return currentRound, nil
 }
 
-// StartLeaderMonitoring starts monitoring the leader's actions for the current round
+// StartLeaderMonitoring starts monitoring the leader for the current round
 func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int) {
 	if leaderMonitoringActive {
 		log.Printf("Leader monitoring already active for round %s", CurrentRound)
 		return
 	}
 
-	monitoringStartTime = startTime
+	if startTime == nil {
+		log.Printf("StartTime is nil, cannot start monitoring")
+		return
+	}
+
 	leaderMonitoringActive = true
 
 	// Get timing parameters from contract
 	offChainSubmissionPeriod := big.NewInt(80)
-	requestOrSubmitOrFailDecisionPeriod := big.NewInt(40)
+	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
 
 	// Calculate deadline: startTime + offChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
 	deadline := new(big.Int).Add(startTime, offChainSubmissionPeriod)
@@ -675,7 +681,6 @@ func ResetMonitoringState() {
 	StopLeaderMonitoring()
 	cvRequestedEventEmitted = false
 	merkleRootSubmittedEventEmitted = false
-	monitoringStartTime = nil
 	log.Printf("Reset monitoring state")
 }
 
@@ -726,35 +731,29 @@ func callFailToRequestSubmitCVOrSubmitMerkleRoot(fallbackEthClient *fallback_eth
 
 // CheckAndStartMonitoring checks if monitoring should be started and starts it if needed
 func CheckAndStartMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
-	if !Execution || CurrentRound == "" {
-		log.Printf("Monitoring check skipped - Execution: %v, CurrentRound: %s", Execution, CurrentRound)
-		return
-	}
-
-	log.Printf("Checking leader actions for round %s", CurrentRound)
-
-	// Check if events have been emitted
-	log.Printf("Leader actions for round %s - CV Requested Event: %v, Merkle Root Submitted Event: %v",
-		CurrentRound, cvRequestedEventEmitted, merkleRootSubmittedEventEmitted)
-
-	// If CV has been requested or Merkle root has been submitted, stop monitoring
-	if cvRequestedEventEmitted || merkleRootSubmittedEventEmitted {
-		log.Printf("Stopping leader monitoring for round %s - CV requested or Merkle root submitted", CurrentRound)
-		StopLeaderMonitoring()
-		return
-	}
-
-	// If monitoring is not active, start it
-	if !leaderMonitoringActive {
-		log.Printf("Starting leader monitoring for round %s", CurrentRound)
-		// Use the StartTime from the Status event
-		if StartTime == nil {
-			log.Printf("StartTime is nil, cannot start monitoring")
-			return
-		}
-
-		StartLeaderMonitoring(fallbackEthClient, StartTime)
-	} else {
+	// Check if monitoring is already active
+	if leaderMonitoringActive {
 		log.Printf("Leader monitoring already active for round %s", CurrentRound)
+		return
 	}
+
+	// Check if CV has been requested
+	if cvRequestedEventEmitted {
+		log.Printf("CV requested event already emitted for round %s", CurrentRound)
+		return
+	}
+
+	// Check if Merkle root has been submitted
+	if merkleRootSubmittedEventEmitted {
+		log.Printf("Merkle root submitted event already emitted for round %s", CurrentRound)
+		return
+	}
+
+	// Check if we have a valid start time
+	if StartTime == nil {
+		log.Printf("StartTime is nil, cannot start monitoring")
+		return
+	}
+
+	StartLeaderMonitoring(fallbackEthClient, StartTime)
 }
