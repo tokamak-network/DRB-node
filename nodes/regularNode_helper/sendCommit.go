@@ -62,6 +62,11 @@ var (
 	// Event tracking variables
 	cvRequestedEventEmitted         bool
 	merkleRootSubmittedEventEmitted bool
+	// Round processing tracking
+	processedRounds map[string]bool
+	// Current round and trialNum from Status event
+	CurrentRoundNum *big.Int
+	CurrentTrialNum *big.Int
 )
 
 func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
@@ -99,8 +104,9 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 				switch vLog.Topics[0] {
 				case SubmitCVS:
 					eventData := struct {
-						StartTime     *big.Int
-						PackedIndices *big.Int
+						Round                         *big.Int
+						TrialNum                      *big.Int
+						PackedIndicesAscendingFromLSB *big.Int
 					}{}
 					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
 					if err != nil {
@@ -108,18 +114,19 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						continue
 					}
 
-					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.PackedIndices)
+					fmt.Printf("CommitRequest Event: Round %v, TrialNum %v, indices %v\n", eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
 
 					// Mark CV as requested and stop leader monitoring
 					cvRequestedEventEmitted = true
 					StopLeaderMonitoring()
 
-					processCommitRequest(fallbackEthClient, eventData.PackedIndices)
+					processCommitRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
 
 				case StatusSig:
 					eventData := struct {
-						CurStartTime *big.Int
-						CurState     *big.Int
+						CurRound    *big.Int
+						CurTrialNum *big.Int
+						CurState    *big.Int
 					}{}
 
 					err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
@@ -135,11 +142,12 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						continue
 					}
 
-					processRandomRequestNumber(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.CurState)
+					processRandomRequestNumber(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.CurRound, eventData.CurTrialNum, eventData.CurState)
 
 				case MerkleRootSubmittedSig:
 					eventData := struct {
-						StartTime  *big.Int
+						Round      *big.Int
+						TrialNum   *big.Int
 						MerkleRoot [32]byte
 					}{}
 
@@ -148,18 +156,19 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
 						continue
 					}
-					fmt.Printf("MerkleRootSubmitted Event:\n StartTime: %v\n MerkleRoot: %v\n Round: %v\n",
-						eventData.StartTime, eventData.MerkleRoot, CurrentRound)
+					fmt.Printf("MerkleRootSubmitted Event:\n Round %v, TrialNum %v, MerkleRoot: %v\n Round: %v\n",
+						eventData.Round, eventData.TrialNum, eventData.MerkleRoot, CurrentRound)
 
 					// Mark Merkle root as submitted and stop leader monitoring
 					merkleRootSubmittedEventEmitted = true
 					StopLeaderMonitoring()
 
-					processMerkleRoot(CurrentRound)
+					processMerkleRoot(eventData.Round, eventData.TrialNum)
 
 				case RequestedToSubmitCoSig:
 					eventData := struct {
-						StartTime     *big.Int
+						Round         *big.Int
+						TrialNum      *big.Int
 						IndicesLength *big.Int
 						PackedIndices *big.Int
 					}{}
@@ -168,14 +177,15 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						log.Printf("Failed to decode RequestedToSubmitCo event log: %v", err)
 						continue
 					}
-					fmt.Printf("RequestedToSubmitCo Event: startTime %v\n, indicesLength %v\n, indices %v\n", eventData.StartTime, eventData.IndicesLength, eventData.PackedIndices)
+					fmt.Printf("RequestedToSubmitCo Event: Round %v, TrialNum %v, indicesLength %v\n, indices %v\n", eventData.Round, eventData.TrialNum, eventData.IndicesLength, eventData.PackedIndices)
 
-					processCosRequest(fallbackEthClient, eventData.PackedIndices, eventData.IndicesLength)
+					processCosRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
 
 				case RequestedToSubmitSFromIndexKSig:
 					eventData := struct {
-						StartTime *big.Int
-						IndexK    *big.Int
+						Round    *big.Int
+						TrialNum *big.Int
+						IndexK   *big.Int
 					}{}
 
 					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitSFromIndexK", vLog.Data)
@@ -184,15 +194,16 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						log.Printf("Failed to decode RequestedToSubmitSFromIndexK event log: %v", err)
 						continue
 					}
-					fmt.Printf("RequestedToSubmitSFromIndexK Event:\n startTime %v\n indexK %v\n", eventData.StartTime, eventData.IndexK)
+					fmt.Printf("RequestedToSubmitSFromIndexK Event:\n Round %v, TrialNum %v, indexK %v\n", eventData.Round, eventData.TrialNum, eventData.IndexK)
 
-					processSecretRequest(fallbackEthClient, eventData.IndexK)
+					processSecretRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.IndexK)
 
 				case SSubmittedSig:
 					eventData := struct {
-						StartTime *big.Int
-						S         [32]byte
-						Index     *big.Int
+						Round    *big.Int
+						TrialNum *big.Int
+						S        [32]byte
+						Index    *big.Int
 					}{}
 
 					err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
@@ -201,16 +212,17 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						log.Printf("Failed to decode SSubmitted event log: %v", err)
 						continue
 					}
-					fmt.Printf("SSubmitted Event:\n startTime %v\n Secret %v\n, indexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
+					fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
 					// index := new(big.Int).Add(eventData.Index, big.NewInt(1))
-					processSubmittedSecretRequest(fallbackEthClient, eventData.Index)
+					processSubmittedSecretRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.Index)
 				}
 			}
 		}
 	}
 }
 
-func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int) {
+func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, index *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, index %v\n", Round, TrialNum, index)
 	data, _ := commitreveal2.LoadRevealOrder("regular_reveal_order.json", CurrentRound)
 	orderedNodes := data.OrderedNodes
 	revealOrder := data.RevealOrder
@@ -237,7 +249,8 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 	}
 }
 
-func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int) {
+func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, index *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, index %v\n", Round, TrialNum, index)
 	data, _ := commitreveal2.LoadRevealOrders("regular_reveal_order.json")
 	revealOrder, exists := data[CurrentRound]
 	if !exists {
@@ -315,18 +328,24 @@ func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	log.Printf("Successfully submitted secret_value: %x", secretValueBytes)
 }
 
-func processMerkleRoot(round string) {
+func processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
 	if RoundsData == nil {
 		RoundsData = make(map[string]RoundData)
 	}
-	roundData := RoundsData[round]
+	roundData := RoundsData[Round.String()]
 	roundData.MerkleRoot = true
-	RoundsData[round] = roundData
+	RoundsData[Round.String()] = roundData
 }
 
-func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, state *big.Int) {
+func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, Round *big.Int, TrialNum *big.Int, state *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, state %v\n", Round, TrialNum, state)
 	// Reset monitoring state for new round
 	ResetMonitoringState()
+
+	// Store the current round and trialNum from Status event
+	CurrentRoundNum = Round
+	CurrentTrialNum = TrialNum
 
 	eth.UpdateActivatedOperators(fallbackEthClient)
 	round, _ := fetchCurrentRound(fallbackEthClient)
@@ -395,7 +414,8 @@ func allCosReceivedUnlockedRegular(roundNum string, ops []common.Address) bool {
 	return true
 }
 
-func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int) error {
+func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, packedIndices *big.Int) error {
+	fmt.Printf("Round %v, TrialNum %v, packedIndices %v\n", Round, TrialNum, packedIndices)
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
@@ -467,7 +487,8 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	return nil
 }
 
-func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int, indicesLength *big.Int) error {
+func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, packedIndices *big.Int, indicesLength *big.Int) error {
+	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
@@ -681,6 +702,11 @@ func ResetMonitoringState() {
 	StopLeaderMonitoring()
 	cvRequestedEventEmitted = false
 	merkleRootSubmittedEventEmitted = false
+	// Clear processed rounds when resetting
+	processedRounds = make(map[string]bool)
+	// Clear current round and trialNum
+	CurrentRoundNum = nil
+	CurrentTrialNum = nil
 	log.Printf("Reset monitoring state")
 }
 
