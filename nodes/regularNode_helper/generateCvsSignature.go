@@ -13,8 +13,9 @@ import (
 )
 
 var EoaAddress string
-// GenerateCvsSignature generates the EIP-712 signature components (v, r, s) for a given round and CVS value.
-func GenerateCvsSignature(startTimeStr string, cvs [32]byte) (uint8, string, string, error) {
+
+// GenerateCvsSignature generates the EIP-712 signature components (v, r, s) for a given round, trialNum and CVS value.
+func GenerateCvsSignature(round *big.Int, trialNum *big.Int, cvs [32]byte) (uint8, string, string, error) {
 	// Convert CVS to string for internal usage (optional, depending on use case)
 	cvsString := hex.EncodeToString(cvs[:])
 	log.Printf("Received CVS as [32]byte: %x", cvs)
@@ -36,18 +37,10 @@ func GenerateCvsSignature(startTimeStr string, cvs [32]byte) (uint8, string, str
 	contractAddressEnv = strings.TrimPrefix(contractAddressEnv, "0x")
 	contractAddress := common.HexToAddress(contractAddressEnv)
 
-
 	chainID := new(big.Int)
 	chainID, okays := chainID.SetString(chainIDEnv, 10)
 	if !okays {
 		return 0, "", "", fmt.Errorf("invalid chain ID: %s", chainIDEnv)
-	}
-
-	// Parse startTimeStr as *big.Int
-	startTime := new(big.Int)
-	_, ok := startTime.SetString(startTimeStr, 10)
-	if !ok {
-		return 0, "", "", fmt.Errorf("invalid startTimeStr: %s", startTimeStr)
 	}
 
 	// Load the private key
@@ -76,12 +69,13 @@ func GenerateCvsSignature(startTimeStr string, cvs [32]byte) (uint8, string, str
 	)
 
 	// Step 2: Compute message hash
-	messageTypeHash := crypto.Keccak256Hash([]byte("Message(uint256 timestamp,bytes32 cv)"))
+	messageTypeHash := crypto.Keccak256Hash([]byte("Message(uint256 round,uint256 trialNum,bytes32 cv)"))
 	messageHash := crypto.Keccak256Hash(
 		abiEncode(
 			messageTypeHash.Bytes(),
-			intToBytes(startTime), // uint256 startTime
-			cvs[:],            // bytes32 CVS as [32]byte
+			intToBytes(round),    // uint256 round
+			intToBytes(trialNum), // uint256 trialNum
+			cvs[:],               // bytes32 CVS as [32]byte
 		),
 	)
 	log.Printf("Message Hash: %s", messageHash.Hex())

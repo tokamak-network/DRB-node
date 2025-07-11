@@ -62,8 +62,6 @@ var (
 	// Event tracking variables
 	cvRequestedEventEmitted         bool
 	merkleRootSubmittedEventEmitted bool
-	// Round processing tracking
-	processedRounds map[string]bool
 	// Current round and trialNum from Status event
 	CurrentRoundNum *big.Int
 	CurrentTrialNum *big.Int
@@ -702,8 +700,6 @@ func ResetMonitoringState() {
 	StopLeaderMonitoring()
 	cvRequestedEventEmitted = false
 	merkleRootSubmittedEventEmitted = false
-	// Clear processed rounds when resetting
-	processedRounds = make(map[string]bool)
 	// Clear current round and trialNum
 	CurrentRoundNum = nil
 	CurrentTrialNum = nil
