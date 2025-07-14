@@ -72,3 +72,4 @@ DROP TABLE IF EXISTS registered_node_schemes;
 DROP TABLE IF EXISTS leader_commit_schemes;
 DROP TABLE IF EXISTS commit_schemes;
 DROP TABLE IF EXISTS reveal_order_schemes;
+DROP TABLE IF EXISTS broadcast_tracker_schemes;

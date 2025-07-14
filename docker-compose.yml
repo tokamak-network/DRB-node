@@ -9,8 +9,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    environment:
-      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    env_file: ./.env
     ports:
       - "5432:5432"
     volumes:
@@ -26,14 +25,9 @@ services:
     env_file: ./.env
     environment:
       LEADER_PORT: 61280
-      LEADER_PRIVATE_KEY: $LEADER_PRIVATE_KEY
-      LEADER_EOA: $LEADER_EOA
       NODE_TYPE: leader
       POSTGRES_HOST: "leaderpostgres"
       POSTGRES_PORT: 5432
-      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-      ETH_RPC_URL: $ETH_RPC_URL
-      CONTRACT_ADDRESS: $CONTRACT_ADDRESS
     volumes:
       - leadernode-key:/root/leadernode.bin
       - ./contract/abi/Commit2RevealDRB.json:/root/contract/abi/Commit2RevealDRB.json
@@ -53,8 +47,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    environment:
-      POSTGRES_PASSWORD: password
+    env_file: ./.env
     ports:
       - "5433:5432"
     volumes:
@@ -67,8 +60,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    environment:
-      POSTGRES_PASSWORD: password
+    env_file: ./.env
     ports:
       - "5434:5432"
     volumes:
@@ -89,17 +81,11 @@ services:
     environment:
       LEADER_IP: 127.0.0.1
       LEADER_PORT: 61280
-      LEADER_PEER_ID: $LEADER_PEER_ID
-      LEADER_EOA: $LEADER_EOA
       PORT: 61281
       EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_1
       NODE_TYPE: regular
       POSTGRES_HOST: "regular1postgres"
       POSTGRES_PORT: 5432
-      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-      CHAIN_ID: $CHAIN_ID
-      ETH_RPC_URL: $ETH_RPC_URL
-      CONTRACT_ADDRESS: $CONTRACT_ADDRESS
   regularnode2:
     build:
       context: .
@@ -116,17 +102,11 @@ services:
     environment:
       LEADER_IP: 127.0.0.1
       LEADER_PORT: 61280
-      LEADER_PEER_ID: $LEADER_PEER_ID
-      LEADER_EOA: $LEADER_EOA
       PORT: 61282
       EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_2
       NODE_TYPE: regular
       POSTGRES_HOST: "regular2postgres"
       POSTGRES_PORT: 5432
-      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-      CHAIN_ID: $CHAIN_ID
-      ETH_RPC_URL: $ETH_RPC_URL
-      CONTRACT_ADDRESS: $CONTRACT_ADDRESS
 
 volumes:
   leaderpostgres-data:
