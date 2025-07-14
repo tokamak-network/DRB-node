@@ -152,21 +152,26 @@ func UpdateNodeInfo(nodeInfo *utils.NodeInfo) error {
 	return nil
 }
 
-func GetNodeInfo() (*utils.NodeInfo, error) {
-	node := &NodeInfoScheme{}
-	err := GetDB().Model(node).Limit(1).Select()
+func GetNodeInfos() ([]*utils.NodeInfo, error) {
+	var nodes []NodeInfoScheme
+	err := GetDB().Model(&nodes).Select()
 	if err != nil {
 		return nil, err
 	}
 
-	nodeInfo := &utils.NodeInfo{
-		IP:         node.IP,
-		Port:       node.Port,
-		PeerID:     node.PeerID,
-		EOAAddress: node.EOAAddress,
+	nodeInfos := make([]*utils.NodeInfo, 0, len(nodes))
+	for _, node := range nodes {
+		nodeInfo := &utils.NodeInfo{
+			IP:         node.IP,
+			Port:       node.Port,
+			PeerID:     node.PeerID,
+			EOAAddress: node.EOAAddress,
+		}
+
+		nodeInfos = append(nodeInfos, nodeInfo)
 	}
 
-	return nodeInfo, nil
+	return nodeInfos, nil
 }
 
 func AddLeaderCommit(commitData *utils.LeaderCommitData) error {
