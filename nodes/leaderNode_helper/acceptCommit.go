@@ -93,6 +93,11 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 			log.Fatalf("Error in event subscription: %v", err)
 
 		case vLog := <-logs:
+			isReorg := vLog.Removed
+			if isReorg {
+				log.Printf("Reorg detected. Skipping event: %v", vLog.TxHash)
+				continue
+			}
 			switch vLog.Topics[0] {
 			case CvsEventSig:
 				eventData := struct {
