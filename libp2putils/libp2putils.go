@@ -103,30 +103,6 @@ func GetConnectedPeers() map[string]struct {
 	Port   string  `json:"port"`
 	PeerID peer.ID `json:"peer_id"`
 } {
-	// filePath := "registered_nodes.json"
-	// file, err := os.Open(filePath)
-	// if err != nil {
-	// 	log.Printf("Failed to open registered_nodes.json: %v", err)
-	// 	return nil
-	// }
-	// defer file.Close()
-
-	// var nodes map[string]struct {
-	// 	IP     string `json:"ip"`
-	// 	Port   string `json:"port"`
-	// 	PeerID string `json:"peer_id"`
-	// }
-	// data, err := io.ReadAll(file)
-	// if err != nil {
-	// 	log.Printf("Failed to read registered_nodes.json: %v", err)
-	// 	return nil
-	// }
-
-	// err = json.Unmarshal(data, &nodes)
-	// if err != nil {
-	// 	log.Printf("Failed to parse registered_nodes.json: %v", err)
-	// 	return nil
-	// }
 	nodes, err := database.GetNodeInfos()
 	if err != nil {
 		log.Printf("Failed to get node infos: %v", err)

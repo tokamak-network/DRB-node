@@ -23,6 +23,7 @@ type LeaderCommitScheme struct {
 	SignV                 string `pg:"sign_v"`
 	SubmitMerkleRootDone  bool   `pg:"submit_merkle_root_done,notnull,use_zero"`
 	RandomNumberGenerated bool   `pg:"random_number_generated,notnull,use_zero"`
+	CreatedAt             int64  `pg:"created_at,notnull"`
 }
 
 type CommitDataScheme struct {
@@ -44,6 +45,15 @@ type RevealOrderScheme struct {
 	OrderedNodes []string `pg:"ordered_nodes,array,notnull"`
 	RevealOrder  []int    `pg:"reveal_order,array,notnull"`
 	RV           string   `pg:"rv,notnull"`
+}
+
+type PeerCommitDataScheme struct {
+	ID          int    `pg:"id,pk"`
+	Round       string `pg:"round,notnull"`
+	EOAAddress  string `pg:"eoa_address,notnull"`
+	SecretValue []byte `pg:"secret_value,type:bytea"`
+	Cos         []byte `pg:"cos,type:bytea"`
+	Cvs         []byte `pg:"cvs,type:bytea"`
 }
 
 type BroadcastTrackerScheme struct {

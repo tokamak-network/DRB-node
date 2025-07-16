@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS leader_commit_schemes (
     sign_v TEXT,
     submit_merkle_root_done BOOLEAN NOT NULL,
     random_number_generated BOOLEAN NOT NULL,
+    created_at BIGINT NOT NULL,
     PRIMARY KEY (round, eoa_address)
 );
 
@@ -51,8 +52,18 @@ CREATE TABLE IF NOT EXISTS reveal_order_schemes (
     rv TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS peer_commit_data_schemes (
+    id SERIAL,
+    round TEXT NOT NULL,
+    eoa_address TEXT NOT NULL,
+    secret_value BYTEA,
+    cos BYTEA,
+    cvs BYTEA,
+    PRIMARY KEY (round, eoa_address)
+);
+
 -- Create broadcast_trackers schema
-CREATE TABLE broadcast_tracker_schemes (
+CREATE TABLE IF NOT EXISTS broadcast_tracker_schemes (
     id SERIAL PRIMARY KEY,
     round TEXT NOT NULL,
     eoa_address TEXT NOT NULL,
@@ -72,4 +83,5 @@ DROP TABLE IF EXISTS registered_node_schemes;
 DROP TABLE IF EXISTS leader_commit_schemes;
 DROP TABLE IF EXISTS commit_schemes;
 DROP TABLE IF EXISTS reveal_order_schemes;
+DROP TABLE IF EXISTS peer_commit_data_schemes;
 DROP TABLE IF EXISTS broadcast_tracker_schemes;

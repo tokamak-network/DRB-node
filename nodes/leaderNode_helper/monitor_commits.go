@@ -136,7 +136,6 @@ func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCCl
 }
 
 func LoadNodeData(round string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash) {
-	// leaderCommits, err := loadLeaderCommits("leader_commits.json")
 	leaderCommits, err := database.GetLeaderCommitsByRound(round)
 	if err != nil {
 		log.Printf("Failed to load leader commits: %v", err)

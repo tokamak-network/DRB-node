@@ -89,8 +89,8 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 	go leaderNode_helper.MonitorCommits(fallbackEthClient)
 	go leaderNode_helper.ReceiveCommit(fallbackEthClient)
-	leaderNode_helper.StartBroadcastCleanup()
-	leaderNode_helper.StartLeaderCommitCleanup()
+	// leaderNode_helper.StartBroadcastCleanup()
+	// leaderNode_helper.StartLeaderCommitCleanup()
 	for {
 		if !leaderNode_helper.Execution {
 			time.Sleep(10 * time.Second)

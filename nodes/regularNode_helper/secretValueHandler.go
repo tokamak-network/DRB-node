@@ -31,15 +31,14 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		roundData, err := database.GetRevealOrder(CurrentRound)
 		if err != nil {
 			log.Printf("Failed to load reveal order: %v", err)
-			time.Sleep(5 * time.Second)
-			continue
+		} else if roundData != nil {
+			if strictOrderWhileSecretRequest[CurrentRound] == nil {
+				strictOrderWhileSecretRequest[CurrentRound] = roundData.OrderedNodes
+			}
+			break
+		} else {
+			log.Printf("Reveal order not yet calculated for round %s. Waiting...", CurrentRound)
 		}
-
-		if strictOrderWhileSecretRequest[CurrentRound] == nil {
-			strictOrderWhileSecretRequest[CurrentRound] = roundData.OrderedNodes
-		}
-
-		log.Printf("Reveal order not yet calculated for round %s. Waiting...", CurrentRound)
 		time.Sleep(5 * time.Second)
 	}
 	if len(strictOrderWhileSecretRequest[CurrentRound]) == 0 || strictOrderWhileSecretRequest[CurrentRound][req.Order] != req.RegularEoaAddress {

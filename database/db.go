@@ -186,6 +186,7 @@ func AddLeaderCommit(commitData *utils.LeaderCommitData) error {
 		SignV:                 commitData.Sign.V,
 		SubmitMerkleRootDone:  commitData.SubmitMerkleRootDone,
 		RandomNumberGenerated: commitData.RandomNumberGenerated,
+		CreatedAt:             time.Now().Unix(),
 	}
 
 	// Convert byte arrays to hex strings
@@ -236,6 +237,7 @@ func GetLeaderCommitByRoundAndEoaAddr(round string, eoaAddr string) (*utils.Lead
 		Sign:                  *sign,
 		SubmitMerkleRootDone:  leaderCommit.SubmitMerkleRootDone,
 		RandomNumberGenerated: leaderCommit.RandomNumberGenerated,
+		CreatedAt:             leaderCommit.CreatedAt,
 	}
 
 	return leaderCommitData, nil
@@ -273,6 +275,7 @@ func GetLeaderCommitsByRound(round string) ([]*utils.LeaderCommitData, error) {
 			Sign:                  *sign,
 			SubmitMerkleRootDone:  model.SubmitMerkleRootDone,
 			RandomNumberGenerated: model.RandomNumberGenerated,
+			CreatedAt:             model.CreatedAt,
 		}
 		leaderCommits = append(leaderCommits, commitData)
 	}
@@ -312,6 +315,7 @@ func GetRoundsToProcess() ([]*utils.LeaderCommitData, error) {
 			Sign:                  *sign,
 			SubmitMerkleRootDone:  model.SubmitMerkleRootDone,
 			RandomNumberGenerated: model.RandomNumberGenerated,
+			CreatedAt:             model.CreatedAt,
 		}
 		leaderCommits = append(leaderCommits, commitData)
 	}
@@ -335,10 +339,15 @@ func UpdateLeaderCommit(leaderCommit *utils.LeaderCommitData) error {
 		SignV:                 leaderCommit.Sign.V,
 		SubmitMerkleRootDone:  leaderCommit.SubmitMerkleRootDone,
 		RandomNumberGenerated: leaderCommit.RandomNumberGenerated,
+		CreatedAt:             leaderCommit.CreatedAt,
 	}
 
 	_, err := GetDB().Model(&model).Where("round = ? AND eoa_address = ?", leaderCommit.Round, leaderCommit.EOAAddress).Update()
-	return err
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func UpdateLeaderCommitRandomNumberGenerated(round string) error {
@@ -584,4 +593,52 @@ func DeleteBroadcastTracker(tracker *utils.BroadcastTracker) error {
 	model := BroadcastTrackerScheme{}
 	_, err := GetDB().Model(&model).Where("round = ? AND eoa_address = ? AND type = ? AND message_id = ?", tracker.Round, tracker.EOAAddress, tracker.Type, tracker.MessageID).Delete()
 	return err
+}
+
+func AddPeerCommitData(peerData *PeerCommitDataScheme) error {
+	peerCommit := PeerCommitDataScheme{
+		Round:       peerData.Round,
+		EOAAddress:  peerData.EOAAddress,
+		SecretValue: peerData.SecretValue[:],
+		Cos:         peerData.Cos[:],
+		Cvs:         peerData.Cvs[:],
+	}
+
+	_, err := GetDB().Model(&peerCommit).Insert()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func GetPeerCommitData(round string, eoaAddress string) (*PeerCommitDataScheme, error) {
+	var peerCommit PeerCommitDataScheme
+	err := GetDB().Model(&peerCommit).
+		Where("round = ? AND eoa_address = ?", round, eoaAddress).
+		Select()
+	if err != nil {
+		return nil, err
+	}
+
+	return &peerCommit, nil
+}
+
+func UpdatePeerCommitData(peerData *PeerCommitDataScheme) error {
+	peerCommit := PeerCommitDataScheme{
+		Round:       peerData.Round,
+		EOAAddress:  peerData.EOAAddress,
+		SecretValue: peerData.SecretValue[:],
+		Cos:         peerData.Cos[:],
+		Cvs:         peerData.Cvs[:],
+	}
+
+	_, err := GetDB().Model(&peerCommit).
+		Where("round = ? AND eoa_address = ?", peerCommit.Round, peerCommit.EOAAddress).
+		Update()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
