@@ -694,7 +694,8 @@ func prepareArgumentsForRequestToSubmitCo(roundNum string, missingIndices []*big
 
 func orderedPackedIndices(missingIndices []*big.Int) ([]*big.Int, []*big.Int) {
 	onChainCvIndices := make(map[int64]struct{})
-	for _, idx := range leaderNode_helper.Indices {
+	indices := leaderNode_helper.GetIndices()
+	for _, idx := range indices {
 		onChainCvIndices[idx.Int64()] = struct{}{}
 	}
 
@@ -769,16 +770,22 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 	for _, op := range activatedOperators {
 		for _, missingOp := range missingOperators {
 			if op == missingOp {
-				leaderNode_helper.Indices = append(leaderNode_helper.Indices, new(big.Int).Set(i))
+				leaderNode_helper.AppendToIndices(i)
 			}
 		}
 		i.Add(i, big.NewInt(1))
 	}
-	sort.Slice(leaderNode_helper.Indices, func(i, j int) bool {
-		return leaderNode_helper.Indices[i].Cmp(leaderNode_helper.Indices[j]) < 0
+
+	// Get the current indices and sort them
+	indices := leaderNode_helper.GetIndices()
+	sort.Slice(indices, func(i, j int) bool {
+		return indices[i].Cmp(indices[j]) < 0
 	})
 
-	packedIndices := leaderNode_helper.PackIndices(leaderNode_helper.Indices)
+	// Update the sorted indices back
+	leaderNode_helper.SetIndices(indices)
+
+	packedIndices := leaderNode_helper.PackIndices(indices)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -822,7 +829,7 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 		return
 	}
 
-	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, leaderNode_helper.Indices)
+	log.Printf("Successfully submitted commit request for round %s and indices %v", roundNum, indices)
 	requestCv = false
 }
 

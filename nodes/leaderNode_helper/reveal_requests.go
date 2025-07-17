@@ -178,8 +178,9 @@ func prepareArgumentsForRequestToSubmitS(roundNum string) ([][32]byte, [][32]byt
 	j := 0
 	length := big.NewInt(int64(len(eth.ActivatedOperators)))
 
+	indices := GetIndices()
 	for i.Cmp(length) < 0 {
-		if j < len(Indices) && i.Cmp(Indices[j]) == 0 {
+		if j < len(indices) && i.Cmp(indices[j]) == 0 {
 			i = new(big.Int).Add(i, big.NewInt(1))
 			j++
 		} else {

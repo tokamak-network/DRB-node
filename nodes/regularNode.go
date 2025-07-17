@@ -186,6 +186,9 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		}
 		time.Sleep(5 * time.Second)
 
+		// Check and start leader monitoring
+		regularNode_helper.CheckAndStartMonitoring(fallbackEthClient)
+
 		round := regularNode_helper.CurrentRound
 		merkleRootSubmitted := regularNode_helper.RoundsData[round].MerkleRoot
 		randomNumberSubmitted := regularNode_helper.RoundsData[round].RandomNumber
@@ -242,7 +245,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				}
 
 				// Send commit to leader
-				sendCommitToLeader(ctx, fallbackEthClient, h, leaderInfo.ID, commitData, eoaAddress)
+				sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, eoaAddress)
 			}
 
 			// If commit data exists and SendCosToLeader is false, send COS to leader
@@ -444,7 +447,7 @@ func checkDepositAmount(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 }
 
 // sendCommitToLeader sends the generated commit to the leader node
-func sendCommitToLeader(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
+func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
 	// Create commit request structure with signed round value and CVS
 	req := utils.CommitRequest{
 		Round:      commitData.Round,
@@ -467,19 +470,13 @@ func sendCommitToLeader(ctx context.Context, fallbackEthClient *fallback_ethclie
 
 	req.Signature = signedRequest
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	// Use the current round and trialNum from Status event instead of startTime
+	if regularNode_helper.CurrentRoundNum == nil || regularNode_helper.CurrentTrialNum == nil {
+		log.Printf("Current round or trialNum not available, cannot generate signature")
+		return
 	}
-	contractAddress := common.HexToAddress(contractAddressStr)
 
-	parsedABI, _ := utils.LoadContractABI(abiFilePath)
-	result, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "getCurStartTime", contractAddress)
-	if err != nil {
-		fmt.Println("error", err)
-	}
-	startTime := result.(*big.Int).String()
-	v, r, s, err := regularNode_helper.GenerateCvsSignature(startTime, req.Cvs)
+	v, r, s, err := regularNode_helper.GenerateCvsSignature(regularNode_helper.CurrentRoundNum, regularNode_helper.CurrentTrialNum, req.Cvs)
 	if err != nil {
 		log.Printf("Failed to generate v, r, s for CVS: %v", err)
 		return

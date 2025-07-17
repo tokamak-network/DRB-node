@@ -96,9 +96,10 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 			switch vLog.Topics[0] {
 			case CvsEventSig:
 				eventData := struct {
-					StartTime *big.Int
-					Cv        [32]byte
-					Index     *big.Int
+					Round    *big.Int
+					TrialNum *big.Int
+					Cv       [32]byte
+					Index    *big.Int
 				}{}
 				err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
 				if err != nil {
@@ -107,13 +108,14 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				}
 				fmt.Printf("CvSubmitted Event: Fetched successfully")
 
-				processCVS(eventData.Cv, eventData.Index)
+				processCVS(eventData.Round, eventData.TrialNum, eventData.Cv, eventData.Index)
 
 			case CoSubmittedSig:
 				eventData := struct {
-					StartTime *big.Int
-					Co        [32]byte
-					Index     *big.Int
+					Round    *big.Int
+					TrialNum *big.Int
+					Co       [32]byte
+					Index    *big.Int
 				}{}
 				err := parsedABI.UnpackIntoInterface(&eventData, "CoSubmitted", vLog.Data)
 				if err != nil {
@@ -122,12 +124,13 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				}
 				fmt.Printf("CoSubmitted Event: Fetched successfully")
 
-				processCOS(fallbackEthClient, eventData.Co, eventData.Index)
+				processCOS(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.Co, eventData.Index)
 
 			case StatusSig:
 				eventData := struct {
-					CurStartTime *big.Int
-					CurState     *big.Int
+					CurRound    *big.Int
+					CurTrialNum *big.Int
+					CurState    *big.Int
 				}{}
 
 				err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
@@ -135,13 +138,21 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					log.Printf("Failed to decode Status event log: %v", err)
 					continue
 				}
-				processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
+
+				blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+				if err != nil {
+					log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+					continue
+				}
+
+				processRandomRequestNumber(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.CurRound, eventData.CurTrialNum, eventData.CurState)
 
 			case SSubmittedSig:
 				eventData := struct {
-					StartTime *big.Int
-					S         [32]byte
-					Index     *big.Int
+					Round    *big.Int
+					TrialNum *big.Int
+					S        [32]byte
+					Index    *big.Int
 				}{}
 
 				err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
@@ -150,16 +161,17 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					log.Printf("Failed to decode SSubmitted event log: %v", err)
 					continue
 				}
-				fmt.Printf("SSubmitted Event:\n StartTime %v\n Secret %v\n IndexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
-				processSubmittedSecretRequest(eventData.S, eventData.Index)
+				fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
+				processSubmittedSecretRequest(eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
 			}
 		}
 	}
 }
 
-func processSubmittedSecretRequest(secret [32]byte, index *big.Int) {
-
-	regularNodeAddress := eth.ActivatedOperators[int(index.Int64())]
+func processSubmittedSecretRequest(Round *big.Int, TrialNum *big.Int, secret [32]byte, index *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, index %v\n", Round, TrialNum, index)
+	intValue := int(index.Int64())
+	regularNodeAddress := eth.ActivatedOperators[intValue]
 
 	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(SecretRequestSentForWhichRound, regularNodeAddress.Hex())
 	if err != nil {
@@ -180,17 +192,18 @@ func processSubmittedSecretRequest(secret [32]byte, index *big.Int) {
 	ReliableBroadCastS(libp2putils.HostInstance, SecretRequestSentForWhichRound, regularNodeAddress.Hex(), secret)
 }
 
-func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, state *big.Int) {
+func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, Round *big.Int, TrialNum *big.Int, state *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, state %v\n", Round, TrialNum, state)
 	round, _ := fetchCurrentRound(fallbackEthClient)
 	CurrentRound = round.String()
 	req := RandomRequest{
 		Round:     round,
-		StartTime: startTime,
+		StartTime: blockTimestamp,
 		State:     state,
 	}
 	if state.Cmp(big.NewInt(1)) == 0 {
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
-			startTime, state, round)
+			blockTimestamp, state, round)
 		Req = req
 		var err error
 		ActivatedOperator, err = FetchActivatedOperators(fallbackEthClient, CurrentRound)
@@ -200,6 +213,10 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		}
 		eth.UpdateActivatedOperators(fallbackEthClient)
 		Execution = true
+
+		// Reset Indices array for the new round
+		ResetIndicesForNewRound()
+		log.Printf("Reset Indices array for new round %s", CurrentRound)
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
 		if RoundsData == nil {
@@ -212,7 +229,8 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 }
 
-func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, cos [32]byte, activatedOperatorIndex *big.Int) error {
+func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, cos [32]byte, activatedOperatorIndex *big.Int) error {
+	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", Round, TrialNum, activatedOperatorIndex)
 	round := CurrentRound
 	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
 	eoa := common.HexToAddress(eoaAddress)
@@ -290,7 +308,8 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 	}
 }
 
-func processCVS(cvs [32]byte, activatedOperatorIndex *big.Int) error {
+func processCVS(Round *big.Int, TrialNum *big.Int, cvs [32]byte, activatedOperatorIndex *big.Int) error {
+	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", Round, TrialNum, activatedOperatorIndex)
 	round := CurrentRound
 	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
 	eoa := common.HexToAddress(eoaAddress)

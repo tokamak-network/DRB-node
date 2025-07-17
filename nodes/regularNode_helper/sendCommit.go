@@ -56,6 +56,18 @@ var RequestQueue []RandomRequest
 var Round *big.Int
 var CurrentRound string
 
+// Add new variables for monitoring
+var (
+	leaderMonitoringActive bool
+	monitoringTimer        *time.Timer
+	// Event tracking variables
+	cvRequestedEventEmitted         bool
+	merkleRootSubmittedEventEmitted bool
+	// Current round and trialNum from Status event
+	CurrentRoundNum *big.Int
+	CurrentTrialNum *big.Int
+)
+
 func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	contractAddress := os.Getenv("CONTRACT_ADDRESS")
 	contractAddr := common.HexToAddress(contractAddress)
@@ -64,6 +76,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	if err != nil {
 		log.Fatalf("Failed to parse contract ABI: %v", err)
 	}
+
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddr},
 	}
@@ -72,6 +85,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	if err != nil {
 		log.Fatalf("Failed to subscribe to logs: %v", err)
 	}
+
 	SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
 	StatusSig := parsedABI.Events["Status"].ID
 	MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
@@ -89,8 +103,9 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 				switch vLog.Topics[0] {
 				case SubmitCVS:
 					eventData := struct {
-						StartTime     *big.Int
-						PackedIndices *big.Int
+						Round                         *big.Int
+						TrialNum                      *big.Int
+						PackedIndicesAscendingFromLSB *big.Int
 					}{}
 					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
 					if err != nil {
@@ -98,14 +113,19 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						continue
 					}
 
-					fmt.Printf("CommitRequest Event: startTime %v\n, indices %v\n", eventData.StartTime, eventData.PackedIndices)
+					fmt.Printf("CommitRequest Event: Round %v, TrialNum %v, indices %v\n", eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
 
-					processCommitRequest(fallbackEthClient, eventData.PackedIndices)
+					// Mark CV as requested and stop leader monitoring
+					cvRequestedEventEmitted = true
+					StopLeaderMonitoring()
+
+					processCommitRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
 
 				case StatusSig:
 					eventData := struct {
-						CurStartTime *big.Int
-						CurState     *big.Int
+						CurRound    *big.Int
+						CurTrialNum *big.Int
+						CurState    *big.Int
 					}{}
 
 					err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
@@ -114,11 +134,19 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						continue
 					}
 
-					processRandomRequestNumber(fallbackEthClient, eventData.CurStartTime, eventData.CurState)
+					// Get the actual block timestamp
+					blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+					if err != nil {
+						log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+						continue
+					}
+
+					processRandomRequestNumber(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.CurRound, eventData.CurTrialNum, eventData.CurState)
 
 				case MerkleRootSubmittedSig:
 					eventData := struct {
-						StartTime  *big.Int
+						Round      *big.Int
+						TrialNum   *big.Int
 						MerkleRoot [32]byte
 					}{}
 
@@ -127,14 +155,19 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
 						continue
 					}
-					fmt.Printf("MerkleRootSubmitted Event:\n StartTime: %v\n MerkleRoot: %v\n Round: %v\n",
-						eventData.StartTime, eventData.MerkleRoot, CurrentRound)
+					fmt.Printf("MerkleRootSubmitted Event:\n Round %v, TrialNum %v, MerkleRoot: %v\n Round: %v\n",
+						eventData.Round, eventData.TrialNum, eventData.MerkleRoot, CurrentRound)
 
-					processMerkleRoot(CurrentRound)
+					// Mark Merkle root as submitted and stop leader monitoring
+					merkleRootSubmittedEventEmitted = true
+					StopLeaderMonitoring()
+
+					processMerkleRoot(eventData.Round, eventData.TrialNum)
 
 				case RequestedToSubmitCoSig:
 					eventData := struct {
-						StartTime     *big.Int
+						Round         *big.Int
+						TrialNum      *big.Int
 						IndicesLength *big.Int
 						PackedIndices *big.Int
 					}{}
@@ -143,14 +176,15 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						log.Printf("Failed to decode RequestedToSubmitCo event log: %v", err)
 						continue
 					}
-					fmt.Printf("RequestedToSubmitCo Event: startTime %v\n, indicesLength %v\n, indices %v\n", eventData.StartTime, eventData.IndicesLength, eventData.PackedIndices)
+					fmt.Printf("RequestedToSubmitCo Event: Round %v, TrialNum %v, indicesLength %v\n, indices %v\n", eventData.Round, eventData.TrialNum, eventData.IndicesLength, eventData.PackedIndices)
 
-					processCosRequest(fallbackEthClient, eventData.PackedIndices, eventData.IndicesLength)
+					processCosRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
 
 				case RequestedToSubmitSFromIndexKSig:
 					eventData := struct {
-						StartTime *big.Int
-						IndexK    *big.Int
+						Round    *big.Int
+						TrialNum *big.Int
+						IndexK   *big.Int
 					}{}
 
 					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitSFromIndexK", vLog.Data)
@@ -159,15 +193,16 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						log.Printf("Failed to decode RequestedToSubmitSFromIndexK event log: %v", err)
 						continue
 					}
-					fmt.Printf("RequestedToSubmitSFromIndexK Event:\n startTime %v\n indexK %v\n", eventData.StartTime, eventData.IndexK)
+					fmt.Printf("RequestedToSubmitSFromIndexK Event:\n Round %v, TrialNum %v, indexK %v\n", eventData.Round, eventData.TrialNum, eventData.IndexK)
 
-					processSecretRequest(fallbackEthClient, eventData.IndexK)
+					processSecretRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.IndexK)
 
 				case SSubmittedSig:
 					eventData := struct {
-						StartTime *big.Int
-						S         [32]byte
-						Index     *big.Int
+						Round    *big.Int
+						TrialNum *big.Int
+						S        [32]byte
+						Index    *big.Int
 					}{}
 
 					err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
@@ -176,16 +211,17 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						log.Printf("Failed to decode SSubmitted event log: %v", err)
 						continue
 					}
-					fmt.Printf("SSubmitted Event:\n startTime %v\n Secret %v\n, indexK %v\n ", eventData.StartTime, eventData.S, eventData.Index)
+					fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
 					// index := new(big.Int).Add(eventData.Index, big.NewInt(1))
-					processSubmittedSecretRequest(fallbackEthClient, eventData.Index)
+					processSubmittedSecretRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.Index)
 				}
 			}
 		}
 	}
 }
 
-func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int) {
+func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, index *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, index %v\n", Round, TrialNum, index)
 	data, err := database.GetRevealOrder(CurrentRound)
 	if err != nil {
 		log.Printf("Failed to get reveal order for round %s: %v", CurrentRound, err)
@@ -215,7 +251,8 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 	}
 }
 
-func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, index *big.Int) {
+func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, index *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, index %v\n", Round, TrialNum, index)
 	revealOrder, err := database.GetRevealOrder(CurrentRound)
 	if err != nil {
 		log.Printf("Failed to get reveal order for round %s: %v", CurrentRound, err)
@@ -286,39 +323,64 @@ func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	log.Printf("Successfully submitted secret_value: %x", secretValueBytes)
 }
 
-func processMerkleRoot(round string) {
+func processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
 	if RoundsData == nil {
 		RoundsData = make(map[string]RoundData)
 	}
-	roundData := RoundsData[round]
+	roundData := RoundsData[Round.String()]
 	roundData.MerkleRoot = true
-	RoundsData[round] = roundData
+	RoundsData[Round.String()] = roundData
 }
 
-func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, state *big.Int) {
+func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, Round *big.Int, TrialNum *big.Int, state *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, state %v\n", Round, TrialNum, state)
+	// Reset monitoring state for new round
+	ResetMonitoringState()
+
+	// Store the current round and trialNum from Status event
+	CurrentRoundNum = Round
+	CurrentTrialNum = TrialNum
+
 	eth.UpdateActivatedOperators(fallbackEthClient)
 	round, _ := fetchCurrentRound(fallbackEthClient)
 	CurrentRound = round.String()
+
 	req := RandomRequest{
 		Round:     round,
-		StartTime: startTime,
+		StartTime: blockTimestamp,
 		State:     state,
 	}
+
 	if state.Cmp(big.NewInt(1)) == 0 {
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
-			startTime, state, round)
+			blockTimestamp, state, round)
 		ActivatedOperator, _ = FetchActivatedOperators(fallbackEthClient, CurrentRound)
 		Req = req
-
 		Execution = true
+		log.Printf("Execution started for round %s", CurrentRound)
+
+		// Start leader monitoring for the new round using block timestamp
+		StartLeaderMonitoring(fallbackEthClient, blockTimestamp)
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
 		roundData := RoundsData[round.String()]
 		roundData.RandomNumber = true
 		RoundsData[round.String()] = roundData
-
 		Execution = false
+		log.Printf("Execution stopped for round %s", CurrentRound)
 	}
+
+	// Update rounds data
+	if RoundsData == nil {
+		RoundsData = make(map[string]RoundData)
+	}
+
+	RoundsData[CurrentRound] = RoundData{
+		MerkleRoot:   false,
+		RandomNumber: false,
+	}
+
 	go AllCosReceivedUnlocked(ActivatedOperator)
 }
 
@@ -347,7 +409,8 @@ func allCosReceivedUnlockedRegular(roundNum string, ops []common.Address) bool {
 	return true
 }
 
-func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int) error {
+func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, packedIndices *big.Int) error {
+	fmt.Printf("Round %v, TrialNum %v, packedIndices %v\n", Round, TrialNum, packedIndices)
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
@@ -408,7 +471,8 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	return nil
 }
 
-func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, packedIndices *big.Int, indicesLength *big.Int) error {
+func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, packedIndices *big.Int, indicesLength *big.Int) error {
+	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
@@ -528,28 +592,165 @@ func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCCl
 }
 
 func fetchCurrentRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient) (*big.Int, error) {
-	abiFilePath := "contract/abi/Commit2RevealDRB.json"
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		log.Fatalf("Failed to load contract ABI: %v", err)
+		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+
+	result, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_currentRound", contractAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call s_currentRound: %v", err)
+	}
+
+	currentRound := result.(*big.Int)
+	return currentRound, nil
+}
+
+// StartLeaderMonitoring starts monitoring the leader for the current round
+func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int) {
+	if leaderMonitoringActive {
+		log.Printf("Leader monitoring already active for round %s", CurrentRound)
+		return
+	}
+
+	if startTime == nil {
+		log.Printf("StartTime is nil, cannot start monitoring")
+		return
+	}
+
+	leaderMonitoringActive = true
+
+	// Get timing parameters from contract
+	offChainSubmissionPeriod := big.NewInt(80)
+	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
+
+	// Calculate deadline: startTime + offChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
+	deadline := new(big.Int).Add(startTime, offChainSubmissionPeriod)
+	deadline.Add(deadline, requestOrSubmitOrFailDecisionPeriod)
+
+	// Convert deadline to time.Duration
+	deadlineTime := time.Unix(deadline.Int64(), 0)
+	now := time.Now()
+	duration := deadlineTime.Sub(now)
+
+	if duration <= 0 {
+		log.Printf("Deadline has already passed for round %s, calling failToRequestSubmitCVOrSubmitMerkleRoot immediately", CurrentRound)
+		callFailToRequestSubmitCVOrSubmitMerkleRoot(fallbackEthClient)
+		return
+	}
+
+	log.Printf("Starting leader monitoring for round %s, deadline: %v (in %v)", CurrentRound, deadlineTime, duration)
+
+	// Set timer to call the function when deadline is reached
+	monitoringTimer = time.AfterFunc(duration, func() {
+		log.Printf("Deadline reached for round %s, calling failToRequestSubmitCVOrSubmitMerkleRoot", CurrentRound)
+		callFailToRequestSubmitCVOrSubmitMerkleRoot(fallbackEthClient)
+		leaderMonitoringActive = false
+	})
+}
+
+// StopLeaderMonitoring stops the current leader monitoring
+func StopLeaderMonitoring() {
+	if !leaderMonitoringActive {
+		return
+	}
+
+	if monitoringTimer != nil {
+		monitoringTimer.Stop()
+		monitoringTimer = nil
+	}
+
+	leaderMonitoringActive = false
+	log.Printf("Stopped leader monitoring for round %s", CurrentRound)
+}
+
+// ResetMonitoringState resets all monitoring variables
+func ResetMonitoringState() {
+	StopLeaderMonitoring()
+	cvRequestedEventEmitted = false
+	merkleRootSubmittedEventEmitted = false
+	// Clear current round and trialNum
+	CurrentRoundNum = nil
+	CurrentTrialNum = nil
+	log.Printf("Reset monitoring state")
+}
+
+// callFailToRequestSubmitCVOrSubmitMerkleRoot calls the contract function to fail the leader
+func callFailToRequestSubmitCVOrSubmitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode Ethereum private key: %v", err)
+		return
 	}
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
-
 	contractAddress := common.HexToAddress(contractAddressStr)
 
-	result, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_currentRound", contractAddress)
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		log.Printf("Failed to fetch activated operators: %v", err)
-		return nil, err
-	}
-	currentRound, ok := result.(*big.Int)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type: expected *big.Int, got %v", result)
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
 	}
 
-	return currentRound, nil
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"failToRequestSubmitCvOrSubmitMerkleRoot",
+		big.NewInt(0),
+	)
+	if err != nil {
+		log.Printf("Failed to call failToRequestSubmitCVOrSubmitMerkleRoot: %v", err)
+		return
+	}
+
+	log.Printf("Successfully called failToRequestSubmitCVOrSubmitMerkleRoot for round %s", CurrentRound)
+}
+
+// CheckAndStartMonitoring checks if monitoring should be started and starts it if needed
+func CheckAndStartMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+	// Check if monitoring is already active
+	if leaderMonitoringActive {
+		log.Printf("Leader monitoring already active for round %s", CurrentRound)
+		return
+	}
+
+	// Check if CV has been requested
+	if cvRequestedEventEmitted {
+		log.Printf("CV requested event already emitted for round %s", CurrentRound)
+		return
+	}
+
+	// Check if Merkle root has been submitted
+	if merkleRootSubmittedEventEmitted {
+		log.Printf("Merkle root submitted event already emitted for round %s", CurrentRound)
+		return
+	}
+
+	// Check if we have a valid start time
+	if StartTime == nil {
+		log.Printf("StartTime is nil, cannot start monitoring")
+		return
+	}
+
+	StartLeaderMonitoring(fallbackEthClient, StartTime)
 }

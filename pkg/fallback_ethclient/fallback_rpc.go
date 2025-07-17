@@ -81,9 +81,9 @@ func (f *FallbackRPCClient) switchToNextClient() {
 func (f *FallbackRPCClient) getCurrentClient() *ethclient.Client {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-    if !rpcURLPrinted {
-        rpcURLPrinted = true
-    }
+	if !rpcURLPrinted {
+		rpcURLPrinted = true
+	}
 
 	return f.clients[f.currentIdx]
 }
@@ -197,7 +197,7 @@ func (f *FallbackRPCClient) EstimateGas(ctx context.Context, msg ethereum.CallMs
 		f.logger.WithError(err).Warn("RPC estimate gas failed, switching to fallback")
 		f.switchToNextClient()
 	}
-	return 0, fmt.Errorf("all RPCs failed: %v", lastErr)
+	return 0, lastErr
 }
 
 // SubscribeFilterLogs implements the ethereum.ContractTransactor interface
@@ -230,6 +230,22 @@ func (f *FallbackRPCClient) BalanceAt(ctx context.Context, account common.Addres
 		f.switchToNextClient()
 	}
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
+}
+
+// BlockTimestamp gets the timestamp of a specific block
+func (f *FallbackRPCClient) BlockTimestamp(ctx context.Context, blockNumber *big.Int) (uint64, error) {
+	var lastErr error
+	for i := 0; i < len(f.clients); i++ {
+		client := f.getCurrentClient()
+		header, err := client.HeaderByNumber(ctx, blockNumber)
+		if err == nil {
+			return header.Time, nil
+		}
+		lastErr = err
+		f.logger.WithError(err).Warn("RPC get block header failed, switching to fallback")
+		f.switchToNextClient()
+	}
+	return 0, fmt.Errorf("all RPCs failed: %v", lastErr)
 }
 
 // Close closes all RPC client connections
