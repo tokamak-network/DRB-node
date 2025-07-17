@@ -45,6 +45,21 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 	}
 
 	for _, round := range roundsToProcess {
+		// Defensive check: skip if all random_number_generated are already true for this round
+		leaderCommits, err := database.GetLeaderCommitsByRound(round.Round)
+		if err == nil && len(leaderCommits) > 0 {
+			allRandomNumberGenerated := true
+			for _, lc := range leaderCommits {
+				if !lc.RandomNumberGenerated {
+					allRandomNumberGenerated = false
+					break
+				}
+			}
+			if allRandomNumberGenerated {
+				log.Printf("Skipping round %s: all random numbers already generated.", round.Round)
+				continue
+			}
+		}
 		// Convert ActivatedOperator from []string to []common.Address
 		var operatorAddresses []common.Address
 		for _, operator := range ActivatedOperator {
