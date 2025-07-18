@@ -21,6 +21,7 @@ var roundSecret = make(map[string]map[string]bool)
 var secretsOnChain = make(map[string]bool)
 var Indices []*big.Int
 var indicesMutex sync.RWMutex
+var secretMapsMutex sync.Mutex
 
 // ResetIndicesForNewRound resets the Indices array for a new round
 func ResetIndicesForNewRound() {
@@ -97,10 +98,12 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	}
 	var secretValueArray [32]byte
 	copy(secretValueArray[:], req.SecretValue[:]) // Convert req.SecretValue to [32]byte
+	secretMapsMutex.Lock()
 	if _, exists := RoundSecrets[req.Round]; !exists {
 		RoundSecrets[req.Round] = make([][32]byte, 0)
 	}
 	RoundSecrets[req.Round] = append(RoundSecrets[req.Round], secretValueArray)
+	secretMapsMutex.Unlock()
 	// Store the secret value in both byte array and hex string formats
 	copy(leaderCommitData.SecretValue[:], req.SecretValue[:])
 	leaderCommitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
@@ -114,10 +117,12 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	}
 
 	log.Printf("Successfully saved secret value for round %s and EOA %s", req.Round, req.RegularEoaAddress)
+	secretMapsMutex.Lock()
 	if _, exists := roundSecret[CurrentRound]; !exists {
 		roundSecret[req.Round] = make(map[string]bool)
 	}
 	roundSecret[CurrentRound][req.RegularEoaAddress] = true
+	secretMapsMutex.Unlock()
 	ReliableBroadCastS(h, req.Round, req.RegularEoaAddress, leaderCommitData.SecretValue)
 	// Continue requesting secret values from remaining nodes in the reveal order
 	HandleSecretValueResponse(h, fallbackEthClient, req.Round, req.RegularEoaAddress)
