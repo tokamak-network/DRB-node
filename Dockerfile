@@ -1,11 +1,11 @@
 # Build stage
-FROM golang:1.22-alpine AS build-env
+FROM golang:1.23-alpine AS build-env
 
 # Set environment variables
-ENV CONFIG_BASE_PATH /root/
+ENV CONFIG_BASE_PATH=/root/
 
 # Set the working directory
-WORKDIR /app
+WORKDIR /build
 
 # Copy go mod and sum files
 COPY go.mod go.sum ./
@@ -23,19 +23,20 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./cmd/main.go
 FROM alpine:latest
 
 # Set the working directory
-WORKDIR /root/
+WORKDIR /app/
 
 # Install necessary packages
-RUN apk --no-cache add ca-certificates
+RUN apk add --no-cache netcat-openbsd
 
 # Copy the binary from the build stage
-COPY --from=build-env /app/main .
+COPY --from=build-env /build/main ./
+COPY --from=build-env /build/leadernode.bin ./leadernode.bin
 
-# Copy the .env file
-COPY .env .
+# Copy the migration file
+COPY database/migrations /app/migrations
 
 # Copy the ABI files
-COPY contract/abi/Commit2RevealDRB.json /root/contract/abi/Commit2RevealDRB.json
+COPY contract/abi/Commit2RevealDRB.json /app/contract/abi/Commit2RevealDRB.json
 
 # Ensure the binary is executable
 RUN chmod +x ./main

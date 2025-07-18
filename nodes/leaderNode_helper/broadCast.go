@@ -3,6 +3,7 @@ package leaderNode_helper
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -20,7 +22,7 @@ var activeBroadcasts = make(map[string]*utils.BroadcastTracker)
 
 // ReliableBroadCastS broadcasts secret values with acknowledgment tracking
 func ReliableBroadCastS(h host.Host, roundNum string, eoaAddress string, secret [32]byte) {
-	messageID := utils.GenerateMessageID(roundNum, eoaAddress, "secret")
+	messageID := generateMessageID(roundNum, eoaAddress, "secret")
 
 	tracker := &utils.BroadcastTracker{
 		Round:        roundNum,
@@ -39,7 +41,7 @@ func ReliableBroadCastS(h host.Host, roundNum string, eoaAddress string, secret 
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := utils.SaveBroadcastTracker(*tracker); err != nil {
+	if err := database.AddBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return
 	}
@@ -54,7 +56,7 @@ func ReliableBroadCastS(h host.Host, roundNum string, eoaAddress string, secret 
 
 // ReliableBroadCastCOS broadcasts COS values with acknowledgment tracking
 func ReliableBroadCastCOS(h host.Host, roundNum string, eoaAddress common.Address, cos [32]byte) {
-	messageID := utils.GenerateMessageID(roundNum, eoaAddress.Hex(), "cos")
+	messageID := generateMessageID(roundNum, eoaAddress.Hex(), "cos")
 
 	tracker := &utils.BroadcastTracker{
 		Round:        roundNum,
@@ -73,7 +75,7 @@ func ReliableBroadCastCOS(h host.Host, roundNum string, eoaAddress common.Addres
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := utils.SaveBroadcastTracker(*tracker); err != nil {
+	if err := database.AddBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return
 	}
@@ -88,7 +90,7 @@ func ReliableBroadCastCOS(h host.Host, roundNum string, eoaAddress common.Addres
 
 // ReliableBroadCastCVS broadcasts CVS values with acknowledgment tracking
 func ReliableBroadCastCVS(h host.Host, roundNum string, eoaAddress common.Address, cvs [32]byte) {
-	messageID := utils.GenerateMessageID(roundNum, eoaAddress.Hex(), "cvs")
+	messageID := generateMessageID(roundNum, eoaAddress.Hex(), "cvs")
 
 	tracker := &utils.BroadcastTracker{
 		Round:        roundNum,
@@ -107,7 +109,7 @@ func ReliableBroadCastCVS(h host.Host, roundNum string, eoaAddress common.Addres
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := utils.SaveBroadcastTracker(*tracker); err != nil {
+	if err := database.AddBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return
 	}
@@ -182,7 +184,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		}
 
 		// Update tracker
-		if err := utils.UpdateBroadcastTracker(*tracker); err != nil {
+		if err := database.UpdateBroadcastTracker(tracker); err != nil {
 			log.Printf("Failed to update broadcast tracker: %v", err)
 		}
 
@@ -257,115 +259,124 @@ func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
 	}
 
 	// Update tracker
-	if err := utils.UpdateBroadcastTracker(*tracker); err != nil {
+	if err := database.UpdateBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to update broadcast tracker: %v", err)
 	}
 }
 
-// StartBroadcastCleanup starts a goroutine to clean up old broadcast trackers
-func StartBroadcastCleanup() {
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute) // Clean up every 5 minutes
-		defer ticker.Stop()
+// // StartBroadcastCleanup starts a goroutine to clean up old broadcast trackers
+// func StartBroadcastCleanup() {
+// 	go func() {
+// 		ticker := time.NewTicker(5 * time.Minute) // Clean up every 5 minutes
+// 		defer ticker.Stop()
 
-		for range ticker.C {
-			cleanupOldBroadcasts()
-		}
-	}()
-}
-func StartLeaderCommitCleanup() {
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute) // Clean up every 5 minutes
-		defer ticker.Stop()
+// 		for range ticker.C {
+// 			cleanupOldBroadcasts()
+// 		}
+// 	}()
+// }
+// func StartLeaderCommitCleanup() {
+// 	go func() {
+// 		ticker := time.NewTicker(5 * time.Minute) // Clean up every 5 minutes
+// 		defer ticker.Stop()
 
-		for range ticker.C {
-			cleanupOldLeaderCommits()
-		}
-	}()
-}
+// 		for range ticker.C {
+// 			cleanupOldLeaderCommits()
+// 		}
+// 	}()
+// }
 
-// cleanupOldLeaderCommits removes leader commit data older than 1 hour
-func cleanupOldLeaderCommits() {
-	CommitMu.Lock()
-	defer CommitMu.Unlock()
+// // cleanupOldLeaderCommits removes leader commit data older than 1 hour
+// func cleanupOldLeaderCommits() {
+// 	CommitMu.Lock()
+// 	defer CommitMu.Unlock()
 
-	currentTime := time.Now().Unix()
-	cutoffTime := currentTime - 3600*12 // 12 hours ago
+// 	currentTime := time.Now().Unix()
+// 	cutoffTime := currentTime - 3600*12 // 12 hours ago
 
-	// Clean up in-memory leader commits
-	for roundNum, roundMap := range utils.CommittedNodes {
-		for eoaAddress, commitData := range roundMap {
-			if commitData.CreatedAt < cutoffTime {
-				delete(roundMap, eoaAddress)
-				log.Printf("Cleaned up old leader commit data: round %s, EOA %s", roundNum, eoaAddress.Hex())
-			}
-		}
-		// Remove empty round maps
-		if len(roundMap) == 0 {
-			delete(utils.CommittedNodes, roundNum)
-			log.Printf("Removed empty round map for round %s", roundNum)
-		}
-	}
+// 	// Clean up in-memory leader commits
+// 	for roundNum, roundMap := range utils.CommittedNodes {
+// 		for eoaAddress, commitData := range roundMap {
+// 			if commitData.CreatedAt < cutoffTime {
+// 				delete(roundMap, eoaAddress)
+// 				log.Printf("Cleaned up old leader commit data: round %s, EOA %s", roundNum, eoaAddress.Hex())
+// 			}
+// 		}
+// 		// Remove empty round maps
+// 		if len(roundMap) == 0 {
+// 			delete(utils.CommittedNodes, roundNum)
+// 			log.Printf("Removed empty round map for round %s", roundNum)
+// 		}
+// 	}
 
-	// Clean up file-based leader commits
-	commits, err := utils.LoadAllLeaderCommitData()
-	if err != nil {
-		log.Printf("Failed to load leader commit data for cleanup: %v", err)
-		return
-	}
+// 	// Clean up file-based leader commits
+// 	commits, err := utils.LoadAllLeaderCommitData()
+// 	if err != nil {
+// 		log.Printf("Failed to load leader commit data for cleanup: %v", err)
+// 		return
+// 	}
 
-	cleaned := false
-	for key, commitData := range commits {
-		if commitData.CreatedAt < cutoffTime {
-			delete(commits, key)
-			cleaned = true
-			log.Printf("Cleaned up old leader commit data from file: %s", key)
-		}
-	}
+// 	cleaned := false
+// 	for key, commitData := range commits {
+// 		if commitData.CreatedAt < cutoffTime {
+// 			delete(commits, key)
+// 			cleaned = true
+// 			log.Printf("Cleaned up old leader commit data from file: %s", key)
+// 		}
+// 	}
 
-	if cleaned {
-		// Save cleaned commits back to file
-		if err := utils.SaveAllLeaderCommitData(commits); err != nil {
-			log.Printf("Failed to save cleaned leader commit data: %v", err)
-		}
-	}
-}
+// 	if cleaned {
+// 		// Save cleaned commits back to file
+// 		if err := utils.SaveAllLeaderCommitData(commits); err != nil {
+// 			log.Printf("Failed to save cleaned leader commit data: %v", err)
+// 		}
+// 	}
+// }
 
-// cleanupOldBroadcasts removes broadcast trackers older than 1 hour
-func cleanupOldBroadcasts() {
-	broadcastMutex.Lock()
-	defer broadcastMutex.Unlock()
+// // cleanupOldBroadcasts removes broadcast trackers older than 1 hour
+// func cleanupOldBroadcasts() {
+// 	broadcastMutex.Lock()
+// 	defer broadcastMutex.Unlock()
 
-	currentTime := time.Now().Unix()
-	cutoffTime := currentTime - 3600 // 1 hour ago
+// 	currentTime := time.Now().Unix()
+// 	cutoffTime := currentTime - 3600 // 1 hour ago
 
-	// Clean up in-memory trackers
-	for messageID, tracker := range activeBroadcasts {
-		if tracker.LastSent < cutoffTime {
-			delete(activeBroadcasts, messageID)
-			log.Printf("Cleaned up old broadcast tracker: %s", messageID)
-		}
-	}
+// 	// Clean up in-memory trackers
+// 	for messageID, tracker := range activeBroadcasts {
+// 		if tracker.LastSent < cutoffTime {
+// 			delete(activeBroadcasts, messageID)
+// 			log.Printf("Cleaned up old broadcast tracker: %s", messageID)
+// 		}
+// 	}
 
-	// Clean up file-based trackers
-	trackers, err := utils.LoadBroadcastTrackers()
-	if err != nil {
-		log.Printf("Failed to load broadcast trackers for cleanup: %v", err)
-		return
-	}
+// 	// Clean up file-based trackers
+// 	trackers, err := database.GetBroadcastTrackers()
+// 	if err != nil {
+// 		log.Printf("Failed to load broadcast trackers for cleanup: %v", err)
+// 		return
+// 	}
 
-	cleaned := false
-	for key, tracker := range trackers {
-		if tracker.LastSent < cutoffTime {
-			delete(trackers, key)
-			cleaned = true
-		}
-	}
+// 	cleaned := false
+// 	for _, tracker := range trackers {
+// 		if tracker.LastSent < cutoffTime {
+// 			err := database.DeleteBroadcastTracker(tracker)
+// 			if err != nil {
+// 				log.Printf("Failed to delete broadcast tracker for %s_%s_%s_%s", tracker.Round, tracker.EOAAddress, tracker.Type, tracker.MessageID)
+// 				return
+// 			}
+// 			cleaned = true
+// 		}
+// 	}
 
-	if cleaned {
-		// Save cleaned trackers back to file using helper function
-		if err := utils.SaveAllBroadcastTrackers(trackers); err != nil {
-			log.Printf("Failed to save cleaned broadcast trackers: %v", err)
-		}
-	}
+// 	if cleaned {
+// 		// Save cleaned trackers back to file using helper function
+// 		if err := database.AddAllBroadcastTrackers(trackers); err != nil {
+// 			log.Printf("Failed to save cleaned broadcast trackers: %v", err)
+// 		}
+// 	}
+// }
+
+// generateMessageID creates a unique message ID for broadcasts
+func generateMessageID(round, eoaAddress, messageType string) string {
+	return fmt.Sprintf("%s_%s_%s_%d", round, eoaAddress, messageType, time.Now().UnixNano())
 }

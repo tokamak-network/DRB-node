@@ -1,12 +1,14 @@
 package main
 
 import (
-	"github.com/tokamak-network/DRB-node/nodes"
 	"log"
 	"os"
 	"strings"
 
+	"github.com/tokamak-network/DRB-node/nodes"
+
 	"github.com/joho/godotenv"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 )
@@ -18,6 +20,15 @@ func main() {
 
 	logger.InitLogger()
 	defer logger.CloseLogger()
+
+	// Initialise DB
+	// Load configuration
+	cfg := database.LoadConfig()
+
+	err := database.InitSQLDB(cfg.PostgresPort, cfg.PostgresHost, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresName)
+	if err != nil {
+		log.Fatalf("Error initializing sql db: %v", err)
+	}
 
 	nodeType := os.Getenv("NODE_TYPE") // Expecting 'leader' or 'regular'
 

@@ -17,6 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/regularNode_helper"
@@ -34,7 +35,13 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	if port == "" {
 		log.Fatal("PORT not set in environment variables.")
 	}
-	h, peerID, err := libp2putils.CreateHost(port)
+
+	nodeType := os.Getenv("NODE_TYPE")
+	if nodeType == "" {
+		log.Fatal("NODE_TYPE is not set in environment variables.")
+	}
+
+	h, peerID, err := libp2putils.CreateHost(port, nodeType)
 	if err != nil {
 		log.Fatalf("Error creating host: %v", err)
 	}
@@ -99,7 +106,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		EOAAddress: eoaAddress,
 	}
 
-	if err := utils.SaveNodeInfo([]utils.NodeInfo{nodeInfo}); err != nil {
+	if err := database.AddNodeInfo(&nodeInfo); err != nil {
 		log.Printf("Failed to save node info: %v", err)
 	}
 
@@ -186,7 +193,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		merkleRootSubmitted := regularNode_helper.RoundsData[round].MerkleRoot
 		randomNumberSubmitted := regularNode_helper.RoundsData[round].RandomNumber
 
-		log.Printf("Checking round...")
+		log.Printf("Checking round %s ...", round)
 		// Check if Merkle Root and Random Number are already generated (not nil)
 		if merkleRootSubmitted && randomNumberSubmitted {
 			// If both MerkleRoot and RandomNumber are generated, skip this round
@@ -198,8 +205,8 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		if isEOAActivated(eoaAddress) {
 
 			// Check if this round has already been committed (store it locally)
-			commitData, err := utils.LoadCommitData(round)
-			if err != nil && err.Error() != "commit not found" {
+			commitData, err := database.GetCommitByRound(round)
+			if err != nil && err.Error() != "pg: no rows in result set" {
 				log.Printf("Error loading commit data: %v", err)
 				continue
 			}
@@ -226,12 +233,12 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					SecretValue:     secretValue,
 					Cos:             cos,
 					Cvs:             cvs,
-					SendToLeader:    true,  // Mark commit to be sent to leader
+					SendToLeader:    true, // Initially false, will be set to true after sending
 					SendCosToLeader: false, // Initially false, to allow sending COS
 				}
 
 				// Save commit data locally to prevent resending
-				err = utils.SaveCommitData(commitData)
+				err = database.AddCommit(&commitData)
 				if err != nil {
 					log.Printf("Error saving commit data: %v", err)
 					continue
@@ -248,15 +255,6 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					log.Printf("Merkle Root is set but Random Number is not. Sending COS for round %s.", round)
 					// Send COS to leader
 					sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress, privateKey)
-
-					// Update SendCosToLeader flag
-					commitData.SendCosToLeader = true
-
-					// Save updated commit data to prevent re-sending COS
-					err := utils.SaveCommitData(*commitData)
-					if err != nil {
-						log.Printf("Error saving updated commit data after sending COS: %v", err)
-					}
 				}
 				continue
 			}
@@ -294,6 +292,12 @@ func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitD
 		log.Printf("Failed to send COS commit to leader: %v", err)
 	} else {
 		log.Printf("COS commit sent to leader for round %s", commitData.Round)
+
+		// Update SendCosToLeader flag to true after successful send
+		commitData.SendCosToLeader = true
+		if err := database.UpdateCommit(&commitData); err != nil {
+			log.Printf("Failed to update SendCosToLeader flag: %v", err)
+		}
 	}
 }
 
@@ -479,15 +483,15 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	}
 
 	// Add signature values to the commit request
-	req.Sign = map[string]string{
-		"v": fmt.Sprintf("%d", v),
-		"r": r,
-		"s": s,
+	req.Sign = utils.SignInfo{
+		V: fmt.Sprintf("%d", v),
+		R: r,
+		S: s,
 	}
 
 	// Save commit data locally with v, r, s
 	commitData.Sign = req.Sign
-	if err := utils.SaveCommitData(commitData); err != nil {
+	if err := database.UpdateCommit(&commitData); err != nil {
 		log.Printf("Failed to save commit data locally: %v", err)
 		return
 	}
@@ -505,6 +509,12 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 		log.Printf("Failed to send commit to leader for round %s: %v", req.Round, err)
 	} else {
 		log.Printf("Commit successfully sent to leader for round %s", req.Round)
+
+		// Update SendToLeader flag to true after successful send
+		commitData.SendToLeader = true
+		if err := database.UpdateCommit(&commitData); err != nil {
+			log.Printf("Failed to update SendToLeader flag: %v", err)
+		}
 	}
 }
 

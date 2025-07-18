@@ -18,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
@@ -55,7 +56,12 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		log.Fatal("LEADER_PORT is not set in environment variables.")
 	}
 
-	h, peerID, err := libp2putils.CreateHost(port)
+	nodeType := os.Getenv("NODE_TYPE")
+	if nodeType == "" {
+		log.Fatal("NODE_TYPE is not set in environment variables.")
+	}
+
+	h, peerID, err := libp2putils.CreateHost(port, nodeType)
 	if err != nil {
 		log.Fatalf("Error creating host: %v", err)
 	}
@@ -83,8 +89,8 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 	go leaderNode_helper.MonitorCommits(fallbackEthClient)
 	go leaderNode_helper.ReceiveCommit(fallbackEthClient)
-	leaderNode_helper.StartBroadcastCleanup()
-	leaderNode_helper.StartLeaderCommitCleanup()
+	// leaderNode_helper.StartBroadcastCleanup()
+	// leaderNode_helper.StartLeaderCommitCleanup()
 	for {
 		if !leaderNode_helper.Execution {
 			time.Sleep(10 * time.Second)
@@ -99,8 +105,7 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 func (h *Handler) handleRegistrationRequest(s network.Stream) {
 	defer s.Close()
-	filePath := "registered_nodes.json"
-	if err := leaderNode_helper.RegisterNode(s, filePath, "contract/abi/Commit2RevealDRB.json"); err != nil {
+	if err := leaderNode_helper.RegisterNode(s, "contract/abi/Commit2RevealDRB.json"); err != nil {
 		log.Printf("Failed to handle registration request: %v", err)
 		return
 	}
@@ -135,11 +140,16 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		commitData.Cvs = req.Cvs
 		commitData.CvsHex = hex.EncodeToString(req.Cvs[:])
 		commitData.Sign = req.Sign
+		commitData.SubmitMerkleRootDone = false
+		commitData.RandomNumberGenerated = false
 		log.Printf("Storing CVS and signature for round %s EOA %s", roundNum, eoaAddress.Hex())
 	}
+	updateInMemoryData(roundNum, eoaAddress, *commitData)
+	log.Printf("Commit data saved and updated in-memory for round %s EOA %s", roundNum, commitData.EOAAddress)
 
-	if err := utils.SaveLeaderCommitData(*commitData); err != nil {
-		log.Printf("Error saving commit data for round %s EOA %s: %v", roundNum, eoaAddress.Hex(), err)
+	// Update database for commit data from regular node
+	if err := database.AddLeaderCommit(commitData); err != nil {
+		log.Printf("Error saving commit data for round %s EOA %s: %v", roundNum, commitData.EOAAddress, err)
 		return
 	}
 	updateInMemoryData(roundNum, eoaAddress, *commitData)
@@ -175,6 +185,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	commitMu.Lock()
 	defer commitMu.Unlock()
 
+	// Update in-memory data for leaderCommit's COS
 	commitData := getOrCreateLeaderCommitData(roundNum, eoaAddress)
 	if commitData.Cvs == [32]byte{} {
 		log.Printf("No CVS found for round %s EOA %s, rejecting COS.", roundNum, eoaAddress.Hex())
@@ -196,7 +207,20 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	commitData.CosHex = hex.EncodeToString(req.Cos[:])
 	log.Printf("Storing COS for round %s EOA %s", roundNum, eoaAddress.Hex())
 
-	if err := utils.SaveLeaderCommitData(*commitData); err != nil {
+	updateInMemoryData(roundNum, eoaAddress, *commitData)
+	log.Printf("COS data saved and updated in-memory for round %s EOA %s", roundNum, eoaAddress.Hex())
+
+	// Update database for leaderCommit's COS
+	leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, req.EOAAddress)
+	if err != nil {
+		log.Printf("Error loading leaderCommit data from database for round: %s, and eoaAddress: %s, error: %v", roundNum, eoaAddress.Hex(), err)
+		return
+	}
+
+	leaderCommitDBData.Cos = req.Cos
+	leaderCommitDBData.CosHex = hex.EncodeToString(req.Cos[:])
+
+	if err := database.UpdateLeaderCommit(leaderCommitDBData); err != nil {
 		log.Printf("Error saving COS data for round %s EOA %s: %v", roundNum, eoaAddress.Hex(), err)
 		return
 	}
@@ -214,7 +238,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if allCosReceivedUnlocked(roundNum) {
 		log.Printf("All COS received for round %s.", roundNum)
-		err := commitreveal2.DetermineRevealOrder(roundNum, eth.ActivatedOperators)
+		_, err := commitreveal2.DetermineRevealOrder(roundNum, eth.ActivatedOperators)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s: %v", roundNum, err)
 			return
@@ -507,12 +531,22 @@ func updateCommitDataAfterSubmit(roundNum string) {
 	}
 
 	for eoaAddress, data := range roundMap {
-		data.SubmitMerkleRootDone = true
 		log.Printf("Setting submit_merkle_root_done = true for key: %s+%s", roundNum, eoaAddress.Hex())
 
-		if err := utils.SaveLeaderCommitData(data); err != nil {
+		// Update database with marked submitmerkleroot as done
+		leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, eoaAddress.Hex())
+		if err != nil {
+			log.Printf("Error loading leaderCommit data from database for round: %s, and eoaAddress: %s, error: %v", roundNum, eoaAddress.Hex(), err)
+			return
+		}
+
+		leaderCommitDBData.SubmitMerkleRootDone = true
+
+		if err := database.UpdateLeaderCommit(leaderCommitDBData); err != nil {
 			log.Printf("Failed to save updated commit data for %s in round %s: %v", eoaAddress.Hex(), roundNum, err)
+			return
 		} else {
+			data.SubmitMerkleRootDone = true
 			roundMap[eoaAddress] = data
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -221,7 +222,10 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 
 func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, index *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", Round, TrialNum, index)
-	data, _ := commitreveal2.LoadRevealOrder("regular_reveal_order.json", CurrentRound)
+	data, err := database.GetRevealOrder(CurrentRound)
+	if err != nil {
+		log.Printf("Failed to get reveal order for round %s: %v", CurrentRound, err)
+	}
 	orderedNodes := data.OrderedNodes
 	revealOrder := data.RevealOrder
 	if index.Int64() >= int64(len(orderedNodes)) {
@@ -249,11 +253,9 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 
 func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, index *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", Round, TrialNum, index)
-	data, _ := commitreveal2.LoadRevealOrders("regular_reveal_order.json")
-	revealOrder, exists := data[CurrentRound]
-	if !exists {
-		log.Printf("No reveal order found for round %s", CurrentRound)
-		return
+	revealOrder, err := database.GetRevealOrder(CurrentRound)
+	if err != nil {
+		log.Printf("Failed to get reveal order for round %s: %v", CurrentRound, err)
 	}
 
 	if index.Int64() >= int64(len(revealOrder.OrderedNodes)) {
@@ -270,14 +272,9 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 }
 
 func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
-	commits, err := utils.LoadRegularCommits()
+	roundData, err := database.GetCommitByRound(CurrentRound)
 	if err != nil {
-		log.Fatalf("Failed to load commits: %v", err)
-	}
-
-	roundData, exists := commits[CurrentRound]
-	if !exists {
-		log.Fatalf("Round %s not found in commits.json", CurrentRound)
+		log.Printf("Failed to get regular commit for round %s: %v", CurrentRound, err)
 	}
 
 	secretValueBytes := roundData.SecretValue
@@ -392,7 +389,7 @@ func AllCosReceivedUnlocked(ActivatedOperator []string) {
 		round := CurrentRound
 		ops := eth.ActivatedOperators
 		if allCosReceivedUnlockedRegular(round, ops) {
-			flag, _ := commitreveal2.DetermineRevealOrderForRegular(CurrentRound, ops, "regular_reveal_order.json")
+			flag, _ := commitreveal2.DetermineRegularRevealOrder(CurrentRound, ops)
 			if flag {
 				break
 			}
@@ -454,22 +451,10 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		ContractABI:     parsedABI,
 	}
 
-	commits, err := utils.LoadRegularCommits()
+	commitData, err := database.GetCommitByRound(CurrentRound)
 	if err != nil {
-		fmt.Println("Error loading commits:", err)
 		return err
 	}
-
-	var cvs []uint8
-	for key, data := range commits {
-		if CurrentRound == key {
-			cvs = data.Cvs[:]
-			break
-		}
-	}
-	cvsSlice := cvs[:]
-	var cv [32]byte
-	copy(cv[:], []byte(cvsSlice))
 
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
@@ -477,11 +462,12 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		fallbackEthClient,
 		"submitCv",
 		big.NewInt(0),
-		cv,
+		commitData.Cvs,
 	)
 	if err != nil {
 		fmt.Println("It contains error")
 	}
+
 	return nil
 }
 
@@ -527,22 +513,11 @@ func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 		ContractABI:     parsedABI,
 	}
 
-	commits, err := utils.LoadRegularCommits()
+	commitData, err := database.GetCommitByRound(CurrentRound)
 	if err != nil {
 		fmt.Println("Error loading commits:", err)
 		return err
 	}
-
-	var cos []uint8
-	for key, data := range commits {
-		if CurrentRound == key {
-			cos = data.Cos[:]
-			break
-		}
-	}
-	cvsSlice := cos[:]
-	var cv [32]byte
-	copy(cv[:], []byte(cvsSlice))
 
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
@@ -550,7 +525,7 @@ func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 		fallbackEthClient,
 		"submitCo",
 		big.NewInt(0),
-		cv,
+		commitData.Cos,
 	)
 	if err != nil {
 		fmt.Println("It contains error")

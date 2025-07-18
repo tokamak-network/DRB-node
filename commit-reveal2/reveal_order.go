@@ -1,22 +1,18 @@
 package commitreveal2
 
 import (
+	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"sort"
-	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
-
-// Global mutex for protecting reveal_orders.json file access
-var RevealOrdersMutex sync.Mutex
 
 type RevealOrder struct {
 	OrderedNodes []string `json:"ordered_nodes"`
@@ -41,7 +37,7 @@ func calculateRV(cosValues [][]byte) [32]byte {
 func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	type revealOrderEntry struct {
 		index int
-		value *big.Int
+		value [32]byte // Use hash as value
 	}
 
 	var entries []revealOrderEntry
@@ -49,103 +45,30 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	for i, cvs := range cvsValues {
 		cvsValue := new(big.Int).SetBytes(cvs)
 		diff := new(big.Int).Abs(new(big.Int).Sub(rvValue, cvsValue)) // Absolute difference
-		entries = append(entries, revealOrderEntry{index: i, value: diff})
+		diffBytes := diff.Bytes()
+		hash := Keccak256(diffBytes)
+		var hash32 [32]byte
+		copy(hash32[:], hash)
+		entries = append(entries, revealOrderEntry{index: i, value: hash32})
 	}
 
-	// Sort by the difference value
+	// Sort by the hash value (descending, to match contract's RevealNotInDescendingOrder)
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].value.Cmp(entries[j].value) > 0
+		return bytes.Compare(entries[i].value[:], entries[j].value[:]) > 0
 	})
 
 	var order []int
 	for _, entry := range entries {
 		order = append(order, entry.index)
 	}
-
-	return order
+		return order
 }
 
-// saveRevealOrder stores the RV and reveal order in a file
-func saveRevealOrders(filePath string, data map[string]RevealOrder) error {
-	RevealOrdersMutex.Lock()
-	defer RevealOrdersMutex.Unlock()
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create reveal order file: %v", err)
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	err = encoder.Encode(data)
-	if err != nil {
-		return fmt.Errorf("failed to write reveal order to file: %v", err)
-	}
-
-	return nil
-}
-
-func LoadRevealOrders(filePath string) (map[string]RevealOrder, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return make(map[string]RevealOrder), nil
-		}
-		return nil, fmt.Errorf("failed to open regular reveal order file: %v", err)
-	}
-	defer file.Close()
-
-	var data map[string]RevealOrder
-	err = json.NewDecoder(file).Decode(&data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode reveal order file: %v", err)
-	}
-
-	return data, nil
-}
-
-func LoadRevealOrder(filepath string, round string) (*RevealOrder, error) {
-	// Open the JSON file
-	fmt.Println("filepath", filepath)
-	file, err := os.Open(filepath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file %s: %v", filepath, err)
-	}
-	defer file.Close()
-
-	// Decode the JSON data
-	var data map[string]RevealOrder
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode JSON data: %v", err)
-	}
-
-	// Retrieve the reveal order for the specified round
-	revealOrder, exists := data[round]
-	if !exists {
-		return nil, fmt.Errorf("reveal order not found for round %s", round)
-	}
-	fmt.Println("data", data)
-	fmt.Println(revealOrder, revealOrder)
-	return &revealOrder, nil
-}
-
-func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) error {
-	// File path for reveal order storage
-	filePath := "reveal_orders.json"
-
-	// Load existing data
-	data, err := LoadRevealOrders(filePath)
-	if err != nil {
-		log.Printf("Failed to load existing reveal orders: %v", err)
-		return err
-	}
-
-	// Check if the round already exists
-	if _, exists := data[roundNum]; exists {
+func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) (bool, error) {
+	_, err := database.GetRevealOrder(roundNum)
+	if err == nil {
 		log.Printf("Reveal order already exists for round %s. Skipping calculation.", roundNum)
-		return nil
+		return true, nil
 	}
 
 	log.Printf("Determining reveal order for round %s...", roundNum)
@@ -154,76 +77,6 @@ func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) 
 
 	if len(operators) == 0 {
 		log.Printf("No activated operators found for round %s", roundNum)
-		return fmt.Errorf("no activated operators found for round %s", roundNum)
-	}
-
-	var cvsValues [][]byte
-	var cosValues [][]byte
-	var addresses []string
-	for _, eoaAddress := range operators {
-		eoaAddressStr := eoaAddress.Hex()
-
-		commitData, err := utils.LoadLeaderCommitData(roundNum, eoaAddressStr)
-		if err != nil {
-			log.Printf("Failed to load COS for operator %s in round %s: %v", eoaAddressStr, roundNum, err)
-			return fmt.Errorf("failed to load COS for operator %s", eoaAddressStr)
-		}
-
-		if commitData.Cos == [32]byte{} {
-			log.Printf("Missing COS for operator %s in round %s", eoaAddressStr, roundNum)
-			return fmt.Errorf("missing COS for operator %s", eoaAddressStr)
-		}
-
-		cvsValues = append(cvsValues, commitData.Cvs[:])
-		cosValues = append(cosValues, commitData.Cos[:])
-		addresses = append(addresses, eoaAddressStr)
-	}
-
-	// Calculate the RV and determine the reveal order
-	rv := calculateRV(cosValues)
-	revealOrder := determineOrder(rv, cvsValues)
-
-	// Reorder addresses based on reveal order
-	orderedAddresses := make([]string, len(addresses))
-	for i, index := range revealOrder {
-		orderedAddresses[i] = addresses[index]
-	}
-
-	// Add the new reveal order to the data map
-	data[roundNum] = RevealOrder{
-		OrderedNodes: orderedAddresses,
-		RevealOrder:  revealOrder,
-		RV:           hex.EncodeToString(rv[:]),
-	}
-
-	// Save the updated data back to the file
-	err = saveRevealOrders(filePath, data)
-	if err != nil {
-		log.Printf("Failed to save reveal order for round %s: %v", roundNum, err)
-		return fmt.Errorf("failed to save reveal order for round %s", roundNum)
-	}
-
-	log.Printf("Reveal order determined and stored for round %s", roundNum)
-	return nil
-}
-
-func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common.Address, filePath string) (bool, error) {
-	data, err := LoadRevealOrders(filePath)
-	if err != nil {
-		log.Printf("Failed to load existing reveal orders: %v", err)
-		return false, err
-	}
-
-	if _, exists := data[roundNum]; exists {
-		log.Printf("Regular Reveal order already exists for round %s. Skipping calculation.", roundNum)
-		return true, nil
-	}
-
-	log.Printf("Determining Regular reveal order for round %s...", roundNum)
-
-	operators := eth.ActivatedOperators
-	if len(operators) == 0 {
-		log.Printf("No activated operators found for round sfsf %s", roundNum)
 		return false, fmt.Errorf("no activated operators found for round %s", roundNum)
 	}
 
@@ -233,15 +86,15 @@ func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common
 	for _, eoaAddress := range operators {
 		eoaAddressStr := eoaAddress.Hex()
 
-		commitData, err := utils.LoadCommitDataRegular(roundNum, eoaAddressStr)
+		commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, eoaAddressStr)
 		if err != nil {
-			log.Printf("Failed to load COS for operator %s in round %s: %v", eoaAddressStr, roundNum, err)
-			return false, fmt.Errorf("failed to load COS for operator %s", eoaAddressStr)
+			log.Printf("Failed to load leader commit for operator %s in round %s: %v", eoaAddressStr, roundNum, err)
+			return false, fmt.Errorf("failed to load leader commit for operator %s", eoaAddressStr)
 		}
 
 		if commitData.Cos == [32]byte{} {
-			log.Printf("Missing COS for operator %s in round %s", eoaAddressStr, roundNum)
-			return false, fmt.Errorf("missing COS for operator %s", eoaAddressStr)
+			log.Printf("Missing leader commit for operator %s in round %s", eoaAddressStr, roundNum)
+			return false, fmt.Errorf("missing leader commit for operator %s", eoaAddressStr)
 		}
 
 		cvsValues = append(cvsValues, commitData.Cvs[:])
@@ -259,15 +112,79 @@ func DetermineRevealOrderForRegular(roundNum string, activatedOperators []common
 		orderedAddresses[i] = addresses[index]
 	}
 
-	// Add the new reveal order to the data map
-	data[roundNum] = RevealOrder{
-		OrderedNodes: orderedAddresses,
+	revealOrderData := utils.RevealOrderData{
+		Round:        roundNum,
 		RevealOrder:  revealOrder,
+		OrderedNodes: orderedAddresses,
 		RV:           hex.EncodeToString(rv[:]),
 	}
 
-	// Save the updated data back to the file
-	err = saveRevealOrders(filePath, data)
+	err = database.AddRevealOrder(&revealOrderData)
+	if err != nil {
+		log.Printf("Failed to save reveal order for round %s: %v", roundNum, err)
+		return false, fmt.Errorf("failed to save reveal order for round %s", roundNum)
+	}
+
+	log.Printf("Reveal order determined and stored for round %s", roundNum)
+	return true, nil
+}
+
+func DetermineRegularRevealOrder(roundNum string, activatedOperators []common.Address) (bool, error) {
+	_, err := database.GetRevealOrder(roundNum)
+	if err == nil {
+		log.Printf("Reveal order already exists for round %s. Skipping calculation.", roundNum)
+		return true, nil
+	}
+
+	log.Printf("Determining reveal order for round %s...", roundNum)
+
+	operators := eth.ActivatedOperators
+
+	if len(operators) == 0 {
+		log.Printf("No activated operators found for round %s", roundNum)
+		return false, fmt.Errorf("no activated operators found for round %s", roundNum)
+	}
+
+	var cvsValues [][]byte
+	var cosValues [][]byte
+	var addresses []string
+	for _, eoaAddress := range operators {
+		eoaAddressStr := eoaAddress.Hex()
+
+		commitData, err := database.GetPeerCommitData(roundNum, eoaAddressStr)
+		if err != nil {
+			log.Printf("Failed to load leader commit for operator %s in round %s: %v", eoaAddressStr, roundNum, err)
+			return false, fmt.Errorf("failed to load leader commit for operator %s", eoaAddressStr)
+		}
+
+		if utils.ConvertByteArray(commitData.Cos) == [32]byte{} {
+			log.Printf("Missing leader commit for operator %s in round %s", eoaAddressStr, roundNum)
+			return false, fmt.Errorf("missing leader commit for operator %s", eoaAddressStr)
+		}
+
+		cvsValues = append(cvsValues, commitData.Cvs)
+		cosValues = append(cosValues, commitData.Cos)
+		addresses = append(addresses, eoaAddressStr)
+	}
+
+	// Calculate the RV and determine the reveal order
+	rv := calculateRV(cosValues)
+	revealOrder := determineOrder(rv, cvsValues)
+
+	// Reorder addresses based on reveal order
+	orderedAddresses := make([]string, len(addresses))
+	for i, index := range revealOrder {
+		orderedAddresses[i] = addresses[index]
+	}
+
+	revealOrderData := utils.RevealOrderData{
+		Round:        roundNum,
+		RevealOrder:  revealOrder,
+		OrderedNodes: orderedAddresses,
+		RV:           hex.EncodeToString(rv[:]),
+	}
+
+	err = database.AddRevealOrder(&revealOrderData)
 	if err != nil {
 		log.Printf("Failed to save reveal order for round %s: %v", roundNum, err)
 		return false, fmt.Errorf("failed to save reveal order for round %s", roundNum)

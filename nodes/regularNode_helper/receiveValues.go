@@ -3,14 +3,15 @@ package regularNode_helper
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 
+	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -62,30 +63,34 @@ func HandleCvs(h host.Host, s network.Stream) {
 	log.Printf("Received CVS broadcast for round %s from EOA %s (message ID: %s)",
 		message.Round, message.EOAAddress, message.MessageID)
 
-	// Process the CVS data
-	peerCommitData := utils.PeerCommitData{
-		Round:      message.Round,
-		EOAAddress: message.EOAAddress,
-		Cvs:        message.Data,
-	}
-
-	// Save to file
-	peerNodeInfo, err := utils.LoadPeerNodeInfo()
+	peerCommitData, err := database.GetPeerCommitData(message.Round, message.EOAAddress)
 	if err != nil {
-		log.Printf("Failed to load peerNodeInfo.json: %v", err)
-		return
+		if err == pg.ErrNoRows {
+			// No existing record, create new and insert
+			peerCommitData = &database.PeerCommitDataScheme{
+				Round:      message.Round,
+				EOAAddress: message.EOAAddress,
+				Cvs:        message.Data[:],
+			}
+			if err = database.AddPeerCommitData(peerCommitData); err != nil {
+				log.Printf("Failed to add new peer commit data: %v", err)
+				return
+			}
+		} else {
+			log.Printf("Failed to get peer commit data: %v", err)
+			return
+		}
+	} else {
+		// Existing record found, update fields
+		peerCommitData.Cvs = message.Data[:]
+
+		if err = database.UpdatePeerCommitData(peerCommitData); err != nil {
+			log.Printf("Failed to update peer commit data: %v", err)
+			return
+		}
 	}
 
-	key := fmt.Sprintf("%s+%s", message.Round, message.EOAAddress)
-	peerNodeInfo[key] = peerCommitData
-
-	err = utils.SavePeerNodeInfo(peerNodeInfo)
-	if err != nil {
-		log.Printf("Failed to save to peerNodeInfo.json: %v", err)
-		return
-	}
-
-	log.Printf("Successfully saved CVS data for round %s and EOA %s into peerNodeInfo.json", message.Round, message.EOAAddress)
+	log.Printf("Successfully saved CVS data for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
 	ack := utils.AcknowledgmentMessage{
@@ -131,24 +136,34 @@ func HandleCos(h host.Host, s network.Stream) {
 	}
 	CosRecevied[message.Round][message.EOAAddress] = true
 
-	peerNodeInfo, err := utils.LoadPeerNodeInfo()
+	peerCommitData, err := database.GetPeerCommitData(message.Round, message.EOAAddress)
 	if err != nil {
-		log.Printf("Failed to load peerNodeInfo.json: %v", err)
-		return
+		if err == pg.ErrNoRows {
+			// No existing record, create new and insert
+			peerCommitData = &database.PeerCommitDataScheme{
+				Round:      message.Round,
+				EOAAddress: message.EOAAddress,
+				Cos:        message.Data[:],
+			}
+			if err = database.AddPeerCommitData(peerCommitData); err != nil {
+				log.Printf("Failed to add new peer commit data: %v", err)
+				return
+			}
+		} else {
+			log.Printf("Failed to get peer commit data: %v", err)
+			return
+		}
+	} else {
+		// Existing record found, update fields
+		peerCommitData.Cos = message.Data[:]
+
+		if err = database.UpdatePeerCommitData(peerCommitData); err != nil {
+			log.Printf("Failed to update peer commit data: %v", err)
+			return
+		}
 	}
 
-	key := fmt.Sprintf("%s+%s", message.Round, message.EOAAddress)
-	data := peerNodeInfo[key]
-	data.Cos = message.Data
-	peerNodeInfo[key] = data
-
-	err = utils.SavePeerNodeInfo(peerNodeInfo)
-	if err != nil {
-		log.Printf("Failed to save to peerNodeInfo.json: %v", err)
-		return
-	}
-
-	log.Printf("Successfully saved COS data for round %s and EOA %s into peerNodeInfo.json", message.Round, message.EOAAddress)
+	log.Printf("Successfully saved CoS data for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
 	ack := utils.AcknowledgmentMessage{
@@ -188,25 +203,34 @@ func HandleSecret(h host.Host, s network.Stream) {
 	log.Printf("Received secret broadcast for round %s from EOA %s (message ID: %s)",
 		message.Round, message.EOAAddress, message.MessageID)
 
-	// Process the secret data
-	peerNodeInfo, err := utils.LoadPeerNodeInfo()
+	peerCommitData, err := database.GetPeerCommitData(message.Round, message.EOAAddress)
 	if err != nil {
-		log.Printf("Failed to load peerNodeInfo.json: %v", err)
-		return
+		if err == pg.ErrNoRows {
+			// No existing record, create new and insert
+			peerCommitData = &database.PeerCommitDataScheme{
+				Round:       message.Round,
+				EOAAddress:  message.EOAAddress,
+				SecretValue: message.Data[:],
+			}
+			if err = database.AddPeerCommitData(peerCommitData); err != nil {
+				log.Printf("Failed to add new peer commit data: %v", err)
+				return
+			}
+		} else {
+			log.Printf("Failed to get peer commit data: %v", err)
+			return
+		}
+	} else {
+		// Existing record found, update fields
+		peerCommitData.SecretValue = message.Data[:]
+
+		if err = database.UpdatePeerCommitData(peerCommitData); err != nil {
+			log.Printf("Failed to update peer commit data: %v", err)
+			return
+		}
 	}
 
-	key := fmt.Sprintf("%s+%s", message.Round, message.EOAAddress)
-	data := peerNodeInfo[key]
-	data.SecretValue = message.Data
-	peerNodeInfo[key] = data
-
-	err = utils.SavePeerNodeInfo(peerNodeInfo)
-	if err != nil {
-		log.Printf("Failed to save to peerNodeInfo.json: %v", err)
-		return
-	}
-
-	log.Printf("Successfully saved secret data for round %s and EOA %s into peerNodeInfo.json", message.Round, message.EOAAddress)
+	log.Printf("Successfully saved secret value for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
 	ack := utils.AcknowledgmentMessage{
