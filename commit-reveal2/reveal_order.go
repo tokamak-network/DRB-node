@@ -1,6 +1,7 @@
 package commitreveal2
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -36,7 +37,7 @@ func calculateRV(cosValues [][]byte) [32]byte {
 func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	type revealOrderEntry struct {
 		index int
-		value *big.Int
+		value [32]byte // Use hash as value
 	}
 
 	var entries []revealOrderEntry
@@ -44,20 +45,23 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	for i, cvs := range cvsValues {
 		cvsValue := new(big.Int).SetBytes(cvs)
 		diff := new(big.Int).Abs(new(big.Int).Sub(rvValue, cvsValue)) // Absolute difference
-		entries = append(entries, revealOrderEntry{index: i, value: diff})
+		diffBytes := diff.Bytes()
+		hash := Keccak256(diffBytes)
+		var hash32 [32]byte
+		copy(hash32[:], hash)
+		entries = append(entries, revealOrderEntry{index: i, value: hash32})
 	}
 
-	// Sort by the difference value
+	// Sort by the hash value (descending, to match contract's RevealNotInDescendingOrder)
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].value.Cmp(entries[j].value) > 0
+		return bytes.Compare(entries[i].value[:], entries[j].value[:]) > 0
 	})
 
 	var order []int
 	for _, entry := range entries {
 		order = append(order, entry.index)
 	}
-
-	return order
+		return order
 }
 
 func DetermineRevealOrder(roundNum string, activatedOperators []common.Address) (bool, error) {
