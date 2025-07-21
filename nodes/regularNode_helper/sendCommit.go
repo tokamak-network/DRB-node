@@ -220,11 +220,12 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	}
 }
 
-func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, index *big.Int) {
-	fmt.Printf("Round %v, TrialNum %v, index %v\n", Round, TrialNum, index)
-	data, err := database.GetRevealOrder(CurrentRound)
+func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trialNum *big.Int, index *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
+	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
+	data, err := database.GetRevealOrder(round.String(), trialNum.String(), uniqueKey)
 	if err != nil {
-		log.Printf("Failed to get reveal order for round %s: %v", CurrentRound, err)
+		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
 	}
 	orderedNodes := data.OrderedNodes
 	revealOrder := data.RevealOrder
@@ -244,18 +245,19 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 		if temp+1 < len(orderedNodes) {
 			regularEoaAddress := orderedNodes[temp+1]
 			if EoaAddress == regularEoaAddress {
-				fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", CurrentRound, regularEoaAddress)
-				submitS(fallbackEthClient)
+				fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, TrialNum: %v, EOA: %v\n", round.String(), trialNum.String(), regularEoaAddress)
+				submitS(fallbackEthClient, round.String(), trialNum.String())
 			}
 		}
 	}
 }
 
-func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, index *big.Int) {
-	fmt.Printf("Round %v, TrialNum %v, index %v\n", Round, TrialNum, index)
-	revealOrder, err := database.GetRevealOrder(CurrentRound)
+func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trialNum *big.Int, index *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
+	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
+	revealOrder, err := database.GetRevealOrder(round.String(), trialNum.String(), uniqueKey)
 	if err != nil {
-		log.Printf("Failed to get reveal order for round %s: %v", CurrentRound, err)
+		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
 	}
 
 	if index.Int64() >= int64(len(revealOrder.OrderedNodes)) {
@@ -266,15 +268,15 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
 	if EoaAddress == regularEoaAddress {
 		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", CurrentRound, regularEoaAddress)
-		submitS(fallbackEthClient)
+		submitS(fallbackEthClient, round.String(), trialNum.String())
 	}
 
 }
 
-func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
-	roundData, err := database.GetCommitByRound(CurrentRound)
+func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	roundData, err := database.GetCommitByRound(round, trialNum)
 	if err != nil {
-		log.Printf("Failed to get regular commit for round %s: %v", CurrentRound, err)
+		log.Printf("Failed to get regular commit for round %s with : %v", CurrentRound, err)
 	}
 
 	secretValueBytes := roundData.SecretValue
@@ -389,7 +391,7 @@ func AllCosReceivedUnlocked(ActivatedOperator []string) {
 		round := CurrentRound
 		ops := eth.ActivatedOperators
 		if allCosReceivedUnlockedRegular(round, ops) {
-			flag, _ := commitreveal2.DetermineRegularRevealOrder(CurrentRound, ops)
+			flag, _ := commitreveal2.DetermineRegularRevealOrder(CurrentRound, CurrentTrialNum.String(), ops)
 			if flag {
 				break
 			}
@@ -400,9 +402,10 @@ func AllCosReceivedUnlocked(ActivatedOperator []string) {
 	}
 }
 
-func allCosReceivedUnlockedRegular(roundNum string, ops []common.Address) bool {
+func allCosReceivedUnlockedRegular(round string, ops []common.Address) bool {
+	uniqueKey := utils.GetUniqueKey(round, CurrentTrialNum.String())
 	for _, op := range ops {
-		if !CosRecevied[roundNum][op.Hex()] {
+		if !CosRecevied[uniqueKey][op.Hex()] {
 			return false
 		}
 	}
@@ -451,7 +454,7 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		ContractABI:     parsedABI,
 	}
 
-	commitData, err := database.GetCommitByRound(CurrentRound)
+	commitData, err := database.GetCommitByRound(Round.String(), TrialNum.String())
 	if err != nil {
 		return err
 	}
@@ -513,7 +516,7 @@ func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 		ContractABI:     parsedABI,
 	}
 
-	commitData, err := database.GetCommitByRound(CurrentRound)
+	commitData, err := database.GetCommitByRound(Round.String(), TrialNum.String())
 	if err != nil {
 		fmt.Println("Error loading commits:", err)
 		return err
@@ -640,7 +643,7 @@ func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 	duration := deadlineTime.Sub(now)
 
 	if duration <= 0 {
-		log.Printf("Deadline has already passed for round %s, calling failToRequestSubmitCVOrSubmitMerkleRoot immediately", CurrentRound)
+		log.Printf("Deadline has already passed for round %s with trail %s, calling failToRequestSubmitCVOrSubmitMerkleRoot immediately", CurrentRound, CurrentTrialNum.String())
 		callFailToRequestSubmitCVOrSubmitMerkleRoot(fallbackEthClient)
 		return
 	}

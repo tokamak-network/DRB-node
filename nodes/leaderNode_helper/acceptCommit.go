@@ -26,9 +26,11 @@ var CommitMu sync.Mutex
 var StartTime *big.Int
 var Execution bool
 var ActivatedOperator []string
+var TrialNum *big.Int
 
 type RandomRequest struct {
 	Round     *big.Int
+	TrialNum  *big.Int
 	StartTime *big.Int
 	State     *big.Int
 }
@@ -168,12 +170,13 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	}
 }
 
-func processSubmittedSecretRequest(Round *big.Int, TrialNum *big.Int, secret [32]byte, index *big.Int) {
-	fmt.Printf("Round %v, TrialNum %v, index %v\n", Round, TrialNum, index)
+func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32]byte, index *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	intValue := int(index.Int64())
 	regularNodeAddress := eth.ActivatedOperators[intValue]
+	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 
-	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(SecretRequestSentForWhichRound, regularNodeAddress.Hex())
+	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(SecretRequestSentForWhichRound, regularNodeAddress.Hex(), uniqueKey, regularNodeAddress.Hex())
 	if err != nil {
 		log.Printf("Failed to get leadercommit data from database by round and eoaAddress %v", err)
 	}
@@ -189,12 +192,13 @@ func processSubmittedSecretRequest(Round *big.Int, TrialNum *big.Int, secret [32
 	}
 
 	// Broadcast the secret value to all activated regular nodes
-	ReliableBroadCastS(libp2putils.HostInstance, SecretRequestSentForWhichRound, regularNodeAddress.Hex(), secret)
+	ReliableBroadCastS(libp2putils.HostInstance, SecretRequestSentForWhichRound, trialNum.String(), regularNodeAddress.Hex(), secret)
 }
 
-func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, Round *big.Int, TrialNum *big.Int, state *big.Int) {
-	fmt.Printf("Round %v, TrialNum %v, state %v\n", Round, TrialNum, state)
-	round, _ := fetchCurrentRound(fallbackEthClient)
+func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
+	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
+	TrialNum = trialNum
+	round, _ = fetchCurrentRound(fallbackEthClient)
 	CurrentRound = round.String()
 	req := RandomRequest{
 		Round:     round,
@@ -212,11 +216,11 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 			return
 		}
 		eth.UpdateActivatedOperators(fallbackEthClient)
+		ResetIndicesForNewRound()
+		log.Printf("Reset Indices array for new round %s", CurrentRound)
 		Execution = true
 
 		// Reset Indices array for the new round
-		ResetIndicesForNewRound()
-		log.Printf("Reset Indices array for new round %s", CurrentRound)
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
 		if RoundsData == nil {
@@ -229,14 +233,17 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 }
 
-func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, cos [32]byte, activatedOperatorIndex *big.Int) error {
-	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", Round, TrialNum, activatedOperatorIndex)
-	round := CurrentRound
+func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trialNum *big.Int, cos [32]byte, activatedOperatorIndex *big.Int) error {
+	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
+
 	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
 	eoa := common.HexToAddress(eoaAddress)
 	cosHex := hex.EncodeToString(cos[:])
+	roundStr := round.String()
+	trialNumStr := trialNum.String()
+	uniqueKey := utils.GetUniqueKey(roundStr, trialNumStr)
 
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, eoa.Hex())
+	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundStr, trialNumStr, uniqueKey, eoa.Hex())
 	if err != nil {
 		signInfo := utils.SignInfo{
 			R: "",
@@ -244,7 +251,9 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *
 			V: "",
 		}
 		leaderCommit := utils.LeaderCommitData{
-			Round:                 round,
+			UniqueKey:             uniqueKey,
+			Round:                 roundStr,
+			TrialNum:              trialNumStr,
 			EOAAddress:            eoa.Hex(),
 			Cvs:                   [32]byte{},
 			CvsHex:                "",
@@ -271,21 +280,21 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *
 		}
 	}
 
-	updateCOS(fallbackEthClient, round, eoa, cos)
-	fmt.Printf("Successfully stored COS for Round %s, EOA %s\n", round, eoa.Hex())
+	updateCOS(fallbackEthClient, roundStr, trialNumStr, uniqueKey, eoa, cos)
+	fmt.Printf("Successfully stored COS for Round %s with Trail %s, EOA %s\n", roundStr, trialNumStr, eoa.Hex())
 
 	// Broadcast the COS value to all activated regular nodes
-	ReliableBroadCastCOS(libp2putils.HostInstance, round, eoa, cos)
+	ReliableBroadCastCOS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cos)
 
 	return nil
 }
 
-func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, eoa common.Address, cos [32]byte) {
-	if _, exists := utils.CommittedNodes[round]; !exists {
-		utils.CommittedNodes[round] = make(map[common.Address]utils.LeaderCommitData)
+func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, uniqueKey string, eoa common.Address, cos [32]byte) {
+	if _, exists := utils.CommittedNodes[uniqueKey]; !exists {
+		utils.CommittedNodes[uniqueKey] = make(map[common.Address]utils.LeaderCommitData)
 	}
 
-	commitData, exists := utils.CommittedNodes[round][eoa]
+	commitData, exists := utils.CommittedNodes[uniqueKey][eoa]
 	if !exists {
 		commitData = utils.LeaderCommitData{}
 	}
@@ -295,27 +304,30 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 	commitData.Cos = cos
 	cosHex := hex.EncodeToString(cos[:])
 	commitData.CosHex = cosHex
-	utils.CommittedNodes[round][eoa] = commitData
+	utils.CommittedNodes[uniqueKey][eoa] = commitData
 
-	if AllCosReceivedUnlocked(round) {
-		log.Printf("All COS received for round %s.", round)
-		_, err := commitreveal2.DetermineRevealOrder(round, eth.ActivatedOperators)
+	if AllCosReceivedUnlocked(uniqueKey) {
+		log.Printf("All COS received for round %s with trail %s.", round, trialNum)
+		_, err := commitreveal2.DetermineRevealOrder(round, trialNum, eth.ActivatedOperators)
 		if err != nil {
-			log.Printf("Failed to determine reveal order for round %s: %v", round, err)
+			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, trialNum, err)
 			return
 		}
-		StartSecretValueRequests(libp2putils.HostInstance, fallbackEthClient, round)
+		StartSecretValueRequests(libp2putils.HostInstance, fallbackEthClient, round, trialNum)
 	}
 }
 
-func processCVS(Round *big.Int, TrialNum *big.Int, cvs [32]byte, activatedOperatorIndex *big.Int) error {
-	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", Round, TrialNum, activatedOperatorIndex)
-	round := CurrentRound
+func processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte, activatedOperatorIndex *big.Int) error {
+	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
+	// round := CurrentRound
+	roundStr := round.String()
+	trialNumStr := trialNum.String()
 	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
 	eoa := common.HexToAddress(eoaAddress)
 	cvsHex := hex.EncodeToString(cvs[:])
 
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, eoa.Hex())
+	uniqueKey := utils.GetUniqueKey(roundStr, trialNumStr)
+	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundStr, trialNumStr, uniqueKey, eoa.Hex())
 	if err != nil {
 		signInfo := utils.SignInfo{
 			R: "",
@@ -323,7 +335,9 @@ func processCVS(Round *big.Int, TrialNum *big.Int, cvs [32]byte, activatedOperat
 			V: "",
 		}
 		leaderCommit := utils.LeaderCommitData{
-			Round:                 round,
+			UniqueKey:             uniqueKey,
+			Round:                 roundStr,
+			TrialNum:              trialNumStr,
 			EOAAddress:            eoa.Hex(),
 			Cvs:                   cvs,
 			CvsHex:                cvsHex,
@@ -350,21 +364,21 @@ func processCVS(Round *big.Int, TrialNum *big.Int, cvs [32]byte, activatedOperat
 		}
 	}
 
-	updateCVS(round, eoa, cvs)
-	fmt.Printf("Successfully stored CVS for Round %s, EOA %s\n", round, eoa.Hex())
+	updateCVS(roundStr, uniqueKey, eoa, cvs)
+	fmt.Printf("Successfully stored CVS for Round %s with Trail %s, EOA %s\n", roundStr, trialNumStr, eoa.Hex())
 
 	// Broadcast the CVS value to all activated regular nodes
-	ReliableBroadCastCVS(libp2putils.HostInstance, round, eoa, cvs)
+	ReliableBroadCastCVS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cvs)
 
 	return nil
 }
 
-func updateCVS(round string, eoa common.Address, cvs [32]byte) {
-	if _, exists := utils.CommittedNodes[round]; !exists {
-		utils.CommittedNodes[round] = make(map[common.Address]utils.LeaderCommitData)
+func updateCVS(round string, uniqueKey string, eoa common.Address, cvs [32]byte) {
+	if _, exists := utils.CommittedNodes[uniqueKey]; !exists {
+		utils.CommittedNodes[uniqueKey] = make(map[common.Address]utils.LeaderCommitData)
 	}
 
-	commitData, exists := utils.CommittedNodes[round][eoa]
+	commitData, exists := utils.CommittedNodes[uniqueKey][eoa]
 	if !exists {
 		commitData = utils.LeaderCommitData{}
 	}
@@ -374,17 +388,17 @@ func updateCVS(round string, eoa common.Address, cvs [32]byte) {
 	commitData.Cvs = cvs
 	cvsHex := hex.EncodeToString(cvs[:])
 	commitData.CvsHex = cvsHex
-	utils.CommittedNodes[round][eoa] = commitData
+	utils.CommittedNodes[uniqueKey][eoa] = commitData
 
 }
 
-func AllCosReceivedUnlocked(roundNum string) bool {
+func AllCosReceivedUnlocked(uniqueKey string) bool {
 	ops := eth.ActivatedOperators
 	if len(ops) == 0 {
 		return false
 	}
 
-	roundCommits, roundExists := utils.CommittedNodes[roundNum]
+	roundCommits, roundExists := utils.CommittedNodes[uniqueKey]
 	if !roundExists || len(roundCommits) == 0 {
 		return false
 	}

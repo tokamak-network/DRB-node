@@ -27,22 +27,23 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		log.Printf("Failed to decode secret value request: %v", err)
 		return
 	}
+	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)
 	for {
-		roundData, err := database.GetRevealOrder(CurrentRound)
+		roundData, err := database.GetRevealOrder(req.Round, req.TrialNum, uniqueKey)
 		if err != nil {
-			log.Printf("Failed to load reveal order: %v", err)
+			log.Printf("Failed to load reveal order with trail %s for round %s: %v", req.TrialNum, req.Round, err)
 		} else if roundData != nil {
-			if strictOrderWhileSecretRequest[CurrentRound] == nil {
-				strictOrderWhileSecretRequest[CurrentRound] = roundData.OrderedNodes
+			if strictOrderWhileSecretRequest[uniqueKey] == nil {
+				strictOrderWhileSecretRequest[uniqueKey] = roundData.OrderedNodes
 			}
 			break
 		} else {
-			log.Printf("Reveal order not yet calculated for round %s. Waiting...", CurrentRound)
+			log.Printf("Reveal order not yet calculated for round %s with trail %s. Waiting...", req.Round, req.TrialNum)
 		}
 		time.Sleep(5 * time.Second)
 	}
-	if len(strictOrderWhileSecretRequest[CurrentRound]) == 0 || strictOrderWhileSecretRequest[CurrentRound][req.Order] != req.RegularEoaAddress {
-		log.Printf("EOA %s is not next in the reveal order %v for round %s", req.RegularEoaAddress, req.Order, CurrentRound)
+	if len(strictOrderWhileSecretRequest[uniqueKey]) == 0 || strictOrderWhileSecretRequest[uniqueKey][req.Order] != req.RegularEoaAddress {
+		log.Printf("EOA %s is not next in the reveal order %v for round %s with trail %s", req.RegularEoaAddress, req.Order, req.Round, req.TrialNum)
 		return
 	}
 
@@ -66,18 +67,18 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 
 	// Log the request details
-	log.Printf("Verified secret value request for round %s from leader %s", CurrentRound, req.LeaderEoaAddress)
+	log.Printf("Verified secret value request for round %s with trail %s from leader %s", req.Round, req.TrialNum, req.LeaderEoaAddress)
 
 	// Fetch the secret value for the specified round
-	commitData, err := database.GetCommitByRound(req.Round)
+	commitData, err := database.GetCommitByRound(req.Round, req.TrialNum)
 	if err != nil {
-		log.Printf("Failed to load commit data for round %s: %v", CurrentRound, err)
+		log.Printf("Failed to load commit data for round %s with trail %s: %v", req.Round, req.TrialNum, err)
 		return
 	}
 
 	// Check if the secret value exists
 	if commitData.SecretValue == [32]byte{} {
-		log.Printf("No secret value found for round %s", CurrentRound)
+		log.Printf("No secret value found for round %s with Trail %s", req.Round, req.TrialNum)
 		return
 	}
 
@@ -92,15 +93,15 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		return
 	}
 
-	SendSecretValue(h, leaderPeerID, CurrentRound)
+	SendSecretValue(h, leaderPeerID, req.Round, req.TrialNum)
 }
 
 // SendSecretValue sends the secret value for a round to the leader node
-func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
+func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string, trialNum string) {
 	// Load the commit data for the specified round
-	commitData, err := database.GetCommitByRound(roundNum)
+	commitData, err := database.GetCommitByRound(roundNum, trialNum)
 	if err != nil {
-		log.Printf("Failed to load commit data for round %s: %v", roundNum, err)
+		log.Printf("Failed to load commit data for round %s with trial %s: %v", roundNum, trialNum, err)
 		return
 	}
 
@@ -127,6 +128,7 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string) {
 		Signature:         signature,
 		SecretValue:       commitData.SecretValue[:],
 		Round:             roundNum,
+		TrialNum:          trialNum,
 	}
 
 	// Open a stream to the leader node

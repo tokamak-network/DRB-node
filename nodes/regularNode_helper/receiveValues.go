@@ -60,15 +60,18 @@ func HandleCvs(h host.Host, s network.Stream) {
 		return
 	}
 
-	log.Printf("Received CVS broadcast for round %s from EOA %s (message ID: %s)",
-		message.Round, message.EOAAddress, message.MessageID)
+	log.Printf("Received CVS broadcast for round %s with trail %s from EOA %s (message ID: %s)",
+		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
-	peerCommitData, err := database.GetPeerCommitData(message.Round, message.EOAAddress)
+	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
+	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
 			peerCommitData = &database.PeerCommitDataScheme{
+				UniqueKey:  uniqueKey,
 				Round:      message.Round,
+				TrialNum:   message.TrialNum,
 				EOAAddress: message.EOAAddress,
 				Cvs:        message.Data[:],
 			}
@@ -95,6 +98,7 @@ func HandleCvs(h host.Host, s network.Stream) {
 	// Send acknowledgment
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
+		TrialNum:   message.TrialNum,
 		EOAAddress: getRegularNodeEOA(),
 		MessageID:  message.MessageID,
 		Type:       message.Type,
@@ -127,21 +131,24 @@ func HandleCos(h host.Host, s network.Stream) {
 		return
 	}
 
-	log.Printf("Received COS broadcast for round %s from EOA %s (message ID: %s)",
-		message.Round, message.EOAAddress, message.MessageID)
+	log.Printf("Received COS broadcast for round %s with trail %s from EOA %s (message ID: %s)",
+		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
 	// Process the COS data
-	if CosRecevied[message.Round] == nil {
-		CosRecevied[message.Round] = make(map[string]bool)
+	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
+	if CosRecevied[uniqueKey] == nil {
+		CosRecevied[uniqueKey] = make(map[string]bool)
 	}
-	CosRecevied[message.Round][message.EOAAddress] = true
+	CosRecevied[uniqueKey][message.EOAAddress] = true
 
-	peerCommitData, err := database.GetPeerCommitData(message.Round, message.EOAAddress)
+	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
 			peerCommitData = &database.PeerCommitDataScheme{
+				UniqueKey:  uniqueKey,
 				Round:      message.Round,
+				TrialNum:   message.TrialNum,
 				EOAAddress: message.EOAAddress,
 				Cos:        message.Data[:],
 			}
@@ -163,11 +170,12 @@ func HandleCos(h host.Host, s network.Stream) {
 		}
 	}
 
-	log.Printf("Successfully saved CoS data for round %s and EOA %s", message.Round, message.EOAAddress)
+	log.Printf("Successfully saved CoS data for round %s with trail %s and EOA %s", message.Round, message.TrialNum, message.EOAAddress)
 
 	// Send acknowledgment
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
+		TrialNum:   message.TrialNum,
 		EOAAddress: getRegularNodeEOA(),
 		MessageID:  message.MessageID,
 		Type:       message.Type,
@@ -200,15 +208,18 @@ func HandleSecret(h host.Host, s network.Stream) {
 		return
 	}
 
-	log.Printf("Received secret broadcast for round %s from EOA %s (message ID: %s)",
-		message.Round, message.EOAAddress, message.MessageID)
+	log.Printf("Received secret broadcast for round %s with trail %s from EOA %s (message ID: %s)",
+		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
-	peerCommitData, err := database.GetPeerCommitData(message.Round, message.EOAAddress)
+	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
+	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
 			peerCommitData = &database.PeerCommitDataScheme{
+				UniqueKey:   uniqueKey,
 				Round:       message.Round,
+				TrialNum:    message.TrialNum,
 				EOAAddress:  message.EOAAddress,
 				SecretValue: message.Data[:],
 			}

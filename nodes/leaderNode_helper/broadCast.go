@@ -21,11 +21,12 @@ var broadcastMutex sync.Mutex
 var activeBroadcasts = make(map[string]*utils.BroadcastTracker)
 
 // ReliableBroadCastS broadcasts secret values with acknowledgment tracking
-func ReliableBroadCastS(h host.Host, roundNum string, eoaAddress string, secret [32]byte) {
-	messageID := generateMessageID(roundNum, eoaAddress, "secret")
+func ReliableBroadCastS(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte) {
+	messageID := generateMessageID(roundNum, trialNum, eoaAddress, "secret")
 
 	tracker := &utils.BroadcastTracker{
 		Round:        roundNum,
+		TrialNum:     trialNum,
 		EOAAddress:   eoaAddress,
 		Type:         "secret",
 		MessageID:    messageID,
@@ -55,11 +56,12 @@ func ReliableBroadCastS(h host.Host, roundNum string, eoaAddress string, secret 
 }
 
 // ReliableBroadCastCOS broadcasts COS values with acknowledgment tracking
-func ReliableBroadCastCOS(h host.Host, roundNum string, eoaAddress common.Address, cos [32]byte) {
-	messageID := generateMessageID(roundNum, eoaAddress.Hex(), "cos")
+func ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte) {
+	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cos")
 
 	tracker := &utils.BroadcastTracker{
 		Round:        roundNum,
+		TrialNum:     trialNum,
 		EOAAddress:   eoaAddress.Hex(),
 		Type:         "cos",
 		MessageID:    messageID,
@@ -89,11 +91,12 @@ func ReliableBroadCastCOS(h host.Host, roundNum string, eoaAddress common.Addres
 }
 
 // ReliableBroadCastCVS broadcasts CVS values with acknowledgment tracking
-func ReliableBroadCastCVS(h host.Host, roundNum string, eoaAddress common.Address, cvs [32]byte) {
-	messageID := generateMessageID(roundNum, eoaAddress.Hex(), "cvs")
+func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte) {
+	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cvs")
 
 	tracker := &utils.BroadcastTracker{
 		Round:        roundNum,
+		TrialNum:     trialNum,
 		EOAAddress:   eoaAddress.Hex(),
 		Type:         "cvs",
 		MessageID:    messageID,
@@ -130,12 +133,13 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		tracker.Attempts++
 		tracker.LastSent = time.Now().Unix()
 
-		log.Printf("Broadcasting %s (attempt %d/%d) for round %s, EOA %s",
-			broadcastType, tracker.Attempts, tracker.MaxAttempts, tracker.Round, tracker.EOAAddress)
+		log.Printf("Broadcasting %s (attempt %d/%d) for round %s, trail %s, EOA %s",
+			broadcastType, tracker.Attempts, tracker.MaxAttempts, tracker.Round, tracker.TrialNum, tracker.EOAAddress)
 
 		// Create broadcast message
 		message := utils.BroadcastMessage{
 			Round:      tracker.Round,
+			TrialNum:   tracker.TrialNum,
 			EOAAddress: tracker.EOAAddress,
 			MessageID:  tracker.MessageID,
 			Type:       broadcastType,
@@ -177,8 +181,8 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 			if err := json.NewEncoder(stream).Encode(message); err != nil {
 				log.Printf("Failed to send %s to regular node %s: %v", broadcastType, op.Hex(), err)
 			} else {
-				log.Printf("%s sent to regular node %s for round %s (attempt %d)",
-					broadcastType, op.Hex(), tracker.Round, tracker.Attempts)
+				log.Printf("%s sent to regular node %s for round %s with trail %s (attempt %d)",
+					broadcastType, op.Hex(), tracker.Round, tracker.TrialNum, tracker.Attempts)
 			}
 			stream.Close()
 		}
@@ -377,6 +381,6 @@ func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
 // }
 
 // generateMessageID creates a unique message ID for broadcasts
-func generateMessageID(round, eoaAddress, messageType string) string {
-	return fmt.Sprintf("%s_%s_%s_%d", round, eoaAddress, messageType, time.Now().UnixNano())
+func generateMessageID(round, eoaAddress, trailNum, messageType string) string {
+	return fmt.Sprintf("%s_%s_%s_%s_%d", round, trailNum, eoaAddress, messageType, time.Now().UnixNano())
 }

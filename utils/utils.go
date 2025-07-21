@@ -17,6 +17,7 @@ type SecretValueRequest struct {
 	LeaderEoaAddress  string `json:"leader_eoa"`  // Sender's EOA address
 	RegularEoaAddress string `json:"regular_eoa"` // EOA address of the node sending the request
 	Round             string `json:"round"`       // Round number
+	TrialNum          string `json:"trial_num"`   // Trial number
 	Signature         []byte `json:"signature"`   // Signature
 	SecretValue       []byte `json:"secret_value"`
 	Order             int    `json:"order"` // Order in the reveal sequence
@@ -46,4 +47,8 @@ func SignData(data string, privateKey *ecdsa.PrivateKey) []byte {
 		log.Fatalf("Failed to sign data: %v", err)
 	}
 	return signature
+}
+
+func GetUniqueKey(round string, trialNum string) string {
+	return round + "-" + trialNum
 }

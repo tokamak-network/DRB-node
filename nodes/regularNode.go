@@ -190,14 +190,15 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		regularNode_helper.CheckAndStartMonitoring(fallbackEthClient)
 
 		round := regularNode_helper.CurrentRound
-		merkleRootSubmitted := regularNode_helper.RoundsData[round].MerkleRoot
-		randomNumberSubmitted := regularNode_helper.RoundsData[round].RandomNumber
+		uniqueKey := utils.GetUniqueKey(round, regularNode_helper.CurrentTrialNum.String())
+		merkleRootSubmitted := regularNode_helper.RoundsData[uniqueKey].MerkleRoot
+		randomNumberSubmitted := regularNode_helper.RoundsData[uniqueKey].RandomNumber
 
-		log.Printf("Checking round %s ...", round)
+		log.Printf("Checking round %s with trial %s ...", round, regularNode_helper.CurrentTrialNum.String())
 		// Check if Merkle Root and Random Number are already generated (not nil)
 		if merkleRootSubmitted && randomNumberSubmitted {
 			// If both MerkleRoot and RandomNumber are generated, skip this round
-			log.Printf("Round %s already has Merkle Root AND Random Number generated. Skipping commit generation.", round)
+			log.Printf("Round %s with trial %s already has Merkle Root AND Random Number generated. Skipping commit generation.", round, regularNode_helper.CurrentTrialNum.String())
 			continue
 		}
 
@@ -205,7 +206,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		if isEOAActivated(eoaAddress) {
 
 			// Check if this round has already been committed (store it locally)
-			commitData, err := database.GetCommitByRound(round)
+			commitData, err := database.GetCommitByRound(round, regularNode_helper.CurrentTrialNum.String())
 			if err != nil && err.Error() != "pg: no rows in result set" {
 				log.Printf("Error loading commit data: %v", err)
 				continue
@@ -213,7 +214,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 			// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil
 			if commitData != nil && !merkleRootSubmitted && !randomNumberSubmitted {
-				log.Printf("Commit data already exists for round %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", round)
+				log.Printf("Commit data already exists for round %s with trial %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", round, regularNode_helper.CurrentTrialNum.String())
 				continue
 			}
 
@@ -229,11 +230,13 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 				// Prepare commit data
 				commitData := utils.CommitData{
+					UniqueKey:       uniqueKey,
 					Round:           round,
+					TrialNum:        regularNode_helper.CurrentTrialNum.String(),
 					SecretValue:     secretValue,
 					Cos:             cos,
 					Cvs:             cvs,
-					SendToLeader:    true, // Initially false, will be set to true after sending
+					SendToLeader:    true,  // Initially false, will be set to true after sending
 					SendCosToLeader: false, // Initially false, to allow sending COS
 				}
 
@@ -245,7 +248,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				}
 
 				// Send commit to leader
-				sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, eoaAddress)
+				sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, round, regularNode_helper.CurrentTrialNum.String(), eoaAddress)
 			}
 
 			// If commit data exists and SendCosToLeader is false, send COS to leader
@@ -268,7 +271,9 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	// Create commit request structure with signed COS and round data
 	req := utils.CosRequest{
+		UniqueKey:  commitData.UniqueKey,
 		Round:      commitData.Round,
+		TrialNum:   commitData.TrialNum,
 		Cos:        commitData.Cos,
 		EOAAddress: eoaAddress, // Include EOA address to verify
 	}
@@ -447,10 +452,12 @@ func checkDepositAmount(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 }
 
 // sendCommitToLeader sends the generated commit to the leader node
-func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string) {
+func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, round string, trialNum string, eoaAddress string) {
 	// Create commit request structure with signed round value and CVS
 	req := utils.CommitRequest{
-		Round:      commitData.Round,
+		UniqueKey:  commitData.UniqueKey,
+		Round:      round,
+		TrialNum:   trialNum,
 		Cvs:        commitData.Cvs,
 		EOAAddress: eoaAddress,
 	}

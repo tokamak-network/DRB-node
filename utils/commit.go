@@ -5,7 +5,9 @@ import "github.com/ethereum/go-ethereum/common"
 var CommittedNodes = make(map[string]map[common.Address]LeaderCommitData)
 
 type CommitRequest struct {
+	UniqueKey  string   `json:"unique_key"`
 	Round      string   `json:"round"`
+	TrialNum   string   `json:"trial_num"`
 	Cvs        [32]byte `json:"cvs"`
 	EOAAddress string   `json:"eoa_address"`
 	Signature  []byte   `json:"signed_round"`
@@ -13,7 +15,9 @@ type CommitRequest struct {
 }
 
 type CosRequest struct {
-	Round      string   `json:"round"`
+	UniqueKey  string   `json:"unique_key"`
+	Round      string   `json:"round"`	
+	TrialNum   string   `json:"trial_num"`
 	Cos        [32]byte `json:"cos"`
 	EOAAddress string   `json:"eoa_address"`
 	Signature  []byte   `json:"signed_round"`
@@ -21,7 +25,9 @@ type CosRequest struct {
 
 // LeaderCommitData defines the structure for storing commit data in the leader node.
 type LeaderCommitData struct {
+	UniqueKey             string   `json:"unique_key"`
 	Round                 string   `json:"round"`
+	TrialNum              string   `json:"trial_num"`
 	EOAAddress            string   `json:"eoa_address"`
 	Cvs                   [32]byte `json:"cvs"`
 	CvsHex                string   `json:"cvs_hex,omitempty"`
@@ -36,8 +42,10 @@ type LeaderCommitData struct {
 }
 
 // CommitData defines the structure for storing commit data for the regular node.
-type CommitData struct {
+type CommitData struct {		
+	UniqueKey       string   `json:"unique_key"`
 	Round           string   `json:"round"`
+	TrialNum        string   `json:"trial_num"`
 	SecretValue     [32]byte `json:"secret_value"`
 	Cos             [32]byte `json:"cos"`
 	Cvs             [32]byte `json:"cvs"`
@@ -48,6 +56,7 @@ type CommitData struct {
 
 type PeerCommitData struct {
 	Round       string   `json:"round"`
+	TrialNum    string   `json:"trial_num"`
 	SecretValue [32]byte `json:"secret_value"`
 	Cos         [32]byte `json:"cos"`
 	Cvs         [32]byte `json:"cvs"`
@@ -56,6 +65,7 @@ type PeerCommitData struct {
 
 type Request struct {
 	Round      string `json:"round"`
+	TrialNum   string `json:"trial_num"`
 	EOAAddress string `json:"eoa_address"`
 	Signature  []byte `json:"signed_round"`
 }

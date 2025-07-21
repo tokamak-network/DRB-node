@@ -27,9 +27,10 @@ type SigRS struct {
 var revealRequestStatus = make(map[string][]string)
 
 // StartSecretValueRequests initializes the secret value request process for a given round
-func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string) {
+func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
 	// Load reveal order for the round
-	roundRevealData, err := database.GetRevealOrder(roundNum)
+	uniqueKey := utils.GetUniqueKey(round, trialNum)
+	roundRevealData, err := database.GetRevealOrder(round, trialNum, uniqueKey)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return
@@ -43,15 +44,15 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 
 	// Initialize reveal request status for the round if not already done
-	if _, exists := revealRequestStatus[roundNum]; !exists {
-		revealRequestStatus[roundNum] = []string{}
+	if _, exists := revealRequestStatus[uniqueKey]; !exists {
+		revealRequestStatus[uniqueKey] = []string{}
 	}
 
 	// Send the request to the first node in the reveal order
 	for order, eoa := range roundRevealData.OrderedNodes {
 		for _, node := range nodes {
 			if node.EOAAddress == eoa {
-				sendSecretValueRequestToNode(h, fallbackEthClient, roundNum, eoa, node, order)
+				sendSecretValueRequestToNode(h, fallbackEthClient, round, trialNum, uniqueKey, eoa, node, order)
 			} else {
 				log.Printf("Node info for EOA %s not found in registered nodes.", eoa)
 				continue
@@ -60,7 +61,7 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 }
 
-func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string, regularEoa string, nodeInfo *utils.NodeInfo, order int) {
+func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, uniqueKey string, regularEoa string, nodeInfo *utils.NodeInfo, order int) {
 	// Load private key from environment variable
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -83,7 +84,8 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 	req := utils.SecretValueRequest{
 		LeaderEoaAddress:  leaderEoa, // Leader's EOA
 		RegularEoaAddress: regularEoa,
-		Round:             roundNum,  // Round number
+		Round:             round,     // Round number
+		TrialNum:          trialNum,  // Trial number
 		Signature:         signature, // Signed round number
 		Order:             order,
 	}
@@ -93,9 +95,9 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 	// Send the request
 	err = sendToRegularNode(h, *nodeInfo, "/sendSecretValue", req)
 	if err != nil {
-		log.Printf("Failed to send secret value request to EOA %s for round %s: %v", regularEoa, roundNum, err)
+		log.Printf("Failed to send secret value request to EOA %s for round %s with trail %s: %v", regularEoa, round, trialNum, err)
 	} else {
-		log.Printf("Secret value request sent to EOA %s for round %s", regularEoa, roundNum)
+		log.Printf("Secret value request sent to EOA %s for round %s with trail %s", regularEoa, round, trialNum)
 
 		// Start a timer to track if the response is received within 15 seconds
 		go func() {
@@ -106,21 +108,21 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 			<-timer.C
 
 			// If the timer expires and the secret value is not received, call handleMissingSecretValue
-			if !roundSecret[roundNum][regularEoa] {
-				log.Printf("Secret value not received for EOA %s in round %s within 15 seconds. Handling missing secret value.", regularEoa, roundNum)
-				secretsOnChain[roundNum] = true
-				requestToSubmitS(fallbackEthClient, roundNum)
+			if !roundSecret[uniqueKey][regularEoa] {
+				log.Printf("Secret value not received for EOA %s in round %s with trail %s within 15 seconds. Handling missing secret value.", regularEoa, round, trialNum)
+				secretsOnChain[uniqueKey] = true
+				requestToSubmitS(fallbackEthClient, round, trialNum, uniqueKey)
 			}
 		}()
 
 		// Mark this EOA as requested
-		revealRequestStatus[roundNum] = append(revealRequestStatus[roundNum], regularEoa)
+		revealRequestStatus[uniqueKey] = append(revealRequestStatus[uniqueKey], regularEoa)
 	}
 }
 
-func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string) {
+func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, uniqueKey string) {
 	SecretRequestSentForWhichRound = CurrentRound
-	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := prepareArgumentsForRequestToSubmitS(roundNum)
+	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := prepareArgumentsForRequestToSubmitS(round, trialNum)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -164,15 +166,15 @@ func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 		packedRevealOrders,
 	)
 	if err != nil {
-		log.Printf("Failed to submit commit request root for round %s: %v", roundNum, err)
+		log.Printf("Failed to submit commit request root for round %s: %v", round, err)
 		return
 	}
 
-	log.Printf("Successfully submitted cos request for round %s", roundNum)
+	log.Printf("Successfully submitted cos request for round %s", round)
 }
 
-func prepareArgumentsForRequestToSubmitS(roundNum string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
-	_, cos, _, vs, rs, ss := LoadNodeData(roundNum)
+func prepareArgumentsForRequestToSubmitS(round string, trialNum string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
+	_, cos, _, vs, rs, ss := LoadNodeData(round, trialNum)
 	var notOnChainIndices []*big.Int
 	i := big.NewInt(0)
 	j := 0
@@ -209,17 +211,17 @@ func prepareArgumentsForRequestToSubmitS(roundNum string) ([][32]byte, [][32]byt
 		}
 		sigRSsForAllCvsNotOnChain = append(sigRSsForAllCvsNotOnChain, cvAndSigRS)
 	}
-
-	revealOrders, err := database.GetRevealOrder(roundNum)
+	uniqueKey := utils.GetUniqueKey(round, trialNum)
+	revealOrders, err := database.GetRevealOrder(round, trialNum, uniqueKey)
 	if err != nil {
-		log.Printf("Failed to load reveal order for round %s: %v", roundNum, err)
+		log.Printf("Failed to load reveal order for round %s with trail %s: %v", round, trialNum, err)
 	}
 
 	order := revealOrders.RevealOrder
 	packedRevealOrders := packRevealOrder(order)
 	packedVsForAllCvsNotOnChain := packVsValues(vsForNotOnChain)
 
-	return allCos, RoundSecrets[roundNum], packedVsForAllCvsNotOnChain, sigRSsForAllCvsNotOnChain, packedRevealOrders
+	return allCos, RoundSecrets[uniqueKey], packedVsForAllCvsNotOnChain, sigRSsForAllCvsNotOnChain, packedRevealOrders
 }
 
 func PackIndices(indices []*big.Int) *big.Int {
@@ -231,11 +233,11 @@ func PackIndices(indices []*big.Int) *big.Int {
 }
 
 // handleSecretValueResponse processes a response and sends the next request if applicable
-func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string, eoa string) {
-	log.Printf("Secret value received for round %s from EOA %s", roundNum, eoa)
-
+func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, eoa string) {
+	log.Printf("Secret value received for round %s with trail %s from EOA %s", round, trialNum, eoa)
+	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	// Load reveal order for the round
-	roundRevealData, err := database.GetRevealOrder(roundNum)
+	roundRevealData, err := database.GetRevealOrder(round, trialNum, uniqueKey)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return
@@ -250,17 +252,17 @@ func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclien
 
 	// Check which node is next in the reveal order
 	for order, eoa := range roundRevealData.OrderedNodes {
-		if !contains(revealRequestStatus[roundNum], eoa) {
+		if !contains(revealRequestStatus[uniqueKey], eoa) {
 			for _, node := range nodes {
 				if node.EOAAddress == eoa {
-					sendSecretValueRequestToNode(h, fallbackEthClient, roundNum, eoa, node, order)
+					sendSecretValueRequestToNode(h, fallbackEthClient, round, trialNum, uniqueKey, eoa, node, order)
 					return
 				}
 			}
 		}
 	}
 
-	log.Printf("All nodes processed for round %s.", roundNum)
+	log.Printf("All nodes processed for round %s with trail %s.", round, trialNum)
 }
 
 // sendToRegularNode sends a request to a specific regular node
