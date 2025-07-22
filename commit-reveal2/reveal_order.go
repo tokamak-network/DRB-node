@@ -114,6 +114,7 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOperators [
 	}
 
 	revealOrderData := utils.RevealOrderData{
+		UniqueKey:    uniqueKey,
 		Round:        roundNum,
 		TrialNum:     trialNum,
 		RevealOrder:  revealOrder,
@@ -181,7 +182,9 @@ func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOper
 	}
 
 	revealOrderData := utils.RevealOrderData{
+		UniqueKey:    uniqueKey,
 		Round:        roundNum,
+		TrialNum:     trialNum,
 		RevealOrder:  revealOrder,
 		OrderedNodes: orderedAddresses,
 		RV:           hex.EncodeToString(rv[:]),
