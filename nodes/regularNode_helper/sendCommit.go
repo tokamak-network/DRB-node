@@ -335,9 +335,10 @@ func processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
 	if RoundsData == nil {
 		RoundsData = make(map[string]RoundData)
 	}
-	roundData := RoundsData[Round.String()]
+	uniqueKey := utils.GetUniqueKey(Round.String(), TrialNum.String())
+	roundData := RoundsData[uniqueKey]
 	roundData.MerkleRoot = true
-	RoundsData[Round.String()] = roundData
+	RoundsData[uniqueKey] = roundData
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, Round *big.Int, TrialNum *big.Int, state *big.Int) {
