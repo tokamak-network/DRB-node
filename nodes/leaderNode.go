@@ -124,10 +124,10 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 	}
 
 	commitVerificationRequest := utils.Request{
-		Round: req.Round, 
-		TrialNum: req.TrialNum, 
-		EOAAddress: req.EOAAddress, 
-		Signature: req.Signature,
+		Round:      req.Round,
+		TrialNum:   req.TrialNum,
+		EOAAddress: req.EOAAddress,
+		Signature:  req.Signature,
 	}
 
 	if !VerifySignatureAndCheckActivation(fallbackEthClient, commitVerificationRequest, "commit") {
@@ -147,7 +147,6 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		commitData.Sign = req.Sign
 		commitData.SubmitMerkleRootDone = false
 		commitData.RandomNumberGenerated = false
-		commitData.TrialNum = req.TrialNum
 		log.Printf("Storing CVS and signature for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 	}
 	updateInMemoryData(round, req.TrialNum, uniqueKey, eoaAddress, *commitData)
@@ -364,6 +363,7 @@ func getOrCreateLeaderCommitData(roundNum string, trialNum string, uniqueKey str
 	data, existsData := roundMap[eoaAddress]
 	if !existsData {
 		data = utils.LeaderCommitData{
+			UniqueKey:  uniqueKey,
 			Round:      roundNum,
 			TrialNum:   trialNum,
 			EOAAddress: eoaAddress.Hex(),

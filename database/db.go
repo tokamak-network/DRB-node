@@ -213,7 +213,7 @@ func AddLeaderCommit(commitData *utils.LeaderCommitData) error {
 func GetLeaderCommitByRoundAndEoaAddr(round, trailNum, uniqueKey, eoaAddr string) (*utils.LeaderCommitData, error) {
 	var leaderCommit LeaderCommitScheme
 	err := GetDB().Model(&leaderCommit).
-		Where("uniqueKey = ? AND eoa_address = ?", uniqueKey, eoaAddr).
+		Where("unique_key = ? AND eoa_address = ?", uniqueKey, eoaAddr).
 		Limit(1).
 		Select()
 	if err != nil {
@@ -253,7 +253,7 @@ func GetLeaderCommitsByRoundAndTrialNum(round string, trialNum string) ([]*utils
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 
 	err := GetDB().Model(&leaderCommitModels).
-		Where("uniqueKey = ?", uniqueKey).
+		Where("unique_key = ?", uniqueKey).
 		Select()
 	if err != nil {
 		return nil, err
@@ -371,7 +371,7 @@ func UpdateLeaderCommitRandomNumberGenerated(round string, trialNum string) erro
 	// Update only the "random_number_generated" column where uniqueKey matches
 	_, err := GetDB().Model(&leaderCommit).
 		Column("random_number_generated").
-		Where("uniqueKey = ?", uniqueKey).
+		Where("unique_key = ?", uniqueKey).
 		Update()
 	if err != nil {
 		return err
@@ -441,7 +441,7 @@ func GetRevealOrders() ([]*utils.RevealOrderData, error) {
 func GetRevealOrder(round, trailNum, uniqueKey string) (*utils.RevealOrderData, error) {
 	var model RevealOrderScheme
 	err := GetDB().Model(&model).
-		Where("uniqueKey = ?", uniqueKey).
+		Where("unique_key = ?", uniqueKey).
 		Limit(1).
 		Select()
 	if err != nil {
@@ -462,6 +462,7 @@ func GetRevealOrder(round, trailNum, uniqueKey string) (*utils.RevealOrderData, 
 func AddCommit(commit *utils.CommitData) error {
 
 	model := CommitDataScheme{
+		UniqueKey:       commit.UniqueKey,
 		Round:           commit.Round,
 		Cvs:             commit.Cvs[:], // convert [32]byte to []byte
 		Cos:             commit.Cos[:],
@@ -499,7 +500,7 @@ func UpdateCommit(commit *utils.CommitData) error {
 func GetCommitByRound(round string, trialNum string) (*utils.CommitData, error) {
 	var model CommitDataScheme
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	err := GetDB().Model(&model).Where("uniqueKey = ?", uniqueKey).Limit(1).Select()
+	err := GetDB().Model(&model).Where("unique_key = ?", uniqueKey).Limit(1).Select()
 	if err != nil {
 		log.Printf("Failed to get commit info: %v", err)
 		return nil, err
