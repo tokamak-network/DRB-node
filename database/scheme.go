@@ -45,6 +45,7 @@ type CommitDataScheme struct {
 
 type RevealOrderScheme struct {
 	ID           int      `pg:"id,pk"`
+	UniqueKey    string   `pg:"unique_key,notnull"`
 	Round        string   `pg:"round,notnull"`
 	TrialNum     string   `pg:"trial_num,notnull"`
 	OrderedNodes []string `pg:"ordered_nodes,array,notnull"`

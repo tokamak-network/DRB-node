@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS node_info_schemes (
 -- Create leader_commits schema
 CREATE TABLE IF NOT EXISTS leader_commit_schemes (
     id SERIAL,
+    unique_key TEXT NOT NULL,
     round TEXT NOT NULL,
+    trial_num TEXT NOT NULL,
     eoa_address TEXT NOT NULL,
     cvs BYTEA NOT NULL,
     cvs_hex TEXT,
@@ -32,7 +34,9 @@ CREATE TABLE IF NOT EXISTS leader_commit_schemes (
 -- Create commits schema
 CREATE TABLE IF NOT EXISTS commit_data_schemes (
     id SERIAL PRIMARY KEY,
+    unique_key TEXT NOT NULL,
     round TEXT NOT NULL,
+    trial_num TEXT NOT NULL,
     cvs BYTEA NOT NULL,
     cos BYTEA NOT NULL,
     secret_value BYTEA NOT NULL,
@@ -46,7 +50,9 @@ CREATE TABLE IF NOT EXISTS commit_data_schemes (
 -- Create reveal_orders schema
 CREATE TABLE IF NOT EXISTS reveal_order_schemes (
     id SERIAL PRIMARY KEY,
+    unique_key TEXT NOT NULL,
     round TEXT NOT NULL,
+    trial_num TEXT NOT NULL,
     ordered_nodes TEXT[] NOT NULL,
     reveal_order INT[] NOT NULL,
     rv TEXT NOT NULL
@@ -54,7 +60,9 @@ CREATE TABLE IF NOT EXISTS reveal_order_schemes (
 
 CREATE TABLE IF NOT EXISTS peer_commit_data_schemes (
     id SERIAL,
+    unique_key TEXT NOT NULL,
     round TEXT NOT NULL,
+    trial_num TEXT NOT NULL,
     eoa_address TEXT NOT NULL,
     secret_value BYTEA,
     cos BYTEA,
@@ -66,6 +74,7 @@ CREATE TABLE IF NOT EXISTS peer_commit_data_schemes (
 CREATE TABLE IF NOT EXISTS broadcast_tracker_schemes (
     id SERIAL PRIMARY KEY,
     round TEXT NOT NULL,
+    trial_num TEXT NOT NULL,
     eoa_address TEXT NOT NULL,
     type TEXT NOT NULL,
     message_id TEXT NOT NULL,
