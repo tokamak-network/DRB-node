@@ -117,8 +117,10 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 		// If all EOAs have submitted, trigger the random number generation transaction
 		if allEOAsSubmitted {
 			log.Printf("All EOAs have submitted for round %s. Initiating random number generation.", round.Round)
-			var err error
-			if !secretsOnChain[round.Round] {
+			secretsOnChainMu.RLock()
+			notOnChain := !secretsOnChain[round.UniqueKey]
+			secretsOnChainMu.RUnlock()
+			if notOnChain {
 				if !CvOnChain {
 					err = generateRandomNumberTransaction(fallbackEthClient, round.Round, round.TrialNum, secrets, vs, rs, ss)
 				} else {

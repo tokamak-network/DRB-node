@@ -110,7 +110,9 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 			// If the timer expires and the secret value is not received, call handleMissingSecretValue
 			if !roundSecret[uniqueKey][regularEoa] {
 				log.Printf("Secret value not received for EOA %s in round %s with trail %s within 15 seconds. Handling missing secret value.", regularEoa, round, trialNum)
+				secretsOnChainMu.Lock()
 				secretsOnChain[uniqueKey] = true
+				secretsOnChainMu.Unlock()
 				requestToSubmitS(fallbackEthClient, round, trialNum, uniqueKey)
 			}
 		}()

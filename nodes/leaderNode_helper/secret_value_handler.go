@@ -22,6 +22,7 @@ var secretsOnChain = make(map[string]bool)
 var Indices []*big.Int
 var indicesMutex sync.RWMutex
 var secretMapsMutex sync.Mutex
+var secretsOnChainMu sync.RWMutex
 
 // ResetIndicesForNewRound resets the Indices array for a new round
 func ResetIndicesForNewRound() {

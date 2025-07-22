@@ -207,6 +207,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	CurrentRound = round.String()
 	req := RandomRequest{
 		Round:     round,
+		TrialNum:  trialNum,
 		StartTime: blockTimestamp,
 		State:     state,
 	}

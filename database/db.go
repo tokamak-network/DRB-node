@@ -406,6 +406,7 @@ func GetRegisteredNodes() ([]*utils.NodeInfo, error) {
 
 func AddRevealOrder(revealOrder *utils.RevealOrderData) error {
 	model := RevealOrderScheme{
+		UniqueKey:    revealOrder.UniqueKey,
 		Round:        revealOrder.Round,
 		TrialNum:     revealOrder.TrialNum,
 		OrderedNodes: revealOrder.OrderedNodes,
