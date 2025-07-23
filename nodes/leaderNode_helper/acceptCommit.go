@@ -239,6 +239,9 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 
 	if state.Cmp(big.NewInt(3)) == 0 {
+		// Delete round and trial data from database
+		database.DeleteRoundTrialDataForLeaderNode(CurrentRound, trialNum.String())
+		// resume the round
 		resuming(fallbackEthClient)
 	}
 }
