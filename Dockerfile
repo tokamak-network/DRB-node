@@ -1,9 +1,6 @@
 # Build stage
 FROM golang:1.23-alpine AS build-env
 
-# Set environment variables
-ENV CONFIG_BASE_PATH=/root/
-
 # Set the working directory
 WORKDIR /build
 
@@ -30,7 +27,7 @@ RUN apk add --no-cache netcat-openbsd
 
 # Copy the binary from the build stage
 COPY --from=build-env /build/main ./
-COPY --from=build-env /build/leadernode.bin ./leadernode.bin
+COPY --from=build-env /build/static-key/leadernode.bin ./static-key/leadernode.bin
 
 # Copy the migration file
 COPY database/migrations /app/migrations

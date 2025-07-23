@@ -23,17 +23,27 @@ var (
 )
 var RegisteredNodes = make(map[string]peer.AddrInfo)
 
+type NodeInfo struct {
+	IP     string  `json:"ip"`
+	Port   string  `json:"port"`
+	PeerID peer.ID `json:"peer_id"`
+}
+
 func SetHost(h host.Host) {
 	HostInstance = h
 }
 
 // CreateHost creates a new libp2p host with a given port and private key.
 func CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
+	// Define the file path based on nodeType to separate keys for leader and regular nodes
+	filePath := fmt.Sprintf("/app/static-key/%snode.bin", nodeType)
 
-	filePath := "leadernode.bin"
+	var privKey crypto.PrivKey
 
-	if _, err := os.Stat(filePath); err == nil && nodeType == "leader" {
-		log.Println("Loading private key from file")
+	// Check if the key file exists
+	if _, err := os.Stat(filePath); err == nil {
+		// File exists, load the private key
+		log.Printf("Loading private key for %s from file: %s", nodeType, filePath)
 		buff, err := os.ReadFile(filePath)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to load private key: %v", err)
@@ -43,9 +53,9 @@ func CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to unmarshal private key: %v", err)
 		}
-	} else if errors.Is(err, os.ErrNotExist) || nodeType == "regular" {
-		log.Println("Generating new private key")
-
+	} else if errors.Is(err, os.ErrNotExist) {
+		// File does not exist, generate a new private key
+		log.Printf("Generating new private key for %s", nodeType)
 		privKey, _, err = crypto.GenerateKeyPair(crypto.Ed25519, 0)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to generate private key: %v", err)
@@ -58,8 +68,10 @@ func CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
 
 		err = os.WriteFile(filePath, buff, 0644)
 		if err != nil {
-			return nil, "", fmt.Errorf("failed to write private key: %v", err)
+			return nil, "", fmt.Errorf("failed to write private key to file: %v", err)
 		}
+	} else {
+		return nil, "", fmt.Errorf("error checking private key file: %v", err)
 	}
 
 	// Generate the PeerID from the private key
@@ -69,12 +81,16 @@ func CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
 		return nil, "", err
 	}
 
-	h, err := libp2p.New(libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)), libp2p.Identity(privKey))
+	// Create the libp2p host with the private key identity
+	h, err := libp2p.New(
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)),
+		libp2p.Identity(privKey),
+	)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create libp2p host: %v", err)
 	}
 
-	log.Printf("Host created with PeerID: %s", peerID.String())
+	log.Printf("%s host created with PeerID: %s", nodeType, peerID.String())
 	return h, peerID, nil
 }
 
@@ -98,22 +114,14 @@ func ConnectToPeer(h host.Host, leaderIP, leaderPort, leaderPeerID string) (*pee
 	return leaderInfo, h.Connect(context.Background(), *leaderInfo)
 }
 
-func GetConnectedPeers() map[string]struct {
-	IP     string  `json:"ip"`
-	Port   string  `json:"port"`
-	PeerID peer.ID `json:"peer_id"`
-} {
+func GetConnectedPeers() map[string]NodeInfo {
 	nodes, err := database.GetNodeInfos()
 	if err != nil {
 		log.Printf("Failed to get node infos: %v", err)
 		return nil
 	}
 
-	finalNodes := make(map[string]struct {
-		IP     string  `json:"ip"`
-		Port   string  `json:"port"`
-		PeerID peer.ID `json:"peer_id"`
-	})
+	finalNodes := make(map[string]NodeInfo)
 
 	for _, node := range nodes {
 		multiAddrStr := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", node.IP, node.Port, node.PeerID)
@@ -129,11 +137,7 @@ func GetConnectedPeers() map[string]struct {
 			continue
 		}
 
-		finalNodes[node.EOAAddress] = struct {
-			IP     string  `json:"ip"`
-			Port   string  `json:"port"`
-			PeerID peer.ID `json:"peer_id"`
-		}{
+		finalNodes[node.EOAAddress] = NodeInfo{
 			IP:     node.IP,
 			Port:   node.Port,
 			PeerID: addrInfo.ID,

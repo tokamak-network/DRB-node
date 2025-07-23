@@ -10,7 +10,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
@@ -172,6 +174,12 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		broadcastMutex.Unlock()
 
 		for _, op := range operatorsToSend {
+			// Add peer info into peer store
+			peerID := nodeInfo[op.Hex()].PeerID
+			peerAddrStr := fmt.Sprintf("/ip4/%s/tcp/%s", nodeInfo[op.Hex()].IP, nodeInfo[op.Hex()].Port)
+			peerAddr, _ := multiaddr.NewMultiaddr(peerAddrStr)
+			h.Peerstore().AddAddr(peerID, peerAddr, peerstore.PermanentAddrTTL)
+
 			stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, streamProtocol)
 			if err != nil {
 				log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)

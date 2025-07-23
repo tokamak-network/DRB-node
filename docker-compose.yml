@@ -29,8 +29,7 @@ services:
       POSTGRES_HOST: "leaderpostgres"
       POSTGRES_PORT: 5432
     volumes:
-      - leadernode-key:/root/leadernode.bin
-      - ./contract/abi/Commit2RevealDRB.json:/root/contract/abi/Commit2RevealDRB.json
+      - leadernode-key:/app/static-key
     ports:
       - "61280:61280"
     healthcheck:
@@ -86,6 +85,8 @@ services:
       NODE_TYPE: regular
       POSTGRES_HOST: "regular1postgres"
       POSTGRES_PORT: 5432
+    volumes:
+      - regularnode1-key:/app/static-key
   regularnode2:
     build:
       context: .
@@ -107,9 +108,13 @@ services:
       NODE_TYPE: regular
       POSTGRES_HOST: "regular2postgres"
       POSTGRES_PORT: 5432
+    volumes:
+      - regularnode2-key:/app/static-key
 
 volumes:
   leaderpostgres-data:
   regular1postgres-data:
   regular2postgres-data:
   leadernode-key:
+  regularnode1-key:
+  regularnode2-key:
