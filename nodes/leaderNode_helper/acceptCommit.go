@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
@@ -26,7 +27,8 @@ var CommitMu sync.Mutex
 var StartTime *big.Int
 var Execution bool
 var ActivatedOperator []string
-var TrialNum *big.Int
+
+var Halted bool
 
 type RandomRequest struct {
 	Round     *big.Int
@@ -202,9 +204,9 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
-	TrialNum = trialNum
 	round, _ = fetchCurrentRound(fallbackEthClient)
 	CurrentRound = round.String()
+	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 	req := RandomRequest{
 		Round:     round,
 		TrialNum:  trialNum,
@@ -223,19 +225,122 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		}
 		eth.UpdateActivatedOperators(fallbackEthClient)
 		ResetIndicesForNewRound()
-		log.Printf("Reset Indices array for new round %s", CurrentRound)
+		log.Printf("Reset Indices array for new round %s with trail %s", CurrentRound, trialNum.String())
 		Execution = true
-
-		// Reset Indices array for the new round
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
 		if RoundsData == nil {
 			RoundsData = make(map[string]RoundData)
 		}
-		data := RoundsData[CurrentRound]
+		data := RoundsData[uniqueKey]
 		data.RandomNumber = true
-		RoundsData[CurrentRound] = data
+		RoundsData[uniqueKey] = data
 		Execution = false
+	}
+
+	if state.Cmp(big.NewInt(3)) == 0 {
+		// Delete round and trial data from database
+		database.DeleteRoundTrialDataForLeaderNode(CurrentRound, trialNum.String())
+		// resume the round
+		Halted = true
+		resuming(fallbackEthClient)
+	}
+}
+
+func resuming(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+	// Load contract ABI and address
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Fatalf("Failed to decode leader private key: %v", err)
+	}
+	leaderEOA := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Check deposit amount
+	depositResult, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, leaderEOA)
+	if err != nil {
+		log.Printf("Failed to call s_depositAmount: %v", err)
+		return
+	}
+	depositAmount, ok := depositResult.(*big.Int)
+	if !ok {
+		log.Printf("Unexpected type for depositAmount: %T", depositResult)
+		return
+	}
+	minDeposit := new(big.Int).SetUint64(1e16) // 0.01 ETH in wei
+	if depositAmount.Cmp(minDeposit) < 0 {
+		// Need to top up
+		amountToDeposit := new(big.Int).Sub(minDeposit, depositAmount)
+		clientUtils := &utils.Client{
+			ContractAddress: contractAddress,
+			PrivateKey:      privateKey,
+			ContractABI:     parsedABI,
+		}
+		_, _, err := eth.ExecuteTransaction(
+			context.Background(),
+			clientUtils,
+			fallbackEthClient,
+			"deposit",
+			amountToDeposit,
+		)
+		if err != nil {
+			log.Printf("Failed to deposit: %v", err)
+			return
+		}
+		log.Printf("Deposited %s wei to reach 0.01 ETH minimum.", amountToDeposit.String())
+	}
+
+	// Now poll getActivatedOperatorsLength and call resume when >=2
+	for {
+		opsLenResult, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "getActivatedOperatorsLength", contractAddress)
+		if err != nil {
+			log.Printf("Failed to call getActivatedOperatorsLength: %v", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		opsLen, ok := opsLenResult.(*big.Int)
+		if !ok {
+			log.Printf("Unexpected type for getActivatedOperatorsLength: %T", opsLenResult)
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		if opsLen.Cmp(big.NewInt(2)) >= 0 {
+			// Call resume
+			clientUtils := &utils.Client{
+				ContractAddress: contractAddress,
+				PrivateKey:      privateKey,
+				ContractABI:     parsedABI,
+			}
+			_, _, err := eth.ExecuteTransaction(
+				context.Background(),
+				clientUtils,
+				fallbackEthClient,
+				"resume",
+				big.NewInt(0),
+			)
+			if err != nil {
+				log.Printf("Failed to call resume: %v", err)
+				return
+			}
+			log.Printf("Called resume() as activated operators >= 2.")
+			return
+		}
+		log.Printf("Activated operators (%v) < 2 . Waiting to call resume...", opsLen)
+		time.Sleep(5 * time.Second)
 	}
 }
 

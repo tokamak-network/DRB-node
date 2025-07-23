@@ -160,10 +160,6 @@ func LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, 
 		log.Printf("Failed to load leader commits: %v", err)
 
 	}
-	var operatorAddresses []common.Address
-	for _, operator := range ActivatedOperator {
-		operatorAddresses = append(operatorAddresses, common.HexToAddress(operator))
-	}
 
 	// Collect secret values, signatures (v, r, s), and round info in the order of activated operators
 	var secrets [][]byte

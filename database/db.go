@@ -671,3 +671,56 @@ func UpdatePeerCommitData(peerData *PeerCommitDataScheme) error {
 
 	return nil
 }
+
+// DeleteRoundTriDeleteRoundTrialDataForLeaderNodealData deletes all rows with the given round and trialNum from all relevant tables in leader node
+func DeleteRoundTrialDataForLeaderNode(round, trialNum string) error {
+	db := GetDB()
+
+	// Delete from leader_commit_schemes
+	_, err := db.Model((*LeaderCommitScheme)(nil)).Where("round = ? AND trial_num = ?", round, trialNum).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from leader_commit_schemes: %w", err)
+	}
+
+	// Delete from reveal_order_schemes
+	_, err = db.Model((*RevealOrderScheme)(nil)).Where("round = ? AND trial_num = ?", round, trialNum).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from reveal_order_schemes: %w", err)
+	}
+
+	// Delete from broadcast_tracker_schemes
+	_, err = db.Model((*BroadcastTrackerScheme)(nil)).Where("round = ? AND trial_num = ?", round, trialNum).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from broadcast_tracker_schemes: %w", err)
+	}
+	
+	return nil
+}
+
+// DeleteRoundTrialDataForRegularNode deletes all rows with the given round and trialNum from all relevant tables in regular node
+func DeleteRoundTrialDataForRegularNode(round, trialNum string) error {
+	db := GetDB()
+
+	// Delete from commit_data_schemes
+	_, err := db.Model((*CommitDataScheme)(nil)).Where("round = ? AND trial_num = ?", round, trialNum).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from commit_data_schemes: %w", err)
+	}
+	// Delete from reveal_order_schemes
+	_, err = db.Model((*RevealOrderScheme)(nil)).Where("round = ? AND trial_num = ?", round, trialNum).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from reveal_order_schemes: %w", err)
+	}
+	// Delete from peer_commit_data_schemes
+	_, err = db.Model((*PeerCommitDataScheme)(nil)).Where("round = ? AND trial_num = ?", round, trialNum).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from peer_commit_data_schemes: %w", err)
+	}
+	// Delete from broadcast_tracker_schemes
+	_, err = db.Model((*BroadcastTrackerScheme)(nil)).Where("round = ? AND trial_num = ?", round, trialNum).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from broadcast_tracker_schemes: %w", err)
+	}
+
+	return nil
+}
