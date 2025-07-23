@@ -11,6 +11,7 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -117,7 +118,10 @@ func (h *Handler) handleRegistrationRequest(s network.Stream) {
 
 func (h *Handler) handleCommitRequest(s network.Stream) {
 	defer s.Close()
-
+	if atomic.LoadInt32(&leaderNode_helper.Halted) == 1 {
+		log.Println("System is halted. Skipping handleCommitRequest.")
+		return
+	}
 	fallbackEthClient := h.fallbackEthClient
 
 	var req utils.CommitRequest
@@ -174,7 +178,10 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 
 func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h host.Host, s network.Stream) {
 	defer s.Close()
-
+	if atomic.LoadInt32(&leaderNode_helper.Halted) == 1 {
+		log.Println("System is halted. Skipping handleCOSRequest.")
+		return
+	}
 	var req utils.CosRequest
 	if err := json.NewDecoder(s).Decode(&req); err != nil {
 		log.Printf("Failed to decode COS request: %v", err)
@@ -390,6 +397,10 @@ func updateInMemoryData(uniqueKey string, eoaAddress common.Address, commitData 
 
 // generateMerkleRoot doesn't lock; it locks inside to read from memory
 func generateMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roundNum string, trialNum string) {
+	if atomic.LoadInt32(&leaderNode_helper.Halted) == 1 {
+		log.Println("System is halted. Skipping generateMerkleRoot.")
+		return
+	}
 	commitMu.Lock()
 	// Check if merkle root is already done before proceeding
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)

@@ -8,10 +8,10 @@ import (
 	"math/big"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
-
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -28,7 +28,7 @@ var StartTime *big.Int
 var Execution bool
 var ActivatedOperator []string
 
-var Halted bool
+var Halted int32 // 0 = false, 1 = true
 
 type RandomRequest struct {
 	Round     *big.Int
@@ -178,6 +178,10 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 }
 
 func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32]byte, index *big.Int) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
+		return
+	}
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	intValue := int(index.Int64())
 	regularNodeAddress := eth.ActivatedOperators[intValue]
@@ -204,7 +208,6 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
-	round, _ = fetchCurrentRound(fallbackEthClient)
 	CurrentRound = round.String()
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 	req := RandomRequest{
@@ -242,7 +245,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		// Delete round and trial data from database
 		database.DeleteRoundTrialDataForLeaderNode(CurrentRound, trialNum.String())
 		// resume the round
-		Halted = true
+		atomic.StoreInt32(&Halted, 1)
 		resuming(fallbackEthClient)
 	}
 }
@@ -345,6 +348,10 @@ func resuming(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 }
 
 func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trialNum *big.Int, cos [32]byte, activatedOperatorIndex *big.Int) error {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processCOS.")
+		return nil
+	}
 	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
 
 	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
@@ -429,8 +436,11 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 }
 
 func processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte, activatedOperatorIndex *big.Int) error {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processCVS.")
+		return nil
+	}
 	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
-	// round := CurrentRound
 	roundStr := round.String()
 	trialNumStr := trialNum.String()
 	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
@@ -521,31 +531,4 @@ func AllCosReceivedUnlocked(uniqueKey string) bool {
 		}
 	}
 	return true
-}
-
-func fetchCurrentRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient) (*big.Int, error) {
-	abiFilePath := "contract/abi/Commit2RevealDRB.json"
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		log.Fatalf("Failed to load contract ABI: %v", err)
-	}
-
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	result, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_currentRound", contractAddress)
-	if err != nil {
-		log.Printf("Failed to fetch activated operators: %v", err)
-		return nil, err
-	}
-	currentRound, ok := result.(*big.Int)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type: expected *big.Int, got %v", result)
-	}
-
-	return currentRound, nil
 }

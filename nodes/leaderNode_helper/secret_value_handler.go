@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -66,7 +67,10 @@ func SetIndices(indices []*big.Int) {
 // AcceptSecretValue processes and stores secret values sent by regular nodes.
 func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	defer s.Close()
-
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping AcceptSecretValue.")
+		return
+	}
 	// Decode the incoming request
 	var req utils.SecretValueRequest
 	if err := json.NewDecoder(s).Decode(&req); err != nil {

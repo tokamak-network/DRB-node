@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -129,6 +130,13 @@ func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddr
 
 // performReliableBroadcast handles the actual broadcasting with retry logic
 func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broadcastType string) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		broadcastMutex.Lock()
+		delete(activeBroadcasts, tracker.MessageID)
+		broadcastMutex.Unlock()
+		log.Println("System is halted. Skipping processCVS.")
+		return
+	}
 	nodeInfo := libp2putils.GetConnectedPeers()
 
 	for tracker.Attempts < tracker.MaxAttempts {
@@ -238,6 +246,10 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 
 // HandleAcknowledgment processes acknowledgments from regular nodes
 func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping HandleAcknowledgment.")
+		return
+	}
 	broadcastMutex.Lock()
 	defer broadcastMutex.Unlock()
 

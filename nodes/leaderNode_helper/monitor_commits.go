@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -45,6 +46,10 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 	}
 
 	for _, round := range roundsToProcess {
+		if atomic.LoadInt32(&Halted) == 1 {
+			log.Println("System is halted. Skipping checkRoundsForCompletion.")
+			return
+		}
 		// Defensive check: skip if all random_number_generated are already true for this round
 		leaderCommits, err := database.GetLeaderCommitsByRoundAndTrialNum(round.Round, round.TrialNum)
 		if err == nil && len(leaderCommits) > 0 {

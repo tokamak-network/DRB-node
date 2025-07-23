@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -28,6 +29,10 @@ var revealRequestStatus = make(map[string][]string)
 
 // StartSecretValueRequests initializes the secret value request process for a given round
 func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping StartSecretValueRequests.")
+		return
+	}
 	// Load reveal order for the round
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	roundRevealData, err := database.GetRevealOrder(round, trialNum, uniqueKey)
@@ -113,7 +118,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 				secretsOnChainMu.Lock()
 				secretsOnChain[uniqueKey] = true
 				secretsOnChainMu.Unlock()
-				requestToSubmitS(fallbackEthClient, round, trialNum, uniqueKey)
+				requestToSubmitS(fallbackEthClient, round, trialNum)
 			}
 		}()
 
@@ -122,7 +127,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 	}
 }
 
-func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, uniqueKey string) {
+func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
 	SecretRequestSentForWhichRound = CurrentRound
 	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := prepareArgumentsForRequestToSubmitS(round, trialNum)
 
@@ -236,6 +241,10 @@ func PackIndices(indices []*big.Int) *big.Int {
 
 // handleSecretValueResponse processes a response and sends the next request if applicable
 func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, eoa string) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping HandleSecretValueResponse.")
+		return
+	}
 	log.Printf("Secret value received for round %s with trail %s from EOA %s", round, trialNum, eoa)
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	// Load reveal order for the round
