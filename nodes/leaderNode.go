@@ -66,6 +66,9 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		log.Fatalf("Error creating host: %v", err)
 	}
 
+	// Populate peerstore from DB
+	// libp2putils.PopulatePeerstoreFromDB(h)
+
 	handler := &Handler{
 		fallbackEthClient: fallbackEthClient,
 	}
@@ -149,7 +152,7 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		commitData.RandomNumberGenerated = false
 		log.Printf("Storing CVS and signature for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 	}
-	updateInMemoryData(round, req.TrialNum, uniqueKey, eoaAddress, *commitData)
+	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
 
 	// Update database for commit data from regular node
@@ -157,7 +160,7 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		log.Printf("Error saving commit data for round %s EOA %s: %v", round, commitData.EOAAddress, err)
 		return
 	}
-	updateInMemoryData(round, req.TrialNum, uniqueKey, eoaAddress, *commitData)
+	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
 	leaderNode_helper.ReliableBroadCastCVS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cvs)
 	// Check if all commits are ready after this update
@@ -212,7 +215,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	commitData.CosHex = hex.EncodeToString(req.Cos[:])
 	log.Printf("Storing COS for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 
-	updateInMemoryData(round, req.TrialNum, uniqueKey, eoaAddress, *commitData)
+	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 
 	// Update database for leaderCommit's COS
@@ -229,7 +232,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		log.Printf("Error saving COS data for round %s with trail %s EOA %s: %v", round, req.TrialNum, eoaAddress.Hex(), err)
 		return
 	}
-	updateInMemoryData(round, req.TrialNum, uniqueKey, eoaAddress, *commitData)
+	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cos)
 	// Check if all commits are ready after this COS
@@ -376,7 +379,7 @@ func getOrCreateLeaderCommitData(roundNum string, trialNum string, uniqueKey str
 
 // updateInMemoryData updates committedNodes with the latest commitData.
 // Called with commitMu locked.
-func updateInMemoryData(roundNum string, trialNum string, uniqueKey string, eoaAddress common.Address, commitData utils.LeaderCommitData) {
+func updateInMemoryData(uniqueKey string, eoaAddress common.Address, commitData utils.LeaderCommitData) {
 	roundMap, exists := utils.CommittedNodes[uniqueKey]
 	if !exists {
 		roundMap = make(map[common.Address]utils.LeaderCommitData)

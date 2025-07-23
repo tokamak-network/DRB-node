@@ -27,7 +27,8 @@ var CommitMu sync.Mutex
 var StartTime *big.Int
 var Execution bool
 var ActivatedOperator []string
-var TrialNum *big.Int
+
+var Halted bool
 
 type RandomRequest struct {
 	Round     *big.Int
@@ -203,7 +204,6 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
-	TrialNum = trialNum
 	round, _ = fetchCurrentRound(fallbackEthClient)
 	CurrentRound = round.String()
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
@@ -242,6 +242,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		// Delete round and trial data from database
 		database.DeleteRoundTrialDataForLeaderNode(CurrentRound, trialNum.String())
 		// resume the round
+		Halted = true
 		resuming(fallbackEthClient)
 	}
 }

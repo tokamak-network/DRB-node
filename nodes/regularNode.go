@@ -187,18 +187,19 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		time.Sleep(5 * time.Second)
 
 		// Check and start leader monitoring
-		regularNode_helper.CheckAndStartMonitoring(fallbackEthClient)
-
 		round := regularNode_helper.CurrentRound
-		uniqueKey := utils.GetUniqueKey(round, regularNode_helper.CurrentTrialNum.String())
+		trialNum := regularNode_helper.CurrentTrialNum
+		regularNode_helper.CheckAndStartMonitoring(fallbackEthClient, round, trialNum)
+
+		uniqueKey := utils.GetUniqueKey(round, trialNum)
 		merkleRootSubmitted := regularNode_helper.RoundsData[uniqueKey].MerkleRoot
 		randomNumberSubmitted := regularNode_helper.RoundsData[uniqueKey].RandomNumber
 
-		log.Printf("Checking round %s with trial %s ...", round, regularNode_helper.CurrentTrialNum.String())
+		log.Printf("Checking round %s with trial %s ...", round, trialNum)
 		// Check if Merkle Root and Random Number are already generated (not nil)
 		if merkleRootSubmitted && randomNumberSubmitted {
 			// If both MerkleRoot and RandomNumber are generated, skip this round
-			log.Printf("Round %s with trial %s already has Merkle Root AND Random Number generated. Skipping commit generation.", round, regularNode_helper.CurrentTrialNum.String())
+			log.Printf("Round %s with trial %s already has Merkle Root AND Random Number generated. Skipping commit generation.", round, trialNum)
 			continue
 		}
 
@@ -206,7 +207,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		if isEOAActivated(eoaAddress) {
 
 			// Check if this round has already been committed (store it locally)
-			commitData, err := database.GetCommitByRound(round, regularNode_helper.CurrentTrialNum.String())
+			commitData, err := database.GetCommitByRound(round, trialNum)
 			if err != nil && err.Error() != "pg: no rows in result set" {
 				log.Printf("Error loading commit data: %v", err)
 				continue
@@ -214,7 +215,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 			// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil
 			if commitData != nil && !merkleRootSubmitted && !randomNumberSubmitted {
-				log.Printf("Commit data already exists for round %s with trial %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", round, regularNode_helper.CurrentTrialNum.String())
+				log.Printf("Commit data already exists for round %s with trial %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", round, trialNum)
 				continue
 			}
 
@@ -232,7 +233,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				commitData := utils.CommitData{
 					UniqueKey:       uniqueKey,
 					Round:           round,
-					TrialNum:        regularNode_helper.CurrentTrialNum.String(),
+					TrialNum:        trialNum,
 					SecretValue:     secretValue,
 					Cos:             cos,
 					Cvs:             cvs,
@@ -248,7 +249,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				}
 
 				// Send commit to leader
-				sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, round, regularNode_helper.CurrentTrialNum.String(), eoaAddress)
+				sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, round, trialNum, eoaAddress)
 			}
 
 			// If commit data exists and SendCosToLeader is false, send COS to leader
@@ -478,12 +479,13 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	req.Signature = signedRequest
 
 	// Use the current round and trialNum from Status event instead of startTime
-	if regularNode_helper.CurrentRoundNum == nil || regularNode_helper.CurrentTrialNum == nil {
+	if round == "" || trialNum == "" {
 		log.Printf("Current round or trialNum not available, cannot generate signature")
 		return
 	}
-
-	v, r, s, err := regularNode_helper.GenerateCvsSignature(regularNode_helper.CurrentRoundNum, regularNode_helper.CurrentTrialNum, req.Cvs)
+	trailNumBigIntValue, _ := big.NewInt(0).SetString(trialNum, 10)
+	roundBigIntValue, _ := big.NewInt(0).SetString(round, 10)
+	v, r, s, err := regularNode_helper.GenerateCvsSignature(roundBigIntValue, trailNumBigIntValue, req.Cvs)
 	if err != nil {
 		log.Printf("Failed to generate v, r, s for CVS: %v", err)
 		return
