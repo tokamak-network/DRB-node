@@ -217,6 +217,9 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		State:     state,
 	}
 	if state.Cmp(big.NewInt(1)) == 0 {
+		// Set Halted to 0 to resume the round
+		atomic.StoreInt32(&Halted, 0)
+
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
 		Req = req
@@ -242,10 +245,10 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 
 	if state.Cmp(big.NewInt(3)) == 0 {
+		atomic.StoreInt32(&Halted, 1)
 		// Delete round and trial data from database
 		database.DeleteRoundTrialDataForLeaderNode(CurrentRound, trialNum.String())
 		// resume the round
-		atomic.StoreInt32(&Halted, 1)
 		resuming(fallbackEthClient)
 	}
 }

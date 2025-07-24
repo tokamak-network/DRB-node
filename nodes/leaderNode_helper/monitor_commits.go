@@ -18,7 +18,7 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-var CvOnChain bool
+var CvOnChain = make(map[string]bool)
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
 func MonitorCommits(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
@@ -78,8 +78,8 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 		var ss []common.Hash
 		var index int
 		allEOAsSubmitted := true
+		uniqueKey := utils.GetUniqueKey(round.Round, round.TrialNum)
 		for i, operator := range operatorAddresses {
-			uniqueKey := utils.GetUniqueKey(round.Round, round.TrialNum)
 			commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round.Round, round.TrialNum, uniqueKey, operator.Hex())
 			if err != nil || commitData.SecretValue == [32]byte{} {
 				log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round.Round)
@@ -89,7 +89,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 
 			secrets = append(secrets, commitData.SecretValue[:])
 			// if Cv values are on-chain, than check this condition
-			if CvOnChain {
+			if CvOnChain[uniqueKey] {
 				indices := GetIndices()
 				if index < len(indices) && int64(i) <= indices[index].Int64() {
 					if int64(i) == indices[index].Int64() {
@@ -126,7 +126,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 			notOnChain := !secretsOnChain[round.UniqueKey]
 			secretsOnChainMu.RUnlock()
 			if notOnChain {
-				if !CvOnChain {
+				if !CvOnChain[uniqueKey] {
 					err = generateRandomNumberTransaction(fallbackEthClient, round.Round, round.TrialNum, secrets, vs, rs, ss)
 				} else {
 					err = generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient, round.Round, round.TrialNum, secrets, vs, rs, ss)

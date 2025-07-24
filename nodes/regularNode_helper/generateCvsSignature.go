@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-var EoaAddress string
 
 // GenerateCvsSignature generates the EIP-712 signature components (v, r, s) for a given round, trialNum and CVS value.
 func GenerateCvsSignature(round *big.Int, trialNum *big.Int, cvs [32]byte) (uint8, string, string, error) {
@@ -126,8 +125,4 @@ func abiEncodePacked(elements ...[]byte) []byte {
 // Helper: intToBytes converts a *big.Int to its padded big-endian byte representation.
 func intToBytes(n *big.Int) []byte {
 	return common.LeftPadBytes(n.Bytes(), 32)
-}
-
-func Setup(eoaAddress string) {
-	EoaAddress = eoaAddress
 }

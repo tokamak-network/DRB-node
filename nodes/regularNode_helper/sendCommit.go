@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -31,6 +32,7 @@ type CommitData struct {
 
 var Execution bool
 var ActivatedOperator []string
+var Halted int32 // 0 = false, 1 = true
 
 func MonitorCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	receiveCommitRequest(fallbackEthClient)
@@ -223,6 +225,11 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 }
 
 func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trialNum *big.Int, index *big.Int) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
+		return
+	}
+
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 	data, err := database.GetRevealOrder(round.String(), trialNum.String(), uniqueKey)
@@ -246,7 +253,7 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 	if temp+1 < len(revealOrder) {
 		if temp+1 < len(orderedNodes) {
 			regularEoaAddress := orderedNodes[temp+1]
-			if EoaAddress == regularEoaAddress {
+			if regularNodeEOA == regularEoaAddress {
 				fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, TrialNum: %v, EOA: %v\n", round.String(), trialNum.String(), regularEoaAddress)
 				submitS(fallbackEthClient, round.String(), trialNum.String())
 			}
@@ -255,6 +262,10 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 }
 
 func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, index *big.Int) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
+		return
+	}
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	revealOrder, err := database.GetRevealOrder(round, trialNum, uniqueKey)
@@ -268,7 +279,7 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	}
 
 	regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
-	if EoaAddress == regularEoaAddress {
+	if regularNodeEOA == regularEoaAddress {
 		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", round, regularEoaAddress)
 		submitS(fallbackEthClient, round, trialNum)
 	}
@@ -328,6 +339,10 @@ func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round stri
 }
 
 func processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
+		return
+	}
 	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
 	if RoundsData == nil {
 		RoundsData = make(map[string]RoundData)
@@ -339,6 +354,7 @@ func processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
+	
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
 	// Reset monitoring state for new round
 	roundStr := round.String()
@@ -358,6 +374,9 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 
 	if state.Cmp(big.NewInt(1)) == 0 {
+		// Set Halted to 0 to resume the round
+		atomic.StoreInt32(&Halted, 0)
+		
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
 		ActivatedOperator, _ = FetchActivatedOperators(fallbackEthClient, roundStr)
@@ -375,6 +394,15 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		RoundsData[uniqueKey] = roundData
 		Execution = false
 		log.Printf("Execution stopped for round %s", roundStr)
+	}
+
+	if state.Cmp(big.NewInt(3)) == 0 {
+		// Delete round and trial data from database
+		database.DeleteRoundTrialDataForLeaderNode(CurrentRound, trialNum.String())
+		// resume the round
+		atomic.StoreInt32(&Halted, 1)
+		// resuming(fallbackEthClient)
+		Execution = false
 	}
 
 	// Update rounds data
@@ -408,7 +436,8 @@ func AllCosReceivedUnlocked(activatedOperator []string, round string, trialNum s
 func allCosReceivedUnlockedRegular(round string, trialNum string, ops []common.Address) bool {
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	for _, op := range ops {
-		if !CosRecevied[uniqueKey][op.Hex()] {
+		v, ok := GetCosReceived(uniqueKey, op.Hex())
+		if !ok || !v {
 			return false
 		}
 	}
@@ -416,6 +445,10 @@ func allCosReceivedUnlockedRegular(round string, trialNum string, ops []common.A
 }
 
 func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trialNum *big.Int, packedIndices *big.Int) error {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processCommitRequest.")
+		return nil
+	}
 	fmt.Printf("Round %v, TrialNum %v, packedIndices %v\n", round, trialNum, packedIndices)
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -478,6 +511,10 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 }
 
 func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, packedIndices *big.Int, indicesLength *big.Int) error {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processCosRequest.")
+		return nil
+	}
 	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -599,6 +636,10 @@ func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCCl
 
 // StartLeaderMonitoring starts monitoring the leader for the current round
 func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, startTime *big.Int, round string, trialNum string) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping StartLeaderMonitoring.")
+		return
+	}
 	if leaderMonitoringActive {
 		log.Printf("Leader monitoring already active for round %s", round)
 		return

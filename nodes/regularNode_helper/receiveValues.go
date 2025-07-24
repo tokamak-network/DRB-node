@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sync"
+	"sync/atomic"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -15,7 +17,7 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-var CosRecevied = make(map[string]map[string]bool)
+var CosRecevied sync.Map // outer: string, inner: *sync.Map (string->bool)
 
 // Global variable to store the regular node's EOA address
 var regularNodeEOA string
@@ -53,6 +55,11 @@ func sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack utils.Acknowledgm
 // HandleCvs processes incoming CVS values and sends acknowledgment
 func HandleCvs(h host.Host, s network.Stream) {
 	defer s.Close()
+
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping HandleCvs.")
+		return
+	}
 
 	var message utils.BroadcastMessage
 	if err := json.NewDecoder(s).Decode(&message); err != nil {
@@ -125,6 +132,11 @@ func HandleCvs(h host.Host, s network.Stream) {
 func HandleCos(h host.Host, s network.Stream) {
 	defer s.Close()
 
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping HandleCos.")
+		return
+	}
+
 	var message utils.BroadcastMessage
 	if err := json.NewDecoder(s).Decode(&message); err != nil {
 		log.Printf("Failed to decode COS broadcast message: %v", err)
@@ -136,10 +148,7 @@ func HandleCos(h host.Host, s network.Stream) {
 
 	// Process the COS data
 	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
-	if CosRecevied[uniqueKey] == nil {
-		CosRecevied[uniqueKey] = make(map[string]bool)
-	}
-	CosRecevied[uniqueKey][message.EOAAddress] = true
+	SetCosReceived(uniqueKey, message.EOAAddress, true)
 
 	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
@@ -201,6 +210,11 @@ func HandleCos(h host.Host, s network.Stream) {
 // HandleSecret processes incoming secret values and sends acknowledgment
 func HandleSecret(h host.Host, s network.Stream) {
 	defer s.Close()
+
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping HandleSecret.")
+		return
+	}
 
 	var message utils.BroadcastMessage
 	if err := json.NewDecoder(s).Decode(&message); err != nil {
@@ -266,4 +280,23 @@ func HandleSecret(h host.Host, s network.Stream) {
 	}
 
 	sendAcknowledgment(h, leaderPeerID, ack)
+}
+
+func SetCosReceived(outer, inner string, value bool) {
+	actual, _ := CosRecevied.LoadOrStore(outer, &sync.Map{})
+	innerMap := actual.(*sync.Map)
+	innerMap.Store(inner, value)
+}
+
+func GetCosReceived(outer, inner string) (bool, bool) {
+	actual, ok := CosRecevied.Load(outer)
+	if !ok {
+		return false, false
+	}
+	innerMap := actual.(*sync.Map)
+	v, ok := innerMap.Load(inner)
+	if !ok {
+		return false, false
+	}
+	return v.(bool), true
 }

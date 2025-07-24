@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -21,6 +22,10 @@ var strictOrderWhileSecretRequest = make(map[string][]string)
 func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	defer s.Close()
 
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping HandleSecretValueRequest.")
+		return
+	}
 	// Decode the request
 	var req utils.SecretValueRequest
 	if err := json.NewDecoder(s).Decode(&req); err != nil {

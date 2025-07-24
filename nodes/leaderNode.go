@@ -45,7 +45,7 @@ var sendCommitRequest = make(map[string]bool)
 var onChainExecution = make(map[string]map[string]map[string]int)
 var flag = make(map[string]bool)
 var dispute = make(map[string]bool)
-var requestCv = true
+var requestCv = make(map[string]bool)
 
 type Handler struct {
 	fallbackEthClient *fallback_ethclient.FallbackRPCClient
@@ -627,7 +627,7 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 			}
 		}
 		if flag[uniqueKey] {
-			if requestCv {
+			if requestCv[uniqueKey] {
 				handleMissingCV(fallbackEthClient, missingOperators, roundNum, trialNum)
 			}
 		}
@@ -788,8 +788,13 @@ func requestToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 	log.Printf("Successfully submitted cos request for round %s with trail %s and indices %v", roundNum, trialNum, missingIndices)
 }
 
-func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, missingOperators []string, roundNum string, trialNum string) {
-	leaderNode_helper.CvOnChain = true
+func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, missingOperators []string, round string, trialNum string) {
+	if atomic.LoadInt32(&leaderNode_helper.Halted) == 1 {
+		log.Println("System is halted. Skipping handleMissingCV.")
+		return
+	}
+	uniqueKey := utils.GetUniqueKey(round, trialNum)
+	leaderNode_helper.CvOnChain[uniqueKey] = true
 	activatedOperators := leaderNode_helper.ActivatedOperator
 	i := big.NewInt(0)
 	for _, op := range activatedOperators {
@@ -850,12 +855,12 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 		packedIndices,
 	)
 	if err != nil {
-		log.Printf("Failed to submit commit request root for round %s with trail %s: %v", roundNum, trialNum, err)
+		log.Printf("Failed to submit commit request root for round %s with trail %s: %v", round, trialNum, err)
 		return
 	}
 
-	log.Printf("Successfully submitted commit request for round %s with trail %s and indices %v", roundNum, trialNum, indices)
-	requestCv = false
+	log.Printf("Successfully submitted commit request for round %s with trail %s and indices %v", round, trialNum, indices)
+	requestCv[uniqueKey] = false
 }
 
 func revert() {
@@ -864,7 +869,10 @@ func revert() {
 
 func handleAcknowledgment(s network.Stream) {
 	defer s.Close()
-
+	if atomic.LoadInt32(&leaderNode_helper.Halted) == 1 {
+		log.Println("System is halted. Skipping handleAcknowledgment.")
+		return
+	}
 	var ack utils.AcknowledgmentMessage
 	if err := json.NewDecoder(s).Decode(&ack); err != nil {
 		log.Printf("Failed to decode acknowledgment message: %v", err)

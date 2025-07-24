@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -91,7 +92,6 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	}
 
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	regularNode_helper.Setup(eoaAddress)
 	regularNode_helper.SetRegularNodeEOA(eoaAddress)
 	log.Printf("EOA Address: %s", eoaAddress)
 
@@ -192,6 +192,10 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		regularNode_helper.CheckAndStartMonitoring(fallbackEthClient, round, trialNum)
 
 		uniqueKey := utils.GetUniqueKey(round, trialNum)
+		if atomic.LoadInt32(&regularNode_helper.Halted) == 1 {
+			log.Println("System is halted. Skipping checkAndStartMonitoring.")
+			return
+		}
 		merkleRootSubmitted := regularNode_helper.RoundsData[uniqueKey].MerkleRoot
 		randomNumberSubmitted := regularNode_helper.RoundsData[uniqueKey].RandomNumber
 
