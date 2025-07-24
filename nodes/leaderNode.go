@@ -413,7 +413,7 @@ func generateMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 
 	log.Printf("Generating Merkle root for round %s with trail %s...", roundNum, trialNum)
 
-	activatedOperatorsList := leaderNode_helper.ActivatedOperator
+	activatedOperatorsList := eth.ActivatedOperators
 
 	log.Printf("Activated operators for round %s with trail %s in order: %v", roundNum, trialNum, activatedOperatorsList)
 
@@ -426,8 +426,7 @@ func generateMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 	}
 
 	var leaves [][]byte
-	for _, op := range activatedOperatorsList {
-		opAddr := common.HexToAddress(op)
+	for _, opAddr := range activatedOperatorsList {
 		data, ok := roundMap[opAddr]
 		if !ok || data.Cvs == [32]byte{} {
 			log.Printf("Missing CVS for operator %s in round %s with trail %s", opAddr.Hex(), roundNum, trialNum)
@@ -795,11 +794,11 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 	}
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	leaderNode_helper.CvOnChain[uniqueKey] = true
-	activatedOperators := leaderNode_helper.ActivatedOperator
+	activatedOperators := eth.ActivatedOperators
 	i := big.NewInt(0)
 	for _, op := range activatedOperators {
 		for _, missingOp := range missingOperators {
-			if op == missingOp {
+			if op.Hex() == missingOp {
 				leaderNode_helper.AppendToIndices(i)
 			}
 		}

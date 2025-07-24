@@ -26,7 +26,7 @@ import (
 var CommitMu sync.Mutex
 var StartTime *big.Int
 var Execution bool
-var ActivatedOperator []string
+// var ActivatedOperator []string
 
 var Halted int32 // 0 = false, 1 = true
 
@@ -223,12 +223,12 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
 		Req = req
-		var err error
-		ActivatedOperator, err = FetchActivatedOperators(fallbackEthClient, CurrentRound)
-		if err != nil {
-			log.Printf("Failed to fetch activated operators: %v", err)
-			return
-		}
+		// var err error
+		// ActivatedOperator, err = FetchActivatedOperators(fallbackEthClient, CurrentRound)
+		// if err != nil {
+		// 	log.Printf("Failed to fetch activated operators: %v", err)
+		// 	return
+		// }
 		eth.UpdateActivatedOperators(fallbackEthClient)
 		ResetIndicesForNewRound()
 		log.Printf("Reset Indices array for new round %s with trail %s", CurrentRound, trialNum.String())
@@ -357,8 +357,7 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *
 	}
 	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
 
-	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
-	eoa := common.HexToAddress(eoaAddress)
+	eoa := eth.ActivatedOperators[activatedOperatorIndex.Int64()]
 	cosHex := hex.EncodeToString(cos[:])
 	roundStr := round.String()
 	trialNumStr := trialNum.String()
@@ -446,8 +445,7 @@ func processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte, activatedOperat
 	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
 	roundStr := round.String()
 	trialNumStr := trialNum.String()
-	eoaAddress := ActivatedOperator[activatedOperatorIndex.Int64()]
-	eoa := common.HexToAddress(eoaAddress)
+	eoa := eth.ActivatedOperators[activatedOperatorIndex.Int64()]
 	cvsHex := hex.EncodeToString(cvs[:])
 
 	uniqueKey := utils.GetUniqueKey(roundStr, trialNumStr)

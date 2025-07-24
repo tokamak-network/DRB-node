@@ -65,11 +65,8 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 				continue
 			}
 		}
-		// Convert ActivatedOperator from []string to []common.Address
-		var operatorAddresses []common.Address
-		for _, operator := range ActivatedOperator {
-			operatorAddresses = append(operatorAddresses, common.HexToAddress(operator))
-		}
+		// Copy the activated operators from eth package
+		operatorAddresses := eth.ActivatedOperators
 
 		// Collect secret values, signatures (v, r, s), and round info in the order of activated operators
 		var secrets [][]byte
