@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS leader_commit_schemes (
     submit_merkle_root_done BOOLEAN NOT NULL,
     random_number_generated BOOLEAN NOT NULL,
     created_at BIGINT NOT NULL,
-    PRIMARY KEY (round, eoa_address)
+    PRIMARY KEY (unique_key, eoa_address)
 );
 
 -- Create commits schema
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS peer_commit_data_schemes (
     secret_value BYTEA,
     cos BYTEA,
     cvs BYTEA,
-    PRIMARY KEY (round, eoa_address)
+    PRIMARY KEY (unique_key, eoa_address)
 );
 
 -- Create broadcast_trackers schema
