@@ -59,7 +59,6 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 			if node.EOAAddress == eoa {
 				sendSecretValueRequestToNode(h, fallbackEthClient, round, trialNum, uniqueKey, eoa, node, order)
 			} else {
-				log.Printf("Node info for EOA %s not found in registered nodes.", eoa)
 				continue
 			}
 		}
