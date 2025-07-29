@@ -7,11 +7,11 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -20,12 +20,14 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 var CommitMu sync.Mutex
 var StartTime *big.Int
 var Execution bool
+
 // var ActivatedOperator []string
 
 var Halted int32 // 0 = false, 1 = true
@@ -80,98 +82,116 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		Addresses: []common.Address{contractAddr},
 	}
 
-	logs := make(chan types.Log)
-	sub, err := fallbackEthClient.SubscribeFilterLogs(context.Background(), query, logs)
-	if err != nil {
-		log.Fatalf("Failed to subscribe to logs: %v", err)
-	}
+	for { // Outer loop for reconnection
+		logs := make(chan types.Log)
+		sub, err := fallbackEthClient.SubscribeFilterLogs(context.Background(), query, logs)
+		if err != nil {
+			log.Printf("Failed to subscribe to logs: %v. Retrying in 5 seconds...", err)
+			time.Sleep(5 * time.Second)
+			continue
+		}
 
-	CvsEventSig := parsedABI.Events["CvSubmitted"].ID
-	StatusSig := parsedABI.Events["Status"].ID
-	CoSubmittedSig := parsedABI.Events["CoSubmitted"].ID
-	SSubmittedSig := parsedABI.Events["SSubmitted"].ID
+		CvsEventSig := parsedABI.Events["CvSubmitted"].ID
+		StatusSig := parsedABI.Events["Status"].ID
+		CoSubmittedSig := parsedABI.Events["CoSubmitted"].ID
+		SSubmittedSig := parsedABI.Events["SSubmitted"].ID
 
-	for {
-		select {
-		case err := <-sub.Err():
-			log.Fatalf("Error in event subscription: %v", err)
+		reconnect := false
+		for {
+			select {
+			case err := <-sub.Err():
+				log.Printf("Error in event subscription: %v", err)
 
-		case vLog := <-logs:
-			isReorg := vLog.Removed
-			if isReorg {
-				log.Printf("Reorg detected. Skipping event: %v", vLog.TxHash)
-				continue
+				if err != nil && (strings.Contains(err.Error(), "websocket: close 1006") || strings.Contains(err.Error(), "unexpected EOF")) {
+					log.Printf("Websocket closed abnormally. Attempting to reconnect in 1 seconds...")
+					reconnect = true
+					time.Sleep(1 * time.Second)
+				} else {
+					log.Printf("Fatal error in event subscription: %v", err)
+					reconnect = true
+					time.Sleep(1 * time.Second)
+				}
+				
+			case vLog := <-logs:
+				isReorg := vLog.Removed
+				if isReorg {
+					log.Printf("Reorg detected. Skipping event: %v", vLog.TxHash)
+					continue
+				}
+				switch vLog.Topics[0] {
+				case CvsEventSig:
+					eventData := struct {
+						Round    *big.Int
+						TrialNum *big.Int
+						Cv       [32]byte
+						Index    *big.Int
+					}{}
+					err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode CvSubmitted event log: %v", err)
+						continue
+					}
+					fmt.Printf("CvSubmitted Event: Fetched successfully")
+
+					processCVS(eventData.Round, eventData.TrialNum, eventData.Cv, eventData.Index)
+
+				case CoSubmittedSig:
+					eventData := struct {
+						Round    *big.Int
+						TrialNum *big.Int
+						Co       [32]byte
+						Index    *big.Int
+					}{}
+					err := parsedABI.UnpackIntoInterface(&eventData, "CoSubmitted", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode CoSubmitted event log: %v", err)
+						continue
+					}
+					fmt.Printf("CoSubmitted Event: Fetched successfully")
+
+					processCOS(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.Co, eventData.Index)
+
+				case StatusSig:
+					eventData := struct {
+						CurRound    *big.Int
+						CurTrialNum *big.Int
+						CurState    *big.Int
+					}{}
+
+					err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode Status event log: %v", err)
+						continue
+					}
+
+					blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+					if err != nil {
+						log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+						continue
+					}
+
+					processRandomRequestNumber(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.CurRound, eventData.CurTrialNum, eventData.CurState)
+
+				case SSubmittedSig:
+					eventData := struct {
+						Round    *big.Int
+						TrialNum *big.Int
+						S        [32]byte
+						Index    *big.Int
+					}{}
+
+					err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
+
+					if err != nil {
+						log.Printf("Failed to decode SSubmitted event log: %v", err)
+						continue
+					}
+					fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
+					processSubmittedSecretRequest(eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
+				}
 			}
-			switch vLog.Topics[0] {
-			case CvsEventSig:
-				eventData := struct {
-					Round    *big.Int
-					TrialNum *big.Int
-					Cv       [32]byte
-					Index    *big.Int
-				}{}
-				err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
-				if err != nil {
-					log.Printf("Failed to decode CvSubmitted event log: %v", err)
-					continue
-				}
-				fmt.Printf("CvSubmitted Event: Fetched successfully")
-
-				processCVS(eventData.Round, eventData.TrialNum, eventData.Cv, eventData.Index)
-
-			case CoSubmittedSig:
-				eventData := struct {
-					Round    *big.Int
-					TrialNum *big.Int
-					Co       [32]byte
-					Index    *big.Int
-				}{}
-				err := parsedABI.UnpackIntoInterface(&eventData, "CoSubmitted", vLog.Data)
-				if err != nil {
-					log.Printf("Failed to decode CoSubmitted event log: %v", err)
-					continue
-				}
-				fmt.Printf("CoSubmitted Event: Fetched successfully")
-
-				processCOS(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.Co, eventData.Index)
-
-			case StatusSig:
-				eventData := struct {
-					CurRound    *big.Int
-					CurTrialNum *big.Int
-					CurState    *big.Int
-				}{}
-
-				err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
-				if err != nil {
-					log.Printf("Failed to decode Status event log: %v", err)
-					continue
-				}
-
-				blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
-				if err != nil {
-					log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
-					continue
-				}
-
-				processRandomRequestNumber(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.CurRound, eventData.CurTrialNum, eventData.CurState)
-
-			case SSubmittedSig:
-				eventData := struct {
-					Round    *big.Int
-					TrialNum *big.Int
-					S        [32]byte
-					Index    *big.Int
-				}{}
-
-				err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
-
-				if err != nil {
-					log.Printf("Failed to decode SSubmitted event log: %v", err)
-					continue
-				}
-				fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
-				processSubmittedSecretRequest(eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
+			if reconnect {
+				break // break inner for loop to reconnect
 			}
 		}
 	}
@@ -223,13 +243,9 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
 		Req = req
-		// var err error
-		// ActivatedOperator, err = FetchActivatedOperators(fallbackEthClient, CurrentRound)
-		// if err != nil {
-		// 	log.Printf("Failed to fetch activated operators: %v", err)
-		// 	return
-		// }
+		// Update the activated operators
 		eth.UpdateActivatedOperators(fallbackEthClient)
+		// Reset the indices for the new round
 		ResetIndicesForNewRound()
 		log.Printf("Reset Indices array for new round %s with trail %s", CurrentRound, trialNum.String())
 		Execution = true
@@ -245,6 +261,9 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 
 	if state.Cmp(big.NewInt(3)) == 0 {
+		// Set Execution to false to stop the round
+		Execution = false
+		// Set Halted to 1 to halt the round
 		atomic.StoreInt32(&Halted, 1)
 		// Delete round and trial data from database
 		database.DeleteRoundTrialDataForLeaderNode(CurrentRound, trialNum.String())
