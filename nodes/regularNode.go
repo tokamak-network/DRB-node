@@ -194,7 +194,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		uniqueKey := utils.GetUniqueKey(round, trialNum)
 		if atomic.LoadInt32(&regularNode_helper.Halted) == 1 {
 			log.Println("System is halted. Skipping checkAndStartMonitoring.")
-			return
+			continue
 		}
 		merkleRootSubmitted := regularNode_helper.RoundsData[uniqueKey].MerkleRoot
 		randomNumberSubmitted := regularNode_helper.RoundsData[uniqueKey].RandomNumber
