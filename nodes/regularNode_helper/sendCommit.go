@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -66,7 +67,15 @@ var (
 	cvRequestedEventEmitted         bool
 	merkleRootSubmittedEventEmitted bool
 	CurrentTrialNum                 string
+	// New variables for merkle root monitoring
+	merkleRootMonitoringActive bool
+	merkleRootMonitoringTimer  *time.Timer
+	requestedToSubmitCvTime    *big.Int
 )
+
+var cvRequestIndices []*big.Int
+var submittedCvIndices map[string]map[string]bool // Track which indices have submitted CV values
+var submittedCvIndicesMutex sync.RWMutex          // Protect access to submittedCvIndices
 
 func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	contractAddress := os.Getenv("CONTRACT_ADDRESS")
@@ -91,6 +100,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		}
 
 		SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
+		CvsEventSig := parsedABI.Events["CvSubmitted"].ID
 		StatusSig := parsedABI.Events["Status"].ID
 		MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
 		RequestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
@@ -139,6 +149,17 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						cvRequestedEventEmitted = true
 						StopLeaderMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 
+						// Get the block timestamp for the RequestedToSubmitCv event
+						blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+						if err != nil {
+							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+							continue
+						}
+						requestedToSubmitCvTime = big.NewInt(int64(blockTimestamp))
+
+						// Start monitoring for merkle root submission
+						StartMerkleRootMonitoring(fallbackEthClient, eventData.Round.String(), eventData.TrialNum.String())
+
 						processCommitRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
 
 					case StatusSig:
@@ -181,6 +202,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						// Mark Merkle root as submitted and stop leader monitoring
 						merkleRootSubmittedEventEmitted = true
 						StopLeaderMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+						StopMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 
 						processMerkleRoot(eventData.Round, eventData.TrialNum)
 
@@ -233,6 +255,20 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						}
 						fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
 						processSubmittedSecretRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.Index)
+					case CvsEventSig:
+						eventData := struct {
+							Round    *big.Int
+							TrialNum *big.Int
+							Cv       [32]byte
+							Index    *big.Int
+						}{}
+						err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
+						if err != nil {
+							log.Printf("Failed to decode CvSubmitted event log: %v", err)
+							continue
+						}
+						fmt.Printf("CvSubmitted Event: Fetched successfully")
+						processCvSubmitted(eventData.Round, eventData.TrialNum, eventData.Index)
 					}
 				}
 			}
@@ -241,6 +277,60 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 			}
 		}
 	}
+}
+
+func processCvSubmitted(round *big.Int, trialNum *big.Int, index *big.Int) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processCVS.")
+		return
+	}
+	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
+	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
+
+	// Use mutex to protect access to submittedCvIndices
+	submittedCvIndicesMutex.Lock()
+	defer submittedCvIndicesMutex.Unlock()
+
+	// Initialize the tracking map if it doesn't exist
+	if submittedCvIndices == nil {
+		submittedCvIndices = make(map[string]map[string]bool)
+	}
+
+	// Initialize the inner map for this uniqueKey if it doesn't exist
+	if submittedCvIndices[uniqueKey] == nil {
+		submittedCvIndices[uniqueKey] = make(map[string]bool)
+	}
+
+	// Mark this index as submitted
+	indexStr := index.String()
+	submittedCvIndices[uniqueKey][indexStr] = true
+
+	log.Printf("CV submitted for index %s in round %s with trail %s", indexStr, round.String(), trialNum.String())
+
+}
+
+func checkAllCVsSubmittedOnChain(round string, trialNum string) bool {
+	uniqueKey := utils.GetUniqueKey(round, trialNum)
+
+	// Use read lock to protect access to submittedCvIndices
+	submittedCvIndicesMutex.RLock()
+	defer submittedCvIndicesMutex.RUnlock()
+
+	// Check if the outer map or inner map doesn't exist
+	if submittedCvIndices == nil || submittedCvIndices[uniqueKey] == nil {
+		return false
+	}
+
+	// Check if all requested indices have submitted their CV values
+	allSubmitted := true
+	for _, requestedIndex := range cvRequestIndices {
+		if !submittedCvIndices[uniqueKey][requestedIndex.String()] {
+			allSubmitted = false
+			break
+		}
+	}
+
+	return allSubmitted
 }
 
 func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trialNum *big.Int, index *big.Int) {
@@ -481,6 +571,11 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 
 	acitvatedOps := ActivatedOperator
 	indices := unpackIndices(packedIndices)
+	// Copy indices by value (deep copy)
+	cvRequestIndices = make([]*big.Int, len(indices))
+	for i, index := range indices {
+		cvRequestIndices[i] = new(big.Int).Set(index)
+	}
 	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
 
 	if err != nil {
@@ -718,8 +813,16 @@ func StopLeaderMonitoring(round string, trialNum string) {
 // ResetMonitoringState resets all monitoring variables
 func ResetMonitoringState(round string, trialNum string) {
 	StopLeaderMonitoring(round, trialNum)
+	StopMerkleRootMonitoring(round, trialNum)
 	cvRequestedEventEmitted = false
 	merkleRootSubmittedEventEmitted = false
+	requestedToSubmitCvTime = nil
+
+	// Use mutex to protect access to submittedCvIndices
+	submittedCvIndicesMutex.Lock()
+	cvRequestIndices = nil
+	submittedCvIndices = nil
+	submittedCvIndicesMutex.Unlock()
 
 	log.Printf("Reset monitoring state")
 }
@@ -767,6 +870,116 @@ func callFailToRequestSubmitCVOrSubmitMerkleRoot(fallbackEthClient *fallback_eth
 	}
 
 	log.Printf("Successfully called failToRequestSubmitCVOrSubmitMerkleRoot for round %swith trail %s", round, trialNum)
+}
+
+// StartMerkleRootMonitoring starts monitoring for merkle root submission after CV request
+func StartMerkleRootMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	if merkleRootMonitoringActive {
+		log.Printf("Merkle root monitoring already active for round %s with trail %s", round, trialNum)
+		return
+	}
+
+	if requestedToSubmitCvTime == nil {
+		log.Printf("RequestedToSubmitCvTime is nil, cannot start merkle root monitoring")
+		return
+	}
+
+	merkleRootMonitoringActive = true
+
+	// Get timing parameters from contract
+	onChainSubmissionPeriod := big.NewInt(40) // onChainSubmissionPeriodPerOperator = 40
+	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
+
+	// Calculate deadline: requestedToSubmitCvTime + onChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
+	deadline := new(big.Int).Add(requestedToSubmitCvTime, onChainSubmissionPeriod)
+	deadline.Add(deadline, requestOrSubmitOrFailDecisionPeriod)
+
+	// Convert deadline to time.Duration
+	deadlineTime := time.Unix(deadline.Int64(), 0)
+	now := time.Now()
+	duration := deadlineTime.Sub(now)
+
+	if duration <= 0 {
+		log.Printf("Deadline has already passed for round %s with trail %s, calling failToSubmitMerkleRootAfterDispute immediately", round, trialNum)
+		callFailToSubmitMerkleRootAfterDispute(fallbackEthClient, round, trialNum)
+		return
+	}
+
+	log.Printf("Starting merkle root monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
+
+	// Set timer to call the function when deadline is reached
+	merkleRootMonitoringTimer = time.AfterFunc(duration, func() {
+		log.Printf("Deadline reached for round %s, checking conditions before calling failToSubmitMerkleRootAfterDispute", round)
+
+		// Check if all CVs have been submitted on-chain and merkle root hasn't been submitted
+		if checkAllCVsSubmittedOnChain(round, trialNum) && merkleRootSubmittedEventEmitted {
+			log.Printf("All CVs submitted on-chain but merkle root not submitted, calling failToSubmitMerkleRootAfterDispute")
+			callFailToSubmitMerkleRootAfterDispute(fallbackEthClient, round, trialNum)
+		} else {
+			log.Printf("Conditions not met for failToSubmitMerkleRootAfterDispute - CVs not all submitted or merkle root already submitted")
+		}
+		merkleRootMonitoringActive = false
+	})
+}
+
+// StopMerkleRootMonitoring stops the current merkle root monitoring
+func StopMerkleRootMonitoring(round string, trialNum string) {
+	if !merkleRootMonitoringActive {
+		return
+	}
+
+	if merkleRootMonitoringTimer != nil {
+		merkleRootMonitoringTimer.Stop()
+		merkleRootMonitoringTimer = nil
+	}
+
+	merkleRootMonitoringActive = false
+	log.Printf("Stopped merkle root monitoring for round %s", round)
+}
+
+// callFailToSubmitMerkleRootAfterDispute calls the contract function to fail the leader for not submitting merkle root
+func callFailToSubmitMerkleRootAfterDispute(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode Ethereum private key: %v", err)
+		return
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"failToSubmitMerkleRootAfterDispute",
+		big.NewInt(0),
+	)
+	if err != nil {
+		log.Printf("Failed to call failToSubmitMerkleRootAfterDispute: %v", err)
+		return
+	}
+
+	log.Printf("Successfully called failToSubmitMerkleRootAfterDispute for round %s with trail %s", round, trialNum)
 }
 
 // CheckAndStartMonitoring checks if monitoring should be started and starts it if needed
