@@ -68,7 +68,6 @@ var (
 	merkleRootSubmittedEventEmitted bool
 	CurrentTrialNum                 string
 	// New variables for merkle root monitoring
-	merkleRootMonitoringActive bool
 	merkleRootMonitoringTimer  *time.Timer
 	requestedToSubmitCvTime    *big.Int
 )
@@ -147,7 +146,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 
 						// Mark CV as requested and stop leader monitoring
 						cvRequestedEventEmitted = true
-						StopLeaderMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+						StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 
 						// Get the block timestamp for the RequestedToSubmitCv event
 						blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
@@ -201,8 +200,8 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 
 						// Mark Merkle root as submitted and stop leader monitoring
 						merkleRootSubmittedEventEmitted = true
-						StopLeaderMonitoring(eventData.Round.String(), eventData.TrialNum.String())
-						StopMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+						StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+						StopFailToSubmitMerkleRootAfterDisputeMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 
 						processMerkleRoot(eventData.Round, eventData.TrialNum)
 
@@ -795,8 +794,8 @@ func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 	})
 }
 
-// StopLeaderMonitoring stops the current leader monitoring
-func StopLeaderMonitoring(round string, trialNum string) {
+// StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring stops the current leader monitoring
+func StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round string, trialNum string) {
 	if !leaderMonitoringActive {
 		return
 	}
@@ -812,8 +811,8 @@ func StopLeaderMonitoring(round string, trialNum string) {
 
 // ResetMonitoringState resets all monitoring variables
 func ResetMonitoringState(round string, trialNum string) {
-	StopLeaderMonitoring(round, trialNum)
-	StopMerkleRootMonitoring(round, trialNum)
+	StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round, trialNum)
+	StopFailToSubmitMerkleRootAfterDisputeMonitoring(round, trialNum)
 	cvRequestedEventEmitted = false
 	merkleRootSubmittedEventEmitted = false
 	requestedToSubmitCvTime = nil
@@ -874,21 +873,15 @@ func callFailToRequestSubmitCVOrSubmitMerkleRoot(fallbackEthClient *fallback_eth
 
 // StartMerkleRootMonitoring starts monitoring for merkle root submission after CV request
 func StartMerkleRootMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
-	if merkleRootMonitoringActive {
-		log.Printf("Merkle root monitoring already active for round %s with trail %s", round, trialNum)
-		return
-	}
 
 	if requestedToSubmitCvTime == nil {
 		log.Printf("RequestedToSubmitCvTime is nil, cannot start merkle root monitoring")
 		return
 	}
 
-	merkleRootMonitoringActive = true
-
 	// Get timing parameters from contract
-	onChainSubmissionPeriod := big.NewInt(40) // onChainSubmissionPeriodPerOperator = 40
-	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
+	onChainSubmissionPeriod := big.NewInt(120) // onChainSubmissionPeriod = 120
+	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60) // requestOrSubmitOrFailDecisionPeriod = 60
 
 	// Calculate deadline: requestedToSubmitCvTime + onChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
 	deadline := new(big.Int).Add(requestedToSubmitCvTime, onChainSubmissionPeriod)
@@ -899,11 +892,6 @@ func StartMerkleRootMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPC
 	now := time.Now()
 	duration := deadlineTime.Sub(now)
 
-	if duration <= 0 {
-		log.Printf("Deadline has already passed for round %s with trail %s, calling failToSubmitMerkleRootAfterDispute immediately", round, trialNum)
-		callFailToSubmitMerkleRootAfterDispute(fallbackEthClient, round, trialNum)
-		return
-	}
 
 	log.Printf("Starting merkle root monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 
@@ -912,28 +900,23 @@ func StartMerkleRootMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPC
 		log.Printf("Deadline reached for round %s, checking conditions before calling failToSubmitMerkleRootAfterDispute", round)
 
 		// Check if all CVs have been submitted on-chain and merkle root hasn't been submitted
-		if checkAllCVsSubmittedOnChain(round, trialNum) && merkleRootSubmittedEventEmitted {
+		if checkAllCVsSubmittedOnChain(round, trialNum) && !merkleRootSubmittedEventEmitted {
 			log.Printf("All CVs submitted on-chain but merkle root not submitted, calling failToSubmitMerkleRootAfterDispute")
 			callFailToSubmitMerkleRootAfterDispute(fallbackEthClient, round, trialNum)
 		} else {
 			log.Printf("Conditions not met for failToSubmitMerkleRootAfterDispute - CVs not all submitted or merkle root already submitted")
 		}
-		merkleRootMonitoringActive = false
 	})
 }
 
-// StopMerkleRootMonitoring stops the current merkle root monitoring
-func StopMerkleRootMonitoring(round string, trialNum string) {
-	if !merkleRootMonitoringActive {
-		return
-	}
+// StopFailToSubmitMerkleRootAfterDisputeMonitoring stops the current merkle root monitoring
+func StopFailToSubmitMerkleRootAfterDisputeMonitoring(round string, trialNum string) {
 
 	if merkleRootMonitoringTimer != nil {
 		merkleRootMonitoringTimer.Stop()
 		merkleRootMonitoringTimer = nil
 	}
 
-	merkleRootMonitoringActive = false
 	log.Printf("Stopped merkle root monitoring for round %s", round)
 }
 
