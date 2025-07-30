@@ -45,7 +45,6 @@ var sendCommitRequest = make(map[string]bool)
 var onChainExecution = make(map[string]map[string]map[string]int)
 var flag = make(map[string]bool)
 var dispute = make(map[string]bool)
-var requestCv = make(map[string]bool)
 
 type Handler struct {
 	fallbackEthClient *fallback_ethclient.FallbackRPCClient
@@ -616,7 +615,6 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 				}
 				if onChainExecution[uniqueKey]["CVS"][op] >= 3 {
 					failToSubmitCv(fallbackEthClient)
-					revert()
 				} else if sendCommitRequest[uniqueKey] {
 					missingOperators = append(missingOperators, op)
 					onChainExecution[uniqueKey]["CVS"][op]++
@@ -626,9 +624,7 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 			}
 		}
 		if flag[uniqueKey] {
-			if requestCv[uniqueKey] {
-				handleMissingCV(fallbackEthClient, missingOperators, roundNum, trialNum)
-			}
+			handleMissingCV(fallbackEthClient, missingOperators, roundNum, trialNum)
 		}
 		if allReceived {
 			log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", roundNum, trialNum)
@@ -859,11 +855,6 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 	}
 
 	log.Printf("Successfully submitted commit request for round %s with trail %s and indices %v", round, trialNum, indices)
-	requestCv[uniqueKey] = false
-}
-
-func revert() {
-
 }
 
 func handleAcknowledgment(s network.Stream) {
