@@ -529,6 +529,10 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 func AllCosReceivedUnlocked(activatedOperator []string, round string, trialNum string) {
 	for {
 		ops := eth.ActivatedOperators
+		if atomic.LoadInt32(&Halted) == 1 {
+			log.Println("System is halted. Skipping AllCosReceivedUnlocked.")
+			return
+		}
 		if allCosReceivedUnlockedRegular(round, trialNum, ops) {
 			flag, _ := commitreveal2.DetermineRegularRevealOrder(round, trialNum, ops)
 			if flag {
