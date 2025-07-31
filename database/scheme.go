@@ -9,11 +9,10 @@ type NodeInfoScheme struct {
 }
 
 type LeaderCommitScheme struct {
-	ID                    int    `pg:"id,pk"`
-	UniqueKey             string `pg:"unique_key,notnull"`
-	Round                 string `pg:"round,notnull"`
-	TrialNum              string `pg:"trial_num,notnull"`
-	EOAAddress            string `pg:"eoa_address,notnull"`
+	ID                    int    `pg:"id"`
+	Round                 string `pg:"round,pk,notnull"`
+	TrialNum              string `pg:"trial_num,pk,notnull"`
+	EOAAddress            string `pg:"eoa_address,pk,notnull"`
 	Cvs                   []byte `pg:"cvs,type:bytea,notnull"`
 	CvsHex                string `pg:"cvs_hex"`
 	Cos                   []byte `pg:"cos,type:bytea,notnull"`
@@ -29,10 +28,9 @@ type LeaderCommitScheme struct {
 }
 
 type CommitDataScheme struct {
-	ID              int    `pg:"id,pk"`
-	UniqueKey       string `pg:"unique_key,notnull"`
-	Round           string `pg:"round,notnull"`
-	TrialNum        string `pg:"trial_num,notnull"`
+	ID              int    `pg:"id"`
+	Round           string `pg:"round,pk,notnull"`
+	TrialNum        string `pg:"trial_num,pk,notnull"`
 	Cvs             []byte `pg:"cvs,type:bytea,notnull"`
 	Cos             []byte `pg:"cos,type:bytea,notnull"`
 	SecretValue     []byte `pg:"secret_value,type:bytea,notnull"`
@@ -44,21 +42,19 @@ type CommitDataScheme struct {
 }
 
 type RevealOrderScheme struct {
-	ID           int      `pg:"id,pk"`
-	UniqueKey    string   `pg:"unique_key,notnull"`
-	Round        string   `pg:"round,notnull"`
-	TrialNum     string   `pg:"trial_num,notnull"`
+	ID           int      `pg:"id"`
+	Round        string   `pg:"round,pk,notnull"`
+	TrialNum     string   `pg:"trial_num,pk,notnull"`
 	OrderedNodes []string `pg:"ordered_nodes,array,notnull"`
 	RevealOrder  []int    `pg:"reveal_order,array,notnull"`
 	RV           string   `pg:"rv,notnull"`
 }
 
 type PeerCommitDataScheme struct {
-	ID          int    `pg:"id,pk"`
-	UniqueKey   string `pg:"unique_key,notnull"`
-	Round       string `pg:"round,notnull"`
-	TrialNum    string `pg:"trial_num,notnull"`
-	EOAAddress  string `pg:"eoa_address,notnull"`
+	ID          int    `pg:"id"`
+	Round       string `pg:"round,pk,notnull"`
+	TrialNum    string `pg:"trial_num,pk,notnull"`
+	EOAAddress  string `pg:"eoa_address,pk,notnull"`
 	SecretValue []byte `pg:"secret_value,type:bytea"`
 	Cos         []byte `pg:"cos,type:bytea"`
 	Cvs         []byte `pg:"cvs,type:bytea"`

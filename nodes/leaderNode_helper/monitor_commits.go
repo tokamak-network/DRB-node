@@ -77,7 +77,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 		allEOAsSubmitted := true
 		uniqueKey := utils.GetUniqueKey(round.Round, round.TrialNum)
 		for i, operator := range operatorAddresses {
-			commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round.Round, round.TrialNum, uniqueKey, operator.Hex())
+			commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round.Round, round.TrialNum, operator.Hex())
 			if err != nil || commitData.SecretValue == [32]byte{} {
 				log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round.Round)
 				allEOAsSubmitted = false
@@ -263,8 +263,7 @@ func generateRandomNumberTransaction(fallbackEthClient *fallback_ethclient.Fallb
 		})
 	}
 
-	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	roundRevealData, err := database.GetRevealOrder(round, trialNum, uniqueKey)
+	roundRevealData, err := database.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return err
@@ -338,8 +337,7 @@ func generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient *fallback_et
 		allSecrets = append(allSecrets, secret)
 	}
 
-	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	roundRevealData, err := database.GetRevealOrder(round, trialNum, uniqueKey)
+	roundRevealData, err := database.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return err

@@ -65,8 +65,7 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 }
 
 func DetermineRevealOrder(roundNum string, trialNum string, activatedOperators []common.Address) (bool, error) {
-	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
-	_, err := database.GetRevealOrder(roundNum, trialNum, uniqueKey)
+	_, err := database.GetRevealOrder(roundNum, trialNum)
 	if err == nil {
 		log.Printf("Reveal order already exists for round %s with trail %s. Skipping calculation.", roundNum, trialNum)
 		return true, nil
@@ -87,7 +86,7 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOperators [
 	for _, eoaAddress := range operators {
 		eoaAddressStr := eoaAddress.Hex()
 
-		commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, trialNum, uniqueKey, eoaAddressStr)
+		commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, trialNum, eoaAddressStr)
 		if err != nil {
 			log.Printf("Failed to load leader commit for operator %s in round %s with trail %s: %v", eoaAddressStr, roundNum, trialNum, err)
 			return false, fmt.Errorf("failed to load leader commit for operator %s in round %s with trail %s", eoaAddressStr, roundNum, trialNum)
@@ -114,7 +113,7 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOperators [
 	}
 
 	revealOrderData := utils.RevealOrderData{
-		UniqueKey:    uniqueKey,
+		UniqueKey:    roundNum + "-" + trialNum,
 		Round:        roundNum,
 		TrialNum:     trialNum,
 		RevealOrder:  revealOrder,
@@ -133,8 +132,7 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOperators [
 }
 
 func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOperators []common.Address) (bool, error) {
-	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
-	_, err := database.GetRevealOrder(roundNum, trialNum, uniqueKey)
+	_, err := database.GetRevealOrder(roundNum, trialNum)
 	if err == nil {
 		log.Printf("Reveal order already exists for round %s with trial %s. Skipping calculation.", roundNum, trialNum)
 		return true, nil
@@ -182,7 +180,7 @@ func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOper
 	}
 
 	revealOrderData := utils.RevealOrderData{
-		UniqueKey:    uniqueKey,
+		UniqueKey:    roundNum + "-" + trialNum,
 		Round:        roundNum,
 		TrialNum:     trialNum,
 		RevealOrder:  revealOrder,

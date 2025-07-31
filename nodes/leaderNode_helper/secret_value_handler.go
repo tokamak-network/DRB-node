@@ -94,7 +94,7 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	// Get the unique key for the round and trial number
 	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)
 	// Fetch or initialize the leader commit data for the given round and EOA
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(req.Round, req.TrialNum, uniqueKey, req.RegularEoaAddress)
+	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(req.Round, req.TrialNum, req.RegularEoaAddress)
 	if err != nil {
 		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", req.Round, req.RegularEoaAddress)
 		leaderCommitData = &utils.LeaderCommitData{

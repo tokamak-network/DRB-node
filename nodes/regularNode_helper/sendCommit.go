@@ -68,8 +68,8 @@ var (
 	merkleRootSubmittedEventEmitted bool
 	CurrentTrialNum                 string
 	// New variables for merkle root monitoring
-	merkleRootMonitoringTimer  *time.Timer
-	requestedToSubmitCvTime    *big.Int
+	merkleRootMonitoringTimer *time.Timer
+	requestedToSubmitCvTime   *big.Int
 )
 
 var cvRequestIndices []*big.Int
@@ -332,15 +332,14 @@ func checkAllCVsSubmittedOnChain(round string, trialNum string) bool {
 	return allSubmitted
 }
 
-func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trialNum *big.Int, index *big.Int) {
+func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round, trialNum, index *big.Int) {
 	if atomic.LoadInt32(&Halted) == 1 {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
 	}
 
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
-	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
-	data, err := database.GetRevealOrder(round.String(), trialNum.String(), uniqueKey)
+	data, err := database.GetRevealOrder(round.String(), trialNum.String())
 	if err != nil {
 		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
 	}
@@ -375,8 +374,7 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		return
 	}
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
-	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	revealOrder, err := database.GetRevealOrder(round, trialNum, uniqueKey)
+	revealOrder, err := database.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round, trialNum, err)
 	}
@@ -884,7 +882,7 @@ func StartMerkleRootMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPC
 	}
 
 	// Get timing parameters from contract
-	onChainSubmissionPeriod := big.NewInt(120) // onChainSubmissionPeriod = 120
+	onChainSubmissionPeriod := big.NewInt(120)            // onChainSubmissionPeriod = 120
 	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60) // requestOrSubmitOrFailDecisionPeriod = 60
 
 	// Calculate deadline: requestedToSubmitCvTime + onChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
@@ -895,7 +893,6 @@ func StartMerkleRootMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPC
 	deadlineTime := time.Unix(deadline.Int64(), 0)
 	now := time.Now()
 	duration := deadlineTime.Sub(now)
-
 
 	log.Printf("Starting merkle root monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 
