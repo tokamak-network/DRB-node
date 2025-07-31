@@ -34,7 +34,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)
 	for {
-		roundData, err := database.GetRevealOrder(req.Round, req.TrialNum, uniqueKey)
+		roundData, err := database.GetRevealOrder(req.Round, req.TrialNum)
 		if err != nil {
 			log.Printf("Failed to load reveal order with trail %s for round %s: %v", req.TrialNum, req.Round, err)
 		} else if roundData != nil {

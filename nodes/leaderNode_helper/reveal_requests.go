@@ -35,7 +35,7 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 	// Load reveal order for the round
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	roundRevealData, err := database.GetRevealOrder(round, trialNum, uniqueKey)
+	roundRevealData, err := database.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return
@@ -218,7 +218,7 @@ func prepareArgumentsForRequestToSubmitS(round string, trialNum string) ([][32]b
 		sigRSsForAllCvsNotOnChain = append(sigRSsForAllCvsNotOnChain, cvAndSigRS)
 	}
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	revealOrders, err := database.GetRevealOrder(round, trialNum, uniqueKey)
+	revealOrders, err := database.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order for round %s with trail %s: %v", round, trialNum, err)
 	}
@@ -247,7 +247,7 @@ func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclien
 	log.Printf("Secret value received for round %s with trail %s from EOA %s", round, trialNum, eoa)
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	// Load reveal order for the round
-	roundRevealData, err := database.GetRevealOrder(round, trialNum, uniqueKey)
+	roundRevealData, err := database.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return

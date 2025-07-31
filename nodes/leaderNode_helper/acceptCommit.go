@@ -111,7 +111,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					reconnect = true
 					time.Sleep(1 * time.Second)
 				}
-				
+
 			case vLog := <-logs:
 				isReorg := vLog.Removed
 				if isReorg {
@@ -205,9 +205,8 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	intValue := int(index.Int64())
 	regularNodeAddress := eth.ActivatedOperators[intValue]
-	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 
-	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(SecretRequestSentForWhichRound, regularNodeAddress.Hex(), uniqueKey, regularNodeAddress.Hex())
+	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(SecretRequestSentForWhichRound, regularNodeAddress.Hex(), regularNodeAddress.Hex())
 	if err != nil {
 		log.Printf("Failed to get leadercommit data from database by round and eoaAddress %v", err)
 	}
@@ -382,7 +381,7 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *
 	trialNumStr := trialNum.String()
 	uniqueKey := utils.GetUniqueKey(roundStr, trialNumStr)
 
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundStr, trialNumStr, uniqueKey, eoa.Hex())
+	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundStr, trialNumStr, eoa.Hex())
 	if err != nil {
 		signInfo := utils.SignInfo{
 			R: "",
@@ -468,7 +467,7 @@ func processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte, activatedOperat
 	cvsHex := hex.EncodeToString(cvs[:])
 
 	uniqueKey := utils.GetUniqueKey(roundStr, trialNumStr)
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundStr, trialNumStr, uniqueKey, eoa.Hex())
+	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundStr, trialNumStr, eoa.Hex())
 	if err != nil {
 		signInfo := utils.SignInfo{
 			R: "",

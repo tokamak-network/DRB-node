@@ -225,7 +225,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 
 	// Update database for leaderCommit's COS
-	leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, req.TrialNum, uniqueKey, eoaAddress.Hex())
+	leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, req.TrialNum, eoaAddress.Hex())
 	if err != nil {
 		log.Printf("Error loading leaderCommit data from database for round: %s, trail: %s, and eoaAddress: %s, error: %v", round, req.TrialNum, eoaAddress.Hex(), err)
 		return
@@ -555,7 +555,7 @@ func updateCommitDataAfterSubmit(roundNum string, trialNum string, uniqueKey str
 		log.Printf("Setting submit_merkle_root_done = true for key: %s+%s", uniqueKey, eoaAddress.Hex())
 
 		// Update database with marked submitmerkleroot as done
-		leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, trialNum, uniqueKey, eoaAddress.Hex())
+		leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, trialNum, eoaAddress.Hex())
 		if err != nil {
 			log.Printf("Error loading leaderCommit data from database for round: %s, and eoaAddress: %s, error: %v", roundNum, eoaAddress.Hex(), err)
 			return

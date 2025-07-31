@@ -70,13 +70,11 @@ func HandleCvs(h host.Host, s network.Stream) {
 	log.Printf("Received CVS broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
-	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
 	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
 			peerCommitData = &database.PeerCommitDataScheme{
-				UniqueKey:  uniqueKey,
 				Round:      message.Round,
 				TrialNum:   message.TrialNum,
 				EOAAddress: message.EOAAddress,
@@ -155,7 +153,6 @@ func HandleCos(h host.Host, s network.Stream) {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
 			peerCommitData = &database.PeerCommitDataScheme{
-				UniqueKey:  uniqueKey,
 				Round:      message.Round,
 				TrialNum:   message.TrialNum,
 				EOAAddress: message.EOAAddress,
@@ -225,13 +222,11 @@ func HandleSecret(h host.Host, s network.Stream) {
 	log.Printf("Received secret broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
-	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
 	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
 			peerCommitData = &database.PeerCommitDataScheme{
-				UniqueKey:   uniqueKey,
 				Round:       message.Round,
 				TrialNum:    message.TrialNum,
 				EOAAddress:  message.EOAAddress,

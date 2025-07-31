@@ -176,7 +176,6 @@ func GetNodeInfos() ([]*utils.NodeInfo, error) {
 
 func AddLeaderCommit(commitData *utils.LeaderCommitData) error {
 	leaderCommit := LeaderCommitScheme{
-		UniqueKey:             commitData.UniqueKey,
 		Round:                 commitData.Round,
 		TrialNum:              commitData.TrialNum,
 		EOAAddress:            commitData.EOAAddress,
@@ -210,10 +209,10 @@ func AddLeaderCommit(commitData *utils.LeaderCommitData) error {
 	return nil
 }
 
-func GetLeaderCommitByRoundAndEoaAddr(round, trailNum, uniqueKey, eoaAddr string) (*utils.LeaderCommitData, error) {
+func GetLeaderCommitByRoundAndEoaAddr(round, trialNum, eoaAddr string) (*utils.LeaderCommitData, error) {
 	var leaderCommit LeaderCommitScheme
 	err := GetDB().Model(&leaderCommit).
-		Where("unique_key = ? AND eoa_address = ?", uniqueKey, eoaAddr).
+		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
 		Limit(1).
 		Select()
 	if err != nil {
@@ -228,9 +227,9 @@ func GetLeaderCommitByRoundAndEoaAddr(round, trailNum, uniqueKey, eoaAddr string
 
 	// Map LeaderCommit to utils.LeaderCommitData
 	leaderCommitData := &utils.LeaderCommitData{
-		UniqueKey:             uniqueKey,
+		UniqueKey:             round + "-" + trialNum,
 		Round:                 leaderCommit.Round,
-		TrialNum:              trailNum,
+		TrialNum:              trialNum,
 		EOAAddress:            leaderCommit.EOAAddress,
 		Cvs:                   utils.ConvertByteArray(leaderCommit.Cvs),
 		CvsHex:                leaderCommit.CvsHex,
@@ -250,10 +249,9 @@ func GetLeaderCommitByRoundAndEoaAddr(round, trailNum, uniqueKey, eoaAddr string
 func GetLeaderCommitsByRoundAndTrialNum(round string, trialNum string) ([]*utils.LeaderCommitData, error) {
 	// Slice to hold DB model results
 	var leaderCommitModels []LeaderCommitScheme
-	uniqueKey := utils.GetUniqueKey(round, trialNum)
 
 	err := GetDB().Model(&leaderCommitModels).
-		Where("unique_key = ?", uniqueKey).
+		Where("round = ? AND trial_num = ?", round, trialNum).
 		Select()
 	if err != nil {
 		return nil, err
@@ -269,7 +267,7 @@ func GetLeaderCommitsByRoundAndTrialNum(round string, trialNum string) ([]*utils
 		}
 
 		commitData := &utils.LeaderCommitData{
-			UniqueKey:             model.UniqueKey,
+			UniqueKey:             round + "-" + trialNum,
 			Round:                 round,
 			TrialNum:              trialNum,
 			EOAAddress:            model.EOAAddress,
@@ -311,7 +309,7 @@ func GetRoundsToProcess() ([]*utils.LeaderCommitData, error) {
 		}
 
 		commitData := &utils.LeaderCommitData{
-			UniqueKey:             model.UniqueKey,
+			UniqueKey:             model.Round + "-" + model.TrialNum,
 			Round:                 model.Round,
 			TrialNum:              model.TrialNum,
 			EOAAddress:            model.EOAAddress,
@@ -335,7 +333,6 @@ func GetRoundsToProcess() ([]*utils.LeaderCommitData, error) {
 func UpdateLeaderCommit(leaderCommit *utils.LeaderCommitData) error {
 	// Convert utils.LeaderCommitData to DB model LeaderCommit
 	model := LeaderCommitScheme{
-		UniqueKey:             leaderCommit.UniqueKey,
 		Round:                 leaderCommit.Round,
 		TrialNum:              leaderCommit.TrialNum,
 		EOAAddress:            leaderCommit.EOAAddress,
@@ -353,7 +350,7 @@ func UpdateLeaderCommit(leaderCommit *utils.LeaderCommitData) error {
 		CreatedAt:             leaderCommit.CreatedAt,
 	}
 
-	_, err := GetDB().Model(&model).Where("round = ? AND eoa_address = ?", leaderCommit.Round, leaderCommit.EOAAddress).Update()
+	_, err := GetDB().Model(&model).Where("round = ? AND trial_num = ? AND eoa_address = ?", leaderCommit.Round, leaderCommit.TrialNum, leaderCommit.EOAAddress).Update()
 	if err != nil {
 		return err
 	}
@@ -367,11 +364,10 @@ func UpdateLeaderCommitRandomNumberGenerated(round string, trialNum string) erro
 		RandomNumberGenerated: true,
 	}
 
-	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	// Update only the "random_number_generated" column where uniqueKey matches
 	_, err := GetDB().Model(&leaderCommit).
 		Column("random_number_generated").
-		Where("unique_key = ?", uniqueKey).
+		Where("round = ? AND trial_num = ?", round, trialNum).
 		Update()
 	if err != nil {
 		return err
@@ -406,7 +402,6 @@ func GetRegisteredNodes() ([]*utils.NodeInfo, error) {
 
 func AddRevealOrder(revealOrder *utils.RevealOrderData) error {
 	model := RevealOrderScheme{
-		UniqueKey:    revealOrder.UniqueKey,
 		Round:        revealOrder.Round,
 		TrialNum:     revealOrder.TrialNum,
 		OrderedNodes: revealOrder.OrderedNodes,
@@ -439,10 +434,10 @@ func GetRevealOrders() ([]*utils.RevealOrderData, error) {
 	return revealOrders, nil
 }
 
-func GetRevealOrder(round, trailNum, uniqueKey string) (*utils.RevealOrderData, error) {
+func GetRevealOrder(round, trialNum string) (*utils.RevealOrderData, error) {
 	var model RevealOrderScheme
 	err := GetDB().Model(&model).
-		Where("unique_key = ?", uniqueKey).
+		Where("round = ? AND trial_num = ?", round, trialNum).
 		Limit(1).
 		Select()
 	if err != nil {
@@ -463,8 +458,8 @@ func GetRevealOrder(round, trailNum, uniqueKey string) (*utils.RevealOrderData, 
 func AddCommit(commit *utils.CommitData) error {
 
 	model := CommitDataScheme{
-		UniqueKey:       commit.UniqueKey,
 		Round:           commit.Round,
+		TrialNum:        commit.TrialNum,
 		Cvs:             commit.Cvs[:], // convert [32]byte to []byte
 		Cos:             commit.Cos[:],
 		SecretValue:     commit.SecretValue[:],
@@ -481,7 +476,6 @@ func AddCommit(commit *utils.CommitData) error {
 
 func UpdateCommit(commit *utils.CommitData) error {
 	model := CommitDataScheme{
-		UniqueKey:       commit.UniqueKey,
 		Round:           commit.Round,
 		TrialNum:        commit.TrialNum,
 		Cvs:             commit.Cvs[:],
@@ -494,14 +488,16 @@ func UpdateCommit(commit *utils.CommitData) error {
 		SendCosToLeader: commit.SendCosToLeader,
 	}
 
-	_, err := GetDB().Model(&model).Where("round = ?", commit.Round).Update()
+	_, err := GetDB().Model(&model).Where("round = ? AND trial_num = ?", commit.Round, commit.TrialNum).Update()
 	return err
 }
 
-func GetCommitByRound(round string, trialNum string) (*utils.CommitData, error) {
+func GetCommitByRound(round, trialNum string) (*utils.CommitData, error) {
 	var model CommitDataScheme
-	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	err := GetDB().Model(&model).Where("unique_key = ?", uniqueKey).Limit(1).Select()
+	err := GetDB().Model(&model).
+		Where("round = ? AND trial_num = ?", round, trialNum).
+		Limit(1).
+		Select()
 	if err != nil {
 		log.Printf("Failed to get commit info: %v", err)
 		return nil, err
@@ -514,7 +510,7 @@ func GetCommitByRound(round string, trialNum string) (*utils.CommitData, error) 
 	copy(secretValue[:], model.SecretValue)
 
 	commit := &utils.CommitData{
-		UniqueKey:   uniqueKey,
+		UniqueKey:   round + "-" + trialNum,
 		Round:       round,
 		TrialNum:    trialNum,
 		Cvs:         cvs,
@@ -598,7 +594,9 @@ func UpdateBroadcastTracker(tracker *utils.BroadcastTracker) error {
 		LastSent:     tracker.LastSent,
 		Timeout:      tracker.Timeout,
 	}
-	_, err := GetDB().Model(&model).Where("round = ? AND trial_num = ? AND eoa_address = ? AND type = ? AND message_id = ?", tracker.Round, tracker.TrialNum, tracker.EOAAddress, tracker.Type, tracker.MessageID).Update()
+	_, err := GetDB().Model(&model).
+		Where("round = ? AND trial_num = ? AND eoa_address = ? AND type = ? AND message_id = ?", tracker.Round, tracker.TrialNum, tracker.EOAAddress, tracker.Type, tracker.MessageID).
+		Update()
 	return err
 }
 
@@ -615,13 +613,14 @@ func AddAllBroadcastTrackers(trackers []*utils.BroadcastTracker) error {
 
 func DeleteBroadcastTracker(tracker *utils.BroadcastTracker) error {
 	model := BroadcastTrackerScheme{}
-	_, err := GetDB().Model(&model).Where("round = ? AND trial_num = ? AND eoa_address = ? AND type = ? AND message_id = ?", tracker.Round, tracker.TrialNum, tracker.EOAAddress, tracker.Type, tracker.MessageID).Delete()
+	_, err := GetDB().Model(&model).
+		Where("round = ? AND trial_num = ? AND eoa_address = ? AND type = ? AND message_id = ?", tracker.Round, tracker.TrialNum, tracker.EOAAddress, tracker.Type, tracker.MessageID).
+		Delete()
 	return err
 }
 
 func AddPeerCommitData(peerData *PeerCommitDataScheme) error {
 	peerCommit := PeerCommitDataScheme{
-		UniqueKey:   peerData.UniqueKey,
 		Round:       peerData.Round,
 		TrialNum:    peerData.TrialNum,
 		EOAAddress:  peerData.EOAAddress,
@@ -638,11 +637,10 @@ func AddPeerCommitData(peerData *PeerCommitDataScheme) error {
 	return nil
 }
 
-func GetPeerCommitData(round string, trialNum string, eoaAddress string) (*PeerCommitDataScheme, error) {
+func GetPeerCommitData(round, trialNum, eoaAddress string) (*PeerCommitDataScheme, error) {
 	var peerCommit PeerCommitDataScheme
-	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	err := GetDB().Model(&peerCommit).
-		Where("unique_key = ? AND eoa_address = ?", uniqueKey, eoaAddress).
+		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddress).
 		Select()
 	if err != nil {
 		return nil, err
@@ -653,7 +651,6 @@ func GetPeerCommitData(round string, trialNum string, eoaAddress string) (*PeerC
 
 func UpdatePeerCommitData(peerData *PeerCommitDataScheme) error {
 	peerCommit := PeerCommitDataScheme{
-		UniqueKey:   peerData.UniqueKey,
 		Round:       peerData.Round,
 		TrialNum:    peerData.TrialNum,
 		EOAAddress:  peerData.EOAAddress,
@@ -663,7 +660,7 @@ func UpdatePeerCommitData(peerData *PeerCommitDataScheme) error {
 	}
 
 	_, err := GetDB().Model(&peerCommit).
-		Where("unique_key = ? AND eoa_address = ?", peerCommit.UniqueKey, peerCommit.EOAAddress).
+		Where("round = ? AND trial_num = ? AND eoa_address = ?", peerCommit.Round, peerCommit.TrialNum, peerCommit.EOAAddress).
 		Update()
 	if err != nil {
 		return err
@@ -693,7 +690,7 @@ func DeleteRoundTrialDataForLeaderNode(round, trialNum string) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete from broadcast_tracker_schemes: %w", err)
 	}
-	
+
 	return nil
 }
 
