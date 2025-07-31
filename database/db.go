@@ -445,6 +445,7 @@ func GetRevealOrder(round, trialNum string) (*utils.RevealOrderData, error) {
 	}
 
 	revealOrder := &utils.RevealOrderData{
+		UniqueKey:    model.Round + "-" + model.TrialNum,
 		Round:        model.Round,
 		TrialNum:     model.TrialNum,
 		OrderedNodes: model.OrderedNodes,
