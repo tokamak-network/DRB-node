@@ -28,6 +28,12 @@ import (
 
 const abiFilePath = "contract/abi/Commit2RevealDRB.json"
 
+// Flags to track whether deposit and activate have been called in current run
+var (
+	depositCalledInThisRun  bool = false
+	activateCalledInThisRun bool = false
+)
+
 // RunRegularNode handles the behavior for a regular node
 func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	ctx := context.Background()
@@ -145,39 +151,50 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 			log.Println("Node is activated. No further action required.")
 		} else {
 			log.Println("Node is not activated. Checking deposit amount...")
-
-			// Check and ensure deposit is sufficient
-			depositSufficient, err := checkDepositAmount(fallbackEthClient, clientUtils, eoaAddress)
-			if err != nil {
-				log.Printf("Error checking deposit amount: %v", err)
-				time.Sleep(30 * time.Second)
-				continue
-			}
-
-			if !depositSufficient {
-				log.Println("Deposit insufficient. Initiating deposit transaction...")
-				txSent, err := depositAndCheckActivation(ctx, fallbackEthClient, eoaAddress, privateKey)
+			// Check and ensure deposit is sufficient (only if not already called this run)
+			// This ensures deposit is called only once per program run
+			if !depositCalledInThisRun {
+				depositSufficient, err := checkDepositAmount(fallbackEthClient, clientUtils, eoaAddress)
 				if err != nil {
-					log.Printf("Error during deposit transaction: %v", err)
+					log.Printf("Error checking deposit amount: %v", err)
 					time.Sleep(30 * time.Second)
 					continue
 				}
-				if txSent {
-					log.Println("Deposit successful")
+
+				if !depositSufficient {
+					log.Println("Deposit insufficient. Initiating deposit transaction...")
+					txSent, err := deposit(ctx, fallbackEthClient, eoaAddress, privateKey)
+					if err != nil {
+						log.Printf("Error during deposit transaction: %v", err)
+						time.Sleep(30 * time.Second)
+						continue
+					}
+					if txSent {
+						log.Println("Deposit successful")
+						depositCalledInThisRun = true // Mark deposit as called this run
+						continue
+					}
+				}
+			} else {
+				log.Println("Deposit already attempted this run. Skipping deposit check.")
+			}
+
+			// Call activate only if not already called this run
+			if !activateCalledInThisRun {
+				err = activateOnChain(fallbackEthClient, abiFilePath)
+				if err != nil {
+					log.Printf("failed to activate EOA %s on-chain: %v", eoaAddress, err)
+					time.Sleep(30 * time.Second)
 					continue
 				}
+				activateCalledInThisRun = true // Mark activate as called this run
+				log.Println("Activation successful")
+				// Send registration request to leader
+				log.Println("Sending registration request to leader...")
+				sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
+			} else {
+				log.Println("Activation already attempted this run. Skipping activation.")
 			}
-
-			err = activateOnChain(fallbackEthClient, abiFilePath)
-			if err != nil {
-				log.Printf("failed to activate EOA %s on-chain: %v", eoaAddress, err)
-				time.Sleep(30 * time.Second)
-				continue
-			}
-
-			// Send registration request to leader
-			log.Println("Deposit sufficient. Sending registration request to leader...")
-			sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
 		}
 
 		if !regularNode_helper.Execution {
@@ -365,7 +382,7 @@ func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID 
 	}
 }
 
-func depositAndCheckActivation(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
+func deposit(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
