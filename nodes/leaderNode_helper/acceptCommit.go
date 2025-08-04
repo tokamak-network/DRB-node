@@ -32,6 +32,11 @@ var Execution bool
 
 var Halted int32 // 0 = false, 1 = true
 
+// Add new variables for RequestedToSubmitCo monitoring
+var RequestedToSubmitCoTimestamp *big.Int
+var RequestedToSubmitCoMonitoringActive bool
+var RequestedToSubmitCoMonitoringTimer *time.Timer
+
 type RandomRequest struct {
 	Round     *big.Int
 	TrialNum  *big.Int
@@ -95,6 +100,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		StatusSig := parsedABI.Events["Status"].ID
 		CoSubmittedSig := parsedABI.Events["CoSubmitted"].ID
 		SSubmittedSig := parsedABI.Events["SSubmitted"].ID
+		RequestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
 
 		reconnect := false
 		for {
@@ -150,6 +156,27 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					fmt.Printf("CoSubmitted Event: Fetched successfully")
 
 					processCOS(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.Co, eventData.Index)
+
+				case RequestedToSubmitCoSig:
+					eventData := struct {
+						Round         *big.Int
+						TrialNum      *big.Int
+						IndicesLength *big.Int
+						PackedIndices *big.Int
+					}{}
+					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCo", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode RequestedToSubmitCo event log: %v", err)
+						continue
+					}
+
+					blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+					if err != nil {
+						log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+						continue
+					}
+
+					processRequestedToSubmitCo(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.Round, eventData.TrialNum)
 
 				case StatusSig:
 					eventData := struct {
@@ -424,6 +451,9 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *
 	// Broadcast the COS value to all activated regular nodes
 	ReliableBroadCastCOS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cos)
 
+	// Check if all COS values are received and stop monitoring if so
+	checkAndStopFailToSubmitCoMonitoring(roundStr, trialNumStr)
+
 	return nil
 }
 
@@ -550,4 +580,126 @@ func AllCosReceivedUnlocked(uniqueKey string) bool {
 		}
 	}
 	return true
+}
+
+// Add new function to process RequestedToSubmitCo event
+func processRequestedToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processRequestedToSubmitCo.")
+		return
+	}
+
+	fmt.Printf("RequestedToSubmitCo Event: Round %v, TrialNum %v, BlockTimestamp %v\n", round, trialNum, blockTimestamp)
+
+	// Save the block timestamp and round/trial info
+	RequestedToSubmitCoTimestamp = blockTimestamp
+
+	// Start monitoring for failToSubmitCo condition
+	startFailToSubmitCoMonitoring(fallbackEthClient, round.String(), trialNum.String())
+}
+
+// Add function to start monitoring for failToSubmitCo condition
+func startFailToSubmitCoMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	if RequestedToSubmitCoTimestamp == nil {
+		log.Printf("RequestedToSubmitCoTimestamp is nil, cannot start monitoring")
+		return
+	}
+
+	RequestedToSubmitCoMonitoringActive = true
+
+	// Get s_onChainSubmissionPeriod from contract
+	onChainSubmissionPeriod := big.NewInt(120)
+
+	// Calculate deadline: RequestedToSubmitCoTimestamp + s_onChainSubmissionPeriod
+	deadline := new(big.Int).Add(RequestedToSubmitCoTimestamp, onChainSubmissionPeriod)
+
+	// Convert deadline to time.Duration
+	deadlineTime := time.Unix(deadline.Int64(), 0)
+	now := time.Now()
+	duration := deadlineTime.Sub(now)
+
+	if duration <= 0 {
+		log.Printf("Deadline has already passed for round %s with trail %s, calling failToSubmitCo immediately", round, trialNum)
+		callFailToSubmitCo(fallbackEthClient, round, trialNum)
+		return
+	}
+
+	log.Printf("Starting failToSubmitCo monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
+
+	// Set timer to call the function when deadline is reached
+	RequestedToSubmitCoMonitoringTimer = time.AfterFunc(duration, func() {
+		log.Printf("Deadline reached for round %s, calling failToSubmitCo", round)
+		callFailToSubmitCo(fallbackEthClient, round, trialNum)
+		RequestedToSubmitCoMonitoringActive = false
+	})
+}
+
+// Add function to stop failToSubmitCo monitoring
+func stopFailToSubmitCoMonitoring() {
+	if RequestedToSubmitCoMonitoringTimer != nil {
+		RequestedToSubmitCoMonitoringTimer.Stop()
+		RequestedToSubmitCoMonitoringTimer = nil
+	}
+	RequestedToSubmitCoMonitoringActive = false
+	log.Printf("Stopped failToSubmitCo monitoring")
+}
+
+// Add function to call failToSubmitCo on chain
+func callFailToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode leader private key: %v", err)
+		return
+	}
+
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"failToSubmitCo",
+		big.NewInt(0),
+	)
+	if err != nil {
+		log.Printf("Failed to call failToSubmitCo for round %s with trail %s: %v", round, trialNum, err)
+		return
+	}
+
+	log.Printf("Successfully called failToSubmitCo for round %s with trail %s", round, trialNum)
+}
+
+// Add function to check if all COS values are received and stop monitoring
+func checkAndStopFailToSubmitCoMonitoring(round string, trialNum string) {
+	// Only check if monitoring is active for this round/trial
+	if !RequestedToSubmitCoMonitoringActive {
+		return
+	}
+
+	// Check if all activated operators have submitted COS values
+	if AllCosReceivedUnlocked(utils.GetUniqueKey(round, trialNum)) {
+		log.Printf("All COS values received for round %s trial %s, stopping failToSubmitCo monitoring", round, trialNum)
+		stopFailToSubmitCoMonitoring()
+	}
 }
