@@ -79,7 +79,9 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 		for i, operator := range operatorAddresses {
 			commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round.Round, round.TrialNum, operator.Hex())
 			if err != nil || commitData.SecretValue == [32]byte{} {
-				log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round.Round)
+				if !(commitData.Cos == [32]byte{}) {
+					log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round.Round)
+				}
 				allEOAsSubmitted = false
 				break
 			}

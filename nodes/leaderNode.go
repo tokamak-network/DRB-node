@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/big"
 	"os"
@@ -100,7 +99,6 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 			continue
 		}
 		firstRequest = leaderNode_helper.Req
-		fmt.Printf("Executing request: %v", firstRequest)
 		processRounds(fallbackEthClient, firstRequest)
 		time.Sleep(30 * time.Second)
 	}
