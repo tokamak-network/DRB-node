@@ -157,11 +157,14 @@ func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCCl
 }
 
 func LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash) {
+
 	leaderCommits, err := database.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load leader commits: %v", err)
-
 	}
+
+	// Sort leaderCommits based on eth.ActivatedOperators order
+	sortedLeaderCommits := sortLeaderCommitsByActivatedOperators(leaderCommits)
 
 	// Collect secret values, signatures (v, r, s), and round info in the order of activated operators
 	var secrets [][]byte
@@ -170,9 +173,8 @@ func LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, 
 	var vs []uint8
 	var rs []common.Hash
 	var ss []common.Hash
-	// var index int
-	for _, commitData := range leaderCommits {
-		// commitData := leaderCommits
+
+	for _, commitData := range sortedLeaderCommits {
 
 		secrets = append(secrets, commitData.SecretValue[:])
 		cvs = append(cvs, commitData.Cvs[:])
@@ -207,7 +209,42 @@ func LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, 
 		}
 	}
 
+
 	return cvs, cos, secrets, vs, rs, ss
+}
+
+// Updated function to use utils.LeaderCommitData
+func sortLeaderCommitsByActivatedOperators(leaderCommits []*utils.LeaderCommitData) []*utils.LeaderCommitData {
+	// Create a map for quick lookup of activated operators order
+	activatedOperatorsOrder := make(map[string]int)
+	for i, operator := range eth.ActivatedOperators {
+		activatedOperatorsOrder[operator.Hex()] = i
+	}
+
+	log.Printf("Activated operators order: %v", eth.ActivatedOperators)
+
+	// Create a map of leaderCommits by EOA address for quick lookup
+	leaderCommitsMap := make(map[string]*utils.LeaderCommitData)
+	for _, commit := range leaderCommits {
+		leaderCommitsMap[commit.EOAAddress] = commit
+	}
+
+	// Create sorted array based on activated operators order
+	var sortedLeaderCommits []*utils.LeaderCommitData
+
+	for i, operator := range eth.ActivatedOperators {
+		operatorAddr := operator.Hex()
+		log.Printf("Looking for operator %s at position %d", operatorAddr, i)
+
+		if commit, exists := leaderCommitsMap[operatorAddr]; exists {
+			log.Printf("Found commit data for operator %s", operatorAddr)
+			// No need to convert, already utils.LeaderCommitData
+			sortedLeaderCommits = append(sortedLeaderCommits, commit)
+		}
+	}
+
+	log.Printf("Sorted leader commits length: %d", len(sortedLeaderCommits))
+	return sortedLeaderCommits
 }
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
