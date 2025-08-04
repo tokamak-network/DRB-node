@@ -536,7 +536,7 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 			}
 			if len(missingIndices) > 0 {
 				log.Printf("Requesting on-chain for missing COS indices: %v for round %s with trail %s", missingIndices, rn, trialNum)
-				requestToSubmitCo(fallbackEthClient, rn, trialNum, missingIndices)
+				requestToSubmitCo(fallbackEthClient, roundNum, trialNum, missingIndices)
 			}
 		}(uniqueKey)
 	})
@@ -687,12 +687,14 @@ func prepareArgumentsForRequestToSubmitCo(roundNum string, trialNum string, miss
 	indicesLength := big.NewInt(int64(len(missingIndices)))
 
 	notOnChainIndices, onChainIndices := orderedPackedIndices(missingIndices)
+
 	allOrderedIndices := append(notOnChainIndices, onChainIndices...)
 	packedOrderedIndices := leaderNode_helper.PackIndices(allOrderedIndices)
 	var cvNotOnChainCvAndSigRS []CvAndSigRS
 	var vsForNotOnChain []*big.Int
 	for _, i := range notOnChainIndices {
 		index := int(i.Int64())
+
 		vsForNotOnChain = append(vsForNotOnChain, big.NewInt(int64(vs[index])))
 		var cv32 [32]byte
 		copy(cv32[:], cvs[index])
