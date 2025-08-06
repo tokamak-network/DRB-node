@@ -626,6 +626,13 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 }
 
 func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, Round *big.Int, TrialNum *big.Int, packedIndices *big.Int, indicesLength *big.Int) error {
+	// flag to skip processing Cos request
+	disabled := os.Getenv("DISABLED")
+	if disabled == "disabled" {
+		log.Println("Skipped processing cos request")
+		return nil
+	}
+
 	if atomic.LoadInt32(&Halted) == 1 {
 		log.Println("System is halted. Skipping processCosRequest.")
 		return nil

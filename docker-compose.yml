@@ -75,6 +75,21 @@ services:
       - regular2postgres-data:/var/lib/postgresql/data
     networks:
       - anvil-net
+  regular3postgres:
+    image: postgres:14.13
+    container_name: regular3postgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file: ./.env
+    ports:
+      - "5435:5432"
+    volumes:
+      - regular3postgres-data:/var/lib/postgresql/data
+    networks:
+      - anvil-net
   regularnode1:
     build:
       context: .
@@ -131,14 +146,45 @@ services:
     networks:
       - anvil-net
     restart: on-failure
+  regularnode3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: regularnode3
+    depends_on:
+      leadernode:
+        condition: service_healthy
+      regular3postgres:
+        condition: service_healthy
+    ports:
+      - "61283:61283"
+    env_file: ./.env
+    environment:
+      LEADER_IP: leadernode
+      LEADER_PORT: 61280
+      PORT: 61283
+      EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_3
+      NODE_TYPE: regular
+      POSTGRES_HOST: "regular3postgres"
+      POSTGRES_PORT: 5432
+      DISABLED: disabled
+    volumes:
+      - regularnode3-key:/app/static-key
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - anvil-net
+    restart: on-failure
 
 volumes:
   leaderpostgres-data:
   regular1postgres-data:
   regular2postgres-data:
+  regular3postgres-data:
   leadernode-key:
   regularnode1-key:
   regularnode2-key:
+  regularnode3-key:
 
 networks:
   anvil-net:
