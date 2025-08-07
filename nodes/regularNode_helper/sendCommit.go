@@ -68,8 +68,13 @@ var (
 	merkleRootSubmittedEventEmitted bool
 	CurrentTrialNum                 string
 	// New variables for merkle root monitoring
-	merkleRootMonitoringTimer *time.Timer
-	requestedToSubmitCvTime   *big.Int
+	merkleRootMonitoringTimer         *time.Timer
+	requestedToSubmitCvTime           *big.Int
+	MerkleRootOrRequestToSubmitCoTime *big.Int
+	// Variables for request to submit S or generate random number monitoring
+	requestToSubmitSOrGenerateRandomNumberMonitoringActive bool
+	requestToSubmitSOrGenerateRandomNumberMonitoringTimer  *time.Timer
+	merkleRootSubmittedTOrRequestedCvTime                  *big.Int
 )
 
 var cvRequestIndices []*big.Int
@@ -200,10 +205,19 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 
 						// Mark Merkle root as submitted and stop leader monitoring
 						merkleRootSubmittedEventEmitted = true
+						blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+						merkleRootSubmittedTOrRequestedCvTime = big.NewInt(int64(blockTimestamp))
+
 						StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 						StopFailToSubmitMerkleRootAfterDisputeMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+						StartRequestToSubmitSOrGenerateRandomNumberMonitoring(fallbackEthClient, eventData.Round.String(), eventData.TrialNum.String())
 
 						processMerkleRoot(eventData.Round, eventData.TrialNum)
+
+						if err != nil {
+							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+							continue
+						}
 
 					case RequestedToSubmitCoSig:
 						eventData := struct {
@@ -236,6 +250,14 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						}
 						fmt.Printf("RequestedToSubmitSFromIndexK Event:\n Round %v, TrialNum %v, indexK %v\n", eventData.Round, eventData.TrialNum, eventData.IndexK)
 
+						// Stop request to submit S or generate random number monitoring when RequestedToSubmitSFromIndexK event is received
+						StopRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+						blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+						merkleRootSubmittedTOrRequestedCvTime = big.NewInt(int64(blockTimestamp))
+						if err != nil {
+							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+							continue
+						}
 						processSecretRequest(fallbackEthClient, eventData.Round.String(), eventData.TrialNum.String(), eventData.IndexK)
 
 					case SSubmittedSig:
@@ -465,6 +487,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	// Reset monitoring state for new round
 	roundStr := round.String()
 	ResetMonitoringState(round.String(), trialNum.String())
+	MerkleRootOrRequestToSubmitCoTime = nil
 
 	// Store the current round and trialNum from Status event
 	CurrentTrialNum = trialNum.String()
@@ -815,9 +838,11 @@ func StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round string, trialNu
 func ResetMonitoringState(round string, trialNum string) {
 	StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round, trialNum)
 	StopFailToSubmitMerkleRootAfterDisputeMonitoring(round, trialNum)
+	StopRequestToSubmitSOrGenerateRandomNumberMonitoring(round, trialNum)
 	cvRequestedEventEmitted = false
 	merkleRootSubmittedEventEmitted = false
 	requestedToSubmitCvTime = nil
+	merkleRootSubmittedTOrRequestedCvTime = nil
 
 	// Use mutex to protect access to submittedCvIndices
 	submittedCvIndicesMutex.Lock()
@@ -993,4 +1018,109 @@ func CheckAndStartMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCCl
 	}
 
 	StartLeaderMonitoring(fallbackEthClient, StartTime, round, trialNum)
+}
+
+// StartRequestToSubmitSOrGenerateRandomNumberMonitoring starts monitoring for failToRequestSOrGenerateRandomNumber condition
+func StartRequestToSubmitSOrGenerateRandomNumberMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping StartRequestToSubmitSOrGenerateRandomNumberMonitoring.")
+		return
+	}
+
+	if requestToSubmitSOrGenerateRandomNumberMonitoringActive {
+		log.Printf("Request to submit S or generate random number monitoring already active for round %s", round)
+		return
+	}
+
+	offChainSubmissionPeriod := big.NewInt(80)
+	offChainSubmissionPeriodPerOperator := big.NewInt(20)
+	activatedOperatorsLength := new(big.Int).SetInt64(int64(len(eth.ActivatedOperators)))
+	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
+	
+	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod
+	deadline := new(big.Int).Add(merkleRootSubmittedTOrRequestedCvTime, offChainSubmissionPeriod)
+	operatorDelay := new(big.Int).Mul(offChainSubmissionPeriodPerOperator, activatedOperatorsLength)
+	deadline.Add(deadline, operatorDelay)
+	deadline.Add(deadline, requestOrSubmitOrFailDecisionPeriod)
+
+	// Convert deadline to time.Duration
+	deadlineTime := time.Unix(deadline.Int64(), 0)
+	now := time.Now()
+	duration := deadlineTime.Sub(now)
+
+	requestToSubmitSOrGenerateRandomNumberMonitoringActive = true
+
+	log.Printf("Starting request to submit S or generate random number monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
+	log.Printf("Parameters - merkleRootSubmittedTime: %v, offChainSubmissionPeriod: %v, offChainSubmissionPeriodPerOperator: %v, activatedOperatorsLength: %v, requestOrSubmitOrFailDecisionPeriod: %v",
+		merkleRootSubmittedTOrRequestedCvTime, offChainSubmissionPeriod, offChainSubmissionPeriodPerOperator, activatedOperatorsLength, requestOrSubmitOrFailDecisionPeriod)
+
+	// Set timer to call the function when deadline is reached
+	requestToSubmitSOrGenerateRandomNumberMonitoringTimer = time.AfterFunc(duration, func() {
+		log.Printf("Deadline reached for round %s, calling failToRequestSOrGenerateRandomNumber", round)
+		callFailToRequestSOrGenerateRandomNumber(fallbackEthClient, round, trialNum)
+		requestToSubmitSOrGenerateRandomNumberMonitoringActive = false
+	})
+}
+
+// StopRequestToSubmitSOrGenerateRandomNumberMonitoring stops the monitoring
+func StopRequestToSubmitSOrGenerateRandomNumberMonitoring(round string, trialNum string) {
+	if !requestToSubmitSOrGenerateRandomNumberMonitoringActive {
+		return
+	}
+
+	if requestToSubmitSOrGenerateRandomNumberMonitoringTimer != nil {
+		requestToSubmitSOrGenerateRandomNumberMonitoringTimer.Stop()
+		requestToSubmitSOrGenerateRandomNumberMonitoringTimer = nil
+	}
+
+	requestToSubmitSOrGenerateRandomNumberMonitoringActive = false
+	log.Printf("Stopped request to submit S or generate random number monitoring for round %s", round)
+}
+
+// callFailToRequestSOrGenerateRandomNumber calls the contract function to fail
+func callFailToRequestSOrGenerateRandomNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	log.Printf("Calling failToRequestSOrGenerateRandomNumber for round %s with trial %s", round, trialNum)
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in environment variables.")
+	}
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode private key: %v", err)
+		return
+	}
+
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	// Execute the transaction
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"failToRequestSorGenerateRandomNumber",
+		big.NewInt(0),
+	)
+	if err != nil {
+		log.Printf("Failed to execute failToRequestSOrGenerateRandomNumber transaction: %v", err)
+		return
+	}
+
+	log.Printf("Successfully called failToRequestSOrGenerateRandomNumber for round %s with trial %s", round, trialNum)
 }
