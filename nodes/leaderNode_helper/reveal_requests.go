@@ -27,6 +27,14 @@ type SigRS struct {
 // Tracks EOAs that have been sent requests per round
 var revealRequestStatus = make(map[string][]string)
 
+// Variables for monitoring failToSubmitS condition
+var (
+	failToSubmitSMonitoringActive bool
+	failToSubmitSMonitoringTimer  *time.Timer
+	requestToSubmitSTimestamp     *big.Int
+	lastSubmitSTimestamp          *big.Int
+)
+
 // StartSecretValueRequests initializes the secret value request process for a given round
 func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
 	if atomic.LoadInt32(&Halted) == 1 {
@@ -172,11 +180,15 @@ func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 		packedRevealOrders,
 	)
 	if err != nil {
-		log.Printf("Failed to submit commit request root for round %s: %v", round, err)
+		log.Printf("Failed to submit secret request for round %s: %v", round, err)
 		return
 	}
 
-	log.Printf("Successfully submitted cos request for round %s", round)
+	log.Printf("Successfully submitted secret request for round %s", round)
+
+	// Start monitoring for failToSubmitS condition
+	requestTimestamp := big.NewInt(time.Now().Unix())
+	StartFailToSubmitSMonitoring(fallbackEthClient, round, trialNum, requestTimestamp)
 }
 
 func prepareArgumentsForRequestToSubmitS(round string, trialNum string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
@@ -304,4 +316,150 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// StartFailToSubmitSMonitoring starts monitoring for failToSubmitS condition
+// Should be called when requestToSubmitS transaction is confirmed
+func StartFailToSubmitSMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, requestTimestamp *big.Int) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping StartFailToSubmitSMonitoring.")
+		return
+	}
+
+	if failToSubmitSMonitoringActive {
+		log.Printf("FailToSubmitS monitoring already active for round %s", round)
+		return
+	}
+
+	// Set the initial timestamp - either requestToSubmitS timestamp or last submitS timestamp
+	requestToSubmitSTimestamp = requestTimestamp
+	if lastSubmitSTimestamp == nil {
+		lastSubmitSTimestamp = requestTimestamp
+	}
+
+	onChainSubmissionPeriodPerOperator := big.NewInt(40)
+	startMonitoringWithPeriod(fallbackEthClient, round, trialNum, onChainSubmissionPeriodPerOperator)
+}
+
+// startMonitoringWithPeriod starts the actual monitoring with the given period
+func startMonitoringWithPeriod(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, period *big.Int) {
+	// Calculate deadline: s_previousSSubmitTimestamp + s_onChainSubmissionPeriodPerOperator
+	deadline := new(big.Int).Add(lastSubmitSTimestamp, period)
+
+	// Convert deadline to time.Duration
+	deadlineTime := time.Unix(deadline.Int64(), 0)
+	now := time.Now()
+	duration := deadlineTime.Sub(now)
+
+	failToSubmitSMonitoringActive = true
+
+	log.Printf("Starting failToSubmitS monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
+	log.Printf("Parameters - lastSubmitSTimestamp: %v, onChainSubmissionPeriodPerOperator: %v",
+		lastSubmitSTimestamp, period)
+
+	// Set timer to call the function when deadline is reached
+	failToSubmitSMonitoringTimer = time.AfterFunc(duration, func() {
+		log.Printf("Deadline reached for round %s, calling failToSubmitS", round)
+		callFailToSubmitS(fallbackEthClient, round, trialNum)
+		failToSubmitSMonitoringActive = false
+	})
+}
+
+// StopFailToSubmitSMonitoring stops the monitoring
+func StopFailToSubmitSMonitoring(round string, trialNum string) {
+	if !failToSubmitSMonitoringActive {
+		return
+	}
+
+	if failToSubmitSMonitoringTimer != nil {
+		failToSubmitSMonitoringTimer.Stop()
+		failToSubmitSMonitoringTimer = nil
+	}
+
+	failToSubmitSMonitoringActive = false
+	log.Printf("Stopped failToSubmitS monitoring for round %s", round)
+}
+
+// UpdateLastSubmitSTimestamp updates the timestamp when a submitS event is received
+// This should be called when SSubmitted event is received
+func UpdateLastSubmitSTimestamp(newTimestamp *big.Int, round string, trialNum string) {
+	lastSubmitSTimestamp = newTimestamp
+	log.Printf("Updated lastSubmitSTimestamp to %v for round %s", newTimestamp, round)
+
+	// If monitoring is active, restart it with the new timestamp
+	if failToSubmitSMonitoringActive {
+		log.Printf("Restarting failToSubmitS monitoring with updated timestamp")
+		StopFailToSubmitSMonitoring(round, trialNum)
+
+		// Use hardcoded period for restart - this should ideally get the period from contract
+		onChainSubmissionPeriodPerOperator := big.NewInt(30) // 30 seconds
+		startMonitoringWithPeriod(nil, round, trialNum, onChainSubmissionPeriodPerOperator)
+	}
+}
+
+// callFailToSubmitS calls the contract function to fail
+func callFailToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	log.Printf("Calling failToSubmitS for round %s with trial %s", round, trialNum)
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode private key: %v", err)
+		return
+	}
+
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	// Execute the transaction
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"failToSubmitS",
+		big.NewInt(0),
+	)
+	if err != nil {
+		log.Printf("Failed to execute failToSubmitS transaction: %v", err)
+		return
+	}
+
+	log.Printf("Successfully called failToSubmitS for round %s with trial %s", round, trialNum)
+}
+
+// ResetLeaderMonitoringState resets all leader monitoring variables for a round
+func ResetLeaderMonitoringState(round string, trialNum string) {
+	// Stop secret submission monitoring (S monitoring)
+	StopFailToSubmitSMonitoring(round, trialNum)
+
+	// Reset secret submission monitoring timestamps
+	requestToSubmitSTimestamp = nil
+	lastSubmitSTimestamp = nil
+
+	// Reset reveal request status for the round
+	uniqueKey := utils.GetUniqueKey(round, trialNum)
+	delete(revealRequestStatus, uniqueKey)
+
+	// Call COS and CVS monitoring reset from acceptCommit.go
+	ResetCosAndCvsMonitoringState(round, trialNum)
+
+	log.Printf("Reset all leader monitoring state for round %s", round)
 }

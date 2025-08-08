@@ -211,7 +211,6 @@ func LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, 
 		}
 	}
 
-
 	return cvs, cos, secrets, vs, rs, ss
 }
 

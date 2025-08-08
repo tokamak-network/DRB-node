@@ -214,6 +214,15 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 						continue
 					}
 					fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
+
+					// Get block timestamp and update the last submit S timestamp for monitoring
+					blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+					if err != nil {
+						log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+					} else {
+						UpdateLastSubmitSTimestamp(big.NewInt(int64(blockTimestamp)), eventData.Round.String(), eventData.TrialNum.String())
+					}
+
 					processSubmittedSecretRequest(eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
 				}
 			}
@@ -256,6 +265,9 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
 	CurrentRound = round.String()
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
+
+	// Reset leader monitoring state for new round or trail
+	ResetLeaderMonitoringState(round.String(), trialNum.String())
 	req := RandomRequest{
 		Round:     round,
 		TrialNum:  trialNum,
@@ -274,6 +286,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		// Reset the indices for the new round
 		ResetIndicesForNewRound()
 		log.Printf("Reset Indices array for new round %s with trail %s", CurrentRound, trialNum.String())
+
 		Execution = true
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
@@ -702,4 +715,23 @@ func checkAndStopFailToSubmitCoMonitoring(round string, trialNum string) {
 		log.Printf("All COS values received for round %s trial %s, stopping failToSubmitCo monitoring", round, trialNum)
 		stopFailToSubmitCoMonitoring()
 	}
+}
+
+// ResetCosAndCvsMonitoringState resets COS and CVS monitoring variables
+func ResetCosAndCvsMonitoringState(round string, trialNum string) {
+	// Stop COS monitoring
+	stopFailToSubmitCoMonitoring()
+
+	// Reset COS monitoring variables
+	RequestedToSubmitCoTimestamp = nil
+	RequestedToSubmitCoMonitoringActive = false
+	if RequestedToSubmitCoMonitoringTimer != nil {
+		RequestedToSubmitCoMonitoringTimer.Stop()
+		RequestedToSubmitCoMonitoringTimer = nil
+	}
+
+	// Reset secret request tracking variable
+	SecretRequestSentForWhichRound = ""
+
+	log.Printf("Reset COS and CVS monitoring state for round %s", round)
 }
