@@ -355,13 +355,6 @@ func checkAllCVsSubmittedOnChain(round string, trialNum string) bool {
 }
 
 func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round, trialNum, index *big.Int) {
-	// flag to skip processing secret request
-	disabled := os.Getenv("DISABLED")
-	if disabled == "disabled" {
-		log.Println("Skipped processing secret request")
-		return
-	}
-
 	if atomic.LoadInt32(&Halted) == 1 {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
@@ -412,7 +405,10 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(revealOrder.OrderedNodes))
 		return
 	}
-
+	// regularEoaAddress := revealOrder.OrderedNodes[2]
+	// if regularNodeEOA == regularEoaAddress {
+	// 	return
+	// }
 	regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
 	if regularNodeEOA == regularEoaAddress {
 		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", round, regularEoaAddress)
@@ -1043,7 +1039,7 @@ func StartRequestToSubmitSOrGenerateRandomNumberMonitoring(fallbackEthClient *fa
 	offChainSubmissionPeriodPerOperator := big.NewInt(20)
 	activatedOperatorsLength := new(big.Int).SetInt64(int64(len(eth.ActivatedOperators)))
 	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
-	
+
 	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod
 	deadline := new(big.Int).Add(merkleRootSubmittedTOrRequestedCvTime, offChainSubmissionPeriod)
 	operatorDelay := new(big.Int).Mul(offChainSubmissionPeriodPerOperator, activatedOperatorsLength)

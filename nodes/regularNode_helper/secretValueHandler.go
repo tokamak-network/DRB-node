@@ -126,11 +126,6 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string, trialNu
 
 	// Sign the round number using the regular node's private key
 	signature := utils.SignData(eoaAddress, privateKey)
-	disabled := os.Getenv("DISABLED")
-	if disabled == "disabled" {
-		log.Println("Skipped processing secret request")
-		return
-	}
 	// Create the secret value request
 	req := utils.SecretValueRequest{
 		RegularEoaAddress: eoaAddress, // Regular node's Ethereum address

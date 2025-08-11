@@ -167,7 +167,6 @@ services:
       NODE_TYPE: regular
       POSTGRES_HOST: "regular3postgres"
       POSTGRES_PORT: 5432
-      DISABLED: disabled
     volumes:
       - regularnode3-key:/app/static-key
     extra_hosts:
