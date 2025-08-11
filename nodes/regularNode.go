@@ -216,7 +216,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		merkleRootSubmitted := regularNode_helper.RoundsData[uniqueKey].MerkleRoot
 		randomNumberSubmitted := regularNode_helper.RoundsData[uniqueKey].RandomNumber
 
-		log.Printf("Checking round %s with trial %s ...", round, trialNum)
+		// log.Printf("Checking round %s with trial %s ...", round, trialNum)
 		// Check if Merkle Root and Random Number are already generated (not nil)
 		if merkleRootSubmitted && randomNumberSubmitted {
 			// If both MerkleRoot and RandomNumber are generated, skip this round
@@ -236,7 +236,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 			// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil
 			if commitData != nil && !merkleRootSubmitted && !randomNumberSubmitted {
-				log.Printf("Commit data already exists for round %s with trial %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", round, trialNum)
+				// log.Printf("Commit data already exists for round %s with trial %s, but both Merkle Root and Random Number are nil. Skipping commit generation.", round, trialNum)
 				continue
 			}
 
@@ -504,9 +504,9 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 		log.Printf("Current round or trialNum not available, cannot generate signature")
 		return
 	}
-	trailNumBigIntValue, _ := big.NewInt(0).SetString(trialNum, 10)
+	trialNumBigIntValue, _ := big.NewInt(0).SetString(trialNum, 10)
 	roundBigIntValue, _ := big.NewInt(0).SetString(round, 10)
-	v, r, s, err := regularNode_helper.GenerateCvsSignature(roundBigIntValue, trailNumBigIntValue, req.Cvs)
+	v, r, s, err := regularNode_helper.GenerateCvsSignature(roundBigIntValue, trialNumBigIntValue, req.Cvs)
 	if err != nil {
 		log.Printf("Failed to generate v, r, s for CVS: %v", err)
 		return

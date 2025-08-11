@@ -89,8 +89,6 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 		return
 	}
 
-	log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
-
 	// Get the unique key for the round and trial number
 	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)
 	// Fetch or initialize the leader commit data for the given round and EOA
@@ -116,15 +114,14 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	copy(leaderCommitData.SecretValue[:], req.SecretValue[:])
 	leaderCommitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
 
-	log.Printf("Received secret value for round %s with trail %s and EOA %s: byte=%x, hex=%s",
+	log.Printf("Received secret value for round %s with trial %s and EOA %s: byte=%x, hex=%s",
 		req.Round, req.TrialNum, req.RegularEoaAddress, leaderCommitData.SecretValue, leaderCommitData.SecretValueHex)
 
 	if err := database.UpdateLeaderCommit(leaderCommitData); err != nil {
-		log.Printf("Failed to save updated commit data for %s in round %s with trail %s: %v", req.RegularEoaAddress, req.Round, req.TrialNum, err)
+		log.Printf("Failed to save updated commit data for %s in round %s with trial %s: %v", req.RegularEoaAddress, req.Round, req.TrialNum, err)
 		return
 	}
 
-	log.Printf("Successfully saved secret value for round %s with trail %s and EOA %s", req.Round, req.TrialNum, req.RegularEoaAddress)
 	secretMapsMutex.Lock()
 	if _, exists := roundSecret[uniqueKey]; !exists {
 		roundSecret[uniqueKey] = make(map[string]bool)

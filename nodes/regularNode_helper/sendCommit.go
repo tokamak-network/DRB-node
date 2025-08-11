@@ -200,8 +200,8 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
 							continue
 						}
-						fmt.Printf("MerkleRootSubmitted Event:\n Round %v, TrialNum %v, MerkleRoot: %v\n Round: %v\n",
-							eventData.Round, eventData.TrialNum, eventData.MerkleRoot, eventData.Round.String())
+						fmt.Printf("MerkleRootSubmitted Event:\n Round %v, TrialNum %v, MerkleRoot: %v\n",
+							eventData.Round, eventData.TrialNum, eventData.MerkleRoot,)
 
 						// Mark Merkle root as submitted and stop leader monitoring
 						merkleRootSubmittedEventEmitted = true
@@ -326,7 +326,7 @@ func processCvSubmitted(round *big.Int, trialNum *big.Int, index *big.Int) {
 	indexStr := index.String()
 	submittedCvIndices[uniqueKey][indexStr] = true
 
-	log.Printf("CV submitted for index %s in round %s with trail %s", indexStr, round.String(), trialNum.String())
+	log.Printf("CV submitted for index %s in round %s with trial %s", indexStr, round.String(), trialNum.String())
 
 }
 
@@ -363,7 +363,7 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	data, err := database.GetRevealOrder(round.String(), trialNum.String())
 	if err != nil {
-		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
+		log.Printf("Failed to get reveal order for round %s with trial %s: %v", round.String(), trialNum.String(), err)
 	}
 	orderedNodes := data.OrderedNodes
 	revealOrder := data.RevealOrder
@@ -398,7 +398,7 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	revealOrder, err := database.GetRevealOrder(round, trialNum)
 	if err != nil {
-		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round, trialNum, err)
+		log.Printf("Failed to get reveal order for round %s with trial %s: %v", round, trialNum, err)
 	}
 
 	if index.Int64() >= int64(len(revealOrder.OrderedNodes)) {
@@ -474,7 +474,6 @@ func processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
 	}
-	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
 	if RoundsData == nil {
 		RoundsData = make(map[string]RoundData)
 	}
@@ -514,7 +513,6 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		ActivatedOperator, _ = FetchActivatedOperators(fallbackEthClient, roundStr)
 		Req = req
 		Execution = true
-		log.Printf("Execution started for round %s", roundStr)
 
 		// Start leader monitoring for the new round using block timestamp
 		StartLeaderMonitoring(fallbackEthClient, blockTimestamp, round.String(), trialNum.String())
@@ -787,7 +785,7 @@ func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 	}
 
 	if startTime == nil {
-		log.Printf("StartTime is nil, cannot start monitoring")
+		// log.Printf("StartTime is nil, cannot start monitoring")
 		return
 	}
 
@@ -807,12 +805,10 @@ func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 	duration := deadlineTime.Sub(now)
 
 	if duration <= 0 {
-		log.Printf("Deadline has already passed for round %s with trail %s, calling failToRequestSubmitCVOrSubmitMerkleRoot immediately", round, trialNum)
+		log.Printf("Deadline has already passed for round %s with trial %s, calling failToRequestSubmitCVOrSubmitMerkleRoot immediately", round, trialNum)
 		callFailToRequestSubmitCVOrSubmitMerkleRoot(fallbackEthClient, round, trialNum)
 		return
 	}
-
-	log.Printf("Starting leader monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 
 	// Set timer to call the function when deadline is reached
 	monitoringTimer = time.AfterFunc(duration, func() {
@@ -898,7 +894,7 @@ func callFailToRequestSubmitCVOrSubmitMerkleRoot(fallbackEthClient *fallback_eth
 		return
 	}
 
-	log.Printf("Successfully called failToRequestSubmitCVOrSubmitMerkleRoot for round %swith trail %s", round, trialNum)
+	log.Printf("Successfully called failToRequestSubmitCVOrSubmitMerkleRoot for round %swith trial %s", round, trialNum)
 }
 
 // StartMerkleRootMonitoring starts monitoring for merkle root submission after CV request
@@ -946,7 +942,7 @@ func StopFailToSubmitMerkleRootAfterDisputeMonitoring(round string, trialNum str
 		merkleRootMonitoringTimer = nil
 	}
 
-	log.Printf("Stopped merkle root monitoring for round %s", round)
+	// log.Printf("Stopped merkle root monitoring for round %s", round)
 }
 
 // callFailToSubmitMerkleRootAfterDispute calls the contract function to fail the leader for not submitting merkle root
@@ -991,7 +987,7 @@ func callFailToSubmitMerkleRootAfterDispute(fallbackEthClient *fallback_ethclien
 		return
 	}
 
-	log.Printf("Successfully called failToSubmitMerkleRootAfterDispute for round %s with trail %s", round, trialNum)
+	log.Printf("Successfully called failToSubmitMerkleRootAfterDispute for round %s with trial %s", round, trialNum)
 }
 
 // CheckAndStartMonitoring checks if monitoring should be started and starts it if needed

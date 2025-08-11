@@ -143,9 +143,6 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		tracker.Attempts++
 		tracker.LastSent = time.Now().Unix()
 
-		log.Printf("Broadcasting %s (attempt %d/%d) for round %s, trail %s, EOA %s",
-			broadcastType, tracker.Attempts, tracker.MaxAttempts, tracker.Round, tracker.TrialNum, tracker.EOAAddress)
-
 		// Create broadcast message
 		message := utils.BroadcastMessage{
 			Round:      tracker.Round,
@@ -197,8 +194,6 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 			if err := json.NewEncoder(stream).Encode(message); err != nil {
 				log.Printf("Failed to send %s to regular node %s: %v", broadcastType, op.Hex(), err)
 			} else {
-				log.Printf("%s sent to regular node %s for round %s with trail %s (attempt %d)",
-					broadcastType, op.Hex(), tracker.Round, tracker.TrialNum, tracker.Attempts)
 			}
 			stream.Close()
 		}
@@ -274,8 +269,6 @@ func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
 
 		// Log immediately when all nodes have acknowledged
 		if allAcknowledged {
-			log.Printf("All nodes acknowledged %s for round %s, EOA %s",
-				ack.Type, tracker.Round, tracker.EOAAddress)
 		}
 	} else {
 		log.Printf("Received error acknowledgment from %s for %s broadcast (message ID: %s): %s",
@@ -401,6 +394,6 @@ func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
 // }
 
 // generateMessageID creates a unique message ID for broadcasts
-func generateMessageID(round, eoaAddress, trailNum, messageType string) string {
-	return fmt.Sprintf("%s_%s_%s_%s_%d", round, trailNum, eoaAddress, messageType, time.Now().UnixNano())
+func generateMessageID(round, eoaAddress, trialNum, messageType string) string {
+	return fmt.Sprintf("%s_%s_%s_%s_%d", round, trialNum, eoaAddress, messageType, time.Now().UnixNano())
 }

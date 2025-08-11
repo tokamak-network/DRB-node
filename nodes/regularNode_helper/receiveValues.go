@@ -48,7 +48,6 @@ func sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack utils.Acknowledgm
 	if err := json.NewEncoder(stream).Encode(ack); err != nil {
 		log.Printf("Failed to send acknowledgment: %v", err)
 	} else {
-		log.Printf("Acknowledgment sent for %s broadcast (message ID: %s)", ack.Type, ack.MessageID)
 	}
 }
 
@@ -66,9 +65,6 @@ func HandleCvs(h host.Host, s network.Stream) {
 		log.Printf("Failed to decode CVS broadcast message: %v", err)
 		return
 	}
-
-	log.Printf("Received CVS broadcast for round %s with trail %s from EOA %s (message ID: %s)",
-		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
 	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
@@ -97,8 +93,6 @@ func HandleCvs(h host.Host, s network.Stream) {
 			return
 		}
 	}
-
-	log.Printf("Successfully saved CVS data for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
 	ack := utils.AcknowledgmentMessage{
@@ -141,9 +135,6 @@ func HandleCos(h host.Host, s network.Stream) {
 		return
 	}
 
-	log.Printf("Received COS broadcast for round %s with trail %s from EOA %s (message ID: %s)",
-		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
-
 	// Process the COS data
 	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
 	SetCosReceived(uniqueKey, message.EOAAddress, true)
@@ -175,8 +166,6 @@ func HandleCos(h host.Host, s network.Stream) {
 			return
 		}
 	}
-
-	log.Printf("Successfully saved CoS data for round %s with trail %s and EOA %s", message.Round, message.TrialNum, message.EOAAddress)
 
 	// Send acknowledgment
 	ack := utils.AcknowledgmentMessage{
@@ -218,9 +207,6 @@ func HandleSecret(h host.Host, s network.Stream) {
 		log.Printf("Failed to decode secret broadcast message: %v", err)
 		return
 	}
-
-	log.Printf("Received secret broadcast for round %s with trail %s from EOA %s (message ID: %s)",
-		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
 	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {

@@ -36,19 +36,19 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	for {
 		roundData, err := database.GetRevealOrder(req.Round, req.TrialNum)
 		if err != nil {
-			log.Printf("Failed to load reveal order with trail %s for round %s: %v", req.TrialNum, req.Round, err)
+			log.Printf("Failed to load reveal order with trial %s for round %s: %v", req.TrialNum, req.Round, err)
 		} else if roundData != nil {
 			if strictOrderWhileSecretRequest[uniqueKey] == nil {
 				strictOrderWhileSecretRequest[uniqueKey] = roundData.OrderedNodes
 			}
 			break
 		} else {
-			log.Printf("Reveal order not yet calculated for round %s with trail %s. Waiting...", req.Round, req.TrialNum)
+			log.Printf("Reveal order not yet calculated for round %s with trial %s. Waiting...", req.Round, req.TrialNum)
 		}
 		time.Sleep(5 * time.Second)
 	}
 	if len(strictOrderWhileSecretRequest[uniqueKey]) == 0 || strictOrderWhileSecretRequest[uniqueKey][req.Order] != req.RegularEoaAddress {
-		log.Printf("EOA %s is not next in the reveal order %v for round %s with trail %s", req.RegularEoaAddress, req.Order, req.Round, req.TrialNum)
+		log.Printf("EOA %s is not next in the reveal order %v for round %s with trial %s", req.RegularEoaAddress, req.Order, req.Round, req.TrialNum)
 		return
 	}
 
@@ -72,18 +72,18 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 
 	// Log the request details
-	log.Printf("Verified secret value request for round %s with trail %s from leader %s", req.Round, req.TrialNum, req.LeaderEoaAddress)
+	log.Printf("Verified secret value request for round %s with trial %s from leader %s", req.Round, req.TrialNum, req.LeaderEoaAddress)
 
 	// Fetch the secret value for the specified round
 	commitData, err := database.GetCommitByRound(req.Round, req.TrialNum)
 	if err != nil {
-		log.Printf("Failed to load commit data for round %s with trail %s: %v", req.Round, req.TrialNum, err)
+		log.Printf("Failed to load commit data for round %s with trial %s: %v", req.Round, req.TrialNum, err)
 		return
 	}
 
 	// Check if the secret value exists
 	if commitData.SecretValue == [32]byte{} {
-		log.Printf("No secret value found for round %s with Trail %s", req.Round, req.TrialNum)
+		log.Printf("No secret value found for round %s with trial %s", req.Round, req.TrialNum)
 		return
 	}
 

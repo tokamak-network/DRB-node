@@ -87,7 +87,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 	}
 
 	leaderEoa := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	log.Printf("EOA Address: %s", leaderEoa)
+	// log.Printf("EOA Address: %s", leaderEoa)
 
 	// Sign the round number
 	signature := utils.SignData(leaderEoa, privateKey)
@@ -102,14 +102,12 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 		Order:             order,
 	}
 
-	fmt.Println("Sending secret value request to EOA:", regularEoa)
-
 	// Send the request
 	err = sendToRegularNode(h, *nodeInfo, "/sendSecretValue", req)
 	if err != nil {
-		log.Printf("Failed to send secret value request to EOA %s for round %s with trail %s: %v", regularEoa, round, trialNum, err)
+		log.Printf("Failed to send secret value request to EOA %s for round %s with trial %s: %v", regularEoa, round, trialNum, err)
 	} else {
-		log.Printf("Secret value request sent to EOA %s for round %s with trail %s", regularEoa, round, trialNum)
+		log.Printf("Secret value request sent to EOA %s for round %s with trial %s", regularEoa, round, trialNum)
 
 		// Start a timer to track if the response is received within 15 seconds
 		go func() {
@@ -121,7 +119,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 
 			// If the timer expires and the secret value is not received, call handleMissingSecretValue
 			if !roundSecret[uniqueKey][regularEoa] {
-				log.Printf("Secret value not received for EOA %s in round %s with trail %s within 15 seconds. Handling missing secret value.", regularEoa, round, trialNum)
+				log.Printf("Secret value not received for EOA %s in round %s with trial %s within 15 seconds. Handling missing secret value.", regularEoa, round, trialNum)
 				secretsOnChainMu.Lock()
 				secretsOnChain[uniqueKey] = true
 				secretsOnChainMu.Unlock()
@@ -232,7 +230,7 @@ func prepareArgumentsForRequestToSubmitS(round string, trialNum string) ([][32]b
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	revealOrders, err := database.GetRevealOrder(round, trialNum)
 	if err != nil {
-		log.Printf("Failed to load reveal order for round %s with trail %s: %v", round, trialNum, err)
+		log.Printf("Failed to load reveal order for round %s with trial %s: %v", round, trialNum, err)
 	}
 
 	order := revealOrders.RevealOrder
@@ -256,7 +254,6 @@ func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclien
 		log.Println("System is halted. Skipping HandleSecretValueResponse.")
 		return
 	}
-	log.Printf("Secret value received for round %s with trail %s from EOA %s", round, trialNum, eoa)
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	// Load reveal order for the round
 	roundRevealData, err := database.GetRevealOrder(round, trialNum)
@@ -284,7 +281,6 @@ func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclien
 		}
 	}
 
-	log.Printf("All nodes processed for round %s with trail %s.", round, trialNum)
 }
 
 // sendToRegularNode sends a request to a specific regular node
@@ -461,5 +457,4 @@ func ResetLeaderMonitoringState(round string, trialNum string) {
 	// Call COS and CVS monitoring reset from acceptCommit.go
 	ResetCosAndCvsMonitoringState(round, trialNum)
 
-	log.Printf("Reset all leader monitoring state for round %s", round)
 }

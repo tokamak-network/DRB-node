@@ -152,10 +152,9 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		commitData.Sign = req.Sign
 		commitData.SubmitMerkleRootDone = false
 		commitData.RandomNumberGenerated = false
-		log.Printf("Storing CVS and signature for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
+		log.Printf("Storing CVS and signature for round %s with trial %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 	}
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
 
 	// Update database for commit data from regular node
 	if err := database.AddLeaderCommit(commitData); err != nil {
@@ -163,11 +162,10 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		return
 	}
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
 	leaderNode_helper.ReliableBroadCastCVS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cvs)
 	// Check if all commits are ready after this update
 	if !isMerkleRootSubmitted(uniqueKey) && allCommitsReceivedUnlocked(uniqueKey) {
-		log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", round, req.TrialNum)
+		log.Printf("All CVS received for round %s with trial %s. Generating Merkle root...", round, req.TrialNum)
 		commitMu.Unlock() // Unlock before calling generateMerkleRoot
 		generateMerkleRoot(fallbackEthClient, round, req.TrialNum)
 		commitMu.Lock() // Re-lock if needed
@@ -201,32 +199,30 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	// Update in-memory data for leaderCommit's COS
 	commitData := getOrCreateLeaderCommitData(round, req.TrialNum, uniqueKey, eoaAddress)
 	if commitData.Cvs == [32]byte{} {
-		log.Printf("No CVS found for round %s with trail %s EOA %s, rejecting COS.", round, req.TrialNum, eoaAddress.Hex())
+		log.Printf("No CVS found for round %s with trial %s EOA %s, rejecting COS.", round, req.TrialNum, eoaAddress.Hex())
 		return
 	}
 
 	recalculatedCvs := commitreveal2.Keccak256(req.Cos[:])
 	if !bytes.Equal(recalculatedCvs, commitData.Cvs[:]) {
-		log.Printf("COS hash mismatch for round %s with trail %s EOA %s. Rejecting COS.", round, req.TrialNum, eoaAddress.Hex())
+		log.Printf("COS hash mismatch for round %s with trial %s EOA %s. Rejecting COS.", round, req.TrialNum, eoaAddress.Hex())
 		return
 	}
 
 	if commitData.Cos != [32]byte{} {
-		log.Printf("COS already received for round %s with trail %s EOA %s. Skipping.", round, req.TrialNum, eoaAddress.Hex())
+		log.Printf("COS already received for round %s with trial %s EOA %s. Skipping.", round, req.TrialNum, eoaAddress.Hex())
 		return
 	}
 
 	commitData.Cos = req.Cos
 	commitData.CosHex = hex.EncodeToString(req.Cos[:])
-	log.Printf("Storing COS for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 
 	// Update database for leaderCommit's COS
 	leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, req.TrialNum, eoaAddress.Hex())
 	if err != nil {
-		log.Printf("Error loading leaderCommit data from database for round: %s, trail: %s, and eoaAddress: %s, error: %v", round, req.TrialNum, eoaAddress.Hex(), err)
+		log.Printf("Error loading leaderCommit data from database for round: %s, trial: %s, and eoaAddress: %s, error: %v", round, req.TrialNum, eoaAddress.Hex(), err)
 		return
 	}
 
@@ -234,15 +230,15 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	leaderCommitDBData.CosHex = hex.EncodeToString(req.Cos[:])
 
 	if err := database.UpdateLeaderCommit(leaderCommitDBData); err != nil {
-		log.Printf("Error saving COS data for round %s with trail %s EOA %s: %v", round, req.TrialNum, eoaAddress.Hex(), err)
+		log.Printf("Error saving COS data for round %s with trial %s EOA %s: %v", round, req.TrialNum, eoaAddress.Hex(), err)
 		return
 	}
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
+	log.Printf("COS data saved and updated in-memory for round %s with trial %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cos)
 	// Check if all commits are ready after this COS
 	if !isMerkleRootSubmitted(uniqueKey) && allCommitsReceivedUnlocked(uniqueKey) {
-		log.Printf("All CVS received for round %s with trail %s after COS, generating Merkle root...", round, req.TrialNum)
+		log.Printf("All CVS received for round %s with trial %s after COS, generating Merkle root...", round, req.TrialNum)
 		commitMu.Unlock()
 		generateMerkleRoot(fallbackEthClient, round, req.TrialNum)
 		commitMu.Lock()
@@ -250,10 +246,10 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if allCosReceivedUnlocked(uniqueKey) {
-		log.Printf("All COS received for round %s with trail %s.", round, req.TrialNum)
+		log.Printf("All COS received for round %s with trial %s.", round, req.TrialNum)
 		_, err := commitreveal2.DetermineRevealOrder(round, req.TrialNum, eth.ActivatedOperators)
 		if err != nil {
-			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, req.TrialNum, err)
+			log.Printf("Failed to determine reveal order for round %s with trial %s: %v", round, req.TrialNum, err)
 			return
 		}
 		leaderNode_helper.StartSecretValueRequests(h, fallbackEthClient, round, req.TrialNum)
@@ -403,22 +399,20 @@ func generateMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 	// Check if merkle root is already done before proceeding
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
 	if isMerkleRootSubmitted(uniqueKey) {
-		log.Printf("Merkle root already submitted for round %s with trail %s, skipping.", roundNum, trialNum)
+		log.Printf("Merkle root already submitted for round %s with trial %s, skipping.", roundNum, trialNum)
 		commitMu.Unlock()
 		return
 	}
 	commitMu.Unlock()
 
-	log.Printf("Generating Merkle root for round %s with trail %s...", roundNum, trialNum)
+	log.Printf("Generating Merkle root for round %s with trial %s...", roundNum, trialNum)
 
 	activatedOperatorsList := eth.ActivatedOperators
-
-	log.Printf("Activated operators for round %s with trail %s in order: %v", roundNum, trialNum, activatedOperatorsList)
 
 	commitMu.Lock()
 	roundMap, roundExists := utils.CommittedNodes[uniqueKey]
 	if !roundExists || len(roundMap) == 0 {
-		log.Printf("No commits found in-memory for round %s with trail %s, cannot generate Merkle root.", roundNum, trialNum)
+		log.Printf("No commits found in-memory for round %s with trial %s, cannot generate Merkle root.", roundNum, trialNum)
 		commitMu.Unlock()
 		return
 	}
@@ -427,26 +421,23 @@ func generateMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 	for _, opAddr := range activatedOperatorsList {
 		data, ok := roundMap[opAddr]
 		if !ok || data.Cvs == [32]byte{} {
-			log.Printf("Missing CVS for operator %s in round %s with trail %s", opAddr.Hex(), roundNum, trialNum)
+			log.Printf("Missing CVS for operator %s in round %s with trial %s", opAddr.Hex(), roundNum, trialNum)
 			commitMu.Unlock()
 			return
 		}
 		leaves = append(leaves, data.Cvs[:])
-		log.Printf("Added CVS from operator %s for round %s with trail %s", opAddr.Hex(), roundNum, trialNum)
 	}
 
 	commitMu.Unlock()
 
 	if len(leaves) == 0 {
-		log.Printf("Error: No CVS commits found for round %s with trail %s. Cannot generate Merkle root.", roundNum, trialNum)
+		log.Printf("Error: No CVS commits found for round %s with trial %s. Cannot generate Merkle root.", roundNum, trialNum)
 		return
 	}
 
-	log.Printf("Leaves for Merkle tree for round %s with trail %s: %v", roundNum, trialNum, leaves)
-
 	merkleRoot, err := commitreveal2.CreateMerkleTree(leaves)
 	if err != nil {
-		log.Printf("Failed to create Merkle tree for round %s with trail %s: %v", roundNum, trialNum, err)
+		log.Printf("Failed to create Merkle tree for round %s with trial %s: %v", roundNum, trialNum, err)
 		return
 	}
 	if !submittingMerkleRoot {
@@ -497,11 +488,11 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 		merkleRootBytes32,
 	)
 	if err != nil {
-		log.Printf("Failed to submit Merkle root for round %s with trail %s: %v", roundNum, trialNum, err)
+		log.Printf("Failed to submit Merkle root for round %s with trial %s: %v", roundNum, trialNum, err)
 		return
 	}
 
-	log.Printf("Successfully submitted Merkle root for round %s with trail %s", roundNum, trialNum)
+	log.Printf("Successfully submitted Merkle root for round %s with trial %s", roundNum, trialNum)
 	submittingMerkleRoot = false
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
 	roundData := leaderNode_helper.RoundsData[uniqueKey]
@@ -518,7 +509,6 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 
 	cosTimerOnce[uniqueKey].Do(func() {
 		go func(rn string) {
-			log.Printf("Started 30s timer for COS for round %s", rn)
 			time.Sleep(30 * time.Second)
 			commitMu.Lock()
 			defer commitMu.Unlock()
@@ -534,7 +524,7 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 				}
 			}
 			if len(missingIndices) > 0 {
-				log.Printf("Requesting on-chain for missing COS indices: %v for round %s with trail %s", missingIndices, rn, trialNum)
+				log.Printf("Requesting on-chain for missing COS indices: %v for round %s with trial %s", missingIndices, rn, trialNum)
 				requestToSubmitCo(fallbackEthClient, roundNum, trialNum, missingIndices)
 			}
 		}(uniqueKey)
@@ -551,7 +541,6 @@ func updateCommitDataAfterSubmit(roundNum string, trialNum string, uniqueKey str
 	}
 
 	for eoaAddress, data := range roundMap {
-		log.Printf("Setting submit_merkle_root_done = true for key: %s+%s", uniqueKey, eoaAddress.Hex())
 
 		// Update database with marked submitmerkleroot as done
 		leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, trialNum, eoaAddress.Hex())
@@ -580,7 +569,6 @@ func isEOAActivatedForRound(fallbackEthClient *fallback_ethclient.FallbackRPCCli
 
 	for _, operator := range activatedOperators {
 		if operator == eoaAddress {
-			log.Printf("EOA address %s is activated", eoaAddress.Hex())
 			return true
 		}
 	}
@@ -594,7 +582,6 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 	trialNum := round.TrialNum.String()
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
 	if !leaderNode_helper.RoundsData[uniqueKey].MerkleRoot && !leaderNode_helper.RoundsData[uniqueKey].RandomNumber {
-		log.Printf("LeaderNode for round %s with trail %s is still waiting for commits...", roundNum, trialNum)
 
 		commitMu.Lock()
 		ready := UpdatedallCommitsReceivedUnlocked(fallbackEthClient, uniqueKey)
@@ -626,11 +613,11 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 			handleMissingCV(fallbackEthClient, missingOperators, roundNum, trialNum)
 		}
 		if allReceived {
-			log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", roundNum, trialNum)
+			log.Printf("All CVS received for round %s with trial %s. Generating Merkle root...", roundNum, trialNum)
 			flag[uniqueKey] = false
 			generateMerkleRoot(fallbackEthClient, roundNum, trialNum)
 		} else {
-			log.Printf("Not all CVS received for round %s with trail %s. Waiting for remaining commits.", roundNum, trialNum)
+			log.Printf("Not all CVS received for round %s with trial %s. Waiting for remaining commits.", roundNum, trialNum)
 			sendCommitRequest[uniqueKey] = true
 		}
 	}
@@ -777,11 +764,11 @@ func requestToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 		packedOrederedIndices,
 	)
 	if err != nil {
-		log.Printf("Failed to submit commit request root for round %s with trail %s: %v", roundNum, trialNum, err)
+		log.Printf("Failed to submit commit request root for round %s with trial %s: %v", roundNum, trialNum, err)
 		return
 	}
 
-	log.Printf("Successfully submitted cos request for round %s with trail %s and indices %v", roundNum, trialNum, missingIndices)
+	log.Printf("Successfully submitted cos request for round %s with trial %s and indices %v", roundNum, trialNum, missingIndices)
 }
 
 func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, missingOperators []string, round string, trialNum string) {
@@ -851,11 +838,11 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 		packedIndices,
 	)
 	if err != nil {
-		log.Printf("Failed to submit commit request root for round %s with trail %s: %v", round, trialNum, err)
+		log.Printf("Failed to submit commit request root for round %s with trial %s: %v", round, trialNum, err)
 		return
 	}
 
-	log.Printf("Successfully submitted commit request for round %s with trail %s and indices %v", round, trialNum, indices)
+	log.Printf("Successfully submitted commit request for round %s with trial %s and indices %v", round, trialNum, indices)
 }
 
 func handleAcknowledgment(s network.Stream) {
@@ -869,9 +856,6 @@ func handleAcknowledgment(s network.Stream) {
 		log.Printf("Failed to decode acknowledgment message: %v", err)
 		return
 	}
-
-	log.Printf("Received acknowledgment from %s for %s broadcast (message ID: %s, status: %s)",
-		ack.EOAAddress, ack.Type, ack.MessageID, ack.Status)
 
 	// Process the acknowledgment
 	leaderNode_helper.HandleAcknowledgment(ack)

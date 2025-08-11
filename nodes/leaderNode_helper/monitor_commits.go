@@ -61,7 +61,6 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 				}
 			}
 			if allRandomNumberGenerated {
-				log.Printf("Skipping round %s with trial %s: all random numbers already generated.", round.Round, round.TrialNum)
 				continue
 			}
 		}

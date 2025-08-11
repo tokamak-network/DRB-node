@@ -262,11 +262,12 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
-	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
+	fmt.Printf("Status Event:\n Round: %v\n Trial: %v\n State: %v\n",
+	round, trialNum, state)
 	CurrentRound = round.String()
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 
-	// Reset leader monitoring state for new round or trail
+	// Reset leader monitoring state for new round or trial
 	ResetLeaderMonitoringState(round.String(), trialNum.String())
 	req := RandomRequest{
 		Round:     round,
@@ -278,14 +279,11 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		// Set Halted to 0 to resume the round
 		atomic.StoreInt32(&Halted, 0)
 
-		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
-			blockTimestamp, state, round)
 		Req = req
 		// Update the activated operators
 		eth.UpdateActivatedOperators(fallbackEthClient)
 		// Reset the indices for the new round
 		ResetIndicesForNewRound()
-		log.Printf("Reset Indices array for new round %s with trail %s", CurrentRound, trialNum.String())
 
 		Execution = true
 	}
@@ -459,7 +457,7 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *
 	}
 
 	updateCOS(fallbackEthClient, roundStr, trialNumStr, uniqueKey, eoa, cos)
-	fmt.Printf("Successfully stored COS for Round %s with Trail %s, EOA %s\n", roundStr, trialNumStr, eoa.Hex())
+	fmt.Printf("Successfully stored COS for Round %s with trial %s, EOA %s\n", roundStr, trialNumStr, eoa.Hex())
 
 	// Broadcast the COS value to all activated regular nodes
 	ReliableBroadCastCOS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cos)
@@ -488,10 +486,10 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 	utils.CommittedNodes[uniqueKey][eoa] = commitData
 
 	if AllCosReceivedUnlocked(uniqueKey) {
-		log.Printf("All COS received for round %s with trail %s.", round, trialNum)
+		log.Printf("All COS received for round %s with trial %s.", round, trialNum)
 		_, err := commitreveal2.DetermineRevealOrder(round, trialNum, eth.ActivatedOperators)
 		if err != nil {
-			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, trialNum, err)
+			log.Printf("Failed to determine reveal order for round %s with trial %s: %v", round, trialNum, err)
 			return
 		}
 		StartSecretValueRequests(libp2putils.HostInstance, fallbackEthClient, round, trialNum)
@@ -548,7 +546,7 @@ func processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte, activatedOperat
 	}
 
 	updateCVS(roundStr, uniqueKey, eoa, cvs)
-	fmt.Printf("Successfully stored CVS for Round %s with Trail %s, EOA %s\n", roundStr, trialNumStr, eoa.Hex())
+	fmt.Printf("Successfully stored CVS for Round %s with trial %s, EOA %s\n", roundStr, trialNumStr, eoa.Hex())
 
 	// Broadcast the CVS value to all activated regular nodes
 	ReliableBroadCastCVS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cvs)
@@ -632,7 +630,7 @@ func startFailToSubmitCoMonitoring(fallbackEthClient *fallback_ethclient.Fallbac
 	duration := deadlineTime.Sub(now)
 
 	if duration <= 0 {
-		log.Printf("Deadline has already passed for round %s with trail %s, calling failToSubmitCo immediately", round, trialNum)
+		log.Printf("Deadline has already passed for round %s with trial %s, calling failToSubmitCo immediately", round, trialNum)
 		callFailToSubmitCo(fallbackEthClient, round, trialNum)
 		return
 	}
@@ -696,11 +694,11 @@ func callFailToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 		big.NewInt(0),
 	)
 	if err != nil {
-		log.Printf("Failed to call failToSubmitCo for round %s with trail %s: %v", round, trialNum, err)
+		log.Printf("Failed to call failToSubmitCo for round %s with trial %s: %v", round, trialNum, err)
 		return
 	}
 
-	log.Printf("Successfully called failToSubmitCo for round %s with trail %s", round, trialNum)
+	log.Printf("Successfully called failToSubmitCo for round %s with trial %s", round, trialNum)
 }
 
 // Add function to check if all COS values are received and stop monitoring
