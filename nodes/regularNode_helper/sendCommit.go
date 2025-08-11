@@ -355,6 +355,13 @@ func checkAllCVsSubmittedOnChain(round string, trialNum string) bool {
 }
 
 func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round, trialNum, index *big.Int) {
+	// flag to skip processing secret request
+	disabled := os.Getenv("DISABLED")
+	if disabled == "disabled" {
+		log.Println("Skipped processing secret request")
+		return
+	}
+
 	if atomic.LoadInt32(&Halted) == 1 {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
