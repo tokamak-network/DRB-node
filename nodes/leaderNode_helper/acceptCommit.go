@@ -735,3 +735,41 @@ func ResetCosAndCvsMonitoringState(round string, trialNum string) {
 
 	log.Printf("Reset COS and CVS monitoring state for round %s", round)
 }
+
+func CheckHaltedState(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+	// Load contract ABI and address
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Printf("CONTRACT_ADDRESS is not set in environment variables.")
+		return
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	// Check s_isInProcess storage variable
+	result, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_isInProcess", contractAddress)
+	if err != nil {
+		log.Printf("Failed to call s_isInProcess: %v", err)
+		return
+	}
+
+	isInProcess, ok := result.(*big.Int)
+	if !ok {
+		log.Printf("Unexpected type for s_isInProcess: %T", result)
+		return
+	}
+
+	log.Printf("Current s_isInProcess value: %v", isInProcess)
+
+	// If s_isInProcess equals 3, call resume function
+	if isInProcess.Cmp(big.NewInt(3)) == 0 {
+		resuming(fallbackEthClient)
+	} else {
+		log.Printf("s_isInProcess is %v, no action needed", isInProcess)
+	}
+}
