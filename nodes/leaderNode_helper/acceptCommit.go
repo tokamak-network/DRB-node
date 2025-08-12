@@ -619,7 +619,7 @@ func startFailToSubmitCoMonitoring(fallbackEthClient *fallback_ethclient.Fallbac
 	RequestedToSubmitCoMonitoringActive = true
 
 	// Get s_onChainSubmissionPeriod from contract
-	onChainSubmissionPeriod := big.NewInt(120)
+	onChainSubmissionPeriod := big.NewInt(60)
 
 	// Calculate deadline: RequestedToSubmitCoTimestamp + s_onChainSubmissionPeriod
 	deadline := new(big.Int).Add(RequestedToSubmitCoTimestamp, onChainSubmissionPeriod)

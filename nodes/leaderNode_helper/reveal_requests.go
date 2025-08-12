@@ -334,7 +334,7 @@ func StartFailToSubmitSMonitoring(fallbackEthClient *fallback_ethclient.Fallback
 		lastSubmitSTimestamp = requestTimestamp
 	}
 
-	onChainSubmissionPeriodPerOperator := big.NewInt(40)
+	onChainSubmissionPeriodPerOperator := big.NewInt(30)
 	startMonitoringWithPeriod(fallbackEthClient, round, trialNum, onChainSubmissionPeriodPerOperator)
 }
 

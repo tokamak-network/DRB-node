@@ -790,8 +790,8 @@ func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 	leaderMonitoringActive = true
 
 	// Get timing parameters from contract
-	offChainSubmissionPeriod := big.NewInt(80)
-	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
+	offChainSubmissionPeriod := big.NewInt(40)
+	requestOrSubmitOrFailDecisionPeriod := big.NewInt(30)
 
 	// Calculate deadline: startTime + offChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
 	deadline := new(big.Int).Add(startTime, offChainSubmissionPeriod)
@@ -904,8 +904,8 @@ func StartMerkleRootMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPC
 	}
 
 	// Get timing parameters from contract
-	onChainSubmissionPeriod := big.NewInt(120)            // onChainSubmissionPeriod = 120
-	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60) // requestOrSubmitOrFailDecisionPeriod = 60
+	onChainSubmissionPeriod := big.NewInt(60)            // onChainSubmissionPeriod = 120
+	requestOrSubmitOrFailDecisionPeriod := big.NewInt(30) // requestOrSubmitOrFailDecisionPeriod = 60
 
 	// Calculate deadline: requestedToSubmitCvTime + onChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
 	deadline := new(big.Int).Add(requestedToSubmitCvTime, onChainSubmissionPeriod)
@@ -1010,7 +1010,7 @@ func CheckAndStartMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCCl
 
 	// Check if we have a valid start time
 	if StartTime == nil {
-		log.Printf("StartTime is nil, cannot start monitoring")
+		// log.Printf("StartTime is nil, cannot start monitoring")
 		return
 	}
 
@@ -1029,10 +1029,10 @@ func StartRequestToSubmitSOrGenerateRandomNumberMonitoring(fallbackEthClient *fa
 		return
 	}
 
-	offChainSubmissionPeriod := big.NewInt(80)
+	offChainSubmissionPeriod := big.NewInt(40)
 	offChainSubmissionPeriodPerOperator := big.NewInt(20)
 	activatedOperatorsLength := new(big.Int).SetInt64(int64(len(eth.ActivatedOperators)))
-	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
+	requestOrSubmitOrFailDecisionPeriod := big.NewInt(30)
 
 	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod
 	deadline := new(big.Int).Add(merkleRootSubmittedTOrRequestedCvTime, offChainSubmissionPeriod)
