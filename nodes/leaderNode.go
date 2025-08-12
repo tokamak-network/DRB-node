@@ -111,7 +111,7 @@ func (h *Handler) handleRegistrationRequest(s network.Stream) {
 		log.Printf("Failed to handle registration request: %v", err)
 		return
 	}
-	log.Println("Node registration completed.")
+	log.Println("\033[32mNode registration completed.\033[0m")
 }
 
 func (h *Handler) handleCommitRequest(s network.Stream) {
@@ -165,7 +165,7 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 	leaderNode_helper.ReliableBroadCastCVS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cvs)
 	// Check if all commits are ready after this update
 	if !isMerkleRootSubmitted(uniqueKey) && allCommitsReceivedUnlocked(uniqueKey) {
-		log.Printf("All CVS received for round %s with trial %s. Generating Merkle root...", round, req.TrialNum)
+		log.Printf("\033[32mAll CVS received for round %s with trial %s. Generating Merkle root...\033[0m", round, req.TrialNum)
 		commitMu.Unlock() // Unlock before calling generateMerkleRoot
 		generateMerkleRoot(fallbackEthClient, round, req.TrialNum)
 		commitMu.Lock() // Re-lock if needed
@@ -238,7 +238,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cos)
 	// Check if all commits are ready after this COS
 	if !isMerkleRootSubmitted(uniqueKey) && allCommitsReceivedUnlocked(uniqueKey) {
-		log.Printf("All CVS received for round %s with trial %s after COS, generating Merkle root...", round, req.TrialNum)
+		log.Printf("\033[32mAll CVS received for round %s with trial %s after COS, generating Merkle root...\033[0m", round, req.TrialNum)
 		commitMu.Unlock()
 		generateMerkleRoot(fallbackEthClient, round, req.TrialNum)
 		commitMu.Lock()
@@ -246,7 +246,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if allCosReceivedUnlocked(uniqueKey) {
-		log.Printf("All COS received for round %s with trial %s.", round, req.TrialNum)
+		log.Printf("\033[32mAll COS received for round %s with trial %s.\033[0m", round, req.TrialNum)
 		_, err := commitreveal2.DetermineRevealOrder(round, req.TrialNum, eth.ActivatedOperators)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s with trial %s: %v", round, req.TrialNum, err)
@@ -492,7 +492,7 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 		return
 	}
 
-	log.Printf("Successfully submitted Merkle root for round %s with trial %s", roundNum, trialNum)
+	log.Printf("\033[32mSuccessfully submitted Merkle root for round %s with trial %s\033[0m", roundNum, trialNum)
 	submittingMerkleRoot = false
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
 	roundData := leaderNode_helper.RoundsData[uniqueKey]
@@ -592,7 +592,7 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 		for op, submitted := range ready {
 			if !submitted {
 				allReceived = false
-				log.Printf("Operator %s has not submitted CV.", op)
+				log.Printf("⏳ \033[33mOperator %s has not submitted CV.\033[0m", op)
 				if _, exists := onChainExecution[uniqueKey]; !exists {
 					onChainExecution[uniqueKey] = make(map[string]map[string]int)
 				}

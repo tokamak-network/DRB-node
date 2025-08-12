@@ -47,6 +47,9 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		}
 		time.Sleep(5 * time.Second)
 	}
+	// if req.Order == int(2) {
+	// 	return
+	// }
 	if len(strictOrderWhileSecretRequest[uniqueKey]) == 0 || strictOrderWhileSecretRequest[uniqueKey][req.Order] != req.RegularEoaAddress {
 		log.Printf("EOA %s is not next in the reveal order %v for round %s with trial %s", req.RegularEoaAddress, req.Order, req.Round, req.TrialNum)
 		return
@@ -72,7 +75,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 
 	// Log the request details
-	log.Printf("Verified secret value request for round %s with trial %s from leader %s", req.Round, req.TrialNum, req.LeaderEoaAddress)
+	// log.Printf("Verified secret value request for round %s with trial %s from leader %s", req.Round, req.TrialNum, req.LeaderEoaAddress)
 
 	// Fetch the secret value for the specified round
 	commitData, err := database.GetCommitByRound(req.Round, req.TrialNum)
@@ -122,7 +125,7 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string, trialNu
 	}
 
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	log.Printf("EOA Address: %s", eoaAddress)
+	// log.Printf("EOA Address: %s", eoaAddress)
 
 	// Sign the round number using the regular node's private key
 	signature := utils.SignData(eoaAddress, privateKey)
@@ -150,5 +153,5 @@ func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string, trialNu
 		return
 	}
 
-	log.Printf("Secret value sent for round %s to leader node", roundNum)
+	log.Printf("\033[32mSecret value sent for round %s to leader node\033[0m", roundNum)
 }

@@ -149,6 +149,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		isActivated := checkActivationStatus(fallbackEthClient, clientUtils, eoaAddress)
 		if isActivated {
 			log.Println("Node is activated. No further action required.")
+			activateCalledInThisRun = true
 		} else {
 			log.Println("Node is not activated. Checking deposit amount...")
 			// Check and ensure deposit is sufficient (only if not already called this run)
@@ -162,16 +163,18 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				}
 
 				if !depositSufficient {
+					depositCalledInThisRun = true // Mark deposit as called this run
 					log.Println("Deposit insufficient. Initiating deposit transaction...")
 					txSent, err := deposit(ctx, fallbackEthClient, eoaAddress, privateKey)
 					if err != nil {
 						log.Printf("Error during deposit transaction: %v", err)
-						time.Sleep(30 * time.Second)
+						// time.Sleep(30 * time.Second)
+						depositCalledInThisRun = false
 						continue
 					}
 					if txSent {
-						log.Println("Deposit successful")
-						depositCalledInThisRun = true // Mark deposit as called this run
+						log.Println("\033[32mDeposit successful\033[0m")
+						// depositCalledInThisRun = true 
 						continue
 					}
 				}
@@ -188,7 +191,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					continue
 				}
 				activateCalledInThisRun = true // Mark activate as called this run
-				log.Println("Activation successful")
+				log.Println("\033[32mActivation successful\033[0m")
 				// Send registration request to leader
 				log.Println("Sending registration request to leader...")
 				sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
@@ -318,7 +321,7 @@ func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitD
 	if err := json.NewEncoder(s).Encode(req); err != nil {
 		log.Printf("Failed to send COS commit to leader: %v", err)
 	} else {
-		log.Printf("COS commit sent to leader for round %s", commitData.Round)
+		log.Printf("\033[32mCOS commit sent to leader for round %s\033[0m", commitData.Round)
 
 		// Update SendCosToLeader flag to true after successful send
 		commitData.SendCosToLeader = true
@@ -378,7 +381,7 @@ func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID 
 	if err := json.NewEncoder(s).Encode(req); err != nil {
 		log.Printf("Failed to send registration request: %v", err)
 	} else {
-		log.Println("Registration request sent to leader.")
+		log.Println("\033[32mRegistration request sent to leader.\033[0m")
 	}
 }
 
@@ -538,7 +541,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	if err := json.NewEncoder(send).Encode(req); err != nil {
 		log.Printf("Failed to send commit to leader for round %s: %v", req.Round, err)
 	} else {
-		log.Printf("Commit successfully sent to leader for round %s", req.Round)
+		log.Printf("\033[32mCVS successfully sent to leader for round %s\033[0m", req.Round)
 
 		// Update SendToLeader flag to true after successful send
 		commitData.SendToLeader = true

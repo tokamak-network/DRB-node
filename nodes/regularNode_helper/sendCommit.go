@@ -131,7 +131,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 				{
 					isReorg := vLog.Removed
 					if isReorg {
-						log.Printf("Reorg detected. Skipping event: %v", vLog.TxHash)
+						log.Printf("\033[34mReorg detected. Skipping event: %v\033[0m", vLog.TxHash)
 						continue
 					}
 					switch vLog.Topics[0] {
@@ -147,7 +147,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							continue
 						}
 
-						fmt.Printf("CommitRequest Event: Round %v, TrialNum %v, indices %v\n", eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
+						fmt.Printf("\033[34mCommitRequest Event: Round %v, TrialNum %v, indices %v\033[0m\n", eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
 
 						// Mark CV as requested and stop leader monitoring
 						cvRequestedEventEmitted = true
@@ -200,8 +200,8 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
 							continue
 						}
-						fmt.Printf("MerkleRootSubmitted Event:\n Round %v, TrialNum %v, MerkleRoot: %v\n",
-							eventData.Round, eventData.TrialNum, eventData.MerkleRoot,)
+						fmt.Printf("\033[34mMerkleRootSubmitted Event:\n Round %v, TrialNum %v, MerkleRoot: %v\033[0m\n",
+							eventData.Round, eventData.TrialNum, eventData.MerkleRoot)
 
 						// Mark Merkle root as submitted and stop leader monitoring
 						merkleRootSubmittedEventEmitted = true
@@ -231,7 +231,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to decode RequestedToSubmitCo event log: %v", err)
 							continue
 						}
-						fmt.Printf("RequestedToSubmitCo Event: Round %v, TrialNum %v, indicesLength %v\n, indices %v\n", eventData.Round, eventData.TrialNum, eventData.IndicesLength, eventData.PackedIndices)
+						fmt.Printf("\033[34mRequestedToSubmitCo Event: Round %v, TrialNum %v, indicesLength %v\n, indices %v\033[0m\n", eventData.Round, eventData.TrialNum, eventData.IndicesLength, eventData.PackedIndices)
 
 						processCosRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
 
@@ -248,7 +248,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to decode RequestedToSubmitSFromIndexK event log: %v", err)
 							continue
 						}
-						fmt.Printf("RequestedToSubmitSFromIndexK Event:\n Round %v, TrialNum %v, indexK %v\n", eventData.Round, eventData.TrialNum, eventData.IndexK)
+						fmt.Printf("\033[34mRequestedToSubmitSFromIndexK Event:\n Round %v, TrialNum %v, indexK %v\033[0m\n", eventData.Round, eventData.TrialNum, eventData.IndexK)
 
 						// Stop request to submit S or generate random number monitoring when RequestedToSubmitSFromIndexK event is received
 						StopRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
@@ -274,7 +274,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to decode SSubmitted event log: %v", err)
 							continue
 						}
-						fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
+						fmt.Printf("\033[34mSSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\033[0m\n", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
 						processSubmittedSecretRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.Index)
 					case CvsEventSig:
 						eventData := struct {
@@ -288,7 +288,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to decode CvSubmitted event log: %v", err)
 							continue
 						}
-						fmt.Printf("CvSubmitted Event: Fetched successfully")
+						fmt.Printf("\033[34mCvSubmitted Event: Fetched successfully\033[0m\n")
 						processCvSubmitted(eventData.Round, eventData.TrialNum, eventData.Index)
 					}
 				}
@@ -383,7 +383,7 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 		if temp+1 < len(orderedNodes) {
 			regularEoaAddress := orderedNodes[temp+1]
 			if regularNodeEOA == regularEoaAddress {
-				fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, TrialNum: %v, EOA: %v\n", round.String(), trialNum.String(), regularEoaAddress)
+				fmt.Printf("\033[34mProcessing RequestedToSubmitSFromIndexK event for Round: %v, TrialNum: %v, EOA: %v\033[0m\n", round.String(), trialNum.String(), regularEoaAddress)
 				submitS(fallbackEthClient, round.String(), trialNum.String())
 			}
 		}
@@ -411,7 +411,7 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	// }
 	regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
 	if regularNodeEOA == regularEoaAddress {
-		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", round, regularEoaAddress)
+		fmt.Printf("\033[34mProcessing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\033[0m\n", round, regularEoaAddress)
 		submitS(fallbackEthClient, round, trialNum)
 	}
 
@@ -485,7 +485,8 @@ func processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
 
-	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
+	fmt.Printf("\033[34mStatus Event:\n Round: %v\n Trial: %v\n State: %v\033[0m\n",
+	round, trialNum, state)
 	// Reset monitoring state for new round
 	roundStr := round.String()
 	ResetMonitoringState(round.String(), trialNum.String())
@@ -507,9 +508,6 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	if state.Cmp(big.NewInt(1)) == 0 {
 		// Set Halted to 0 to resume the round
 		atomic.StoreInt32(&Halted, 0)
-
-		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
-			blockTimestamp, state, round)
 		ActivatedOperator, _ = FetchActivatedOperators(fallbackEthClient, roundStr)
 		Req = req
 		Execution = true
@@ -611,7 +609,7 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		return nil
 	}
 
-	fmt.Printf("Processing RequestedToSubmitCv event for Round: %v\n", round.String())
+	fmt.Printf("\033[34mProcessing RequestedToSubmitCv event for Round: %v\033[0m\n", round.String())
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -677,7 +675,7 @@ func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 		return nil
 	}
 
-	fmt.Printf("Processing RequestedToSubmitCo event for Round: %v\n", Round.String())
+	fmt.Printf("\033[34mProcessing RequestedToSubmitCo event for Round: %v\033[0m\n", Round.String())
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -830,7 +828,7 @@ func StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round string, trialNu
 	}
 
 	leaderMonitoringActive = false
-	log.Printf("Stopped leader monitoring for round %s", round)
+	// log.Printf("Stopped leader monitoring for round %s", round)
 }
 
 // ResetMonitoringState resets all monitoring variables
@@ -1006,7 +1004,7 @@ func CheckAndStartMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCCl
 
 	// Check if Merkle root has been submitted
 	if merkleRootSubmittedEventEmitted {
-		log.Printf("Merkle root submitted event already emitted for round %s", round)
+		// log.Printf("Merkle root submitted event already emitted for round %s", round)
 		return
 	}
 
@@ -1049,7 +1047,7 @@ func StartRequestToSubmitSOrGenerateRandomNumberMonitoring(fallbackEthClient *fa
 
 	requestToSubmitSOrGenerateRandomNumberMonitoringActive = true
 
-	log.Printf("Starting request to submit S or generate random number monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
+	log.Printf("\033[31mStarting request to submit S or generate random number monitoring for round %s, deadline: %v (in %v)\033[0m", round, deadlineTime, duration)
 	log.Printf("Parameters - merkleRootSubmittedTime: %v, offChainSubmissionPeriod: %v, offChainSubmissionPeriodPerOperator: %v, activatedOperatorsLength: %v, requestOrSubmitOrFailDecisionPeriod: %v",
 		merkleRootSubmittedTOrRequestedCvTime, offChainSubmissionPeriod, offChainSubmissionPeriodPerOperator, activatedOperatorsLength, requestOrSubmitOrFailDecisionPeriod)
 

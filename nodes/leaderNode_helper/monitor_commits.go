@@ -221,7 +221,7 @@ func sortLeaderCommitsByActivatedOperators(leaderCommits []*utils.LeaderCommitDa
 		activatedOperatorsOrder[operator.Hex()] = i
 	}
 
-	log.Printf("Activated operators order: %v", eth.ActivatedOperators)
+	// log.Printf("Activated operators order: %v", eth.ActivatedOperators)
 
 	// Create a map of leaderCommits by EOA address for quick lookup
 	leaderCommitsMap := make(map[string]*utils.LeaderCommitData)
@@ -232,24 +232,24 @@ func sortLeaderCommitsByActivatedOperators(leaderCommits []*utils.LeaderCommitDa
 	// Create sorted array based on activated operators order
 	var sortedLeaderCommits []*utils.LeaderCommitData
 
-	for i, operator := range eth.ActivatedOperators {
+	for _, operator := range eth.ActivatedOperators {
 		operatorAddr := operator.Hex()
-		log.Printf("Looking for operator %s at position %d", operatorAddr, i)
+		// log.Printf("Looking for operator %s at position %d", operatorAddr, i)
 
 		if commit, exists := leaderCommitsMap[operatorAddr]; exists {
-			log.Printf("Found commit data for operator %s", operatorAddr)
+			// log.Printf("Found commit data for operator %s", operatorAddr)
 			// No need to convert, already utils.LeaderCommitData
 			sortedLeaderCommits = append(sortedLeaderCommits, commit)
 		}
 	}
 
-	log.Printf("Sorted leader commits length: %d", len(sortedLeaderCommits))
+	// log.Printf("Sorted leader commits length: %d", len(sortedLeaderCommits))
 	return sortedLeaderCommits
 }
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
 func generateRandomNumberTransaction(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
-	log.Printf("Preparing to execute generateRandomNumber...")
+	log.Printf("\033[32mPreparing to execute generateRandomNumber...\033[0m")
 
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -324,7 +324,7 @@ func generateRandomNumberTransaction(fallbackEthClient *fallback_ethclient.Fallb
 		return err
 	}
 
-	log.Printf("Transaction submitted. TX Hash: %s", tx.Hash().Hex())
+	log.Printf("\033[32m✅ Transaction submitted. TX Hash: %s\033[0m", tx.Hash().Hex())
 	return nil
 }
 

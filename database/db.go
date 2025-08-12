@@ -107,7 +107,7 @@ func InitSQLDB(port int, host, user, password, name string) error {
 		panic(fmt.Sprintf("Error pinging main DB client after initialization: %v", err))
 	}
 
-	log.Println("Database initialised successfully.")
+	log.Println("\033[32mDatabase initialised successfully.\033[0m")
 	return nil
 }
 

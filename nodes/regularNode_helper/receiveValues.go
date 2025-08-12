@@ -236,7 +236,7 @@ func HandleSecret(h host.Host, s network.Stream) {
 		}
 	}
 
-	log.Printf("Successfully saved secret value for round %s and EOA %s", message.Round, message.EOAAddress)
+	// log.Printf("Successfully saved secret value for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
 	ack := utils.AcknowledgmentMessage{

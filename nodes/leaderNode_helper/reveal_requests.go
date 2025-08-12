@@ -62,13 +62,14 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 
 	// Send the request to the first node in the reveal order
-	for order, eoa := range roundRevealData.OrderedNodes {
-		for _, node := range nodes {
-			if node.EOAAddress == eoa {
-				sendSecretValueRequestToNode(h, fallbackEthClient, round, trialNum, uniqueKey, eoa, node, order)
-			} else {
-				continue
-			}
+	eoaArray := roundRevealData.OrderedNodes
+	eoa := eoaArray[0]
+	for _, node := range nodes {
+		if node.EOAAddress == eoa {
+			fmt.Println("temp", eoa)
+			sendSecretValueRequestToNode(h, fallbackEthClient, round, trialNum, uniqueKey, eoa, node, 0)
+		} else {
+			continue
 		}
 	}
 }
@@ -107,7 +108,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 	if err != nil {
 		log.Printf("Failed to send secret value request to EOA %s for round %s with trial %s: %v", regularEoa, round, trialNum, err)
 	} else {
-		log.Printf("Secret value request sent to EOA %s for round %s with trial %s", regularEoa, round, trialNum)
+		log.Printf("⏳ \033[33mSecret value request sent to EOA %s for round %s with trial %s\033[0m", regularEoa, round, trialNum)
 
 		// Start a timer to track if the response is received within 15 seconds
 		go func() {
@@ -119,7 +120,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 
 			// If the timer expires and the secret value is not received, call handleMissingSecretValue
 			if !roundSecret[uniqueKey][regularEoa] {
-				log.Printf("Secret value not received for EOA %s in round %s with trial %s within 15 seconds. Handling missing secret value.", regularEoa, round, trialNum)
+				log.Printf("Secret value not received for EOA %s in round %s with trial %s within 20 seconds. Handling missing secret value.", regularEoa, round, trialNum)
 				secretsOnChainMu.Lock()
 				secretsOnChain[uniqueKey] = true
 				secretsOnChainMu.Unlock()
@@ -182,7 +183,7 @@ func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 		return
 	}
 
-	log.Printf("Successfully submitted secret request for round %s", round)
+	log.Printf("Successfully submitted on-chain secret request for round %s", round)
 
 	// Start monitoring for failToSubmitS condition
 	requestTimestamp := big.NewInt(time.Now().Unix())
@@ -349,13 +350,13 @@ func startMonitoringWithPeriod(fallbackEthClient *fallback_ethclient.FallbackRPC
 
 	failToSubmitSMonitoringActive = true
 
-	log.Printf("Starting failToSubmitS monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
+	log.Printf("\033[31mStarting failToSubmitS monitoring for round %s, deadline: %v (in %v)\033[0m", round, deadlineTime, duration)
 	log.Printf("Parameters - lastSubmitSTimestamp: %v, onChainSubmissionPeriodPerOperator: %v",
 		lastSubmitSTimestamp, period)
 
 	// Set timer to call the function when deadline is reached
 	failToSubmitSMonitoringTimer = time.AfterFunc(duration, func() {
-		log.Printf("Deadline reached for round %s, calling failToSubmitS", round)
+		log.Printf("⚠️ \033[31m Deadline reached for round %s, calling failToSubmitS\033[0m", round)
 		callFailToSubmitS(fallbackEthClient, round, trialNum)
 		failToSubmitSMonitoringActive = false
 	})
@@ -438,7 +439,7 @@ func callFailToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 		return
 	}
 
-	log.Printf("Successfully called failToSubmitS for round %s with trial %s", round, trialNum)
+	log.Printf("\033[32mSuccessfully called failToSubmitS for round %s with trial %s\033[0m", round, trialNum)
 }
 
 // ResetLeaderMonitoringState resets all leader monitoring variables for a round

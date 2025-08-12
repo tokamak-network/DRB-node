@@ -121,7 +121,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 			case vLog := <-logs:
 				isReorg := vLog.Removed
 				if isReorg {
-					log.Printf("Reorg detected. Skipping event: %v", vLog.TxHash)
+					log.Printf("\033[34mReorg detected. Skipping event: %v\033[0m", vLog.TxHash)
 					continue
 				}
 				switch vLog.Topics[0] {
@@ -137,7 +137,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 						log.Printf("Failed to decode CvSubmitted event log: %v", err)
 						continue
 					}
-					fmt.Printf("CvSubmitted Event: Fetched successfully")
+					fmt.Printf("\033[34mCvSubmitted Event: Fetched successfully\033[0m")
 
 					processCVS(eventData.Round, eventData.TrialNum, eventData.Cv, eventData.Index)
 
@@ -153,7 +153,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 						log.Printf("Failed to decode CoSubmitted event log: %v", err)
 						continue
 					}
-					fmt.Printf("CoSubmitted Event: Fetched successfully")
+					fmt.Printf("\033[34mCoSubmitted Event: Fetched successfully\033[0m")
 
 					processCOS(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.Co, eventData.Index)
 
@@ -213,7 +213,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 						log.Printf("Failed to decode SSubmitted event log: %v", err)
 						continue
 					}
-					fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
+					fmt.Printf("\033[34mSSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\033[0m\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
 
 					// Get block timestamp and update the last submit S timestamp for monitoring
 					blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
@@ -262,8 +262,8 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
-	fmt.Printf("Status Event:\n Round: %v\n Trial: %v\n State: %v\n",
-	round, trialNum, state)
+	fmt.Printf("\033[34mStatus Event:\n Round: %v\n Trial: %v\n State: %v\033[0m\n",
+		round, trialNum, state)
 	CurrentRound = round.String()
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 
@@ -363,7 +363,7 @@ func resuming(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 			log.Printf("Failed to deposit: %v", err)
 			return
 		}
-		log.Printf("Deposited %s wei to reach 0.01 ETH minimum.", amountToDeposit.String())
+		log.Printf("\033[32mDeposited %s wei to reach 0.01 ETH minimum.\033[0m", amountToDeposit.String())
 	}
 
 	// Now poll getActivatedOperatorsLength and call resume when >=2
@@ -398,7 +398,7 @@ func resuming(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				log.Printf("Failed to call resume: %v", err)
 				return
 			}
-			log.Printf("Called resume() as activated operators >= 2.")
+			log.Printf("\033[32mCalled resume() as activated operators >= 2.\033[0m")
 			return
 		}
 		log.Printf("Activated operators (%v) < 2 . Waiting to call resume...", opsLen)
@@ -600,7 +600,7 @@ func processRequestedToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRP
 		return
 	}
 
-	fmt.Printf("RequestedToSubmitCo Event: Round %v, TrialNum %v, BlockTimestamp %v\n", round, trialNum, blockTimestamp)
+	fmt.Printf("\033[34mRequestedToSubmitCo Event: Round %v, TrialNum %v, BlockTimestamp %v\033[0m\n", round, trialNum, blockTimestamp)
 
 	// Save the block timestamp and round/trial info
 	RequestedToSubmitCoTimestamp = blockTimestamp
@@ -652,7 +652,7 @@ func stopFailToSubmitCoMonitoring() {
 		RequestedToSubmitCoMonitoringTimer = nil
 	}
 	RequestedToSubmitCoMonitoringActive = false
-	log.Printf("Stopped failToSubmitCo monitoring")
+	// log.Printf("Stopped failToSubmitCo monitoring")
 }
 
 // Add function to call failToSubmitCo on chain
