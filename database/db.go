@@ -722,3 +722,56 @@ func DeleteRoundTrialDataForRegularNode(round, trialNum string) error {
 
 	return nil
 }
+
+// DeleteOldRoundDataForLeaderNode deletes all rows from all relevant tables in leader node except current round
+func DeleteOldRoundDataForLeaderNode(currentRound string) error {
+	db := GetDB()
+
+	// Delete from leader_commit_schemes
+	_, err := db.Model((*LeaderCommitScheme)(nil)).Where("round != ?", currentRound).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from leader_commit_schemes: %w", err)
+	}
+
+	// Delete from reveal_order_schemes
+	_, err = db.Model((*RevealOrderScheme)(nil)).Where("round != ?", currentRound).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from reveal_order_schemes: %w", err)
+	}
+
+	// Delete from broadcast_tracker_schemes
+	_, err = db.Model((*BroadcastTrackerScheme)(nil)).Where("round != ?", currentRound).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from broadcast_tracker_schemes: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteOldRoundDataForRegularNode deletes all rows from all relevant tables in regular node except current round
+func DeleteOldRoundDataForRegularNode(currentRound string) error {
+	db := GetDB()
+
+	// Delete from commit_data_schemes
+	_, err := db.Model((*CommitDataScheme)(nil)).Where("round != ?", currentRound).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from commit_data_schemes: %w", err)
+	}
+	// Delete from reveal_order_schemes
+	_, err = db.Model((*RevealOrderScheme)(nil)).Where("round != ?", currentRound).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from reveal_order_schemes: %w", err)
+	}
+	// Delete from peer_commit_data_schemes
+	_, err = db.Model((*PeerCommitDataScheme)(nil)).Where("round != ?", currentRound).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from peer_commit_data_schemes: %w", err)
+	}
+	// Delete from broadcast_tracker_schemes
+	_, err = db.Model((*BroadcastTrackerScheme)(nil)).Where("round != ?", currentRound).Delete()
+	if err != nil {
+		return fmt.Errorf("failed to delete from broadcast_tracker_schemes: %w", err)
+	}
+
+	return nil
+}

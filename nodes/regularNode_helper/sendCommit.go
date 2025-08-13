@@ -521,6 +521,9 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 
 	if state.Cmp(big.NewInt(2)) == 0 {
+		// Delete old round data except current round from database
+		database.DeleteOldRoundDataForRegularNode(CurrentRound)
+		// Update in-memory round data
 		roundData := RoundsData[uniqueKey]
 		roundData.RandomNumber = true
 		RoundsData[uniqueKey] = roundData
@@ -530,7 +533,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 
 	if state.Cmp(big.NewInt(3)) == 0 {
 		// Delete round and trial data from database
-		database.DeleteRoundTrialDataForLeaderNode(CurrentRound, trialNum.String())
+		database.DeleteRoundTrialDataForRegularNode(CurrentRound, trialNum.String())
 		// resume the round
 		atomic.StoreInt32(&Halted, 1)
 		// resuming(fallbackEthClient)
