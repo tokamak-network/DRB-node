@@ -18,6 +18,7 @@ type AcknowledgmentMessage struct {
 	MessageID  string `json:"message_id"` // References the broadcast message
 	Type       string `json:"type"`       // "cvs", "cos", or "secret"
 	Status     string `json:"status"`     // "received" or "error"
+	Signature  []byte `json:"signature"`  // EOA signature for verification
 }
 
 // BroadcastTracker tracks broadcast attempts and acknowledgments

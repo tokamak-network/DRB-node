@@ -849,6 +849,18 @@ func handleAcknowledgment(s network.Stream) {
 		return
 	}
 
+	// Verify EOA signature for acknowledgment
+	verifyReq := utils.RegistrationRequest{
+		EOAAddress: ack.EOAAddress,
+		Signature:  ack.Signature,
+	}
+
+	if !utils.VerifySignature(verifyReq) {
+		log.Printf("Signature verification failed for acknowledgment from EOA: %s (message ID: %s)", ack.EOAAddress, ack.MessageID)
+		return
+	}
+
+	log.Printf("Signature verified for acknowledgment from %s", ack.EOAAddress)
 	log.Printf("Received acknowledgment from %s for %s broadcast (message ID: %s, status: %s)",
 		ack.EOAAddress, ack.Type, ack.MessageID, ack.Status)
 
