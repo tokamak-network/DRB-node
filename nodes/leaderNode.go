@@ -107,7 +107,8 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 func (h *Handler) handleRegistrationRequest(s network.Stream) {
 	defer s.Close()
-	if err := leaderNode_helper.RegisterNode(s, "contract/abi/Commit2RevealDRB.json"); err != nil {
+
+	if err := leaderNode_helper.RegisterNode(s, "contract/abi/Commit2RevealDRB.json", h.fallbackEthClient); err != nil {
 		log.Printf("Failed to handle registration request: %v", err)
 		return
 	}
