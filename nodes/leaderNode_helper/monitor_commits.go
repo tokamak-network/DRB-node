@@ -66,7 +66,10 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 		}
 		// Copy the activated operators from eth package
 		operatorAddresses := eth.ActivatedOperators
-
+		// If the leader is restarted, the activated operators will be empty then do not process the round
+		if len(operatorAddresses) < 2 {
+			continue
+		}
 		// Collect secret values, signatures (v, r, s), and round info in the order of activated operators
 		var secrets [][]byte
 		var vs []uint8
