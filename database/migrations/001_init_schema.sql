@@ -86,9 +86,8 @@ CREATE TABLE IF NOT EXISTS broadcast_tracker_schemes (
 
 -- +migrate Down
 DROP TABLE IF EXISTS node_info_schemes;
-DROP TABLE IF EXISTS registered_node_schemes;
 DROP TABLE IF EXISTS leader_commit_schemes;
-DROP TABLE IF EXISTS commit_schemes;
+DROP TABLE IF EXISTS commit_data_schemes;
 DROP TABLE IF EXISTS reveal_order_schemes;
 DROP TABLE IF EXISTS peer_commit_data_schemes;
 DROP TABLE IF EXISTS broadcast_tracker_schemes;
