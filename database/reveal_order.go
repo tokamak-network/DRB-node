@@ -8,18 +8,6 @@ func AddRevealOrder(order *utils.RevealOrderData) error {
 	return err
 }
 
-func GetRevealOrders() ([]*utils.RevealOrderData, error) {
-	var models []RevealOrderScheme
-	if err := GetDB().Model(&models).Select(); err != nil {
-		return nil, err
-	}
-	orders := make([]*utils.RevealOrderData, 0, len(models))
-	for _, m := range models {
-		orders = append(orders, mapRevealOrderSchemeToData(m))
-	}
-	return orders, nil
-}
-
 func GetRevealOrder(round, trialNum string) (*utils.RevealOrderData, error) {
 	var model RevealOrderScheme
 	err := GetDB().Model(&model).
