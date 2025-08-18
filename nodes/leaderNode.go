@@ -146,7 +146,7 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 	commitMu.Lock()
 	defer commitMu.Unlock()
 	uniqueKey := utils.GetUniqueKey(round, req.TrialNum)
-	commitData := getOrCreateLeaderCommitData(round, req.TrialNum, uniqueKey, eoaAddress)
+	commitData := leaderNode_helper.GetOrCreateLeaderCommitData(round, req.TrialNum, uniqueKey, eoaAddress)
 	if commitData.Cvs == [32]byte{} {
 		commitData.Cvs = req.Cvs
 		commitData.CvsHex = hex.EncodeToString(req.Cvs[:])
@@ -193,41 +193,42 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		return
 	}
 
-	round := req.Round
+	round := leaderNode_helper.CurrentRound
+	trial := leaderNode_helper.CurrentTrial
 	eoaAddress := common.HexToAddress(req.EOAAddress)
 
 	commitMu.Lock()
 	defer commitMu.Unlock()
-	uniqueKey := utils.GetUniqueKey(round, req.TrialNum)
+	uniqueKey := utils.GetUniqueKey(round, trial)
 	// Update in-memory data for leaderCommit's COS
-	commitData := getOrCreateLeaderCommitData(round, req.TrialNum, uniqueKey, eoaAddress)
+	commitData := leaderNode_helper.GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
 	if commitData.Cvs == [32]byte{} {
-		log.Printf("No CVS found for round %s with trail %s EOA %s, rejecting COS.", round, req.TrialNum, eoaAddress.Hex())
+		log.Printf("No CVS found for round %s with trail %s EOA %s, rejecting COS.", round, trial, eoaAddress.Hex())
 		return
 	}
 
 	recalculatedCvs := commitreveal2.Keccak256(req.Cos[:])
 	if !bytes.Equal(recalculatedCvs, commitData.Cvs[:]) {
-		log.Printf("COS hash mismatch for round %s with trail %s EOA %s. Rejecting COS.", round, req.TrialNum, eoaAddress.Hex())
+		log.Printf("COS hash mismatch for round %s with trail %s EOA %s. Rejecting COS.", round, trial, eoaAddress.Hex())
 		return
 	}
 
 	if commitData.Cos != [32]byte{} {
-		log.Printf("COS already received for round %s with trail %s EOA %s. Skipping.", round, req.TrialNum, eoaAddress.Hex())
+		log.Printf("COS already received for round %s with trail %s EOA %s. Skipping.", round, trial, eoaAddress.Hex())
 		return
 	}
 
 	commitData.Cos = req.Cos
 	commitData.CosHex = hex.EncodeToString(req.Cos[:])
-	log.Printf("Storing COS for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
+	log.Printf("Storing COS for round %s with trail %s EOA %s", round, trial, eoaAddress.Hex())
 
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
+	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, eoaAddress.Hex())
 
 	// Update database for leaderCommit's COS
-	leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, req.TrialNum, eoaAddress.Hex())
+	leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, trial, eoaAddress.Hex())
 	if err != nil {
-		log.Printf("Error loading leaderCommit data from database for round: %s, trail: %s, and eoaAddress: %s, error: %v", round, req.TrialNum, eoaAddress.Hex(), err)
+		log.Printf("Error loading leaderCommit data from database for round: %s, trail: %s, and eoaAddress: %s, error: %v", round, trial, eoaAddress.Hex(), err)
 		return
 	}
 
@@ -235,29 +236,29 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	leaderCommitDBData.CosHex = hex.EncodeToString(req.Cos[:])
 
 	if err := database.UpdateLeaderCommit(leaderCommitDBData); err != nil {
-		log.Printf("Error saving COS data for round %s with trail %s EOA %s: %v", round, req.TrialNum, eoaAddress.Hex(), err)
+		log.Printf("Error saving COS data for round %s with trail %s EOA %s: %v", round, trial, eoaAddress.Hex(), err)
 		return
 	}
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
-	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cos)
+	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, eoaAddress.Hex())
+	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, round, trial, eoaAddress, commitData.Cos)
 	// Check if all commits are ready after this COS
 	if !isMerkleRootSubmitted(uniqueKey) && allCommitsReceivedUnlocked(uniqueKey) {
-		log.Printf("All CVS received for round %s with trail %s after COS, generating Merkle root...", round, req.TrialNum)
+		log.Printf("All CVS received for round %s with trail %s after COS, generating Merkle root...", round, trial)
 		commitMu.Unlock()
-		generateMerkleRoot(fallbackEthClient, round, req.TrialNum)
+		generateMerkleRoot(fallbackEthClient, round, trial)
 		commitMu.Lock()
 	}
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if allCosReceivedUnlocked(uniqueKey) {
-		log.Printf("All COS received for round %s with trail %s.", round, req.TrialNum)
-		_, err := commitreveal2.DetermineRevealOrder(round, req.TrialNum, eth.ActivatedOperators)
+		log.Printf("All COS received for round %s with trail %s.", round, trial)
+		_, err := commitreveal2.DetermineRevealOrder(round, trial, eth.ActivatedOperators)
 		if err != nil {
-			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, req.TrialNum, err)
+			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, trial, err)
 			return
 		}
-		leaderNode_helper.StartSecretValueRequests(h, fallbackEthClient, round, req.TrialNum)
+		leaderNode_helper.StartSecretValueRequests(h, fallbackEthClient, round, trial)
 	}
 }
 
@@ -358,29 +359,6 @@ func UpdatedallCommitsReceivedUnlocked(fallbackEthClient *fallback_ethclient.Fal
 		}
 	}
 	return result
-}
-
-// getOrCreateLeaderCommitData returns commitData from in-memory map or creates a new one.
-// Called with commitMu locked.
-func getOrCreateLeaderCommitData(roundNum string, trialNum string, uniqueKey string, eoaAddress common.Address) *utils.LeaderCommitData {
-	roundMap, exists := utils.CommittedNodes[uniqueKey]
-	if !exists {
-		roundMap = make(map[common.Address]utils.LeaderCommitData)
-		utils.CommittedNodes[uniqueKey] = roundMap
-	}
-
-	data, existsData := roundMap[eoaAddress]
-	if !existsData {
-		data = utils.LeaderCommitData{
-			UniqueKey:  uniqueKey,
-			Round:      roundNum,
-			TrialNum:   trialNum,
-			EOAAddress: eoaAddress.Hex(),
-			CreatedAt:  time.Now().Unix(),
-		}
-		roundMap[eoaAddress] = data
-	}
-	return &data
 }
 
 // updateInMemoryData updates committedNodes with the latest commitData.
