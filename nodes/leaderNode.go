@@ -83,7 +83,7 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		leaderNode_helper.AcceptSecretValue(h, s, fallbackEthClient)
 	})
 	h.SetStreamHandler("/acknowledgment", func(s network.Stream) {
-		handleAcknowledgment(s)
+		handleAcknowledgment(fallbackEthClient, s)
 	})
 
 	log.Printf("Leader node running on: %s", h.Addrs())
@@ -188,9 +188,14 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		return
 	}
 
-	cosVerificationRequest := utils.Request{Round: req.Round, EOAAddress: req.EOAAddress, Signature: req.Signature}
+	// Verify the EOA signature
+	verifyReq := utils.Verification{
+		EOAAddress: req.EOAAddress,
+		Signature:  req.Signature,
+	}
 
-	if !VerifySignatureAndCheckActivation(fallbackEthClient, cosVerificationRequest, "COS") {
+	if !utils.VerifySignature(verifyReq) {
+		log.Printf("Signature verification failed for COS value request from EOA: %s", req.EOAAddress)
 		return
 	}
 
@@ -838,7 +843,7 @@ func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, mi
 	log.Printf("Successfully submitted commit request for round %s with trail %s and indices %v", round, trialNum, indices)
 }
 
-func handleAcknowledgment(s network.Stream) {
+func handleAcknowledgment(fallbackEthClient *fallback_ethclient.FallbackRPCClient, s network.Stream) {
 	defer s.Close()
 	if atomic.LoadInt32(&leaderNode_helper.Halted) == 1 {
 		log.Println("System is halted. Skipping handleAcknowledgment.")
@@ -858,6 +863,17 @@ func handleAcknowledgment(s network.Stream) {
 
 	if !utils.VerifySignature(verifyReq) {
 		log.Printf("Signature verification failed for acknowledgment from EOA: %s (message ID: %s)", ack.EOAAddress, ack.MessageID)
+		return
+	}
+
+	commitVerificationRequest := utils.Request{
+		Round:      ack.Round,
+		TrialNum:   ack.TrialNum,
+		EOAAddress: ack.EOAAddress,
+		Signature:  ack.Signature,
+	}
+
+	if !VerifySignatureAndCheckActivation(fallbackEthClient, commitVerificationRequest, "commit") {
 		return
 	}
 
