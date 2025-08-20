@@ -83,6 +83,18 @@ func HandleCvs(h host.Host, s network.Stream) {
 		return
 	}
 
+	// Verify leader signature for broadcast message
+	verifyReq := utils.RegistrationRequest{
+		EOAAddress: message.SignerEOA,
+		Signature:  message.Signature,
+	}
+
+	if !utils.VerifySignature(verifyReq) {
+		log.Printf("Signature verification failed for CVS broadcast from signer: %s (message ID: %s)", message.SignerEOA, message.MessageID)
+		return
+	}
+
+	log.Printf("Signature verified for CVS broadcast from %s", message.SignerEOA)
 	log.Printf("Received CVS broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
@@ -161,6 +173,18 @@ func HandleCos(h host.Host, s network.Stream) {
 		return
 	}
 
+	// Verify leader signature for broadcast message
+	verifyReq := utils.RegistrationRequest{
+		EOAAddress: message.SignerEOA,
+		Signature:  message.Signature,
+	}
+
+	if !utils.VerifySignature(verifyReq) {
+		log.Printf("Signature verification failed for COS broadcast from signer: %s (message ID: %s)", message.SignerEOA, message.MessageID)
+		return
+	}
+
+	log.Printf("Signature verified for COS broadcast from %s", message.SignerEOA)
 	log.Printf("Received COS broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
@@ -196,7 +220,7 @@ func HandleCos(h host.Host, s network.Stream) {
 		}
 	}
 
-	log.Printf("Successfully saved CoS data for round %s with trail %s and EOA %s", message.Round, message.TrialNum, message.EOAAddress)
+	log.Printf("Successfully saved COS data for round %s with trail %s and EOA %s", message.Round, message.TrialNum, message.EOAAddress)
 
 	// Send acknowledgment
 	eoaAddress := getRegularNodeEOA()
@@ -243,6 +267,18 @@ func HandleSecret(h host.Host, s network.Stream) {
 		return
 	}
 
+	// Verify leader signature for broadcast message
+	verifyReq := utils.RegistrationRequest{
+		EOAAddress: message.SignerEOA,
+		Signature:  message.Signature,
+	}
+
+	if !utils.VerifySignature(verifyReq) {
+		log.Printf("Signature verification failed for secret broadcast from signer: %s (message ID: %s)", message.SignerEOA, message.MessageID)
+		return
+	}
+
+	log.Printf("Signature verified for secret broadcast from %s", message.SignerEOA)
 	log.Printf("Received secret broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 

@@ -8,6 +8,8 @@ type BroadcastMessage struct {
 	MessageID  string   `json:"message_id"` // Unique identifier for this broadcast
 	Type       string   `json:"type"`       // "cvs", "cos", or "secret"
 	Data       [32]byte `json:"data"`       // The actual data being broadcast
+	SignerEOA  string   `json:"signer_eoa"` // Leader EOA for verification
+	Signature  []byte   `json:"signature"`  // Leader signature for verification
 }
 
 // AcknowledgmentMessage represents acknowledgment from regular nodes to leader

@@ -2,14 +2,17 @@ package leaderNode_helper
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -22,6 +25,22 @@ import (
 
 var broadcastMutex sync.Mutex
 var activeBroadcasts = make(map[string]*utils.BroadcastTracker)
+
+// getLeaderPrivateKey retrieves the leader's private key from environment
+func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		return nil, "", fmt.Errorf("LEADER_PRIVATE_KEY is not set in environment variables")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to decode leader private key: %v", err)
+	}
+
+	leaderEOA := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+	return privateKey, leaderEOA, nil
+}
 
 // ReliableBroadCastS broadcasts secret values with acknowledgment tracking
 func ReliableBroadCastS(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte) {
@@ -146,6 +165,16 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		log.Printf("Broadcasting %s (attempt %d/%d) for round %s, trail %s, EOA %s",
 			broadcastType, tracker.Attempts, tracker.MaxAttempts, tracker.Round, tracker.TrialNum, tracker.EOAAddress)
 
+		// Get leader's private key and EOA for signing
+		privateKey, leaderEOA, err := getLeaderPrivateKey()
+		if err != nil {
+			log.Printf("Failed to get leader private key: %v", err)
+			return
+		}
+
+		// Generate signature for the broadcast
+		signature := utils.SignData(leaderEOA, privateKey)
+
 		// Create broadcast message
 		message := utils.BroadcastMessage{
 			Round:      tracker.Round,
@@ -154,6 +183,8 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 			MessageID:  tracker.MessageID,
 			Type:       broadcastType,
 			Data:       tracker.Data,
+			SignerEOA:  leaderEOA,
+			Signature:  signature,
 		}
 
 		// Determine stream protocol based on type
