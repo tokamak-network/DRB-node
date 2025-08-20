@@ -150,6 +150,8 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		isActivated := checkActivationStatus(fallbackEthClient, clientUtils, eoaAddress)
 		if isActivated {
 			log.Println("Node is activated. No further action required.")
+			activateCalledInThisRun = true
+			depositCalledInThisRun = true
 		} else {
 			log.Println("Node is not activated. Checking deposit amount...")
 			// Check and ensure deposit is sufficient (only if not already called this run)
