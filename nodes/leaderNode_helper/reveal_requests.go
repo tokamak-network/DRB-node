@@ -62,13 +62,13 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 
 	// Send the request to the first node in the reveal order
-	for order, eoa := range roundRevealData.OrderedNodes {
-		for _, node := range nodes {
-			if node.EOAAddress == eoa {
-				sendSecretValueRequestToNode(h, fallbackEthClient, round, trialNum, uniqueKey, eoa, node, order)
-			} else {
-				continue
-			}
+	eoaArray := roundRevealData.OrderedNodes
+	eoa := eoaArray[0]
+	for _, node := range nodes {
+		if node.EOAAddress == eoa {
+			sendSecretValueRequestToNode(h, fallbackEthClient, round, trialNum, uniqueKey, eoa, node, 0)
+		} else {
+			continue
 		}
 	}
 }
