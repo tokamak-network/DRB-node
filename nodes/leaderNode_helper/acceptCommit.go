@@ -53,6 +53,7 @@ var RoundsData map[string]RoundData
 // In case last SSubmitted event also get's emmitted with Status event and curState is IN_PROGRESS then CurrentRound vairable will not be consistent
 var SecretRequestSentForWhichRound string
 var CurrentRound string
+var CurrentTrial string
 var Req RandomRequest
 
 type LeaderCommitData struct {
@@ -264,6 +265,7 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
 	CurrentRound = round.String()
+	CurrentTrial = trialNum.String()
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 
 	// Reset leader monitoring state for new round or trail

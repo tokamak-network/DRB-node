@@ -50,7 +50,7 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 
 	// Load registered nodes
-	nodes, err := database.GetRegisteredNodes()
+	nodes, err := database.GetNodeInfos()
 	if err != nil {
 		log.Printf("Failed to load registered nodes: %v", err)
 		return
@@ -266,7 +266,7 @@ func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclien
 	}
 
 	// Load registered nodes
-	nodes, err := database.GetRegisteredNodes()
+	nodes, err := database.GetNodeInfos()
 	if err != nil {
 		log.Printf("Failed to load registered nodes: %v", err)
 		return

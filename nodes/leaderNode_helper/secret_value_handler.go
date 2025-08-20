@@ -1,6 +1,7 @@
 package leaderNode_helper
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"log"
@@ -9,8 +10,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
+	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -91,15 +94,31 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 
 	log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 
-	// Get the unique key for the round and trial number
-	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)
+	round := CurrentRound
+	trial := CurrentTrial
+	log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
+	uniqueKey := utils.GetUniqueKey(round, trial)
+	eoaAddress := common.HexToAddress(req.RegularEoaAddress)
+	commitData := GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
+	if commitData.Cos == [32]byte{} {
+		log.Printf("No COS found for round %s with trail %s EOA %s, rejecting secret value.", round, trial, eoaAddress.Hex())
+		return
+	}
+
+	recalculatedCos := commitreveal2.Keccak256(req.SecretValue[:])
+	if !bytes.Equal(recalculatedCos, commitData.Cos[:]) {
+		log.Printf("Secret value hash mismatch for round %s with trail %s EOA %s. Rejecting secret value.", round, trial, eoaAddress.Hex())
+		return
+	}
+
+	log.Printf("Secret value hash matches for round %s with trail %s EOA %s.", round, trial, eoaAddress.Hex())
 	// Fetch or initialize the leader commit data for the given round and EOA
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(req.Round, req.TrialNum, req.RegularEoaAddress)
+	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, trial, req.RegularEoaAddress)
 	if err != nil {
-		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", req.Round, req.RegularEoaAddress)
+		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", round, req.RegularEoaAddress)
 		leaderCommitData = &utils.LeaderCommitData{
-			Round:      req.Round,
-			TrialNum:   req.TrialNum,
+			Round:      round,
+			TrialNum:   trial,
 			EOAAddress: req.RegularEoaAddress,
 			CreatedAt:  time.Now().Unix(),
 		}
@@ -117,21 +136,44 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	leaderCommitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
 
 	log.Printf("Received secret value for round %s with trail %s and EOA %s: byte=%x, hex=%s",
-		req.Round, req.TrialNum, req.RegularEoaAddress, leaderCommitData.SecretValue, leaderCommitData.SecretValueHex)
+		round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, leaderCommitData.SecretValueHex)
 
 	if err := database.UpdateLeaderCommit(leaderCommitData); err != nil {
-		log.Printf("Failed to save updated commit data for %s in round %s with trail %s: %v", req.RegularEoaAddress, req.Round, req.TrialNum, err)
+		log.Printf("Failed to save updated commit data for %s in round %s with trail %s: %v", req.RegularEoaAddress, round, trial, err)
 		return
 	}
 
-	log.Printf("Successfully saved secret value for round %s with trail %s and EOA %s", req.Round, req.TrialNum, req.RegularEoaAddress)
+	log.Printf("Successfully saved secret value for round %s with trail %s and EOA %s", round, trial, req.RegularEoaAddress)
 	secretMapsMutex.Lock()
 	if _, exists := roundSecret[uniqueKey]; !exists {
 		roundSecret[uniqueKey] = make(map[string]bool)
 	}
 	roundSecret[uniqueKey][req.RegularEoaAddress] = true
 	secretMapsMutex.Unlock()
-	ReliableBroadCastS(h, req.Round, req.TrialNum, req.RegularEoaAddress, leaderCommitData.SecretValue)
+	ReliableBroadCastS(h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue)
 	// Continue requesting secret values from remaining nodes in the reveal order
-	HandleSecretValueResponse(h, fallbackEthClient, req.Round, req.TrialNum, req.RegularEoaAddress)
+	HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
+}
+
+// getOrCreateLeaderCommitData returns commitData from in-memory map or creates a new one.
+// Called with commitMu locked.
+func GetOrCreateLeaderCommitData(roundNum string, trialNum string, uniqueKey string, eoaAddress common.Address) *utils.LeaderCommitData {
+	roundMap, exists := utils.CommittedNodes[uniqueKey]
+	if !exists {
+		roundMap = make(map[common.Address]utils.LeaderCommitData)
+		utils.CommittedNodes[uniqueKey] = roundMap
+	}
+
+	data, existsData := roundMap[eoaAddress]
+	if !existsData {
+		data = utils.LeaderCommitData{
+			UniqueKey:  uniqueKey,
+			Round:      roundNum,
+			TrialNum:   trialNum,
+			EOAAddress: eoaAddress.Hex(),
+			CreatedAt:  time.Now().Unix(),
+		}
+		roundMap[eoaAddress] = data
+	}
+	return &data
 }

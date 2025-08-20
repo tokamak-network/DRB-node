@@ -8,11 +8,13 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/tokamak-network/DRB-node/database"
+	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // RegisterNode handles both saving node information and activating the node on-chain.
-func RegisterNode(s network.Stream, abiFilePath string) error {
+func RegisterNode(s network.Stream, abiFilePath string, fallbackEthClient *fallback_ethclient.FallbackRPCClient) error {
 	var req utils.RegistrationRequest
 	if err := json.NewDecoder(s).Decode(&req); err != nil {
 		return fmt.Errorf("failed to decode registration request: %v", err)
@@ -23,7 +25,24 @@ func RegisterNode(s network.Stream, abiFilePath string) error {
 	}
 
 	log.Printf("Verified registration for PeerID: %s", req.PeerID)
+	eth.UpdateActivatedOperators(fallbackEthClient)
+	operators := eth.ActivatedOperators
 
+	// Check if the EOA is in the activated operators list
+	isActivated := false
+	for _, operator := range operators {
+		if operator.Hex() == req.EOAAddress {
+			isActivated = true
+			break
+		}
+	}
+
+	// Only register if the EOA is activated
+	if !isActivated {
+		return fmt.Errorf("EOA %s is not activated, registration denied", req.EOAAddress)
+	}
+
+	log.Printf("EOA %s is activated, proceeding with registration", req.EOAAddress)
 	// Get the remote IP and port
 	remoteAddr := s.Conn().RemoteMultiaddr().String()
 	parts := strings.Split(remoteAddr, "/")
