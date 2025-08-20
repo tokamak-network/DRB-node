@@ -280,7 +280,7 @@ func isMerkleRootSubmitted(uniqueKey string) bool {
 }
 
 func VerifySignatureAndCheckActivation(fallbackEthClient *fallback_ethclient.FallbackRPCClient, req utils.Request, reqType string) bool {
-	verifyReq := utils.RegistrationRequest{EOAAddress: req.EOAAddress, Signature: req.Signature}
+	verifyReq := utils.Verification{EOAAddress: req.EOAAddress, Signature: req.Signature}
 	if !utils.VerifySignature(verifyReq) {
 		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
 		return false
@@ -851,7 +851,7 @@ func handleAcknowledgment(s network.Stream) {
 	}
 
 	// Verify EOA signature for acknowledgment
-	verifyReq := utils.RegistrationRequest{
+	verifyReq := utils.Verification{
 		EOAAddress: ack.EOAAddress,
 		Signature:  ack.Signature,
 	}

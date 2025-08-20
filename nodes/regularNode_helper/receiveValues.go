@@ -84,7 +84,7 @@ func HandleCvs(h host.Host, s network.Stream) {
 	}
 
 	// Verify leader signature for broadcast message
-	verifyReq := utils.RegistrationRequest{
+	verifyReq := utils.Verification{
 		EOAAddress: message.SignerEOA,
 		Signature:  message.Signature,
 	}
@@ -174,7 +174,7 @@ func HandleCos(h host.Host, s network.Stream) {
 	}
 
 	// Verify leader signature for broadcast message
-	verifyReq := utils.RegistrationRequest{
+	verifyReq := utils.Verification{
 		EOAAddress: message.SignerEOA,
 		Signature:  message.Signature,
 	}
@@ -268,7 +268,7 @@ func HandleSecret(h host.Host, s network.Stream) {
 	}
 
 	// Verify leader signature for broadcast message
-	verifyReq := utils.RegistrationRequest{
+	verifyReq := utils.Verification{
 		EOAAddress: message.SignerEOA,
 		Signature:  message.Signature,
 	}

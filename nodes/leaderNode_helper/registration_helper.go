@@ -20,7 +20,11 @@ func RegisterNode(s network.Stream, abiFilePath string, fallbackEthClient *fallb
 		return fmt.Errorf("failed to decode registration request: %v", err)
 	}
 
-	if !utils.VerifySignature(req) {
+	verifyReq := utils.Verification{
+		EOAAddress: req.EOAAddress,
+		Signature:  req.Signature,
+	}
+	if !utils.VerifySignature(verifyReq) {
 		return fmt.Errorf("failed to verify signature for PeerID: %s", req.PeerID)
 	}
 

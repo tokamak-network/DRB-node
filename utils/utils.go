@@ -13,6 +13,11 @@ type RegistrationRequest struct {
 	PeerID     string `json:"peer_id"`
 }
 
+type Verification struct {
+	EOAAddress string `json:"eoa_address"`
+	Signature  []byte `json:"signature"`
+}
+
 type SecretValueRequest struct {
 	LeaderEoaAddress  string `json:"leader_eoa"`  // Sender's EOA address
 	RegularEoaAddress string `json:"regular_eoa"` // EOA address of the node sending the request
@@ -23,8 +28,8 @@ type SecretValueRequest struct {
 	Order             int    `json:"order"` // Order in the reveal sequence
 }
 
-// VerifySignature checks if the signature matches the EOA addressp
-func VerifySignature(req RegistrationRequest) bool {
+// VerifySignature checks if the signature matches the EOA address
+func VerifySignature(req Verification) bool {
 	hash := crypto.Keccak256Hash([]byte(req.EOAAddress))
 	pubKey, err := crypto.SigToPub(hash.Bytes(), req.Signature)
 	if err != nil {

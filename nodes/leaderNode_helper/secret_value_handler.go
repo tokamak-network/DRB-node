@@ -82,7 +82,7 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	}
 
 	// Verify the EOA signature
-	verifyReq := utils.RegistrationRequest{
+	verifyReq := utils.Verification{
 		EOAAddress: req.RegularEoaAddress,
 		Signature:  req.Signature,
 	}

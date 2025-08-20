@@ -60,7 +60,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 
 	// Use the existing signature verification mechanism
-	verifyReq := utils.RegistrationRequest{
+	verifyReq := utils.Verification{
 		EOAAddress: req.LeaderEoaAddress, // Sender's address
 		Signature:  req.Signature,        // Signature
 	}
