@@ -770,6 +770,8 @@ func CheckHaltedState(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 	// If s_isInProcess equals 3, call resume function
 	if isInProcess.Cmp(big.NewInt(3)) == 0 {
+		// set Halted to 1 as protocol is halted
+		atomic.StoreInt32(&Halted, 1)
 		resuming(fallbackEthClient)
 	} else {
 		log.Printf("s_isInProcess is %v, no action needed", isInProcess)

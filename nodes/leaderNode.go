@@ -89,9 +89,10 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	log.Printf("Leader node running on: %s", h.Addrs())
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
+	eth.UpdateActivatedOperators(fallbackEthClient)
+	go leaderNode_helper.CheckHaltedState(fallbackEthClient)
 	go leaderNode_helper.MonitorCommits(fallbackEthClient)
 	go leaderNode_helper.ReceiveCommit(fallbackEthClient)
-	go leaderNode_helper.CheckHaltedState(fallbackEthClient)
 	// leaderNode_helper.StartBroadcastCleanup()
 	// leaderNode_helper.StartLeaderCommitCleanup()
 	for {
