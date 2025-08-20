@@ -44,6 +44,21 @@ func VerifySignature(req Verification) bool {
 	return recoveredAddress == req.EOAAddress
 }
 
+func VerifySignatureForRegularNode(req Verification, leaderEOA string) bool {
+	hash := crypto.Keccak256Hash([]byte(req.EOAAddress))
+	pubKey, err := crypto.SigToPub(hash.Bytes(), req.Signature)
+	if err != nil {
+		log.Printf("Error recovering public key: %v", err)
+		return false
+	}
+
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
+	log.Printf("recoveredAddress........:%s", recoveredAddress)
+	log.Printf("req.EOAAddress........:%s", leaderEOA)
+
+	return recoveredAddress == leaderEOA
+}
+
 // SignData signs the given data with the provided private key
 func SignData(data string, privateKey *ecdsa.PrivateKey) []byte {
 	hash := crypto.Keccak256Hash([]byte(data))

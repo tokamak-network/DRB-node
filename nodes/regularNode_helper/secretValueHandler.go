@@ -66,7 +66,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 
 	// Verify the signature
-	if !utils.VerifySignature(verifyReq) {
+	if !utils.VerifySignatureForRegularNode(verifyReq, leaderEOA) {
 		log.Printf("Signature verification failed for secret value request: expected %s, got %s", leaderEOA, req.LeaderEoaAddress)
 		return
 	}

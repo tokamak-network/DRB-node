@@ -83,13 +83,19 @@ func HandleCvs(h host.Host, s network.Stream) {
 		return
 	}
 
+	leaderEOA := os.Getenv("LEADER_EOA")
+	if leaderEOA == "" {
+		log.Println("LEADER_EOA is not set in the environment variables")
+		return
+	}
+
 	// Verify leader signature for broadcast message
 	verifyReq := utils.Verification{
 		EOAAddress: message.SignerEOA,
 		Signature:  message.Signature,
 	}
 
-	if !utils.VerifySignature(verifyReq) {
+	if !utils.VerifySignatureForRegularNode(verifyReq, leaderEOA) {
 		log.Printf("Signature verification failed for CVS broadcast from signer: %s (message ID: %s)", message.SignerEOA, message.MessageID)
 		return
 	}
@@ -173,13 +179,19 @@ func HandleCos(h host.Host, s network.Stream) {
 		return
 	}
 
+	leaderEOA := os.Getenv("LEADER_EOA")
+	if leaderEOA == "" {
+		log.Println("LEADER_EOA is not set in the environment variables")
+		return
+	}
+
 	// Verify leader signature for broadcast message
 	verifyReq := utils.Verification{
 		EOAAddress: message.SignerEOA,
 		Signature:  message.Signature,
 	}
 
-	if !utils.VerifySignature(verifyReq) {
+	if !utils.VerifySignatureForRegularNode(verifyReq, leaderEOA) {
 		log.Printf("Signature verification failed for COS broadcast from signer: %s (message ID: %s)", message.SignerEOA, message.MessageID)
 		return
 	}
@@ -267,13 +279,19 @@ func HandleSecret(h host.Host, s network.Stream) {
 		return
 	}
 
+	leaderEOA := os.Getenv("LEADER_EOA")
+	if leaderEOA == "" {
+		log.Println("LEADER_EOA is not set in the environment variables")
+		return
+	}
+
 	// Verify leader signature for broadcast message
 	verifyReq := utils.Verification{
 		EOAAddress: message.SignerEOA,
 		Signature:  message.Signature,
 	}
 
-	if !utils.VerifySignature(verifyReq) {
+	if !utils.VerifySignatureForRegularNode(verifyReq, leaderEOA) {
 		log.Printf("Signature verification failed for secret broadcast from signer: %s (message ID: %s)", message.SignerEOA, message.MessageID)
 		return
 	}
