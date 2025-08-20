@@ -430,11 +430,6 @@ func completeRound(round string, trialNum string) error {
 		return err
 	}
 
-	err = database.DeleteOldRoundDataForLeaderNode(round)
-	if err != nil {
-		return err
-	}
-
 	if RoundsData == nil {
 		RoundsData = make(map[string]RoundData)
 	}
