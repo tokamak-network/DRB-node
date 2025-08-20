@@ -258,7 +258,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
 							continue
 						}
-						processSecretRequest(fallbackEthClient, eventData.Round.String(), eventData.TrialNum.String(), eventData.IndexK)
+						processSecretRequest(fallbackEthClient, eventData.Round, eventData.TrialNum, eventData.IndexK)
 
 					case SSubmittedSig:
 						eventData := struct {
@@ -390,31 +390,58 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 	}
 }
 
-func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, index *big.Int) {
+func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round, trialNum, index *big.Int) {
 	if atomic.LoadInt32(&Halted) == 1 {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
 	}
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
-	revealOrder, err := database.GetRevealOrder(round, trialNum)
+
+	// Try to get reveal order, if it doesn't exist, try to create it
+	revealOrder, err := database.GetRevealOrder(round.String(), trialNum.String())
 	if err != nil {
-		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round, trialNum, err)
+		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
+		log.Printf("Attempting to determine reveal order for regular node...")
+
+		// Try to determine reveal order for regular node
+		ops := eth.ActivatedOperators
+
+		success, err := commitreveal2.DetermineRegularRevealOrder(round.String(), trialNum.String(), ops)
+		if err != nil || !success {
+			log.Printf("Failed to determine reveal order: %v", err)
+			return
+		}
+
+		// Try to get reveal order again after creation
+		revealOrder, err = database.GetRevealOrder(round.String(), trialNum.String())
+		if err != nil {
+			log.Printf("Still failed to get reveal order after creation: %v", err)
+			return
+		}
+		log.Printf("Successfully created and retrieved reveal order")
+	}
+
+	// Check bounds safely
+	if revealOrder == nil {
+		log.Printf("Reveal order is nil for round %s with trail %s", round.String(), trialNum.String())
+		return
+	}
+
+	if revealOrder.OrderedNodes == nil {
+		log.Printf("Reveal order ordered nodes is nil for round %s with trail %s", round.String(), trialNum.String())
+		return
 	}
 
 	if index.Int64() >= int64(len(revealOrder.OrderedNodes)) {
 		log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(revealOrder.OrderedNodes))
 		return
 	}
-	// regularEoaAddress := revealOrder.OrderedNodes[2]
-	// if regularNodeEOA == regularEoaAddress {
-	// 	return
-	// }
+
 	regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
 	if regularNodeEOA == regularEoaAddress {
 		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", round, regularEoaAddress)
-		submitS(fallbackEthClient, round, trialNum)
+		submitS(fallbackEthClient, round.String(), trialNum.String())
 	}
-
 }
 
 func submitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
