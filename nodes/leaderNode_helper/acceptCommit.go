@@ -111,13 +111,11 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 				if err != nil && (strings.Contains(err.Error(), "websocket: close 1006") || strings.Contains(err.Error(), "unexpected EOF")) {
 					log.Printf("Websocket closed abnormally. Attempting to reconnect in 1 seconds...")
-					reconnect = true
-					time.Sleep(1 * time.Second)
 				} else {
 					log.Printf("Fatal error in event subscription: %v", err)
-					reconnect = true
-					time.Sleep(1 * time.Second)
 				}
+				time.Sleep(1 * time.Second)
+				reconnect = true
 
 			case vLog := <-logs:
 				isReorg := vLog.Removed
@@ -228,6 +226,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				}
 			}
 			if reconnect {
+				log.Printf("Reconnection triggered, breaking out of event loop to restart subscription...")
 				break // break inner for loop to reconnect
 			}
 		}

@@ -294,6 +294,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 				}
 			}
 			if reconnect {
+				log.Printf("Reconnection triggered, breaking out of event loop to restart subscription...")
 				break // break inner for loop to reconnect
 			}
 		}
