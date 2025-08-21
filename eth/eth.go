@@ -117,46 +117,156 @@ func ExecuteTransaction(
 	}
 	log.Infof("Transaction simulation successful, estimated gas: %d", estimateGas)
 
-	tx := types.NewTransaction(auth.Nonce.Uint64(), client.ContractAddress, amount, 3000000, auth.GasPrice, packedData)
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), client.PrivateKey)
+	receipt, signedTx, err := sendWithRetry(ctx, fallbackEthClient, chainID, auth, client.ContractAddress, amount, packedData)
 	if err != nil {
-		log.Errorf("Failed to sign the transaction: %v", err)
-		return nil, nil, fmt.Errorf("failed to sign the transaction: %v", err)
-	}
-
-	// Send the transaction
-	if err := fallbackEthClient.SendTransaction(ctx, signedTx); err != nil {
 		log.Errorf("Failed to send the signed transaction: %v", err)
 		return nil, nil, fmt.Errorf("failed to send the signed transaction: %v", err)
-	}
-
-	// Wait for the transaction to be mined
-	receipt, err := waitForTransactionSuccess(ctx, fallbackEthClient, signedTx)
-	if err != nil {
-		log.Errorf("Transaction failed: %v", err)
-		return nil, nil, err
 	}
 
 	log.Infof("Transaction %s confirmed in block %v", signedTx.Hash().Hex(), receipt.BlockNumber)
 	return signedTx, auth, nil
 }
 
-// waitForTransactionSuccess waits for the transaction to be mined and returns the receipt
-func waitForTransactionSuccess(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, tx *types.Transaction) (*types.Receipt, error) {
-	for {
-		receipt, err := fallbackEthClient.TransactionReceipt(ctx, tx)
+func sendWithRetry(
+	ctx context.Context,
+	client *fallback_ethclient.FallbackRPCClient,
+	chainID *big.Int,
+	auth *bind.TransactOpts,
+	toAddr common.Address,
+	amount *big.Int,
+	data []byte,
+) (*types.Receipt, *types.Transaction, error) {
+	nonce, err := client.PendingNonceAt(ctx, auth.From)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get nonce: %v", err)
+	}
+
+	// Estimate gas limit
+	callMsg := ethereum.CallMsg{
+		From: auth.From,
+		To:   &toAddr,
+		Data: data,
+	}
+
+	bumpFactor := 1.2 // Increase gas price by 20% each retry time
+
+	var signedTx *types.Transaction
+	maxRetries := 5 // Limit retries
+	retryCount := 0
+
+	priorityFee, err := client.SuggestGasTipCap(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to suggest tip cap: %v", err)
+	}
+
+	baseFee, err := client.SuggestGasPrice(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to suggest gas price: %v", err)
+	}
+
+	maxFeePerGas := new(big.Int).Add(baseFee, priorityFee)
+
+	for retryCount < maxRetries {
+		gasLimit, err := client.EstimateGas(ctx, callMsg)
 		if err != nil {
-			// Check if it's just waiting for confirmation (receipt not yet available)
-			if err.Error() == "not found" {
-				time.Sleep(3 * time.Second) // Wait and try again
-				continue
+			return nil, nil, fmt.Errorf("failed to estimate gas: %v", err)
+		}
+
+		gasLimit = gasLimit * 120 / 100
+		// Start with base fee + tip
+		log.Printf("Sending tx with maxFee %s wei", maxFeePerGas.String())
+		log.Printf("Sending tx with priorityFee %s wei", priorityFee.String())
+
+		// Build EIP-1559 transaction
+		txData := &types.DynamicFeeTx{
+			ChainID:   chainID,
+			Nonce:     nonce,
+			To:        &toAddr,
+			Value:     amount,
+			Gas:       gasLimit,
+			GasFeeCap: maxFeePerGas,
+			GasTipCap: priorityFee,
+			Data:      data,
+		}
+		tx := types.NewTx(txData)
+
+		// Sign transaction
+		signedTx, err = auth.Signer(auth.From, tx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to sign tx: %v", err)
+		}
+
+		// Send
+		err = client.SendTransaction(ctx, signedTx)
+		if err != nil {
+			log.Printf("Failed to send tx: %v", err)
+			retryCount++
+			if retryCount >= maxRetries {
+				return nil, nil, fmt.Errorf("SendTransaction failed after %d retries: %v", maxRetries, err)
 			}
-			return nil, fmt.Errorf("failed to get transaction receipt: %v", err)
+			continue
 		}
-		if receipt.Status == types.ReceiptStatusSuccessful {
-			return receipt, nil
+
+		log.Printf("Sent tx %s with maxFee %s wei", signedTx.Hash().Hex(), maxFeePerGas.String())
+
+		// Wait for receipt
+		receipt, err := waitForTransactionSuccess(ctx, client, signedTx, 1*time.Minute)
+		if err != nil {
+			log.Printf("Failed to get receipt: %v", err)
+
+			retryCount++
+			if retryCount >= maxRetries {
+				return nil, nil, fmt.Errorf("transaction failed after %d retries: %v", maxRetries, err)
+			}
+			// If failed or timeout -> bump gas and retry
+			log.Printf("Bumping gas and retrying... (attempt %d/%d)", retryCount, maxRetries)
+			newFee := new(big.Float).Mul(new(big.Float).SetInt(maxFeePerGas), big.NewFloat(bumpFactor))
+			maxFeePerGas, _ = newFee.Int(nil)
+			newPriorityFee := new(big.Float).Mul(new(big.Float).SetInt(priorityFee), big.NewFloat(bumpFactor))
+			priorityFee, _ = newPriorityFee.Int(nil)
+			time.Sleep(5 * time.Second)
+			continue
 		}
-		return nil, fmt.Errorf("transaction failed with status: %v", receipt.Status)
+
+		return receipt, signedTx, nil
+	}
+
+	// This should never be reached, but added for completeness
+	return nil, nil, fmt.Errorf("unexpected end of retry loop")
+}
+
+func waitForTransactionSuccess(ctx context.Context, client *fallback_ethclient.FallbackRPCClient, tx *types.Transaction, timeout time.Duration) (*types.Receipt, error) {
+	log.Printf("Waiting for transaction %s to be mined...", tx.Hash().Hex())
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	timeoutChan := time.After(timeout)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("context cancelled while waiting for transaction %s: %v", tx.Hash().Hex(), ctx.Err())
+		case <-timeoutChan:
+			return nil, fmt.Errorf("transaction %s stuck in mempool after %s", tx.Hash().Hex(), timeout)
+		case <-ticker.C:
+			log.Printf("Checking transaction %s status...", tx.Hash().Hex())
+			receipt, err := client.TransactionReceipt(ctx, tx)
+			if err != nil {
+				if err == ethereum.NotFound {
+					continue // still pending
+				}
+				return nil, fmt.Errorf("failed to get transaction receipt: %v", err)
+			}
+
+			// Check transaction status
+			if receipt.Status == types.ReceiptStatusSuccessful {
+				return receipt, nil
+			} else if receipt.Status == types.ReceiptStatusFailed {
+				return nil, fmt.Errorf("transaction %s failed with status 0 (reverted)", tx.Hash().Hex())
+			}
+
+			// This should not happen, but handle it gracefully
+			return nil, fmt.Errorf("transaction %s has unknown status: %v", tx.Hash().Hex(), receipt.Status)
+		}
 	}
 }
 
