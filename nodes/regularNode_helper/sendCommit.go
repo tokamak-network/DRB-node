@@ -370,17 +370,17 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 		log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(orderedNodes))
 		return
 	}
-	var temp int
+	var indexInRevealOrder int
 	intValue := int(index.Int64())
 	for i, order := range revealOrder {
 		if order == intValue {
-			temp = i
+			indexInRevealOrder = i
 		}
 	}
 
-	if temp+1 < len(revealOrder) {
-		if temp+1 < len(orderedNodes) {
-			regularEoaAddress := orderedNodes[temp+1]
+	if indexInRevealOrder+1 < len(revealOrder) {
+		if indexInRevealOrder+1 < len(orderedNodes) {
+			regularEoaAddress := orderedNodes[indexInRevealOrder+1]
 			if regularNodeEOA == regularEoaAddress {
 				fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, TrialNum: %v, EOA: %v\n", round.String(), trialNum.String(), regularEoaAddress)
 				submitS(fallbackEthClient, round.String(), trialNum.String())
