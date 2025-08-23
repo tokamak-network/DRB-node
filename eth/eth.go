@@ -2,6 +2,7 @@ package eth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -15,8 +16,13 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/sirupsen/logrus"
 	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/pkg/constants"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
+)
+
+var (
+	ErrTransactionFailed = errors.New("transaction failed")
 )
 
 var ActivatedOperators = make([]common.Address, 0)
@@ -136,10 +142,6 @@ func sendWithRetry(
 	amount *big.Int,
 	data []byte,
 ) (*types.Receipt, *types.Transaction, error) {
-	nonce, err := client.PendingNonceAt(ctx, auth.From)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get nonce: %v", err)
-	}
 
 	// Estimate gas limit
 	callMsg := ethereum.CallMsg{
@@ -172,7 +174,12 @@ func sendWithRetry(
 			return nil, nil, fmt.Errorf("failed to estimate gas: %v", err)
 		}
 
-		gasLimit = gasLimit * 120 / 100
+		nonce, err := client.PendingNonceAt(ctx, auth.From)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get nonce: %v", err)
+		}
+
+		gasLimit = gasLimit * 150 / 100
 		// Start with base fee + tip
 		log.Printf("Sending tx with maxFee %s wei", maxFeePerGas.String())
 		log.Printf("Sending tx with priorityFee %s wei", priorityFee.String())
@@ -199,20 +206,22 @@ func sendWithRetry(
 		// Send
 		err = client.SendTransaction(ctx, signedTx)
 		if err != nil {
-			log.Printf("Failed to send tx: %v", err)
-			retryCount++
-			if retryCount >= maxRetries {
-				return nil, nil, fmt.Errorf("SendTransaction failed after %d retries: %v", maxRetries, err)
-			}
-			continue
+			return nil, nil, fmt.Errorf("failed to send tx: %v", err)
 		}
 
 		log.Printf("Sent tx %s with maxFee %s wei", signedTx.Hash().Hex(), maxFeePerGas.String())
 
+		blockTime := constants.Chains[chainID.Uint64()].BlockTime
+
+		timeout := blockTime * 5 // wait for 5 blocks
+
 		// Wait for receipt
-		receipt, err := waitForTransactionSuccess(ctx, client, signedTx, 1*time.Minute)
+		receipt, err := waitForTransactionSuccess(ctx, client, signedTx, timeout)
 		if err != nil {
-			log.Printf("Failed to get receipt: %v", err)
+			if errors.Is(err, ErrTransactionFailed) {
+				// If transaction failed, return the error
+				return nil, nil, err
+			}
 
 			retryCount++
 			if retryCount >= maxRetries {
@@ -224,7 +233,6 @@ func sendWithRetry(
 			maxFeePerGas, _ = newFee.Int(nil)
 			newPriorityFee := new(big.Float).Mul(new(big.Float).SetInt(priorityFee), big.NewFloat(bumpFactor))
 			priorityFee, _ = newPriorityFee.Int(nil)
-			time.Sleep(5 * time.Second)
 			continue
 		}
 
@@ -261,11 +269,11 @@ func waitForTransactionSuccess(ctx context.Context, client *fallback_ethclient.F
 			if receipt.Status == types.ReceiptStatusSuccessful {
 				return receipt, nil
 			} else if receipt.Status == types.ReceiptStatusFailed {
-				return nil, fmt.Errorf("transaction %s failed with status 0 (reverted)", tx.Hash().Hex())
+				return receipt, ErrTransactionFailed
 			}
 
 			// This should not happen, but handle it gracefully
-			return nil, fmt.Errorf("transaction %s has unknown status: %v", tx.Hash().Hex(), receipt.Status)
+			return receipt, fmt.Errorf("transaction %s has unknown status: %v", tx.Hash().Hex(), receipt.Status)
 		}
 	}
 }
