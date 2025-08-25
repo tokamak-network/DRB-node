@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -114,10 +114,29 @@ func (f *FallbackRPCClient) SendTransaction(ctx context.Context, tx *types.Trans
 			return nil
 		}
 		lastErr = err
+
+		// Don't switch RPC for replacement transaction errors as these are client-side issues
+		if isReplacementError(err) {
+			f.logger.WithError(err).Warn("Replacement transaction error - not switching RPC")
+			return err
+		}
+
 		f.logger.WithError(err).Warn("RPC send transaction failed, switching to fallback")
 		f.switchToNextClient()
 	}
 	return fmt.Errorf("all RPCs failed: %v", lastErr)
+}
+
+// isReplacementError checks if the error is related to replacement transaction underpricing
+func isReplacementError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+	return strings.Contains(errStr, "replacement transaction underpriced") ||
+		strings.Contains(errStr, "nonce too low") ||
+		strings.Contains(errStr, "already known")
 }
 
 // TransactionReceipt implements the ethereum.ContractTransactor interface
@@ -125,9 +144,12 @@ func (f *FallbackRPCClient) TransactionReceipt(ctx context.Context, signedTx *ty
 	var lastErr error
 	for i := 0; i < len(f.clients); i++ {
 		client := f.getCurrentClient()
-		receipt, err := bind.WaitMined(ctx, client, signedTx)
+		receipt, err := client.TransactionReceipt(ctx, signedTx.Hash())
 		if err == nil {
 			return receipt, nil
+		}
+		if err.Error() == "not found" {
+			return nil, ethereum.NotFound
 		}
 		lastErr = err
 		f.logger.WithError(err).Warn("RPC get receipt failed, switching to fallback")
@@ -184,6 +206,22 @@ func (f *FallbackRPCClient) SuggestGasPrice(ctx context.Context) (*big.Int, erro
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
 }
 
+// SuggestGasTipCap implements the ethereum.ContractTransactor interface
+func (f *FallbackRPCClient) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
+	var lastErr error
+	for i := 0; i < len(f.clients); i++ {
+		client := f.getCurrentClient()
+		price, err := client.SuggestGasTipCap(ctx)
+		if err == nil {
+			return price, nil
+		}
+		lastErr = err
+		f.logger.WithError(err).Warn("RPC get gas tip cap failed, switching to fallback")
+		f.switchToNextClient()
+	}
+	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
+}
+
 // EstimateGas implements the ethereum.ContractTransactor interface
 func (f *FallbackRPCClient) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 	var lastErr error
@@ -198,6 +236,21 @@ func (f *FallbackRPCClient) EstimateGas(ctx context.Context, msg ethereum.CallMs
 		f.switchToNextClient()
 	}
 	return 0, lastErr
+}
+
+func (f *FallbackRPCClient) ChainID(ctx context.Context) (*big.Int, error) {
+	var lastErr error
+	for i := 0; i < len(f.clients); i++ {
+		client := f.getCurrentClient()
+		id, err := client.ChainID(ctx)
+		if err == nil {
+			return id, nil
+		}
+		lastErr = err
+		f.logger.WithError(err).Warn("RPC get chain ID failed, switching to fallback")
+		f.switchToNextClient()
+	}
+	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
 }
 
 // SubscribeFilterLogs implements the ethereum.ContractTransactor interface
