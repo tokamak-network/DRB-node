@@ -7,8 +7,8 @@ import (
 )
 
 var Chains = map[uint64]types.NetworkInfo{
-	1:        {Name: "Ethereum Mainnet", BlockTime: 12 * time.Second},
-	11155111: {Name: "Ethereum Sepolia", BlockTime: 12 * time.Second},
-	10:       {Name: "Optimism Mainnet", BlockTime: 2 * time.Second},
-	11155420: {Name: "Optimism Sepolia", BlockTime: 2 * time.Second},
+	1:        {Name: "Ethereum Mainnet", BlockTime: 12 * time.Second, EstimatedGasFactorPercent: 150},
+	11155111: {Name: "Ethereum Sepolia", BlockTime: 12 * time.Second, EstimatedGasFactorPercent: 150},
+	10:       {Name: "Optimism Mainnet", BlockTime: 2 * time.Second, EstimatedGasFactorPercent: 200},
+	11155420: {Name: "Optimism Sepolia", BlockTime: 2 * time.Second, EstimatedGasFactorPercent: 200},
 }

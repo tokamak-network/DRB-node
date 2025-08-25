@@ -168,12 +168,20 @@ func sendWithRetry(
 
 	maxFeePerGas := new(big.Int).Add(baseFee, priorityFee)
 
-	gasLimit := uint64(3000000)
 	for retryCount < maxRetries {
 		nonce, err := client.PendingNonceAt(ctx, auth.From)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get nonce: %v", err)
 		}
+
+		gasLimit, err := client.EstimateGas(ctx, callMsg)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to estimate gas: %v", err)
+		}
+
+		log.Printf("Estimated gas: %d", gasLimit)
+		gasLimit = gasLimit * constants.Chains[chainID.Uint64()].EstimatedGasFactorPercent / 100
+		log.Printf("Estimated gas after multiplying by factor: %d", gasLimit)
 
 		// Start with base fee + tip
 		log.Printf("Sending tx with maxFee %s wei", maxFeePerGas.String())
