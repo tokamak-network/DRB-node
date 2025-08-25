@@ -85,13 +85,6 @@ func ExecuteTransaction(
 
 	auth.Nonce = big.NewInt(int64(nonce))
 
-	gasPrice, err := fallbackEthClient.SuggestGasPrice(ctx)
-	if err != nil {
-		log.Errorf("Failed to suggest gas price: %v", err)
-		return nil, nil, fmt.Errorf("failed to suggest gas price: %v", err)
-	}
-	auth.GasPrice = new(big.Int).Mul(gasPrice, big.NewInt(2))
-
 	packedData, err := client.ContractABI.Pack(functionName, params...)
 	if err != nil {
 		log.Errorf("Failed to pack data for %s: %v", functionName, err)
