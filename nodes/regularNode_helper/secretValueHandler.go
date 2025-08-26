@@ -18,6 +18,39 @@ import (
 
 var strictOrderWhileSecretRequest = make(map[string][]string)
 
+// checkPreviousSecretReceived checks if the previous node's secret was received via broadcast
+func checkPreviousSecretReceived(round, trialNum, previousNodeEOA string) bool {
+	// Check if we have the peer commit data (from broadcast) for the previous node
+	peerCommitData, err := database.GetPeerCommitData(round, trialNum, previousNodeEOA)
+	if err != nil {
+		log.Printf("Failed to get peer commit data for previous node %s: %v", previousNodeEOA, err)
+		return false
+	}
+
+	// Check if secret value exists and is not empty
+	if peerCommitData.SecretValue == nil || len(peerCommitData.SecretValue) == 0 {
+		log.Printf("Previous node %s secret value is empty or nil", previousNodeEOA)
+		return false
+	}
+
+	// Additional check: make sure it's not all zeros (empty array)
+	allZeros := true
+	for _, b := range peerCommitData.SecretValue {
+		if b != 0 {
+			allZeros = false
+			break
+		}
+	}
+
+	if allZeros {
+		log.Printf("Previous node %s secret value is all zeros", previousNodeEOA)
+		return false
+	}
+
+	log.Printf("✅ Previous node %s secret value confirmed: %x", previousNodeEOA, peerCommitData.SecretValue[:8]) // Show first 8 bytes for verification
+	return true
+}
+
 // HandleSecretValueRequest processes secret value requests from the leader node
 func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	defer s.Close()
@@ -50,6 +83,22 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	if len(strictOrderWhileSecretRequest[uniqueKey]) == 0 || strictOrderWhileSecretRequest[uniqueKey][req.Order] != req.RegularEoaAddress {
 		log.Printf("EOA %s is not next in the reveal order %v for round %s with trail %s", req.RegularEoaAddress, req.Order, req.Round, req.TrialNum)
 		return
+	}
+
+	// 🔍 Check if previous node's secret was received (if not first in order)
+	if req.Order > 0 {
+		previousNodeEOA := strictOrderWhileSecretRequest[uniqueKey][req.Order-1]
+		log.Printf("🔍 Checking if previous node's secret was received from EOA %s", previousNodeEOA)
+
+		// Check if we received the previous node's secret via broadcast
+		hasPreviousSecret := checkPreviousSecretReceived(req.Round, req.TrialNum, previousNodeEOA)
+		if !hasPreviousSecret {
+			log.Printf("❌ Previous node's secret from %s not yet received. Cannot send secret yet.", previousNodeEOA)
+			return
+		}
+		log.Printf("✅ Previous node's secret from %s confirmed received. Proceeding to send own secret.", previousNodeEOA)
+	} else {
+		log.Printf("🎯 First node in reveal order. No need to check previous secrets.")
 	}
 
 	// Fetch the leader's EOA address from the environment variables

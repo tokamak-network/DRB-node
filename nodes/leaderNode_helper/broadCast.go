@@ -43,7 +43,42 @@ func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
 }
 
 // ReliableBroadCastS broadcasts secret values with acknowledgment tracking
-func ReliableBroadCastS(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte) {
+// func ReliableBroadCastS(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte) {
+// 	messageID := generateMessageID(roundNum, trialNum, eoaAddress, "secret")
+
+// 	tracker := &utils.BroadcastTracker{
+// 		Round:        roundNum,
+// 		TrialNum:     trialNum,
+// 		EOAAddress:   eoaAddress,
+// 		Type:         "secret",
+// 		MessageID:    messageID,
+// 		Data:         secret,
+// 		Attempts:     0,
+// 		MaxAttempts:  3,
+// 		Acknowledged: make(map[string]bool),
+// 		LastSent:     time.Now().Unix(),
+// 		Timeout:      3, // 3 seconds timeout
+// 	}
+
+// 	for _, op := range eth.ActivatedOperators {
+// 		tracker.Acknowledged[op.Hex()] = false
+// 	}
+
+// 	if err := database.AddBroadcastTracker(tracker); err != nil {
+// 		log.Printf("Failed to save broadcast tracker: %v", err)
+// 		return
+// 	}
+
+// 	broadcastMutex.Lock()
+// 	activeBroadcasts[messageID] = tracker
+// 	broadcastMutex.Unlock()
+
+// 	// Start the broadcast process
+// 	go performReliableBroadcast(h, tracker, "secret")
+// }
+
+// ReliableBroadCastSSync broadcasts secret values with acknowledgment tracking and waits for completion
+func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte) bool {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress, "secret")
 
 	tracker := &utils.BroadcastTracker{
@@ -57,7 +92,7 @@ func ReliableBroadCastS(h host.Host, roundNum string, trialNum string, eoaAddres
 		MaxAttempts:  3,
 		Acknowledged: make(map[string]bool),
 		LastSent:     time.Now().Unix(),
-		Timeout:      3, // 30 seconds timeout
+		Timeout:      3, // 3 seconds timeout
 	}
 
 	for _, op := range eth.ActivatedOperators {
@@ -66,15 +101,22 @@ func ReliableBroadCastS(h host.Host, roundNum string, trialNum string, eoaAddres
 
 	if err := database.AddBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
-		return
+		return false
 	}
 
 	broadcastMutex.Lock()
 	activeBroadcasts[messageID] = tracker
 	broadcastMutex.Unlock()
 
-	// Start the broadcast process
-	go performReliableBroadcast(h, tracker, "secret")
+	// 🔄 Perform synchronous broadcast (wait for completion)
+	completed := performReliableBroadcastSync(h, tracker, "secret")
+
+	// Clean up from memory
+	broadcastMutex.Lock()
+	delete(activeBroadcasts, messageID)
+	broadcastMutex.Unlock()
+
+	return completed
 }
 
 // ReliableBroadCastCOS broadcasts COS values with acknowledgment tracking
@@ -273,6 +315,133 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 	broadcastMutex.Lock()
 	delete(activeBroadcasts, tracker.MessageID)
 	broadcastMutex.Unlock()
+}
+
+// performReliableBroadcastSync handles broadcasting synchronously and returns completion status
+func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, broadcastType string) bool {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping broadcast.")
+		return false
+	}
+
+	// Get leader private key and EOA for signing
+	privateKey, leaderEOA, err := getLeaderPrivateKey()
+	if err != nil {
+		log.Printf("Failed to get leader private key: %v", err)
+		return false
+	}
+
+	// Get connected peer information
+	nodeInfo := libp2putils.GetConnectedPeers()
+
+	// Create message
+	message := utils.BroadcastMessage{
+		MessageID:  tracker.MessageID,
+		Round:      tracker.Round,
+		TrialNum:   tracker.TrialNum,
+		EOAAddress: tracker.EOAAddress,
+		Data:       tracker.Data,
+		Type:       broadcastType,
+		SignerEOA:  leaderEOA,
+	}
+
+	// Sign the message
+	signature := utils.SignData(leaderEOA, privateKey)
+	message.Signature = signature
+
+	for tracker.Attempts < tracker.MaxAttempts {
+		tracker.Attempts++
+		tracker.LastSent = time.Now().Unix()
+
+		log.Printf("🔄 Starting %s broadcast attempt %d/%d for round %s, EOA %s",
+			broadcastType, tracker.Attempts, tracker.MaxAttempts, tracker.Round, tracker.EOAAddress)
+
+		var streamProtocol protocol.ID
+		switch broadcastType {
+		case "cvs":
+			streamProtocol = protocol.ID("/cvsBroadcast")
+		case "cos":
+			streamProtocol = protocol.ID("/cosBroadcast")
+		case "secret":
+			streamProtocol = protocol.ID("/secretBroadcast")
+		default:
+			log.Printf("Unknown broadcast type: %s", broadcastType)
+			return false
+		}
+
+		// Send to all activated operators
+		broadcastMutex.Lock()
+		operatorsToSend := make([]common.Address, 0)
+		for _, op := range eth.ActivatedOperators {
+			if tracker.Acknowledged[op.Hex()] {
+				continue // Skip already acknowledged nodes
+			}
+			operatorsToSend = append(operatorsToSend, op)
+		}
+		broadcastMutex.Unlock()
+
+		for _, op := range operatorsToSend {
+			// Add peer info into peer store
+			peerID := nodeInfo[op.Hex()].PeerID
+			peerAddrStr := fmt.Sprintf("/ip4/%s/tcp/%s", nodeInfo[op.Hex()].IP, nodeInfo[op.Hex()].Port)
+			peerAddr, _ := multiaddr.NewMultiaddr(peerAddrStr)
+			h.Peerstore().AddAddr(peerID, peerAddr, peerstore.PermanentAddrTTL)
+
+			stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, streamProtocol)
+			if err != nil {
+				log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
+				continue
+			}
+
+			if err := json.NewEncoder(stream).Encode(message); err != nil {
+				log.Printf("Failed to send %s to regular node %s: %v", broadcastType, op.Hex(), err)
+			} else {
+				log.Printf("%s sent to regular node %s for round %s with trail %s (attempt %d)",
+					broadcastType, op.Hex(), tracker.Round, tracker.TrialNum, tracker.Attempts)
+			}
+			stream.Close()
+		}
+
+		// Update tracker
+		if err := database.UpdateBroadcastTracker(tracker); err != nil {
+			log.Printf("Failed to update broadcast tracker: %v", err)
+		}
+
+		// Wait for acknowledgments or timeout
+		time.Sleep(time.Duration(tracker.Timeout) * time.Second)
+
+		// Check if all nodes have acknowledged
+		broadcastMutex.Lock()
+		allAcknowledged := true
+		for _, acknowledged := range tracker.Acknowledged {
+			if !acknowledged {
+				allAcknowledged = false
+				break
+			}
+		}
+
+		if allAcknowledged {
+			log.Printf("✅ All nodes acknowledged %s broadcast for round %s, EOA %s",
+				broadcastType, tracker.Round, tracker.EOAAddress)
+			broadcastMutex.Unlock()
+			return true
+		}
+
+		// If this was the last attempt, log unacknowledged nodes
+		if tracker.Attempts >= tracker.MaxAttempts {
+			log.Printf("⚠️ Max attempts reached for %s broadcast. Unacknowledged nodes:", broadcastType)
+			for eoa, acknowledged := range tracker.Acknowledged {
+				if !acknowledged {
+					log.Printf("  - %s", eoa)
+				}
+			}
+			broadcastMutex.Unlock()
+			return false
+		}
+		broadcastMutex.Unlock()
+	}
+
+	return false
 }
 
 // HandleAcknowledgment processes acknowledgments from regular nodes

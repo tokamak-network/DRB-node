@@ -258,7 +258,7 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 	}
 
 	// Broadcast the secret value to all activated regular nodes
-	ReliableBroadCastS(libp2putils.HostInstance, SecretRequestSentForWhichRound, trialNum.String(), regularNodeAddress.Hex(), secret)
+	ReliableBroadCastSSync(libp2putils.HostInstance, SecretRequestSentForWhichRound, trialNum.String(), regularNodeAddress.Hex(), secret)
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {

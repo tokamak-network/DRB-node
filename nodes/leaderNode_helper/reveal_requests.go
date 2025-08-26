@@ -109,7 +109,7 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 	if err != nil {
 		log.Printf("Failed to send secret value request to EOA %s for round %s with trail %s: %v", regularEoa, round, trialNum, err)
 	} else {
-		log.Printf("Secret value request sent to EOA %s for round %s with trail %s", regularEoa, round, trialNum)
+		log.Printf("✅ Secret value request sent to EOA %s for round %s with trail %s", regularEoa, round, trialNum)
 
 		// Start a timer to track if the response is received within 15 seconds
 		go func() {
@@ -275,12 +275,14 @@ func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclien
 	// Check which node is next in the reveal order
 	for order, eoa := range roundRevealData.OrderedNodes {
 		if !contains(revealRequestStatus[uniqueKey], eoa) {
+			log.Printf("🎯 Next node in reveal order: %s (order %d) for round %s with trail %s", eoa, order, round, trialNum)
 			for _, node := range nodes {
 				if node.EOAAddress == eoa {
 					sendSecretValueRequestToNode(h, fallbackEthClient, round, trialNum, uniqueKey, eoa, node, order)
 					return
 				}
 			}
+			log.Printf("⚠️ Node info not found for EOA %s", eoa)
 		}
 	}
 

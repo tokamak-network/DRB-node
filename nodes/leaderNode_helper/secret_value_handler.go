@@ -92,11 +92,11 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 		return
 	}
 
-	log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
+	// log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 
 	round := CurrentRound
 	trial := CurrentTrial
-	log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
+	// log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 	uniqueKey := utils.GetUniqueKey(round, trial)
 	eoaAddress := common.HexToAddress(req.RegularEoaAddress)
 	commitData := GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
@@ -150,9 +150,20 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	}
 	roundSecret[uniqueKey][req.RegularEoaAddress] = true
 	secretMapsMutex.Unlock()
-	ReliableBroadCastS(h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue)
-	// Continue requesting secret values from remaining nodes in the reveal order
-	HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
+
+	// 🔄 Wait for broadcast to complete before proceeding to next node
+	log.Printf("🔄 Broadcasting secret from %s for round %s with trail %s...", req.RegularEoaAddress, round, trial)
+	broadcastCompleted := ReliableBroadCastSSync(h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue)
+
+	if broadcastCompleted {
+		log.Printf("✅ Broadcast completed for %s. Proceeding to next node in reveal order.", req.RegularEoaAddress)
+		// Continue requesting secret values from remaining nodes in the reveal order
+		HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
+	} else {
+		log.Printf("⚠️ Broadcast incomplete for %s. Proceeding anyway to next node.", req.RegularEoaAddress)
+		// Still continue even if broadcast incomplete (leader's decision)
+		HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
+	}
 }
 
 // getOrCreateLeaderCommitData returns commitData from in-memory map or creates a new one.
