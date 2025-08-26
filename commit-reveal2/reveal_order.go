@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"math/big"
 	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -41,12 +40,9 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	}
 
 	var entries []revealOrderEntry
-	rvValue := new(big.Int).SetBytes(rv[:])
 	for i, cvs := range cvsValues {
-		cvsValue := new(big.Int).SetBytes(cvs)
-		diff := new(big.Int).Abs(new(big.Int).Sub(rvValue, cvsValue)) // Absolute difference
-		diffBytes := diff.Bytes()
-		hash := Keccak256(diffBytes)
+		concatenated := append(rv[:], cvs...) // rv || cv
+		hash := Keccak256(concatenated)       // hash(rv || cv)
 		var hash32 [32]byte
 		copy(hash32[:], hash)
 		entries = append(entries, revealOrderEntry{index: i, value: hash32})
