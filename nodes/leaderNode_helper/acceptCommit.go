@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +37,15 @@ var Halted int32 // 0 = false, 1 = true
 var RequestedToSubmitCoTimestamp *big.Int
 var RequestedToSubmitCoMonitoringActive bool
 var RequestedToSubmitCoMonitoringTimer *time.Timer
+
+// Add new variables for RequestedToSubmitCv monitoring
+var RequestedToSubmitCvTimestamp *big.Int
+var RequestedToSubmitCvMonitoringActive bool
+var RequestedToSubmitCvMonitoringTimer *time.Timer
+
+// Add new variables for RequestToSubmitCv monitoring (automatic request)
+var RequestToSubmitCvMonitoringActive bool
+var RequestToSubmitCvMonitoringTimer *time.Timer
 
 type RandomRequest struct {
 	Round     *big.Int
@@ -102,6 +112,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		CoSubmittedSig := parsedABI.Events["CoSubmitted"].ID
 		SSubmittedSig := parsedABI.Events["SSubmitted"].ID
 		RequestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
+		RequestedToSubmitCvSig := parsedABI.Events["RequestedToSubmitCv"].ID
 
 		reconnect := false
 		for {
@@ -176,6 +187,27 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					}
 
 					processRequestedToSubmitCo(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.Round, eventData.TrialNum)
+
+				case RequestedToSubmitCvSig:
+					eventData := struct {
+						Round                         *big.Int
+						TrialNum                      *big.Int
+						PackedIndicesAscendingFromLSB *big.Int
+					}{}
+					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode RequestedToSubmitCv event log: %v", err)
+						continue
+					}
+
+					blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+					if err != nil {
+						log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+						continue
+					}
+
+					fmt.Printf("\033[34mRequestedToSubmitCv Event: Round %v, TrialNum %v, BlockTimestamp %v\033[0m\n", eventData.Round, eventData.TrialNum, blockTimestamp)
+					processRequestedToSubmitCv(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.Round, eventData.TrialNum)
 
 				case StatusSig:
 					eventData := struct {
@@ -282,11 +314,15 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
 		Req = req
+		StartTime = blockTimestamp // Store the start time globally
 		// Update the activated operators
 		eth.UpdateActivatedOperators(fallbackEthClient)
 		// Reset the indices for the new round
 		ResetIndicesForNewRound()
 		log.Printf("Reset Indices array for new round %s with trail %s", CurrentRound, trialNum.String())
+
+		// Start monitoring for automatic requestToSubmitCv
+		startRequestToSubmitCvMonitoring(fallbackEthClient, round.String(), trialNum.String())
 
 		Execution = true
 	}
@@ -551,6 +587,9 @@ func processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte, activatedOperat
 	updateCVS(roundStr, uniqueKey, eoa, cvs)
 	fmt.Printf("Successfully stored CVS for Round %s with Trail %s, EOA %s\n", roundStr, trialNumStr, eoa.Hex())
 
+	// Check if all CVS values are received and stop monitoring if needed
+	checkAndStopFailToSubmitCvMonitoring(roundStr, trialNumStr)
+
 	// Broadcast the CVS value to all activated regular nodes
 	ReliableBroadCastCVS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cvs)
 
@@ -596,6 +635,26 @@ func AllCosReceivedUnlocked(uniqueKey string) bool {
 	return true
 }
 
+func AllCvsReceivedUnlocked(uniqueKey string) bool {
+	ops := eth.ActivatedOperators
+	if len(ops) == 0 {
+		return false
+	}
+
+	roundCommits, roundExists := utils.CommittedNodes[uniqueKey]
+	if !roundExists || len(roundCommits) == 0 {
+		return false
+	}
+
+	for _, op := range ops {
+		data, ok := roundCommits[op]
+		if !ok || data.Cvs == [32]byte{} {
+			return false
+		}
+	}
+	return true
+}
+
 // Add new function to process RequestedToSubmitCo event
 func processRequestedToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int) {
 	if atomic.LoadInt32(&Halted) == 1 {
@@ -610,6 +669,26 @@ func processRequestedToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRP
 
 	// Start monitoring for failToSubmitCo condition
 	startFailToSubmitCoMonitoring(fallbackEthClient, round.String(), trialNum.String())
+}
+
+// Add new function to process RequestedToSubmitCv event
+func processRequestedToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping processRequestedToSubmitCv.")
+		return
+	}
+
+	// Stop the requestToSubmitCv monitoring since the request has been made
+	if RequestToSubmitCvMonitoringActive {
+		log.Printf("RequestedToSubmitCv event received, stopping requestToSubmitCv monitoring for round %s", round.String())
+		stopRequestToSubmitCvMonitoring()
+	}
+
+	// Save the block timestamp and round/trial info
+	RequestedToSubmitCvTimestamp = blockTimestamp
+
+	// Start monitoring for failToSubmitCv condition
+	startFailToSubmitCvMonitoring(fallbackEthClient, round.String(), trialNum.String())
 }
 
 // Add function to start monitoring for failToSubmitCo condition
@@ -718,10 +797,116 @@ func checkAndStopFailToSubmitCoMonitoring(round string, trialNum string) {
 	}
 }
 
+// Add function to check if all CVS values are received and stop monitoring
+func checkAndStopFailToSubmitCvMonitoring(round string, trialNum string) {
+	// Only check if monitoring is active for this round/trial
+	if !RequestedToSubmitCvMonitoringActive {
+		return
+	}
+
+	// Check if all activated operators have submitted CVS values
+	if AllCvsReceivedUnlocked(utils.GetUniqueKey(round, trialNum)) {
+		log.Printf("All CVS values received for round %s trial %s, stopping failToSubmitCv monitoring", round, trialNum)
+		stopFailToSubmitCvMonitoring()
+	}
+}
+
+// Add function to start monitoring for failToSubmitCv condition
+func startFailToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	if RequestedToSubmitCvTimestamp == nil {
+		log.Printf("RequestedToSubmitCvTimestamp is nil, cannot start monitoring")
+		return
+	}
+
+	RequestedToSubmitCvMonitoringActive = true
+
+	// Get s_onChainSubmissionPeriod from contract (60 seconds as specified)
+	onChainSubmissionPeriod := big.NewInt(60)
+
+	// Calculate deadline: RequestedToSubmitCvTimestamp + s_onChainSubmissionPeriod
+	deadline := new(big.Int).Add(RequestedToSubmitCvTimestamp, onChainSubmissionPeriod)
+
+	// Convert deadline to time.Duration
+	deadlineTime := time.Unix(deadline.Int64(), 0)
+	now := time.Now()
+	duration := deadlineTime.Sub(now)
+
+	log.Printf("Starting failToSubmitCv monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
+
+	// Set timer to call the function when deadline is reached
+	RequestedToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
+		log.Printf("⚠️ Deadline reached for round %s, calling failToSubmitCv", round)
+		callFailToSubmitCv(fallbackEthClient, round, trialNum)
+		RequestedToSubmitCvMonitoringActive = false
+	})
+}
+
+// Add function to stop failToSubmitCv monitoring
+func stopFailToSubmitCvMonitoring() {
+	if RequestedToSubmitCvMonitoringTimer != nil {
+		RequestedToSubmitCvMonitoringTimer.Stop()
+		RequestedToSubmitCvMonitoringTimer = nil
+	}
+	RequestedToSubmitCvMonitoringActive = false
+	log.Printf("Stopped failToSubmitCv monitoring")
+}
+
+// Add function to call failToSubmitCv on chain
+func callFailToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode leader private key: %v", err)
+		return
+	}
+
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"failToSubmitCv",
+		big.NewInt(0),
+	)
+	if err != nil {
+		log.Printf("Failed to call failToSubmitCv for round %s with trail %s: %v", round, trialNum, err)
+		return
+	}
+
+	log.Printf("Successfully called failToSubmitCv for round %s with trail %s", round, trialNum)
+}
+
 // ResetCosAndCvsMonitoringState resets COS and CVS monitoring variables
 func ResetCosAndCvsMonitoringState(round string, trialNum string) {
 	// Stop COS monitoring
 	stopFailToSubmitCoMonitoring()
+
+	// Stop CVS monitoring (failToSubmitCv)
+	stopFailToSubmitCvMonitoring()
+
+	// Stop requestToSubmitCv monitoring
+	stopRequestToSubmitCvMonitoring()
 
 	// Reset COS monitoring variables
 	RequestedToSubmitCoTimestamp = nil
@@ -729,6 +914,21 @@ func ResetCosAndCvsMonitoringState(round string, trialNum string) {
 	if RequestedToSubmitCoMonitoringTimer != nil {
 		RequestedToSubmitCoMonitoringTimer.Stop()
 		RequestedToSubmitCoMonitoringTimer = nil
+	}
+
+	// Reset CVS monitoring variables (failToSubmitCv)
+	RequestedToSubmitCvTimestamp = nil
+	RequestedToSubmitCvMonitoringActive = false
+	if RequestedToSubmitCvMonitoringTimer != nil {
+		RequestedToSubmitCvMonitoringTimer.Stop()
+		RequestedToSubmitCvMonitoringTimer = nil
+	}
+
+	// Reset requestToSubmitCv monitoring variables
+	RequestToSubmitCvMonitoringActive = false
+	if RequestToSubmitCvMonitoringTimer != nil {
+		RequestToSubmitCvMonitoringTimer.Stop()
+		RequestToSubmitCvMonitoringTimer = nil
 	}
 
 	// Reset secret request tracking variable
@@ -775,4 +975,162 @@ func CheckHaltedState(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	} else {
 		log.Printf("s_isInProcess is %v, no action needed", isInProcess)
 	}
+}
+
+// Add function to start monitoring for automatic requestToSubmitCv
+func startRequestToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	if StartTime == nil {
+		log.Printf("StartTime is nil, cannot start requestToSubmitCv monitoring")
+		return
+	}
+
+	RequestToSubmitCvMonitoringActive = true
+
+	// Calculate deadline: startTime + s_offChainSubmissionPeriod + s_requestOrSubmitOrFailDecisionPeriod
+	s_offChainSubmissionPeriod := big.NewInt(40)
+	s_requestOrSubmitOrFailDecisionPeriod := big.NewInt(30)
+
+	// deadline = startTime + 40 + 30 = startTime + 70 seconds
+	totalPeriod := new(big.Int).Add(s_offChainSubmissionPeriod, s_requestOrSubmitOrFailDecisionPeriod)
+	deadline := new(big.Int).Add(StartTime, totalPeriod)
+
+	// Convert deadline to time.Duration
+	deadlineTime := time.Unix(deadline.Int64(), 0)
+	now := time.Now()
+	duration := deadlineTime.Sub(now)
+
+	log.Printf("Starting requestToSubmitCv monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
+	log.Printf("Parameters - StartTime: %v, offChainPeriod: %v, requestOrSubmitPeriod: %v",
+		StartTime, s_offChainSubmissionPeriod, s_requestOrSubmitOrFailDecisionPeriod)
+
+	// Set timer to call the function when deadline is reached
+	RequestToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
+		log.Printf("⚠️ Deadline reached for round %s, calling requestToSubmitCv", round)
+		callRequestToSubmitCv(fallbackEthClient, round, trialNum)
+		RequestToSubmitCvMonitoringActive = false
+	})
+}
+
+// Add function to stop requestToSubmitCv monitoring
+func stopRequestToSubmitCvMonitoring() {
+	if RequestToSubmitCvMonitoringTimer != nil {
+		RequestToSubmitCvMonitoringTimer.Stop()
+		RequestToSubmitCvMonitoringTimer = nil
+	}
+	RequestToSubmitCvMonitoringActive = false
+	log.Printf("Stopped requestToSubmitCv monitoring")
+}
+
+// Add function to call requestToSubmitCv when regular nodes haven't submitted CVS
+func callRequestToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+	if atomic.LoadInt32(&Halted) == 1 {
+		log.Println("System is halted. Skipping callRequestToSubmitCv.")
+		return
+	}
+
+	log.Printf("Calling requestToSubmitCv for round %s with trial %s due to missing CVS submissions", round, trialNum)
+
+	// Get the list of missing operators (those who haven't submitted CVS)
+	uniqueKey := utils.GetUniqueKey(round, trialNum)
+	missingOperators := getMissingCvsOperators(uniqueKey)
+
+	if len(missingOperators) == 0 {
+		log.Printf("All CVS received for round %s, no need to call requestToSubmitCv", round)
+		return
+	}
+
+	log.Printf("Missing CVS from operators: %v", missingOperators)
+
+	// Implement the same logic as handleMissingCV from leaderNode.go
+	CvOnChain[uniqueKey] = true
+	activatedOperators := eth.ActivatedOperators
+	i := big.NewInt(0)
+	for _, op := range activatedOperators {
+		for _, missingOp := range missingOperators {
+			if op.Hex() == missingOp {
+				AppendToIndices(i)
+			}
+		}
+		i.Add(i, big.NewInt(1))
+	}
+
+	// Get the current indices and sort them
+	indices := GetIndices()
+	sort.Slice(indices, func(i, j int) bool {
+		return indices[i].Cmp(indices[j]) < 0
+	})
+
+	// Update the sorted indices back
+	SetIndices(indices)
+
+	packedIndices := PackIndices(indices)
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		log.Printf("Failed to load contract ABI: %v", err)
+		return
+	}
+
+	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		log.Printf("Failed to decode leader private key: %v", err)
+		return
+	}
+
+	clientUtils := &utils.Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	_, _, err = eth.ExecuteTransaction(
+		context.Background(),
+		clientUtils,
+		fallbackEthClient,
+		"requestToSubmitCv",
+		big.NewInt(0),
+		packedIndices,
+	)
+	if err != nil {
+		log.Printf("Failed to submit commit request root for round %s with trail %s: %v", round, trialNum, err)
+		return
+	}
+
+	log.Printf("Successfully submitted commit request for round %s with trail %s and indices %v", round, trialNum, indices)
+}
+
+// Helper function to get missing CVS operators
+func getMissingCvsOperators(uniqueKey string) []string {
+	var missingOperators []string
+	ops := eth.ActivatedOperators
+
+	roundCommits, roundExists := utils.CommittedNodes[uniqueKey]
+	if !roundExists {
+		// No commits at all, all operators are missing
+		for _, op := range ops {
+			missingOperators = append(missingOperators, op.Hex())
+		}
+		return missingOperators
+	}
+
+	// Check which operators haven't submitted CVS
+	for _, op := range ops {
+		data, ok := roundCommits[op]
+		if !ok || data.Cvs == [32]byte{} {
+			missingOperators = append(missingOperators, op.Hex())
+		}
+	}
+
+	return missingOperators
 }

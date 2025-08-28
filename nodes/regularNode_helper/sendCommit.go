@@ -103,7 +103,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 			continue
 		}
 
-		SubmitCVS := parsedABI.Events["RequestedToSubmitCv"].ID
+		RequestedToSubmitCvS := parsedABI.Events["RequestedToSubmitCv"].ID
 		CvsEventSig := parsedABI.Events["CvSubmitted"].ID
 		StatusSig := parsedABI.Events["Status"].ID
 		MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
@@ -133,7 +133,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						continue
 					}
 					switch vLog.Topics[0] {
-					case SubmitCVS:
+					case RequestedToSubmitCvS:
 						eventData := struct {
 							Round                         *big.Int
 							TrialNum                      *big.Int

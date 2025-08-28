@@ -8,7 +8,6 @@ import (
 	"log"
 	"math/big"
 	"os"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,10 +39,6 @@ type CvAndSigRS struct {
 	Rs SigRS
 }
 
-var sendCommitRequest = make(map[string]bool)
-var onChainExecution = make(map[string]map[string]map[string]int)
-var flag = make(map[string]bool)
-var dispute = make(map[string]bool)
 
 type Handler struct {
 	fallbackEthClient *fallback_ethclient.FallbackRPCClient
@@ -579,92 +574,29 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 	trialNum := round.TrialNum.String()
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
 	if !leaderNode_helper.RoundsData[uniqueKey].MerkleRoot && !leaderNode_helper.RoundsData[uniqueKey].RandomNumber {
-		log.Printf("LeaderNode for round %s with trail %s is still waiting for commits...", roundNum, trialNum)
+		log.Printf("LeaderNode for round %s with trail %s is checking for commits...", roundNum, trialNum)
 
 		commitMu.Lock()
 		ready := UpdatedallCommitsReceivedUnlocked(fallbackEthClient, uniqueKey)
 		commitMu.Unlock()
-		var missingOperators []string
 
 		allReceived := true
 		for op, submitted := range ready {
 			if !submitted {
 				allReceived = false
 				log.Printf("Operator %s has not submitted CV.", op)
-				if _, exists := onChainExecution[uniqueKey]; !exists {
-					onChainExecution[uniqueKey] = make(map[string]map[string]int)
-				}
-				if _, exists := onChainExecution[uniqueKey]["CVS"]; !exists {
-					onChainExecution[uniqueKey]["CVS"] = make(map[string]int)
-				}
-				if onChainExecution[uniqueKey]["CVS"][op] >= 3 {
-					failToSubmitCv(fallbackEthClient)
-				} else if sendCommitRequest[uniqueKey] {
-					missingOperators = append(missingOperators, op)
-					onChainExecution[uniqueKey]["CVS"][op]++
-					flag[uniqueKey] = true
-					dispute[uniqueKey] = true
-				}
 			}
 		}
-		if flag[uniqueKey] {
-			handleMissingCV(fallbackEthClient, missingOperators, roundNum, trialNum)
-		}
+
 		if allReceived {
 			log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", roundNum, trialNum)
-			flag[uniqueKey] = false
 			generateMerkleRoot(fallbackEthClient, roundNum, trialNum)
 		} else {
-			log.Printf("Not all CVS received for round %s with trail %s. Waiting for remaining commits.", roundNum, trialNum)
-			sendCommitRequest[uniqueKey] = true
+			log.Printf("Not all CVS received for round %s with trail %s. Waiting for remaining commits. (CVS requests are handled automatically)", roundNum, trialNum)
 		}
 	}
 }
 
-func failToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-
-	contractAddress := common.HexToAddress(contractAddressStr)
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
-		return
-	}
-
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Printf("Failed to decode leader private key: %v", err)
-		return
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
-	}
-
-	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
-		clientUtils,
-		fallbackEthClient,
-		"failToSubmitCv",
-		big.NewInt(0),
-	)
-	if err != nil {
-		log.Printf("Failed to failToSubmitCv request root for round %s: %v", leaderNode_helper.CurrentRound, err)
-		return
-	}
-
-	log.Printf("Successfully submitted failToSubmitCv request for round %s", leaderNode_helper.CurrentRound)
-}
 
 func prepareArgumentsForRequestToSubmitCo(roundNum string, trialNum string, missingIndices []*big.Int) ([]CvAndSigRS, *big.Int, *big.Int, *big.Int) {
 	cvs, _, _, vs, rs, ss := leaderNode_helper.LoadNodeData(roundNum, trialNum)
@@ -767,80 +699,6 @@ func requestToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 	}
 
 	log.Printf("Successfully submitted cos request for round %s with trail %s and indices %v", roundNum, trialNum, missingIndices)
-}
-
-func handleMissingCV(fallbackEthClient *fallback_ethclient.FallbackRPCClient, missingOperators []string, round string, trialNum string) {
-	if atomic.LoadInt32(&leaderNode_helper.Halted) == 1 {
-		log.Println("System is halted. Skipping handleMissingCV.")
-		return
-	}
-	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	leaderNode_helper.CvOnChain[uniqueKey] = true
-	activatedOperators := eth.ActivatedOperators
-	i := big.NewInt(0)
-	for _, op := range activatedOperators {
-		for _, missingOp := range missingOperators {
-			if op.Hex() == missingOp {
-				leaderNode_helper.AppendToIndices(i)
-			}
-		}
-		i.Add(i, big.NewInt(1))
-	}
-
-	// Get the current indices and sort them
-	indices := leaderNode_helper.GetIndices()
-	sort.Slice(indices, func(i, j int) bool {
-		return indices[i].Cmp(indices[j]) < 0
-	})
-
-	// Update the sorted indices back
-	leaderNode_helper.SetIndices(indices)
-
-	packedIndices := leaderNode_helper.PackIndices(indices)
-
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-
-	contractAddress := common.HexToAddress(contractAddressStr)
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
-		return
-	}
-
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Printf("Failed to decode leader private key: %v", err)
-		return
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
-	}
-
-	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
-		clientUtils,
-		fallbackEthClient,
-		"requestToSubmitCv",
-		big.NewInt(0),
-		packedIndices,
-	)
-	if err != nil {
-		log.Printf("Failed to submit commit request root for round %s with trail %s: %v", round, trialNum, err)
-		return
-	}
-
-	log.Printf("Successfully submitted commit request for round %s with trail %s and indices %v", round, trialNum, indices)
 }
 
 func handleAcknowledgment(fallbackEthClient *fallback_ethclient.FallbackRPCClient, s network.Stream) {
