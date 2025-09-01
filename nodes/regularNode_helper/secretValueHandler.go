@@ -59,10 +59,16 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		log.Println("System is halted. Skipping HandleSecretValueRequest.")
 		return
 	}
-	// Decode the request
+	// Decode the request with strict validation
 	var req utils.SecretValueRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
+	if err := utils.ValidateStreamDecoding(s, &req); err != nil {
 		log.Printf("Failed to decode secret value request: %v", err)
+		return
+	}
+
+	// Validate the request structure
+	if err := req.Validate(); err != nil {
+		log.Printf("Invalid secret value request: %v", err)
 		return
 	}
 	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)

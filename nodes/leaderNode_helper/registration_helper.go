@@ -1,7 +1,6 @@
 package leaderNode_helper
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -16,8 +15,13 @@ import (
 // RegisterNode handles both saving node information and activating the node on-chain.
 func RegisterNode(s network.Stream, abiFilePath string, fallbackEthClient *fallback_ethclient.FallbackRPCClient) error {
 	var req utils.RegistrationRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
+	if err := utils.ValidateStreamDecoding(s, &req); err != nil {
 		return fmt.Errorf("failed to decode registration request: %v", err)
+	}
+
+	// Validate the request structure
+	if err := req.Validate(); err != nil {
+		return fmt.Errorf("invalid registration request: %v", err)
 	}
 
 	verifyReq := utils.Verification{

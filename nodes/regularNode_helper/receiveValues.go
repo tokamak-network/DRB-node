@@ -78,8 +78,14 @@ func HandleCvs(h host.Host, s network.Stream) {
 	}
 
 	var message utils.BroadcastMessage
-	if err := json.NewDecoder(s).Decode(&message); err != nil {
+	if err := utils.ValidateStreamDecoding(s, &message); err != nil {
 		log.Printf("Failed to decode CVS broadcast message: %v", err)
+		return
+	}
+
+	// Validate the broadcast message structure
+	if err := message.Validate(); err != nil {
+		log.Printf("Invalid CVS broadcast message: %v", err)
 		return
 	}
 
@@ -174,8 +180,14 @@ func HandleCos(h host.Host, s network.Stream) {
 	}
 
 	var message utils.BroadcastMessage
-	if err := json.NewDecoder(s).Decode(&message); err != nil {
+	if err := utils.ValidateStreamDecoding(s, &message); err != nil {
 		log.Printf("Failed to decode COS broadcast message: %v", err)
+		return
+	}
+
+	// Validate the broadcast message structure
+	if err := message.Validate(); err != nil {
+		log.Printf("Invalid COS broadcast message: %v", err)
 		return
 	}
 
@@ -274,8 +286,14 @@ func HandleSecret(h host.Host, s network.Stream) {
 	}
 
 	var message utils.BroadcastMessage
-	if err := json.NewDecoder(s).Decode(&message); err != nil {
+	if err := utils.ValidateStreamDecoding(s, &message); err != nil {
 		log.Printf("Failed to decode secret broadcast message: %v", err)
+		return
+	}
+
+	// Validate the broadcast message structure
+	if err := message.Validate(); err != nil {
+		log.Printf("Invalid secret broadcast message: %v", err)
 		return
 	}
 

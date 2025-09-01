@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"log"
 	"math/big"
 	"os"
@@ -120,8 +119,14 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 	fallbackEthClient := h.fallbackEthClient
 
 	var req utils.CommitRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
+	if err := utils.ValidateStreamDecoding(s, &req); err != nil {
 		log.Printf("Failed to decode commit request: %v", err)
+		return
+	}
+
+	// Validate the request structure
+	if err := req.Validate(); err != nil {
+		log.Printf("Invalid commit request: %v", err)
 		return
 	}
 
@@ -178,8 +183,14 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		return
 	}
 	var req utils.CosRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
+	if err := utils.ValidateStreamDecoding(s, &req); err != nil {
 		log.Printf("Failed to decode COS request: %v", err)
+		return
+	}
+
+	// Validate the request structure
+	if err := req.Validate(); err != nil {
+		log.Printf("Invalid COS request: %v", err)
 		return
 	}
 
@@ -708,8 +719,14 @@ func handleAcknowledgment(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		return
 	}
 	var ack utils.AcknowledgmentMessage
-	if err := json.NewDecoder(s).Decode(&ack); err != nil {
+	if err := utils.ValidateStreamDecoding(s, &ack); err != nil {
 		log.Printf("Failed to decode acknowledgment message: %v", err)
+		return
+	}
+
+	// Validate the acknowledgment structure
+	if err := ack.Validate(); err != nil {
+		log.Printf("Invalid acknowledgment message: %v", err)
 		return
 	}
 
