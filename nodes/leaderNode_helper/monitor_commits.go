@@ -134,7 +134,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 			if err != nil {
 				log.Printf("Failed to execute random number generation transaction for round %s with trail %s: %v", round.Round, round.TrialNum, err)
 			} else {
-				err = markRoundCompleted(round.Round, round.TrialNum)
+				err = completeRound(round.Round, round.TrialNum)
 				if err != nil {
 					log.Printf("Failed to mark round %s as completed: %v", round.Round, err)
 				}
@@ -423,8 +423,8 @@ func packVsValues(vs []uint8) *big.Int {
 	return result
 }
 
-// markRoundCompleted updates to mark a round as completed
-func markRoundCompleted(round string, trialNum string) error {
+// completeRound updates to mark a round as completed and deletes old round data
+func completeRound(round string, trialNum string) error {
 	err := database.UpdateLeaderCommitRandomNumberGenerated(round, trialNum)
 	if err != nil {
 		return err

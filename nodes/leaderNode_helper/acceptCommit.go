@@ -310,6 +310,11 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	if state.Cmp(big.NewInt(1)) == 0 {
 		// Set Halted to 0 to resume the round
 		atomic.StoreInt32(&Halted, 0)
+		// Delete round and trial data from database
+		err := database.DeleteOldRoundDataForLeaderNode(round.String())
+		if err != nil {
+			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
+		}
 
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
@@ -334,6 +339,12 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		data.RandomNumber = true
 		RoundsData[uniqueKey] = data
 		Execution = false
+
+		// Delete round and trial data from database
+		err := database.DeleteOldRoundDataForLeaderNode(round.String())
+		if err != nil {
+			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
+		}
 	}
 
 	if state.Cmp(big.NewInt(3)) == 0 {
