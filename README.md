@@ -18,7 +18,7 @@ Before setting up the DRB node, ensure the following requirements are met:
    Deploy the DRB smart contract and obtain its address.  
    You can get the DRB smart contract from [here](https://github.com/tokamak-network/Commit-Reveal2/tree/service).
 
-5. **Account Balance**:  
+4. **Account Balance**:  
    Ensure the Leader Node and Regular Node accounts have sufficient balance to perform transactions.
    - The **Leader Node** must have enough tokens to interact with the blockchain network, such as submitting Merkle roots and generating random numbers.
    - The **Regular Node** must have enough tokens to cover the deposit requirements set by the contract.
@@ -72,13 +72,31 @@ Deploy the contract to your preferred Ethereum network and obtain the contract a
 After deploying the smart contract, you can proceed to run the nodes.
 
 - **Step-by-Step Node Execution**
-Run the following command:
-docker-compose up -d --build
+  Run the following command:
+  `./build.sh`
 
 The above command will run the leader node and three regular nodes.
 
+If there is no leadernode.bin file, it will fail and display a message like
+
+```
+File static-key/leadernode.bin not found. Please generate new ID using run_generator.sh and update LEADER_PEER_ID in .env.
+```
+
+If you see this message, please generate leadernode.bin file using the command:
+`./run_generator.sh`
+
+If leadernode id generation succeeds, update `LEADER_PEER_ID` in `.env` and execute `./build.sh` to run the nodes in docker environment at once.
+
+- If you have permission issue to above scripts, please run this command:
+
+  ```
+  chmod +x <filename>
+  ```
+
 - **Once the build is complete**: You can see the leader node logs via docker logs -f leadernode,
-docker logs -f regularnode1, docker logs -f regularnode2, docker logs -f regularnode3 are used to output the logs from the regular node
+  docker logs -f regularnode1, docker logs -f regularnode2, docker logs -f regularnode3 are used to output the logs from the regular node
+
 ---
 
 ### Verifying the Setup
@@ -86,6 +104,7 @@ docker logs -f regularnode1, docker logs -f regularnode2, docker logs -f regular
 After running the node, you can verify the setup using the following methods:
 
 #### **1. Node Registration Logs**
+
 Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
 
 - **For Regular Node Registration**, the logs should show like:
@@ -121,6 +140,7 @@ Check the logs to confirm successful peer connections. Look for entries indicati
   Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
 
 log message for executing merkle root onchain (leader node):
+
 - **Success Case**:
 
 "Successfully submitted Merkle root for round 0 with trail 0"
@@ -130,7 +150,6 @@ log message for executing merkle root onchain (leader node):
 - **Failure Case**:
 
 "Failed to submit Merkle root for round 0 with trail 0"
-
 
 log message for execuitng generate random number onchain (leader node):
 
@@ -259,22 +278,26 @@ Contains specialized helper functions for Regular Node operations:
 The DRB node system is built around several key architectural components:
 
 #### Database Layer (`database/`)
+
 - **Persistent Storage**: PostgreSQL-based storage for commit data, node information, and reveal orders
 - **Migration System**: Automatic database schema management and updates
 - **Data Models**: Structured storage for leader commits, regular commits, broadcast tracking, and node registry
 
 #### Network Layer (`libp2putils/`, `pkg/fallback_ethclient/`)
+
 - **P2P Communication**: LibP2P-based peer-to-peer networking for node communication
 - **Blockchain Connectivity**: Fallback RPC client with automatic failover for reliable Ethereum connectivity
 - **Event Monitoring**: Real-time blockchain event subscription and processing
 
 #### Protocol Implementation (`commit-reveal2/`, `nodes/`)
+
 - **Commit-Reveal Protocol**: Multi-phase cryptographic commitment and revelation process
 - **Merkle Tree Generation**: Efficient proof generation for commitment verification
 - **Time-Based Monitoring**: Automatic request submission and failure detection with configurable timeouts
 - **Sequential Revelation**: Ordered secret revelation process with verification
 
 #### Monitoring and Reliability
+
 - **Event-Driven Architecture**: Responsive to blockchain events with automatic state transitions
 - **Failure Detection**: Time-based monitoring for missing submissions with automatic retry
 - **State Validation**: Blockchain state verification to prevent stale operations
@@ -301,7 +324,6 @@ To contribute to the project, follow these steps:
 3. **branch**: dispute-mechanishm
 4. **Make your changes**: Modify or add new features as needed.
 5. **Submit a Pull Request**: Once your changes are ready, submit a pull request with a description of your changes.
-
 
 ### **Bugs/Error s**
 
