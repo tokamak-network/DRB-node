@@ -28,6 +28,9 @@ service.log
 
 ./cmd/service.log
 
+# static-key
+static-key/
+
 node_info.json
 peer_id.json
 commits.json
