@@ -26,7 +26,6 @@ import (
 )
 
 var CommitMu sync.Mutex
-var StartTime *big.Int
 var Execution bool
 
 // var ActivatedOperator []string
@@ -319,7 +318,6 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
 		Req = req
-		StartTime = blockTimestamp // Store the start time globally
 		// Update the activated operators
 		eth.UpdateActivatedOperators(fallbackEthClient)
 		// Reset the indices for the new round
@@ -327,7 +325,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		log.Printf("Reset Indices array for new round %s with trail %s", CurrentRound, trialNum.String())
 
 		// Start monitoring for automatic requestToSubmitCv
-		startRequestToSubmitCvMonitoring(fallbackEthClient, round.String(), trialNum.String())
+		startRequestToSubmitCvMonitoring(fallbackEthClient, round.String(), trialNum.String(), blockTimestamp)
 
 		Execution = true
 	}
@@ -989,8 +987,8 @@ func CheckHaltedState(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 }
 
 // Add function to start monitoring for automatic requestToSubmitCv
-func startRequestToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
-	if StartTime == nil {
+func startRequestToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, startTime *big.Int) {
+	if startTime == nil {
 		log.Printf("StartTime is nil, cannot start requestToSubmitCv monitoring")
 		return
 	}
@@ -1003,7 +1001,7 @@ func startRequestToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.Fall
 
 	// deadline = startTime + 40 + 30 = startTime + 70 seconds
 	totalPeriod := new(big.Int).Add(s_offChainSubmissionPeriod, s_requestOrSubmitOrFailDecisionPeriod)
-	deadline := new(big.Int).Add(StartTime, totalPeriod)
+	deadline := new(big.Int).Add(startTime, totalPeriod)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -1012,7 +1010,7 @@ func startRequestToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.Fall
 
 	log.Printf("Starting requestToSubmitCv monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 	log.Printf("Parameters - StartTime: %v, offChainPeriod: %v, requestOrSubmitPeriod: %v",
-		StartTime, s_offChainSubmissionPeriod, s_requestOrSubmitOrFailDecisionPeriod)
+		startTime, s_offChainSubmissionPeriod, s_requestOrSubmitOrFailDecisionPeriod)
 
 	// Set timer to call the function when deadline is reached
 	RequestToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
