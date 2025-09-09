@@ -288,7 +288,12 @@ func VerifySignatureAndCheckActivation(fallbackEthClient *fallback_ethclient.Fal
 
 	eoaAddress := common.HexToAddress(req.EOAAddress)
 
-	if !isEOAActivatedForRound(fallbackEthClient, eoaAddress) {
+	IsNetworkError, isEOAActivated := isEOAActivatedForRound(fallbackEthClient, eoaAddress)
+	if IsNetworkError {
+		log.Printf("Network error. Skipping activation check.")
+		return false
+	}
+	if !isEOAActivated {
 		log.Printf("EOA %s not activated, skipping %v.", eoaAddress.Hex(), reqType)
 		return false
 	}
@@ -552,21 +557,23 @@ func updateCommitDataAfterSubmit(roundNum string, trialNum string, uniqueKey str
 	}
 }
 
-func isEOAActivatedForRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient, eoaAddress common.Address) bool {
+func isEOAActivatedForRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient, eoaAddress common.Address) (bool, bool) {
 	activatedOperators, err := eth.GetActivatedOperators(fallbackEthClient)
 	if err != nil {
 		log.Printf("Error fetching the activated operators %v", err)
+		// Return true for network error flag, false for activation status
+		return true, false
 	}
 
 	for _, operator := range activatedOperators {
 		if operator == eoaAddress {
 			log.Printf("EOA address %s is activated", eoaAddress.Hex())
-			return true
+			return true, false
 		}
 	}
 
 	log.Printf("EOA address %s is NOT activated", eoaAddress.Hex())
-	return false
+	return false, false
 }
 
 func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round leaderNode_helper.RandomRequest) {
