@@ -140,14 +140,13 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		ContractABI:     parsedABI,
 	}
 	for {
-		if err != nil {
-			log.Printf("Error fetching rounds data: %v", err)
+		// Check activation status
+		IsNetworkError, isActivated := checkActivationStatus(fallbackEthClient, clientUtils, eoaAddress)
+		if IsNetworkError {
+			log.Println("Network error. Skipping activation check.")
 			time.Sleep(30 * time.Second)
 			continue
 		}
-
-		// Check activation status
-		isActivated := checkActivationStatus(fallbackEthClient, clientUtils, eoaAddress)
 		if isActivated {
 			log.Println("Node is activated. No further action required.")
 			activateCalledInThisRun = true
@@ -345,21 +344,22 @@ func isEOAActivated(eoaAddress string) bool {
 	return false
 }
 
-func checkActivationStatus(fallbackEthClient *fallback_ethclient.FallbackRPCClient, client *utils.Client, eoaAddress string) bool {
+func checkActivationStatus(fallbackEthClient *fallback_ethclient.FallbackRPCClient, client *utils.Client, eoaAddress string) (bool, bool) {
 	activatedOperatorsResult, err := eth.CallSmartContract(fallbackEthClient, client.ContractABI, "getActivatedOperators", client.ContractAddress)
 	if err != nil {
 		log.Printf("Failed to call getActivatedOperators: %v", err)
-		return false
+		// Return true for network error flag, false for activation status
+		return true, false
 	}
 
 	activatedOperators := activatedOperatorsResult.([]common.Address)
 	for _, operator := range activatedOperators {
 		if operator.Hex() == eoaAddress {
-			return true
+			return false, true
 		}
 	}
 
-	return false
+	return false, false
 }
 
 // sendRegistrationRequestToLeader sends the registration request to the leader node
