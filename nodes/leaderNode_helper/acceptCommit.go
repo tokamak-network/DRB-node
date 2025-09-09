@@ -33,12 +33,10 @@ var Execution bool
 var Halted int32 // 0 = false, 1 = true
 
 // Add new variables for RequestedToSubmitCo monitoring
-var RequestedToSubmitCoTimestamp *big.Int
 var RequestedToSubmitCoMonitoringActive bool
 var RequestedToSubmitCoMonitoringTimer *time.Timer
 
 // Add new variables for RequestedToSubmitCv monitoring
-var RequestedToSubmitCvTimestamp *big.Int
 var RequestedToSubmitCvMonitoringActive bool
 var RequestedToSubmitCvMonitoringTimer *time.Timer
 
@@ -673,11 +671,8 @@ func processRequestedToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRP
 
 	fmt.Printf("RequestedToSubmitCo Event: Round %v, TrialNum %v, BlockTimestamp %v\n", round, trialNum, blockTimestamp)
 
-	// Save the block timestamp and round/trial info
-	RequestedToSubmitCoTimestamp = blockTimestamp
-
 	// Start monitoring for failToSubmitCo condition
-	startFailToSubmitCoMonitoring(fallbackEthClient, round.String(), trialNum.String())
+	startFailToSubmitCoMonitoring(fallbackEthClient, round.String(), trialNum.String(), blockTimestamp)
 }
 
 // Add new function to process RequestedToSubmitCv event
@@ -693,17 +688,14 @@ func processRequestedToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRP
 		stopRequestToSubmitCvMonitoring()
 	}
 
-	// Save the block timestamp and round/trial info
-	RequestedToSubmitCvTimestamp = blockTimestamp
-
 	// Start monitoring for failToSubmitCv condition
-	startFailToSubmitCvMonitoring(fallbackEthClient, round.String(), trialNum.String())
+	startFailToSubmitCvMonitoring(fallbackEthClient, round.String(), trialNum.String(), blockTimestamp)
 }
 
 // Add function to start monitoring for failToSubmitCo condition
-func startFailToSubmitCoMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
-	if RequestedToSubmitCoTimestamp == nil {
-		log.Printf("RequestedToSubmitCoTimestamp is nil, cannot start monitoring")
+func startFailToSubmitCoMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, requestedToSubmitCoTimestamp *big.Int) {
+	if requestedToSubmitCoTimestamp == nil {
+		log.Printf("requestedToSubmitCoTimestamp is nil, cannot start monitoring")
 		return
 	}
 
@@ -712,8 +704,8 @@ func startFailToSubmitCoMonitoring(fallbackEthClient *fallback_ethclient.Fallbac
 	// Get s_onChainSubmissionPeriod from contract
 	onChainSubmissionPeriod := big.NewInt(120)
 
-	// Calculate deadline: RequestedToSubmitCoTimestamp + s_onChainSubmissionPeriod
-	deadline := new(big.Int).Add(RequestedToSubmitCoTimestamp, onChainSubmissionPeriod)
+	// Calculate deadline: requestedToSubmitCoTimestamp + s_onChainSubmissionPeriod
+	deadline := new(big.Int).Add(requestedToSubmitCoTimestamp, onChainSubmissionPeriod)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -821,9 +813,9 @@ func checkAndStopFailToSubmitCvMonitoring(round string, trialNum string) {
 }
 
 // Add function to start monitoring for failToSubmitCv condition
-func startFailToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
-	if RequestedToSubmitCvTimestamp == nil {
-		log.Printf("RequestedToSubmitCvTimestamp is nil, cannot start monitoring")
+func startFailToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, requestedToSubmitCvTimestamp *big.Int) {
+	if requestedToSubmitCvTimestamp == nil {
+		log.Printf("requestedToSubmitCvTimestamp is nil, cannot start monitoring")
 		return
 	}
 
@@ -832,8 +824,8 @@ func startFailToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.Fallbac
 	// Get s_onChainSubmissionPeriod from contract (60 seconds as specified)
 	onChainSubmissionPeriod := big.NewInt(60)
 
-	// Calculate deadline: RequestedToSubmitCvTimestamp + s_onChainSubmissionPeriod
-	deadline := new(big.Int).Add(RequestedToSubmitCvTimestamp, onChainSubmissionPeriod)
+	// Calculate deadline: requestedToSubmitCvTimestamp + s_onChainSubmissionPeriod
+	deadline := new(big.Int).Add(requestedToSubmitCvTimestamp, onChainSubmissionPeriod)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -918,7 +910,6 @@ func ResetCosAndCvsMonitoringState(round string, trialNum string) {
 	stopRequestToSubmitCvMonitoring()
 
 	// Reset COS monitoring variables
-	RequestedToSubmitCoTimestamp = nil
 	RequestedToSubmitCoMonitoringActive = false
 	if RequestedToSubmitCoMonitoringTimer != nil {
 		RequestedToSubmitCoMonitoringTimer.Stop()
@@ -926,7 +917,6 @@ func ResetCosAndCvsMonitoringState(round string, trialNum string) {
 	}
 
 	// Reset CVS monitoring variables (failToSubmitCv)
-	RequestedToSubmitCvTimestamp = nil
 	RequestedToSubmitCvMonitoringActive = false
 	if RequestedToSubmitCvMonitoringTimer != nil {
 		RequestedToSubmitCvMonitoringTimer.Stop()

@@ -28,7 +28,7 @@ func checkPreviousSecretReceived(round, trialNum, previousNodeEOA string) bool {
 	}
 
 	// Check if secret value exists and is not empty
-	if peerCommitData.SecretValue == nil || len(peerCommitData.SecretValue) == 0 {
+	if peerCommitData.SecretValue == nil {
 		log.Printf("Previous node %s secret value is empty or nil", previousNodeEOA)
 		return false
 	}

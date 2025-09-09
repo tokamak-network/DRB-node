@@ -28,8 +28,6 @@ func MonitorCommits(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	}
 }
 
-var StartNextRound bool = true
-
 type RevealOrderData struct {
 	OrderedNodes []string   `json:"ordered_nodes"`
 	RevealOrder  []*big.Int `json:"reveal_order"`
