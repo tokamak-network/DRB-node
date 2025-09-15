@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -26,6 +27,30 @@ var (
 )
 
 var ActivatedOperators = make([]common.Address, 0)
+var ActivatedOperatorsMu sync.RWMutex
+
+// ActivatedOperators thread-safe access functions
+func GetActivatedOperatorsCached() []common.Address {
+	ActivatedOperatorsMu.RLock()
+	defer ActivatedOperatorsMu.RUnlock()
+
+	// Return a copy to prevent external modifications
+	result := make([]common.Address, len(ActivatedOperators))
+	copy(result, ActivatedOperators)
+	return result
+}
+
+func SetActivatedOperatorsCached(operators []common.Address) {
+	ActivatedOperatorsMu.Lock()
+	defer ActivatedOperatorsMu.Unlock()
+	ActivatedOperators = make([]common.Address, len(operators))
+	copy(ActivatedOperators, operators)
+}
+
+func GetActivatedOperatorsUnsafe() []common.Address {
+	// For internal use where mutex is already held
+	return ActivatedOperators
+}
 
 // Smart contract call helper function
 func CallSmartContract(fallbackEthClient *fallback_ethclient.FallbackRPCClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
@@ -299,9 +324,10 @@ func GetActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 }
 
 func UpdateActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
-	var err error
-	ActivatedOperators, err = GetActivatedOperators(fallbackEthClient)
+	operators, err := GetActivatedOperators(fallbackEthClient)
 	if err != nil {
 		log.Printf("Error updating ActivatedOperators: %v", err)
+		return
 	}
+	SetActivatedOperatorsCached(operators)
 }

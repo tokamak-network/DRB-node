@@ -50,6 +50,20 @@ var RoundsData map[string]RoundData
 var RoundsDataMu sync.RWMutex
 
 var StartTime *big.Int
+var StartTimeMu sync.RWMutex
+
+// StartTime getter/setter functions
+func SetStartTime(timestamp *big.Int) {
+	StartTimeMu.Lock()
+	defer StartTimeMu.Unlock()
+	StartTime = timestamp
+}
+
+func GetStartTime() *big.Int {
+	StartTimeMu.RLock()
+	defer StartTimeMu.RUnlock()
+	return StartTime
+}
 
 type RoundData struct {
 	MerkleRoot   bool
@@ -1039,12 +1053,13 @@ func CheckAndStartMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCCl
 	}
 
 	// Check if we have a valid start time
-	if StartTime == nil {
+	startTime := GetStartTime()
+	if startTime == nil {
 		log.Printf("StartTime is nil, cannot start monitoring")
 		return
 	}
 
-	StartLeaderMonitoring(fallbackEthClient, StartTime, round, trialNum)
+	StartLeaderMonitoring(fallbackEthClient, startTime, round, trialNum)
 }
 
 // StartRequestToSubmitSOrGenerateRandomNumberMonitoring starts monitoring for failToRequestSOrGenerateRandomNumber condition

@@ -168,13 +168,9 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 // getOrCreateLeaderCommitData returns commitData from in-memory map or creates a new one.
 // Called with commitMu locked.
 func GetOrCreateLeaderCommitData(roundNum string, trialNum string, uniqueKey string, eoaAddress common.Address) *utils.LeaderCommitData {
-	roundMap, exists := utils.CommittedNodes[uniqueKey]
-	if !exists {
-		roundMap = make(map[common.Address]utils.LeaderCommitData)
-		utils.CommittedNodes[uniqueKey] = roundMap
-	}
+	utils.EnsureCommittedNodesRoundExists(uniqueKey)
 
-	data, existsData := roundMap[eoaAddress]
+	data, existsData := utils.GetCommittedNodeData(uniqueKey, eoaAddress)
 	if !existsData {
 		data = utils.LeaderCommitData{
 			UniqueKey:  uniqueKey,
@@ -183,7 +179,7 @@ func GetOrCreateLeaderCommitData(roundNum string, trialNum string, uniqueKey str
 			EOAAddress: eoaAddress.Hex(),
 			CreatedAt:  time.Now().Unix(),
 		}
-		roundMap[eoaAddress] = data
+		utils.SetCommittedNodeData(uniqueKey, eoaAddress, data)
 	}
 	return &data
 }

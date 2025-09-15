@@ -49,7 +49,7 @@ func DeleteCosTimerOnce(key string) {
 	delete(cosTimerOnce, key)
 }
 
-var submittingMerkleRoot = false
+var submittingMerkleRoot int32 // 0 = false, 1 = true (atomic)
 var commitMu sync.Mutex
 var firstRequest leaderNode_helper.RandomRequest
 
@@ -287,7 +287,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 
 func isMerkleRootSubmitted(uniqueKey string) bool {
 	// Call with commitMu locked or ensure commitMu is locked outside
-	roundMap, exists := utils.CommittedNodes[uniqueKey]
+	roundMap, exists := utils.GetCommittedNodes(uniqueKey)
 	if !exists || len(roundMap) == 0 {
 		return false
 	}
@@ -325,12 +325,12 @@ func VerifySignatureAndCheckActivation(fallbackEthClient *fallback_ethclient.Fal
 // allCommitsReceivedUnlocked checks if all operators have CVS in-memory.
 // Called with commitMu locked.
 func allCommitsReceivedUnlocked(uniqueKey string) bool {
-	ops := eth.ActivatedOperators
+	ops := eth.GetActivatedOperatorsCached()
 	if len(ops) == 0 {
 		return false
 	}
 
-	roundCommits, roundExists := utils.CommittedNodes[uniqueKey]
+	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists || len(roundCommits) == 0 {
 		return false
 	}
@@ -349,7 +349,7 @@ func allCosReceivedUnlocked(uniqueKey string) bool {
 		return false
 	}
 
-	roundCommits, roundExists := utils.CommittedNodes[uniqueKey]
+	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists || len(roundCommits) == 0 {
 		return false
 	}
@@ -367,7 +367,7 @@ func UpdatedallCommitsReceivedUnlocked(fallbackEthClient *fallback_ethclient.Fal
 	result := make(map[string]bool)
 	ops, _ := eth.GetActivatedOperators(fallbackEthClient)
 
-	roundCommits, roundExists := utils.CommittedNodes[uniqueKey]
+	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists || len(roundCommits) == 0 {
 		for _, op := range ops {
 			result[op.Hex()] = false
@@ -392,12 +392,7 @@ func UpdatedallCommitsReceivedUnlocked(fallbackEthClient *fallback_ethclient.Fal
 // updateInMemoryData updates committedNodes with the latest commitData.
 // Called with commitMu locked.
 func updateInMemoryData(uniqueKey string, eoaAddress common.Address, commitData utils.LeaderCommitData) {
-	roundMap, exists := utils.CommittedNodes[uniqueKey]
-	if !exists {
-		roundMap = make(map[common.Address]utils.LeaderCommitData)
-		utils.CommittedNodes[uniqueKey] = roundMap
-	}
-	roundMap[eoaAddress] = commitData
+	utils.SetCommittedNodeData(uniqueKey, eoaAddress, commitData)
 }
 
 // generateMerkleRoot doesn't lock; it locks inside to read from memory
@@ -418,12 +413,12 @@ func generateMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 
 	log.Printf("Generating Merkle root for round %s with trail %s...", roundNum, trialNum)
 
-	activatedOperatorsList := eth.ActivatedOperators
+	activatedOperatorsList := eth.GetActivatedOperatorsCached()
 
 	log.Printf("Activated operators for round %s with trail %s in order: %v", roundNum, trialNum, activatedOperatorsList)
 
 	commitMu.Lock()
-	roundMap, roundExists := utils.CommittedNodes[uniqueKey]
+	roundMap, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists || len(roundMap) == 0 {
 		log.Printf("No commits found in-memory for round %s with trail %s, cannot generate Merkle root.", roundNum, trialNum)
 		commitMu.Unlock()
@@ -456,8 +451,8 @@ func generateMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 		log.Printf("Failed to create Merkle tree for round %s with trail %s: %v", roundNum, trialNum, err)
 		return
 	}
-	if !submittingMerkleRoot {
-		submittingMerkleRoot = true
+	// Use atomic compare-and-swap to prevent race condition
+	if atomic.CompareAndSwapInt32(&submittingMerkleRoot, 0, 1) {
 		submitMerkleRoot(fallbackEthClient, roundNum, trialNum, merkleRoot)
 	}
 }
@@ -509,7 +504,7 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 	}
 
 	log.Printf("Successfully submitted Merkle root for round %s with trail %s", roundNum, trialNum)
-	submittingMerkleRoot = false
+	atomic.StoreInt32(&submittingMerkleRoot, 0)
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
 	roundData, exists := leaderNode_helper.GetRoundData(uniqueKey)
 	if !exists {
@@ -536,7 +531,7 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 			commitMu.Lock()
 			defer commitMu.Unlock()
 			ops := eth.ActivatedOperators
-			roundCommits, roundExists := utils.CommittedNodes[rn]
+			roundCommits, roundExists := utils.GetCommittedNodes(rn)
 			var missingIndices []*big.Int
 			if roundExists {
 				for idx, op := range ops {
@@ -558,7 +553,7 @@ func updateCommitDataAfterSubmit(roundNum string, trialNum string, uniqueKey str
 	commitMu.Lock()
 	defer commitMu.Unlock()
 
-	roundMap, exists := utils.CommittedNodes[uniqueKey]
+	roundMap, exists := utils.GetCommittedNodes(uniqueKey)
 	if !exists {
 		return
 	}

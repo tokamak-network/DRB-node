@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -29,7 +30,7 @@ type FallbackRPCClient struct {
 	logger     *logrus.Logger
 }
 
-var rpcURLPrinted = false
+var rpcURLPrinted int32 // 0 = false, 1 = true (atomic)
 
 // NewFallbackRPCClient creates a new FallbackRPCClient with the given RPC URLs
 func NewFallbackRPCClient(urls []string) (*FallbackRPCClient, error) {
@@ -74,15 +75,15 @@ func (f *FallbackRPCClient) switchToNextClient() {
 		"old_url": f.urls[oldIdx],
 		"new_url": f.urls[f.currentIdx],
 	}).Info("Switching to fallback RPC")
-	rpcURLPrinted = false
+	atomic.StoreInt32(&rpcURLPrinted, 0)
 }
 
 // getCurrentClient returns the current active client
 func (f *FallbackRPCClient) getCurrentClient() *ethclient.Client {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	if !rpcURLPrinted {
-		rpcURLPrinted = true
+	if atomic.LoadInt32(&rpcURLPrinted) == 0 {
+		atomic.StoreInt32(&rpcURLPrinted, 1)
 	}
 
 	return f.clients[f.currentIdx]

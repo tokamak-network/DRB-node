@@ -274,7 +274,12 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 	}
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	intValue := int(index.Int64())
-	regularNodeAddress := eth.ActivatedOperators[intValue]
+	activatedOps := eth.GetActivatedOperatorsCached()
+	if intValue >= len(activatedOps) {
+		log.Printf("Index %d out of bounds for activated operators length %d", intValue, len(activatedOps))
+		return
+	}
+	regularNodeAddress := activatedOps[intValue]
 
 	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(GetSecretRequestSentForWhichRound(), regularNodeAddress.Hex(), regularNodeAddress.Hex())
 	if err != nil {
@@ -463,7 +468,12 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *
 	}
 	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
 
-	eoa := eth.ActivatedOperators[activatedOperatorIndex.Int64()]
+	activatedOps := eth.GetActivatedOperatorsCached()
+	if activatedOperatorIndex.Int64() >= int64(len(activatedOps)) {
+		log.Printf("Index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
+		return nil
+	}
+	eoa := activatedOps[activatedOperatorIndex.Int64()]
 	cosHex := hex.EncodeToString(cos[:])
 	roundStr := round.String()
 	trialNumStr := trialNum.String()
@@ -519,11 +529,9 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *
 }
 
 func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, uniqueKey string, eoa common.Address, cos [32]byte) {
-	if _, exists := utils.CommittedNodes[uniqueKey]; !exists {
-		utils.CommittedNodes[uniqueKey] = make(map[common.Address]utils.LeaderCommitData)
-	}
+	utils.EnsureCommittedNodesRoundExists(uniqueKey)
 
-	commitData, exists := utils.CommittedNodes[uniqueKey][eoa]
+	commitData, exists := utils.GetCommittedNodeData(uniqueKey, eoa)
 	if !exists {
 		commitData = utils.LeaderCommitData{}
 	}
@@ -533,7 +541,7 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 	commitData.Cos = cos
 	cosHex := hex.EncodeToString(cos[:])
 	commitData.CosHex = cosHex
-	utils.CommittedNodes[uniqueKey][eoa] = commitData
+	utils.SetCommittedNodeData(uniqueKey, eoa, commitData)
 
 	if AllCosReceivedUnlocked(uniqueKey) {
 		log.Printf("All COS received for round %s with trail %s.", round, trialNum)
@@ -554,7 +562,12 @@ func processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte, activatedOperat
 	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
 	roundStr := round.String()
 	trialNumStr := trialNum.String()
-	eoa := eth.ActivatedOperators[activatedOperatorIndex.Int64()]
+	activatedOps := eth.GetActivatedOperatorsCached()
+	if activatedOperatorIndex.Int64() >= int64(len(activatedOps)) {
+		log.Printf("Index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
+		return nil
+	}
+	eoa := activatedOps[activatedOperatorIndex.Int64()]
 	cvsHex := hex.EncodeToString(cvs[:])
 
 	uniqueKey := utils.GetUniqueKey(roundStr, trialNumStr)
@@ -608,11 +621,9 @@ func processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte, activatedOperat
 }
 
 func updateCVS(round string, uniqueKey string, eoa common.Address, cvs [32]byte) {
-	if _, exists := utils.CommittedNodes[uniqueKey]; !exists {
-		utils.CommittedNodes[uniqueKey] = make(map[common.Address]utils.LeaderCommitData)
-	}
+	utils.EnsureCommittedNodesRoundExists(uniqueKey)
 
-	commitData, exists := utils.CommittedNodes[uniqueKey][eoa]
+	commitData, exists := utils.GetCommittedNodeData(uniqueKey, eoa)
 	if !exists {
 		commitData = utils.LeaderCommitData{}
 	}
@@ -622,17 +633,17 @@ func updateCVS(round string, uniqueKey string, eoa common.Address, cvs [32]byte)
 	commitData.Cvs = cvs
 	cvsHex := hex.EncodeToString(cvs[:])
 	commitData.CvsHex = cvsHex
-	utils.CommittedNodes[uniqueKey][eoa] = commitData
+	utils.SetCommittedNodeData(uniqueKey, eoa, commitData)
 
 }
 
 func AllCosReceivedUnlocked(uniqueKey string) bool {
-	ops := eth.ActivatedOperators
+	ops := eth.GetActivatedOperatorsCached()
 	if len(ops) == 0 {
 		return false
 	}
 
-	roundCommits, roundExists := utils.CommittedNodes[uniqueKey]
+	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists || len(roundCommits) == 0 {
 		return false
 	}
@@ -647,12 +658,12 @@ func AllCosReceivedUnlocked(uniqueKey string) bool {
 }
 
 func AllCvsReceivedUnlocked(uniqueKey string) bool {
-	ops := eth.ActivatedOperators
+	ops := eth.GetActivatedOperatorsCached()
 	if len(ops) == 0 {
 		return false
 	}
 
-	roundCommits, roundExists := utils.CommittedNodes[uniqueKey]
+	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists || len(roundCommits) == 0 {
 		return false
 	}
@@ -1046,7 +1057,7 @@ func callRequestToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 
 	// Implement the same logic as handleMissingCV from leaderNode.go
 	SetCvOnChain(uniqueKey, true)
-	activatedOperators := eth.ActivatedOperators
+	activatedOperators := eth.GetActivatedOperatorsCached()
 	i := big.NewInt(0)
 	for _, op := range activatedOperators {
 		for _, missingOp := range missingOperators {
@@ -1118,7 +1129,7 @@ func getMissingCvsOperators(uniqueKey string) []string {
 	var missingOperators []string
 	ops := eth.ActivatedOperators
 
-	roundCommits, roundExists := utils.CommittedNodes[uniqueKey]
+	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists {
 		// No commits at all, all operators are missing
 		for _, op := range ops {
