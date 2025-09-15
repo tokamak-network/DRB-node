@@ -20,15 +20,38 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
-	"github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
+	leaderNode_helper "github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+// Global variables with mutex protection for thread safety
+var cosTimerOnce = make(map[string]*sync.Once)
+var cosTimerOnceMu sync.RWMutex
+
+// Helper functions for cosTimerOnce map with mutex protection
+func SetCosTimerOnce(key string, once *sync.Once) {
+	cosTimerOnceMu.Lock()
+	defer cosTimerOnceMu.Unlock()
+	cosTimerOnce[key] = once
+}
+
+func GetCosTimerOnce(key string) (*sync.Once, bool) {
+	cosTimerOnceMu.RLock()
+	defer cosTimerOnceMu.RUnlock()
+	once, exists := cosTimerOnce[key]
+	return once, exists
+}
+
+func DeleteCosTimerOnce(key string) {
+	cosTimerOnceMu.Lock()
+	defer cosTimerOnceMu.Unlock()
+	delete(cosTimerOnce, key)
+}
+
 var submittingMerkleRoot = false
 var commitMu sync.Mutex
 var firstRequest leaderNode_helper.RandomRequest
-var cosTimerOnce = make(map[string]*sync.Once)
 
 type SigRS struct {
 	R [32]byte
@@ -38,7 +61,6 @@ type CvAndSigRS struct {
 	Cv [32]byte
 	Rs SigRS
 }
-
 
 type Handler struct {
 	fallbackEthClient *fallback_ethclient.FallbackRPCClient
@@ -91,11 +113,11 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	// leaderNode_helper.StartBroadcastCleanup()
 	// leaderNode_helper.StartLeaderCommitCleanup()
 	for {
-		if !leaderNode_helper.Execution {
+		if !leaderNode_helper.GetExecution() {
 			time.Sleep(10 * time.Second)
 			continue
 		}
-		firstRequest = leaderNode_helper.Req
+		firstRequest = leaderNode_helper.GetReq()
 		processRounds(fallbackEthClient, firstRequest)
 		time.Sleep(30 * time.Second)
 	}
@@ -194,8 +216,8 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		return
 	}
 
-	round := leaderNode_helper.CurrentRound
-	trial := leaderNode_helper.CurrentTrial
+	round := leaderNode_helper.GetCurrentRound()
+	trial := leaderNode_helper.GetCurrentTrial()
 	eoaAddress := common.HexToAddress(req.EOAAddress)
 
 	commitMu.Lock()
@@ -489,19 +511,25 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 	log.Printf("Successfully submitted Merkle root for round %s with trail %s", roundNum, trialNum)
 	submittingMerkleRoot = false
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
-	roundData := leaderNode_helper.RoundsData[uniqueKey]
-	roundData.MerkleRoot = true
-	if leaderNode_helper.RoundsData == nil {
-		leaderNode_helper.RoundsData = make(map[string]leaderNode_helper.RoundData)
+	roundData, exists := leaderNode_helper.GetRoundData(uniqueKey)
+	if !exists {
+		roundData = leaderNode_helper.RoundData{}
 	}
-	leaderNode_helper.RoundsData[uniqueKey] = roundData
+	roundData.MerkleRoot = true
+	leaderNode_helper.SetRoundData(uniqueKey, roundData)
 	updateCommitDataAfterSubmit(roundNum, trialNum, uniqueKey)
 
 	if _, exists := cosTimerOnce[uniqueKey]; !exists {
+		cosTimerOnceMu.Lock()
+		defer cosTimerOnceMu.Unlock()
 		cosTimerOnce[uniqueKey] = &sync.Once{}
 	}
 
-	cosTimerOnce[uniqueKey].Do(func() {
+	cosTimerOnceMu.RLock()
+	once, _ := GetCosTimerOnce(uniqueKey)
+	cosTimerOnceMu.RUnlock()
+
+	once.Do(func() {
 		go func(rn string) {
 			log.Printf("Started 30s timer for COS for round %s", rn)
 			time.Sleep(30 * time.Second)
@@ -580,7 +608,11 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 	roundNum := round.Round.String()
 	trialNum := round.TrialNum.String()
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
-	if !leaderNode_helper.RoundsData[uniqueKey].MerkleRoot && !leaderNode_helper.RoundsData[uniqueKey].RandomNumber {
+	roundData, exists := leaderNode_helper.GetRoundData(uniqueKey)
+	if !exists {
+		roundData = leaderNode_helper.RoundData{}
+	}
+	if !roundData.MerkleRoot && !roundData.RandomNumber {
 		log.Printf("LeaderNode for round %s with trail %s is checking for commits...", roundNum, trialNum)
 
 		commitMu.Lock()
@@ -603,7 +635,6 @@ func processRounds(fallbackEthClient *fallback_ethclient.FallbackRPCClient, roun
 		}
 	}
 }
-
 
 func prepareArgumentsForRequestToSubmitCo(roundNum string, trialNum string, missingIndices []*big.Int) ([]CvAndSigRS, *big.Int, *big.Int, *big.Int) {
 	cvs, _, _, vs, rs, ss := leaderNode_helper.LoadNodeData(roundNum, trialNum)

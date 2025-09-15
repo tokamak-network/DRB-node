@@ -199,15 +199,15 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 			}
 		}
 
-		if !regularNode_helper.Execution {
+		if !regularNode_helper.GetExecution() {
 			time.Sleep(10 * time.Second)
 			continue
 		}
 		time.Sleep(5 * time.Second)
 
 		// Check and start leader monitoring
-		round := regularNode_helper.CurrentRound
-		trialNum := regularNode_helper.CurrentTrialNum
+		round := regularNode_helper.GetCurrentRound()
+		trialNum := regularNode_helper.GetCurrentTrialNum()
 		regularNode_helper.CheckAndStartMonitoring(fallbackEthClient, round, trialNum)
 
 		uniqueKey := utils.GetUniqueKey(round, trialNum)
@@ -215,8 +215,12 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 			log.Println("System is halted. Skipping checkAndStartMonitoring.")
 			continue
 		}
-		merkleRootSubmitted := regularNode_helper.RoundsData[uniqueKey].MerkleRoot
-		randomNumberSubmitted := regularNode_helper.RoundsData[uniqueKey].RandomNumber
+		roundData, exists := regularNode_helper.GetRoundData(uniqueKey)
+		if !exists {
+			roundData = regularNode_helper.RoundData{}
+		}
+		merkleRootSubmitted := roundData.MerkleRoot
+		randomNumberSubmitted := roundData.RandomNumber
 
 		log.Printf("Checking round %s with trial %s ...", round, trialNum)
 		// Check if Merkle Root and Random Number are already generated (not nil)

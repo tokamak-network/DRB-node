@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,7 +17,10 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+// Global variables with mutex protection for thread safety
 var strictOrderWhileSecretRequest = make(map[string][]string)
+var strictOrderMu sync.RWMutex
+
 
 // checkPreviousSecretReceived checks if the previous node's secret was received via broadcast
 func checkPreviousSecretReceived(round, trialNum, previousNodeEOA string) bool {
@@ -71,23 +75,22 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		if err != nil {
 			log.Printf("Failed to load reveal order with trail %s for round %s: %v", req.TrialNum, req.Round, err)
 		} else if roundData != nil {
-			if strictOrderWhileSecretRequest[uniqueKey] == nil {
-				strictOrderWhileSecretRequest[uniqueKey] = roundData.OrderedNodes
-			}
+			SetStrictOrder(uniqueKey, roundData.OrderedNodes)
 			break
 		} else {
 			log.Printf("Reveal order not yet calculated for round %s with trail %s. Waiting...", req.Round, req.TrialNum)
 		}
 		time.Sleep(5 * time.Second)
 	}
-	if len(strictOrderWhileSecretRequest[uniqueKey]) == 0 || strictOrderWhileSecretRequest[uniqueKey][req.Order] != req.RegularEoaAddress {
+	strictOrder, exists := GetStrictOrder(uniqueKey)
+	if !exists || len(strictOrder) == 0 || req.Order >= len(strictOrder) || strictOrder[req.Order] != req.RegularEoaAddress {
 		log.Printf("EOA %s is not next in the reveal order %v for round %s with trail %s", req.RegularEoaAddress, req.Order, req.Round, req.TrialNum)
 		return
 	}
 
 	// 🔍 Check if previous node's secret was received (if not first in order)
 	if req.Order > 0 {
-		previousNodeEOA := strictOrderWhileSecretRequest[uniqueKey][req.Order-1]
+		previousNodeEOA := strictOrder[req.Order-1]
 		log.Printf("🔍 Checking if previous node's secret was received from EOA %s", previousNodeEOA)
 
 		// Check if we received the previous node's secret via broadcast

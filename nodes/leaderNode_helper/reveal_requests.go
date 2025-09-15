@@ -7,7 +7,7 @@ import (
 	"log"
 	"math/big"
 	"os"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -24,20 +24,19 @@ type SigRS struct {
 	S [32]byte
 }
 
-// Tracks EOAs that have been sent requests per round
+// Tracks EOAs that have been sent requests per round - protected with mutex
 var revealRequestStatus = make(map[string][]string)
+var revealRequestStatusMu sync.RWMutex
 
-// Variables for monitoring failToSubmitS condition
-var (
-	failToSubmitSMonitoringActive bool
-	failToSubmitSMonitoringTimer  *time.Timer
-	requestToSubmitSTimestamp     *big.Int
-	lastSubmitSTimestamp          *big.Int
-)
+// Variables for monitoring failToSubmitS condition - using atomic for thread safety
+var failToSubmitSMonitoringActive int32 // 0 = false, 1 = true
+var failToSubmitSMonitoringTimer *time.Timer
+var lastSubmitSTimestamp *big.Int
+var timestampMu sync.RWMutex // Protect big.Int pointers
 
 // StartSecretValueRequests initializes the secret value request process for a given round
 func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping StartSecretValueRequests.")
 		return
 	}
@@ -57,8 +56,8 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 
 	// Initialize reveal request status for the round if not already done
-	if _, exists := revealRequestStatus[uniqueKey]; !exists {
-		revealRequestStatus[uniqueKey] = []string{}
+	if _, exists := GetRevealRequestStatus(uniqueKey); !exists {
+		SetRevealRequestStatus(uniqueKey, []string{})
 	}
 
 	// Send the request to the first node in the reveal order
@@ -130,12 +129,14 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 		}()
 
 		// Mark this EOA as requested
-		revealRequestStatus[uniqueKey] = append(revealRequestStatus[uniqueKey], regularEoa)
+		currentStatus, _ := GetRevealRequestStatus(uniqueKey)
+		currentStatus = append(currentStatus, regularEoa)
+		SetRevealRequestStatus(uniqueKey, currentStatus)
 	}
 }
 
 func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
-	SecretRequestSentForWhichRound = CurrentRound
+	SetSecretRequestSentForWhichRound(GetCurrentRound())
 	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := prepareArgumentsForRequestToSubmitS(round, trialNum)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
@@ -252,7 +253,7 @@ func PackIndices(indices []*big.Int) *big.Int {
 
 // handleSecretValueResponse processes a response and sends the next request if applicable
 func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, eoa string) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping HandleSecretValueResponse.")
 		return
 	}
@@ -273,8 +274,9 @@ func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclien
 	}
 
 	// Check which node is next in the reveal order
+	currentStatus, _ := GetRevealRequestStatus(uniqueKey)
 	for order, eoa := range roundRevealData.OrderedNodes {
-		if !contains(revealRequestStatus[uniqueKey], eoa) {
+		if !contains(currentStatus, eoa) {
 			log.Printf("🎯 Next node in reveal order: %s (order %d) for round %s with trail %s", eoa, order, round, trialNum)
 			for _, node := range nodes {
 				if node.EOAAddress == eoa {
@@ -323,20 +325,18 @@ func contains(slice []string, item string) bool {
 // StartFailToSubmitSMonitoring starts monitoring for failToSubmitS condition
 // Should be called when requestToSubmitS transaction is confirmed
 func StartFailToSubmitSMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, requestTimestamp *big.Int) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping StartFailToSubmitSMonitoring.")
 		return
 	}
 
-	if failToSubmitSMonitoringActive {
+	if GetFailToSubmitSMonitoringActive() {
 		log.Printf("FailToSubmitS monitoring already active for round %s", round)
 		return
 	}
 
-	// Set the initial timestamp - either requestToSubmitS timestamp or last submitS timestamp
-	requestToSubmitSTimestamp = requestTimestamp
-	if lastSubmitSTimestamp == nil {
-		lastSubmitSTimestamp = requestTimestamp
+	if GetLastSubmitSTimestamp() == nil {
+		SetLastSubmitSTimestamp(requestTimestamp)
 	}
 
 	onChainSubmissionPeriodPerOperator := big.NewInt(40)
@@ -346,30 +346,30 @@ func StartFailToSubmitSMonitoring(fallbackEthClient *fallback_ethclient.Fallback
 // startMonitoringWithPeriod starts the actual monitoring with the given period
 func startMonitoringWithPeriod(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, period *big.Int) {
 	// Calculate deadline: s_previousSSubmitTimestamp + s_onChainSubmissionPeriodPerOperator
-	deadline := new(big.Int).Add(lastSubmitSTimestamp, period)
+	deadline := new(big.Int).Add(GetLastSubmitSTimestamp(), period)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
 	now := time.Now()
 	duration := deadlineTime.Sub(now)
 
-	failToSubmitSMonitoringActive = true
+	SetFailToSubmitSMonitoringActive(true)
 
 	log.Printf("Starting failToSubmitS monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 	log.Printf("Parameters - lastSubmitSTimestamp: %v, onChainSubmissionPeriodPerOperator: %v",
-		lastSubmitSTimestamp, period)
+		GetLastSubmitSTimestamp(), period)
 
 	// Set timer to call the function when deadline is reached
 	failToSubmitSMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToSubmitS", round)
 		callFailToSubmitS(fallbackEthClient, round, trialNum)
-		failToSubmitSMonitoringActive = false
+		SetFailToSubmitSMonitoringActive(false)
 	})
 }
 
 // StopFailToSubmitSMonitoring stops the monitoring
 func StopFailToSubmitSMonitoring(round string, trialNum string) {
-	if !failToSubmitSMonitoringActive {
+	if !GetFailToSubmitSMonitoringActive() {
 		return
 	}
 
@@ -378,18 +378,18 @@ func StopFailToSubmitSMonitoring(round string, trialNum string) {
 		failToSubmitSMonitoringTimer = nil
 	}
 
-	failToSubmitSMonitoringActive = false
+	SetFailToSubmitSMonitoringActive(false)
 	log.Printf("Stopped failToSubmitS monitoring for round %s", round)
 }
 
 // UpdateLastSubmitSTimestamp updates the timestamp when a submitS event is received
 // This should be called when SSubmitted event is received
 func UpdateLastSubmitSTimestamp(newTimestamp *big.Int, round string, trialNum string) {
-	lastSubmitSTimestamp = newTimestamp
+	SetLastSubmitSTimestamp(newTimestamp)
 	log.Printf("Updated lastSubmitSTimestamp to %v for round %s", newTimestamp, round)
 
 	// If monitoring is active, restart it with the new timestamp
-	if failToSubmitSMonitoringActive {
+	if GetFailToSubmitSMonitoringActive() {
 		log.Printf("Restarting failToSubmitS monitoring with updated timestamp")
 		StopFailToSubmitSMonitoring(round, trialNum)
 
@@ -453,12 +453,11 @@ func ResetLeaderMonitoringState(round string, trialNum string) {
 	StopFailToSubmitSMonitoring(round, trialNum)
 
 	// Reset secret submission monitoring timestamps
-	requestToSubmitSTimestamp = nil
-	lastSubmitSTimestamp = nil
+	SetLastSubmitSTimestamp(nil)
 
 	// Reset reveal request status for the round
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	delete(revealRequestStatus, uniqueKey)
+	DeleteRevealRequestStatus(uniqueKey)
 
 	// Call COS and CVS monitoring reset from acceptCommit.go
 	ResetCosAndCvsMonitoringState(round, trialNum)

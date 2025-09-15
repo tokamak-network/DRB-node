@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"os"
 	"strconv"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -18,7 +18,10 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+// Global variables with mutex protection for thread safety
 var CvOnChain = make(map[string]bool)
+var CvOnChainMu sync.RWMutex
+
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
 func MonitorCommits(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
@@ -44,7 +47,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 	}
 
 	for _, round := range roundsToProcess {
-		if atomic.LoadInt32(&Halted) == 1 {
+		if GetHalted() {
 			log.Println("System is halted. Skipping checkRoundsForCompletion.")
 			return
 		}
@@ -86,7 +89,8 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 
 			secrets = append(secrets, commitData.SecretValue[:])
 			// if Cv values are on-chain, than check this condition
-			if CvOnChain[uniqueKey] {
+			cvOnChain, _ := GetCvOnChain(uniqueKey)
+			if cvOnChain {
 				indices := GetIndices()
 				if index < len(indices) && int64(i) <= indices[index].Int64() {
 					if int64(i) == indices[index].Int64() {
@@ -123,7 +127,8 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 			notOnChain := !secretsOnChain[round.UniqueKey]
 			secretsOnChainMu.RUnlock()
 			if notOnChain {
-				if !CvOnChain[uniqueKey] {
+				cvOnChain, _ := GetCvOnChain(uniqueKey)
+				if !cvOnChain {
 					err = generateRandomNumberTransaction(fallbackEthClient, round.Round, round.TrialNum, secrets, vs, rs, ss)
 				} else {
 					err = generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient, round.Round, round.TrialNum, secrets, vs, rs, ss)
@@ -428,12 +433,12 @@ func completeRound(round string, trialNum string) error {
 		return err
 	}
 
-	if RoundsData == nil {
-		RoundsData = make(map[string]RoundData)
+	data, exists := GetRoundData(round)
+	if !exists {
+		data = RoundData{}
 	}
-	data := RoundsData[round]
 	data.RandomNumber = true
-	RoundsData[round] = data
+	SetRoundData(round, data)
 
 	return nil
 }

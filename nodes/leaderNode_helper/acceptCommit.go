@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -26,23 +27,35 @@ import (
 )
 
 var CommitMu sync.Mutex
-var Execution bool
 
-// var ActivatedOperator []string
+// Atomic variables for thread safety
+var Execution int32 // 0 = false, 1 = true
+var Halted int32    // 0 = false, 1 = true
 
-var Halted int32 // 0 = false, 1 = true
+// Monitoring active flags - using atomic for thread safety
+var RequestedToSubmitCoMonitoringActive int32 // 0 = false, 1 = true
+var RequestedToSubmitCvMonitoringActive int32 // 0 = false, 1 = true
+var RequestToSubmitCvMonitoringActive int32   // 0 = false, 1 = true
 
-// Add new variables for RequestedToSubmitCo monitoring
-var RequestedToSubmitCoMonitoringActive bool
+// Timer variables (already safe as they're pointers)
 var RequestedToSubmitCoMonitoringTimer *time.Timer
-
-// Add new variables for RequestedToSubmitCv monitoring
-var RequestedToSubmitCvMonitoringActive bool
 var RequestedToSubmitCvMonitoringTimer *time.Timer
-
-// Add new variables for RequestToSubmitCv monitoring (automatic request)
-var RequestToSubmitCvMonitoringActive bool
 var RequestToSubmitCvMonitoringTimer *time.Timer
+
+// In case last SSubmitted event also get's emmitted with Status event and curState is IN_PROGRESS then CurrentRound vairable will not be consistent
+// Note: SecretRequestSentForWhichRound, CurrentRound, CurrentTrial, and Req are now handled with atomic operations
+// String variables - using atomic with unsafe.Pointer
+var SecretRequestSentForWhichRound unsafe.Pointer // *string
+var CurrentRound unsafe.Pointer                   // *string
+var CurrentTrial unsafe.Pointer                   // *string
+
+// Map variables with mutex protection
+var RoundsData map[string]RoundData
+var RoundsDataMu sync.RWMutex
+
+// Req is a struct so it needs mutex protection
+var Req RandomRequest
+var ReqMu sync.RWMutex
 
 type RandomRequest struct {
 	Round     *big.Int
@@ -54,14 +67,6 @@ type RoundData struct {
 	MerkleRoot   bool
 	RandomNumber bool
 }
-
-var RoundsData map[string]RoundData
-
-// In case last SSubmitted event also get's emmitted with Status event and curState is IN_PROGRESS then CurrentRound vairable will not be consistent
-var SecretRequestSentForWhichRound string
-var CurrentRound string
-var CurrentTrial string
-var Req RandomRequest
 
 type LeaderCommitData struct {
 	Round                 string            `json:"round"`
@@ -263,7 +268,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 }
 
 func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32]byte, index *big.Int) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
 	}
@@ -271,7 +276,7 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 	intValue := int(index.Int64())
 	regularNodeAddress := eth.ActivatedOperators[intValue]
 
-	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(SecretRequestSentForWhichRound, regularNodeAddress.Hex(), regularNodeAddress.Hex())
+	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(GetSecretRequestSentForWhichRound(), regularNodeAddress.Hex(), regularNodeAddress.Hex())
 	if err != nil {
 		log.Printf("Failed to get leadercommit data from database by round and eoaAddress %v", err)
 	}
@@ -287,23 +292,23 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 	}
 
 	// Broadcast the secret value to all activated regular nodes
-	ReliableBroadCastSSync(libp2putils.HostInstance, SecretRequestSentForWhichRound, trialNum.String(), regularNodeAddress.Hex(), secret)
+	ReliableBroadCastSSync(libp2putils.HostInstance, GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex(), secret)
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
-	CurrentRound = round.String()
-	CurrentTrial = trialNum.String()
+	SetCurrentRound(round.String())
+	SetCurrentTrial(trialNum.String())
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 
 	// Reset leader monitoring state for new round or trail
 	ResetLeaderMonitoringState(round.String(), trialNum.String())
-	req := RandomRequest{
+	SetReq(RandomRequest{
 		Round:     round,
 		TrialNum:  trialNum,
 		StartTime: blockTimestamp,
 		State:     state,
-	}
+	})
 	if state.Cmp(big.NewInt(1)) == 0 {
 		// Set Halted to 0 to resume the round
 		atomic.StoreInt32(&Halted, 0)
@@ -315,26 +320,25 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
-		Req = req
 		// Update the activated operators
 		eth.UpdateActivatedOperators(fallbackEthClient)
 		// Reset the indices for the new round
 		ResetIndicesForNewRound()
-		log.Printf("Reset Indices array for new round %s with trail %s", CurrentRound, trialNum.String())
+		log.Printf("Reset Indices array for new round %s with trail %s", GetCurrentRound(), GetCurrentTrial())
 
 		// Start monitoring for automatic requestToSubmitCv
 		startRequestToSubmitCvMonitoring(fallbackEthClient, round.String(), trialNum.String(), blockTimestamp)
 
-		Execution = true
+		SetExecution(true)
 	}
 	if state.Cmp(big.NewInt(2)) == 0 {
-		if RoundsData == nil {
-			RoundsData = make(map[string]RoundData)
+		data, exists := GetRoundData(uniqueKey)
+		if !exists {
+			data = RoundData{}
 		}
-		data := RoundsData[uniqueKey]
 		data.RandomNumber = true
-		RoundsData[uniqueKey] = data
-		Execution = false
+		SetRoundData(uniqueKey, data)
+		SetExecution(false)
 
 		// Delete round and trial data from database
 		err := database.DeleteOldRoundDataForLeaderNode(round.String())
@@ -345,11 +349,11 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 
 	if state.Cmp(big.NewInt(3)) == 0 {
 		// Set Execution to false to stop the round
-		Execution = false
+		SetExecution(false)
 		// Set Halted to 1 to halt the round
-		atomic.StoreInt32(&Halted, 1)
+		SetHalted(true)
 		// Delete round and trial data from database
-		database.DeleteRoundTrialDataForLeaderNode(CurrentRound, trialNum.String())
+		database.DeleteRoundTrialDataForLeaderNode(GetCurrentRound(), GetCurrentTrial())
 		// resume the round
 		resuming(fallbackEthClient)
 	}
@@ -453,7 +457,7 @@ func resuming(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 }
 
 func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int, trialNum *big.Int, cos [32]byte, activatedOperatorIndex *big.Int) error {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping processCOS.")
 		return nil
 	}
@@ -543,7 +547,7 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 }
 
 func processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte, activatedOperatorIndex *big.Int) error {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping processCVS.")
 		return nil
 	}
@@ -664,7 +668,7 @@ func AllCvsReceivedUnlocked(uniqueKey string) bool {
 
 // Add new function to process RequestedToSubmitCo event
 func processRequestedToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping processRequestedToSubmitCo.")
 		return
 	}
@@ -677,13 +681,13 @@ func processRequestedToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRP
 
 // Add new function to process RequestedToSubmitCv event
 func processRequestedToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping processRequestedToSubmitCv.")
 		return
 	}
 
 	// Stop the requestToSubmitCv monitoring since the request has been made
-	if RequestToSubmitCvMonitoringActive {
+	if GetRequestToSubmitCvMonitoringActive() {
 		log.Printf("RequestedToSubmitCv event received, stopping requestToSubmitCv monitoring for round %s", round.String())
 		stopRequestToSubmitCvMonitoring()
 	}
@@ -699,7 +703,7 @@ func startFailToSubmitCoMonitoring(fallbackEthClient *fallback_ethclient.Fallbac
 		return
 	}
 
-	RequestedToSubmitCoMonitoringActive = true
+	SetRequestedToSubmitCoMonitoringActive(true)
 
 	// Get s_onChainSubmissionPeriod from contract
 	onChainSubmissionPeriod := big.NewInt(120)
@@ -724,7 +728,7 @@ func startFailToSubmitCoMonitoring(fallbackEthClient *fallback_ethclient.Fallbac
 	RequestedToSubmitCoMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToSubmitCo", round)
 		callFailToSubmitCo(fallbackEthClient, round, trialNum)
-		RequestedToSubmitCoMonitoringActive = false
+		SetRequestedToSubmitCoMonitoringActive(false)
 	})
 }
 
@@ -734,7 +738,7 @@ func stopFailToSubmitCoMonitoring() {
 		RequestedToSubmitCoMonitoringTimer.Stop()
 		RequestedToSubmitCoMonitoringTimer = nil
 	}
-	RequestedToSubmitCoMonitoringActive = false
+	SetRequestedToSubmitCoMonitoringActive(false)
 	log.Printf("Stopped failToSubmitCo monitoring")
 }
 
@@ -787,7 +791,7 @@ func callFailToSubmitCo(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 // Add function to check if all COS values are received and stop monitoring
 func checkAndStopFailToSubmitCoMonitoring(round string, trialNum string) {
 	// Only check if monitoring is active for this round/trial
-	if !RequestedToSubmitCoMonitoringActive {
+	if !GetRequestedToSubmitCoMonitoringActive() {
 		return
 	}
 
@@ -801,7 +805,7 @@ func checkAndStopFailToSubmitCoMonitoring(round string, trialNum string) {
 // Add function to check if all CVS values are received and stop monitoring
 func checkAndStopFailToSubmitCvMonitoring(round string, trialNum string) {
 	// Only check if monitoring is active for this round/trial
-	if !RequestedToSubmitCvMonitoringActive {
+	if !GetRequestedToSubmitCvMonitoringActive() {
 		return
 	}
 
@@ -819,7 +823,7 @@ func startFailToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.Fallbac
 		return
 	}
 
-	RequestedToSubmitCvMonitoringActive = true
+	SetRequestedToSubmitCvMonitoringActive(true)
 
 	// Get s_onChainSubmissionPeriod from contract (60 seconds as specified)
 	onChainSubmissionPeriod := big.NewInt(60)
@@ -838,7 +842,7 @@ func startFailToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.Fallbac
 	RequestedToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("⚠️ Deadline reached for round %s, calling failToSubmitCv", round)
 		callFailToSubmitCv(fallbackEthClient, round, trialNum)
-		RequestedToSubmitCvMonitoringActive = false
+		SetRequestedToSubmitCvMonitoringActive(false)
 	})
 }
 
@@ -848,7 +852,7 @@ func stopFailToSubmitCvMonitoring() {
 		RequestedToSubmitCvMonitoringTimer.Stop()
 		RequestedToSubmitCvMonitoringTimer = nil
 	}
-	RequestedToSubmitCvMonitoringActive = false
+	SetRequestedToSubmitCvMonitoringActive(false)
 	log.Printf("Stopped failToSubmitCv monitoring")
 }
 
@@ -910,28 +914,28 @@ func ResetCosAndCvsMonitoringState(round string, trialNum string) {
 	stopRequestToSubmitCvMonitoring()
 
 	// Reset COS monitoring variables
-	RequestedToSubmitCoMonitoringActive = false
+	SetRequestedToSubmitCoMonitoringActive(false)
 	if RequestedToSubmitCoMonitoringTimer != nil {
 		RequestedToSubmitCoMonitoringTimer.Stop()
 		RequestedToSubmitCoMonitoringTimer = nil
 	}
 
 	// Reset CVS monitoring variables (failToSubmitCv)
-	RequestedToSubmitCvMonitoringActive = false
+	SetRequestedToSubmitCvMonitoringActive(false)
 	if RequestedToSubmitCvMonitoringTimer != nil {
 		RequestedToSubmitCvMonitoringTimer.Stop()
 		RequestedToSubmitCvMonitoringTimer = nil
 	}
 
 	// Reset requestToSubmitCv monitoring variables
-	RequestToSubmitCvMonitoringActive = false
+	SetRequestToSubmitCvMonitoringActive(false)
 	if RequestToSubmitCvMonitoringTimer != nil {
 		RequestToSubmitCvMonitoringTimer.Stop()
 		RequestToSubmitCvMonitoringTimer = nil
 	}
 
 	// Reset secret request tracking variable
-	SecretRequestSentForWhichRound = ""
+	SetSecretRequestSentForWhichRound("")
 
 	log.Printf("Reset COS and CVS monitoring state for round %s", round)
 }
@@ -983,7 +987,7 @@ func startRequestToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.Fall
 		return
 	}
 
-	RequestToSubmitCvMonitoringActive = true
+	SetRequestToSubmitCvMonitoringActive(true)
 
 	// Calculate deadline: startTime + s_offChainSubmissionPeriod + s_requestOrSubmitOrFailDecisionPeriod
 	s_offChainSubmissionPeriod := big.NewInt(40)
@@ -1006,7 +1010,7 @@ func startRequestToSubmitCvMonitoring(fallbackEthClient *fallback_ethclient.Fall
 	RequestToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("⚠️ Deadline reached for round %s, calling requestToSubmitCv", round)
 		callRequestToSubmitCv(fallbackEthClient, round, trialNum)
-		RequestToSubmitCvMonitoringActive = false
+		SetRequestToSubmitCvMonitoringActive(false)
 	})
 }
 
@@ -1016,13 +1020,13 @@ func stopRequestToSubmitCvMonitoring() {
 		RequestToSubmitCvMonitoringTimer.Stop()
 		RequestToSubmitCvMonitoringTimer = nil
 	}
-	RequestToSubmitCvMonitoringActive = false
+	SetRequestToSubmitCvMonitoringActive(false)
 	log.Printf("Stopped requestToSubmitCv monitoring")
 }
 
 // Add function to call requestToSubmitCv when regular nodes haven't submitted CVS
 func callRequestToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping callRequestToSubmitCv.")
 		return
 	}
@@ -1041,7 +1045,7 @@ func callRequestToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 	log.Printf("Missing CVS from operators: %v", missingOperators)
 
 	// Implement the same logic as handleMissingCV from leaderNode.go
-	CvOnChain[uniqueKey] = true
+	SetCvOnChain(uniqueKey, true)
 	activatedOperators := eth.ActivatedOperators
 	i := big.NewInt(0)
 	for _, op := range activatedOperators {

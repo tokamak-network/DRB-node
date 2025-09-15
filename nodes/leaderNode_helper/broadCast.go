@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -25,6 +24,7 @@ import (
 
 var broadcastMutex sync.Mutex
 var activeBroadcasts = make(map[string]*utils.BroadcastTracker)
+var activeBroadcastsMu sync.RWMutex
 
 // getLeaderPrivateKey retrieves the leader's private key from environment
 func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
@@ -104,17 +104,13 @@ func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAd
 		return false
 	}
 
-	broadcastMutex.Lock()
-	activeBroadcasts[messageID] = tracker
-	broadcastMutex.Unlock()
+	SetActiveBroadcast(messageID, tracker)
 
 	// 🔄 Perform synchronous broadcast (wait for completion)
 	completed := performReliableBroadcastSync(h, tracker, "secret")
 
 	// Clean up from memory
-	broadcastMutex.Lock()
-	delete(activeBroadcasts, messageID)
-	broadcastMutex.Unlock()
+	DeleteActiveBroadcast(messageID)
 
 	return completed
 }
@@ -146,9 +142,7 @@ func ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddr
 		return
 	}
 
-	broadcastMutex.Lock()
-	activeBroadcasts[messageID] = tracker
-	broadcastMutex.Unlock()
+	SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
 	go performReliableBroadcast(h, tracker, "cos")
@@ -181,9 +175,7 @@ func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddr
 		return
 	}
 
-	broadcastMutex.Lock()
-	activeBroadcasts[messageID] = tracker
-	broadcastMutex.Unlock()
+	SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
 	go performReliableBroadcast(h, tracker, "cvs")
@@ -191,10 +183,8 @@ func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddr
 
 // performReliableBroadcast handles the actual broadcasting with retry logic
 func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broadcastType string) {
-	if atomic.LoadInt32(&Halted) == 1 {
-		broadcastMutex.Lock()
-		delete(activeBroadcasts, tracker.MessageID)
-		broadcastMutex.Unlock()
+	if GetHalted() {
+		DeleteActiveBroadcast(tracker.MessageID)
 		log.Println("System is halted. Skipping processCVS.")
 		return
 	}
@@ -312,14 +302,12 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 	}
 
 	// Clean up from memory
-	broadcastMutex.Lock()
-	delete(activeBroadcasts, tracker.MessageID)
-	broadcastMutex.Unlock()
+	DeleteActiveBroadcast(tracker.MessageID)
 }
 
 // performReliableBroadcastSync handles broadcasting synchronously and returns completion status
 func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, broadcastType string) bool {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping broadcast.")
 		return false
 	}
@@ -446,14 +434,14 @@ func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, 
 
 // HandleAcknowledgment processes acknowledgments from regular nodes
 func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping HandleAcknowledgment.")
 		return
 	}
 	broadcastMutex.Lock()
 	defer broadcastMutex.Unlock()
 
-	tracker, exists := activeBroadcasts[ack.MessageID]
+	tracker, exists := GetActiveBroadcast(ack.MessageID)
 	if !exists {
 		log.Printf("Received acknowledgment for unknown message ID: %s", ack.MessageID)
 		return

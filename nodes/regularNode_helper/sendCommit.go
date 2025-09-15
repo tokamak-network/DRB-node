@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -32,13 +33,21 @@ type CommitData struct {
 	Sign            map[string]string `json:"sign"`
 }
 
-var Execution bool
-var ActivatedOperator []string
-var Halted int32 // 0 = false, 1 = true
+// Atomic variables for thread safety
+var Execution int32 // 0 = false, 1 = true
+var Halted int32    // 0 = false, 1 = true
 
-func MonitorCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
-	receiveCommitRequest(fallbackEthClient)
-}
+// ActivatedOperator slice with mutex protection
+var ActivatedOperator []string
+var ActivatedOperatorMu sync.RWMutex
+
+// String variables - using atomic with unsafe.Pointer
+var CurrentRound unsafe.Pointer    // *string
+var CurrentTrialNum unsafe.Pointer // *string
+
+// Map variables with mutex protection
+var RoundsData map[string]RoundData
+var RoundsDataMu sync.RWMutex
 
 var StartTime *big.Int
 
@@ -47,28 +56,26 @@ type RoundData struct {
 	RandomNumber bool
 }
 
-var RoundsData map[string]RoundData
-
-var CurrentRound string
-
-// Add new variables for monitoring
+// Add new variables for monitoring with atomic protection
 var (
-	leaderMonitoringActive bool
-	monitoringTimer        *time.Timer
-	// Event tracking variables
-	merkleRootSubmittedEventEmitted bool
-	CurrentTrialNum                 string
-	// New variables for merkle root monitoring
-	merkleRootMonitoringTimer         *time.Timer
-	// Variables for request to submit S or generate random number monitoring
-
-	requestToSubmitSOrGenerateRandomNumberMonitoringTimer  *time.Timer
-	merkleRootSubmittedTOrRequestedCvTime                  *big.Int
+	leaderMonitoringActive                                int32 // 0 = false, 1 = true
+	monitoringTimer                                       *time.Timer
+	merkleRootSubmittedEventEmitted                       int32 // 0 = false, 1 = true
+	merkleRootMonitoringTimer                             *time.Timer
+	requestToSubmitSOrGenerateRandomNumberMonitoringTimer *time.Timer
+	merkleRootSubmittedTOrRequestedCvTime                 *big.Int
+	merkleRootTimeMu                                      sync.RWMutex // Protect big.Int pointer
 )
 
 var cvRequestIndices []*big.Int
+var cvRequestIndicesMu sync.RWMutex
+
 var submittedCvIndices map[string]map[string]bool // Track which indices have submitted CV values
 var submittedCvIndicesMutex sync.RWMutex          // Protect access to submittedCvIndices
+
+func MonitorCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+	receiveCommitRequest(fallbackEthClient)
+}
 
 func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	contractAddress := os.Getenv("CONTRACT_ADDRESS")
@@ -190,9 +197,9 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 							eventData.Round, eventData.TrialNum, eventData.MerkleRoot, eventData.Round.String())
 
 						// Mark Merkle root as submitted and stop leader monitoring
-						merkleRootSubmittedEventEmitted = true
+						SetMerkleRootSubmittedEventEmitted(true)
 						blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
-						merkleRootSubmittedTOrRequestedCvTime = big.NewInt(int64(blockTimestamp))
+						MerkleRootSubmittedTOrRequestedCvTime(big.NewInt(int64(blockTimestamp)))
 
 						StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 						StopFailToSubmitMerkleRootAfterDisputeMonitoring(eventData.Round.String(), eventData.TrialNum.String())
@@ -239,7 +246,7 @@ func receiveCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 						// Stop request to submit S or generate random number monitoring when RequestedToSubmitSFromIndexK event is received
 						StopRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 						blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
-						merkleRootSubmittedTOrRequestedCvTime = big.NewInt(int64(blockTimestamp))
+						MerkleRootSubmittedTOrRequestedCvTime(big.NewInt(int64(blockTimestamp)))
 						if err != nil {
 							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
 							continue
@@ -330,8 +337,9 @@ func checkAllCVsSubmittedOnChain(round string, trialNum string) bool {
 	}
 
 	// Check if all requested indices have submitted their CV values
+	indices := GetCvRequestIndices()
 	allSubmitted := true
-	for _, requestedIndex := range cvRequestIndices {
+	for _, requestedIndex := range indices {
 		if !submittedCvIndices[uniqueKey][requestedIndex.String()] {
 			allSubmitted = false
 			break
@@ -365,11 +373,11 @@ func processSubmittedSecretRequest(fallbackEthClient *fallback_ethclient.Fallbac
 			indexInRevealOrder = i
 		}
 	}
-
+	eoaAddress := GetRegularNodeEOA()
 	if indexInRevealOrder+1 < len(revealOrder) {
 		if indexInRevealOrder+1 < len(orderedNodes) {
 			regularEoaAddress := orderedNodes[indexInRevealOrder+1]
-			if regularNodeEOA == regularEoaAddress {
+			if eoaAddress == regularEoaAddress {
 				fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, TrialNum: %v, EOA: %v\n", round.String(), trialNum.String(), regularEoaAddress)
 				submitS(fallbackEthClient, round.String(), trialNum.String())
 			}
@@ -425,7 +433,7 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	}
 
 	regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
-	if regularNodeEOA == regularEoaAddress {
+	if GetRegularNodeEOA() == regularEoaAddress {
 		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", round, regularEoaAddress)
 		submitS(fallbackEthClient, round.String(), trialNum.String())
 	}
@@ -489,13 +497,13 @@ func processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
 		return
 	}
 	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
-	if RoundsData == nil {
-		RoundsData = make(map[string]RoundData)
-	}
 	uniqueKey := utils.GetUniqueKey(Round.String(), TrialNum.String())
-	roundData := RoundsData[uniqueKey]
+	roundData, exists := GetRoundData(uniqueKey)
+	if !exists {
+		roundData = RoundData{}
+	}
 	roundData.MerkleRoot = true
-	RoundsData[uniqueKey] = roundData
+	SetRoundData(uniqueKey, roundData)
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
@@ -506,53 +514,63 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	ResetMonitoringState(round.String(), trialNum.String())
 
 	// Store the current round and trialNum from Status event
-	CurrentTrialNum = trialNum.String()
+	SetCurrentTrialNum(trialNum.String())
 
 	eth.UpdateActivatedOperators(fallbackEthClient)
-	CurrentRound = round.String()
+	// Convert []common.Address to []string for SetActivatedOperator
+	stringAddrs := make([]string, len(eth.ActivatedOperators))
+	for i, addr := range eth.ActivatedOperators {
+		stringAddrs[i] = addr.Hex()
+	}
+	SetActivatedOperator(stringAddrs)
+	SetCurrentRound(round.String())
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 
 	if state.Cmp(big.NewInt(1)) == 0 {
 		// Set Halted to 0 to resume the round
 		atomic.StoreInt32(&Halted, 0)
 		// Delete old round data except current round from database
-		err := database.DeleteOldRoundDataForRegularNode(CurrentRound)
+		err := database.DeleteOldRoundDataForRegularNode(round.String())
 		if err != nil {
 			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
 		}
 
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
-		ActivatedOperator, _ = FetchActivatedOperators(fallbackEthClient, roundStr)
-		Execution = true
+		operators := FetchActivatedOperators(fallbackEthClient, roundStr)
+		SetActivatedOperator(operators)
+		SetExecution(true)
 		log.Printf("Execution started for round %s", roundStr)
 
 		// Start leader monitoring for the new round using block timestamp
 		StartLeaderMonitoring(fallbackEthClient, blockTimestamp, round.String(), trialNum.String())
-		go AllCosReceivedUnlocked(ActivatedOperator, round.String(), trialNum.String())
+		go AllCosReceivedUnlocked(GetActivatedOperator(), round.String(), trialNum.String())
 	}
 
 	if state.Cmp(big.NewInt(2)) == 0 {
 		// Delete old round data except current round from database
-		err := database.DeleteOldRoundDataForRegularNode(CurrentRound)
+		err := database.DeleteOldRoundDataForRegularNode(round.String())
 		if err != nil {
 			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
 		}
 		// Update in-memory round data
-		roundData := RoundsData[uniqueKey]
+		roundData, exists := GetRoundData(uniqueKey)
+		if !exists {
+			roundData = RoundData{}
+		}
 		roundData.RandomNumber = true
-		RoundsData[uniqueKey] = roundData
-		Execution = false
+		SetRoundData(uniqueKey, roundData)
+		SetExecution(false)
 		log.Printf("Execution stopped for round %s", roundStr)
 	}
 
 	if state.Cmp(big.NewInt(3)) == 0 {
 		// Delete round and trial data from database
-		database.DeleteRoundTrialDataForRegularNode(CurrentRound, trialNum.String())
+		database.DeleteRoundTrialDataForRegularNode(GetCurrentRound(), trialNum.String())
 		// resume the round
 		atomic.StoreInt32(&Halted, 1)
 		// resuming(fallbackEthClient)
-		Execution = false
+		SetExecution(false)
 	}
 
 	// Update rounds data
@@ -560,10 +578,10 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		RoundsData = make(map[string]RoundData)
 	}
 
-	RoundsData[uniqueKey] = RoundData{
+	SetRoundData(uniqueKey, RoundData{
 		MerkleRoot:   false,
 		RandomNumber: false,
-	}
+	})
 }
 
 func AllCosReceivedUnlocked(activatedOperator []string, round string, trialNum string) {
@@ -612,13 +630,10 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	}
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 
-	acitvatedOps := ActivatedOperator
+	acitvatedOps := GetActivatedOperator()
 	indices := unpackIndices(packedIndices)
 	// Copy indices by value (deep copy)
-	cvRequestIndices = make([]*big.Int, len(indices))
-	for i, index := range indices {
-		cvRequestIndices[i] = new(big.Int).Set(index)
-	}
+	SetCvRequestIndices(indices)
 	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
 
 	if err != nil {
@@ -683,7 +698,7 @@ func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 	}
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 
-	acitvatedOps := ActivatedOperator
+	acitvatedOps := GetActivatedOperator()
 	indices := unpackIndicesWithLength(packedIndices, indicesLength)
 	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
 
@@ -777,18 +792,18 @@ func findEOAAddress(indices []*big.Int, activatedOps []string, eoaAddress string
 	return false, nil
 }
 
-func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string) ([]string, error) {
+func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string) []string {
 	var result []string
 	activatedOperators, err := eth.GetActivatedOperators(fallbackEthClient)
 	if err != nil {
 		log.Printf("Error fetching the activated operators %v", err)
-		return result, err
+		return result
 	}
 	strAddresses := make([]string, len(activatedOperators))
 	for i, addr := range activatedOperators {
 		strAddresses[i] = addr.Hex()
 	}
-	return strAddresses, nil
+	return strAddresses
 }
 
 // StartLeaderMonitoring starts monitoring the leader for the current round
@@ -797,7 +812,7 @@ func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 		log.Println("System is halted. Skipping StartLeaderMonitoring.")
 		return
 	}
-	if leaderMonitoringActive {
+	if GetLeaderMonitoringActive() {
 		log.Printf("Leader monitoring already active for round %s", round)
 		return
 	}
@@ -807,7 +822,7 @@ func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 		return
 	}
 
-	leaderMonitoringActive = true
+	SetLeaderMonitoringActive(true)
 
 	// Get timing parameters from contract
 	offChainSubmissionPeriod := big.NewInt(80)
@@ -834,13 +849,13 @@ func StartLeaderMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 	monitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToRequestSubmitCVOrSubmitMerkleRoot", round)
 		callFailToRequestSubmitCVOrSubmitMerkleRoot(fallbackEthClient, round, trialNum)
-		leaderMonitoringActive = false
+		SetLeaderMonitoringActive(false)
 	})
 }
 
 // StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring stops the current leader monitoring
 func StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round string, trialNum string) {
-	if !leaderMonitoringActive {
+	if !GetLeaderMonitoringActive() {
 		return
 	}
 
@@ -849,7 +864,7 @@ func StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round string, trialNu
 		monitoringTimer = nil
 	}
 
-	leaderMonitoringActive = false
+	SetLeaderMonitoringActive(false)
 	log.Printf("Stopped leader monitoring for round %s", round)
 }
 
@@ -858,9 +873,9 @@ func ResetMonitoringState(round string, trialNum string) {
 	StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round, trialNum)
 	StopFailToSubmitMerkleRootAfterDisputeMonitoring(round, trialNum)
 	StopRequestToSubmitSOrGenerateRandomNumberMonitoring(round, trialNum)
-	merkleRootSubmittedEventEmitted = false
+	SetMerkleRootSubmittedEventEmitted(false)
 	// requestedToSubmitCvTime = nil
-	merkleRootSubmittedTOrRequestedCvTime = nil
+	MerkleRootSubmittedTOrRequestedCvTime(nil)
 
 	// Use mutex to protect access to submittedCvIndices
 	submittedCvIndicesMutex.Lock()
@@ -944,7 +959,7 @@ func StartMerkleRootMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPC
 		log.Printf("Deadline reached for round %s, checking conditions before calling failToSubmitMerkleRootAfterDispute", round)
 
 		// Check if all CVs have been submitted on-chain and merkle root hasn't been submitted
-		if checkAllCVsSubmittedOnChain(round, trialNum) && !merkleRootSubmittedEventEmitted {
+		if checkAllCVsSubmittedOnChain(round, trialNum) && !GetMerkleRootSubmittedEventEmitted() {
 			log.Printf("All CVs submitted on-chain but merkle root not submitted, calling failToSubmitMerkleRootAfterDispute")
 			callFailToSubmitMerkleRootAfterDispute(fallbackEthClient, round, trialNum)
 		} else {
@@ -1012,13 +1027,13 @@ func callFailToSubmitMerkleRootAfterDispute(fallbackEthClient *fallback_ethclien
 // CheckAndStartMonitoring checks if monitoring should be started and starts it if needed
 func CheckAndStartMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
 	// Check if monitoring is already active
-	if leaderMonitoringActive {
+	if GetLeaderMonitoringActive() {
 		log.Printf("Leader monitoring already active for round %s", round)
 		return
 	}
 
 	// Check if Merkle root has been submitted
-	if merkleRootSubmittedEventEmitted {
+	if GetMerkleRootSubmittedEventEmitted() {
 		log.Printf("Merkle root submitted event already emitted for round %s", round)
 		return
 	}
@@ -1045,7 +1060,7 @@ func StartRequestToSubmitSOrGenerateRandomNumberMonitoring(fallbackEthClient *fa
 	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
 
 	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod
-	deadline := new(big.Int).Add(merkleRootSubmittedTOrRequestedCvTime, offChainSubmissionPeriod)
+	deadline := new(big.Int).Add(GetMerkleRootSubmittedTOrRequestedCvTime(), offChainSubmissionPeriod)
 	operatorDelay := new(big.Int).Mul(offChainSubmissionPeriodPerOperator, activatedOperatorsLength)
 	deadline.Add(deadline, operatorDelay)
 	deadline.Add(deadline, requestOrSubmitOrFailDecisionPeriod)
@@ -1057,7 +1072,7 @@ func StartRequestToSubmitSOrGenerateRandomNumberMonitoring(fallbackEthClient *fa
 
 	log.Printf("Starting request to submit S or generate random number monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 	log.Printf("Parameters - merkleRootSubmittedTime: %v, offChainSubmissionPeriod: %v, offChainSubmissionPeriodPerOperator: %v, activatedOperatorsLength: %v, requestOrSubmitOrFailDecisionPeriod: %v",
-		merkleRootSubmittedTOrRequestedCvTime, offChainSubmissionPeriod, offChainSubmissionPeriodPerOperator, activatedOperatorsLength, requestOrSubmitOrFailDecisionPeriod)
+		GetMerkleRootSubmittedTOrRequestedCvTime(), offChainSubmissionPeriod, offChainSubmissionPeriodPerOperator, activatedOperatorsLength, requestOrSubmitOrFailDecisionPeriod)
 
 	// Set timer to call the function when deadline is reached
 	requestToSubmitSOrGenerateRandomNumberMonitoringTimer = time.AfterFunc(duration, func() {

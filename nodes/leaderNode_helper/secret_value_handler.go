@@ -7,7 +7,6 @@ import (
 	"log"
 	"math/big"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -70,7 +69,7 @@ func SetIndices(indices []*big.Int) {
 // AcceptSecretValue processes and stores secret values sent by regular nodes.
 func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	defer s.Close()
-	if atomic.LoadInt32(&Halted) == 1 {
+	if GetHalted() {
 		log.Println("System is halted. Skipping AcceptSecretValue.")
 		return
 	}
@@ -94,8 +93,8 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 
 	// log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 
-	round := CurrentRound
-	trial := CurrentTrial
+	round := GetCurrentRound()
+	trial := GetCurrentTrial()
 	// log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 	uniqueKey := utils.GetUniqueKey(round, trial)
 	eoaAddress := common.HexToAddress(req.RegularEoaAddress)

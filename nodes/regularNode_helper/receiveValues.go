@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -18,38 +19,24 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-var CosRecevied sync.Map // outer: string, inner: *sync.Map (string->bool)
+// Global variables with atomic/mutex protection for thread safety
+var CosRecevied sync.Map // outer: string, inner: *sync.Map (string->bool) - sync.Map is already thread-safe
 
-// Global variable to store the regular node's EOA address
-var regularNodeEOA string
+// regularNodeEOA string with atomic protection
+var regularNodeEOA unsafe.Pointer // *string
+
+// Private key with mutex protection
 var regularNodePrivateKey *ecdsa.PrivateKey
+var privateKeyMu sync.RWMutex
 
-// SetRegularNodeEOA sets the regular node's EOA address
-func SetRegularNodeEOA(eoa string) {
-	regularNodeEOA = eoa
-}
-
-// SetRegularNodePrivateKey sets the regular node's private key for signing
-func SetRegularNodePrivateKey(privateKey *ecdsa.PrivateKey) {
-	regularNodePrivateKey = privateKey
-}
-
-// getRegularNodeEOA returns the regular node's own EOA address
-func getRegularNodeEOA() string {
-	if regularNodeEOA == "" {
-		log.Printf("Regular node EOA address not set")
-		return ""
-	}
-	return regularNodeEOA
-}
 
 // generates a signature for the acknowledgment
 func generateAcknowledgmentSignature(eoaAddress string) []byte {
-	if regularNodePrivateKey == nil {
+	if GetRegularNodePrivateKey() == nil {
 		log.Printf("Regular node private key not set, cannot sign acknowledgment")
 		return nil
 	}
-	return utils.SignData(eoaAddress, regularNodePrivateKey)
+	return utils.SignData(eoaAddress, GetRegularNodePrivateKey())
 }
 
 // sendAcknowledgment sends an acknowledgment back to the leader
@@ -135,7 +122,7 @@ func HandleCvs(h host.Host, s network.Stream) {
 	log.Printf("Successfully saved CVS data for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
-	eoaAddress := getRegularNodeEOA()
+	eoaAddress := GetRegularNodeEOA()
 	signature := generateAcknowledgmentSignature(eoaAddress)
 
 	ack := utils.AcknowledgmentMessage{
@@ -235,7 +222,7 @@ func HandleCos(h host.Host, s network.Stream) {
 	log.Printf("Successfully saved COS data for round %s with trail %s and EOA %s", message.Round, message.TrialNum, message.EOAAddress)
 
 	// Send acknowledgment
-	eoaAddress := getRegularNodeEOA()
+	eoaAddress := GetRegularNodeEOA()
 	signature := generateAcknowledgmentSignature(eoaAddress)
 
 	ack := utils.AcknowledgmentMessage{
@@ -331,7 +318,7 @@ func HandleSecret(h host.Host, s network.Stream) {
 	log.Printf("Successfully saved secret value for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
-	eoaAddress := getRegularNodeEOA()
+	eoaAddress := GetRegularNodeEOA()
 	signature := generateAcknowledgmentSignature(eoaAddress)
 
 	ack := utils.AcknowledgmentMessage{
