@@ -591,7 +591,7 @@ func isEOAActivatedForRound(fallbackEthClient *fallback_ethclient.FallbackRPCCli
 	for _, operator := range activatedOperators {
 		if operator == eoaAddress {
 			log.Printf("EOA address %s is activated", eoaAddress.Hex())
-			return true, false
+			return false, true
 		}
 	}
 
