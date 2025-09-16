@@ -185,7 +185,6 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		commitData.Sign = req.Sign
 		commitData.SubmitMerkleRootDone = false
 		commitData.RandomNumberGenerated = false
-		log.Printf("Storing CVS and signature for round %s with trail %s EOA %s", round, req.TrialNum, eoaAddress.Hex())
 	}
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
@@ -256,7 +255,6 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 
 	commitData.Cos = req.Cos
 	commitData.CosHex = hex.EncodeToString(req.Cos[:])
-	log.Printf("Storing COS for round %s with trail %s EOA %s", round, trial, eoaAddress.Hex())
 
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, eoaAddress.Hex())
@@ -276,7 +274,6 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		return
 	}
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, eoaAddress.Hex())
 	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, round, trial, eoaAddress, commitData.Cos)
 	// Check if all commits are ready after this COS
 	if !GetMerkleRootSubmitted() && allCommitsReceivedUnlocked(uniqueKey) {
@@ -296,22 +293,6 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		}
 		leaderNode_helper.StartSecretValueRequests(h, fallbackEthClient, round, trial)
 	}
-}
-
-func isMerkleRootSubmitted(uniqueKey string) bool {
-	// Call with commitMu locked or ensure commitMu is locked outside
-	roundMap, exists := utils.GetCommittedNodes(uniqueKey)
-	if !exists || len(roundMap) == 0 {
-		return false
-	}
-
-	// Check any operator to see if SubmitMerkleRootDone is set
-	for _, data := range roundMap {
-		if data.SubmitMerkleRootDone {
-			return true
-		}
-	}
-	return false
 }
 
 func VerifySignatureAndCheckActivation(fallbackEthClient *fallback_ethclient.FallbackRPCClient, req utils.Request, reqType string) bool {
@@ -513,12 +494,13 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 	)
 	if err != nil {
 		log.Printf("Failed to submit Merkle root for round %s with trail %s: %v", roundNum, trialNum, err)
-		atomic.StoreInt32(&merkleRootSubmitted, 0) // Reset flag on failure
+		atomic.StoreInt32(&submittingMerkleRoot, 0) // Reset flag on failure
 		return
 	}
 
 	log.Printf("Successfully submitted Merkle root for round %s with trail %s", roundNum, trialNum)
-	atomic.StoreInt32(&submittingMerkleRoot, 0)
+	atomic.StoreInt32(&merkleRootSubmitted, 1) // Set flag to true
+	atomic.StoreInt32(&submittingMerkleRoot, 0) // Reset flag on success
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
 	roundData, exists := leaderNode_helper.GetRoundData(uniqueKey)
 	if !exists {
@@ -782,7 +764,6 @@ func handleAcknowledgment(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		return
 	}
 
-	log.Printf("Signature verified for acknowledgment from %s", ack.EOAAddress)
 	log.Printf("Received acknowledgment from %s for %s broadcast (message ID: %s, status: %s)",
 		ack.EOAAddress, ack.Type, ack.MessageID, ack.Status)
 
