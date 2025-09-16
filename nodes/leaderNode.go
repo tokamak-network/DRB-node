@@ -49,7 +49,21 @@ func DeleteCosTimerOnce(key string) {
 	delete(cosTimerOnce, key)
 }
 
+// Helper functions for merkleRootSubmitted atomic variable
+func SetMerkleRootSubmitted(value bool) {
+	var val int32
+	if value {
+		val = 1
+	}
+	atomic.StoreInt32(&merkleRootSubmitted, val)
+}
+
+func GetMerkleRootSubmitted() bool {
+	return atomic.LoadInt32(&merkleRootSubmitted) == 1
+}
+
 var submittingMerkleRoot int32 // 0 = false, 1 = true (atomic)
+var merkleRootSubmitted int32  // 0 = false, 1 = true (atomic)
 var commitMu sync.Mutex
 var firstRequest leaderNode_helper.RandomRequest
 
@@ -182,10 +196,9 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		return
 	}
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
 	leaderNode_helper.ReliableBroadCastCVS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cvs)
 	// Check if all commits are ready after this update
-	if !isMerkleRootSubmitted(uniqueKey) && allCommitsReceivedUnlocked(uniqueKey) {
+	if !GetMerkleRootSubmitted() && allCommitsReceivedUnlocked(uniqueKey) {
 		log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", round, req.TrialNum)
 		commitMu.Unlock() // Unlock before calling generateMerkleRoot
 		generateMerkleRoot(fallbackEthClient, round, req.TrialNum)
@@ -266,7 +279,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, eoaAddress.Hex())
 	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, round, trial, eoaAddress, commitData.Cos)
 	// Check if all commits are ready after this COS
-	if !isMerkleRootSubmitted(uniqueKey) && allCommitsReceivedUnlocked(uniqueKey) {
+	if !GetMerkleRootSubmitted() && allCommitsReceivedUnlocked(uniqueKey) {
 		log.Printf("All CVS received for round %s with trail %s after COS, generating Merkle root...", round, trial)
 		commitMu.Unlock()
 		generateMerkleRoot(fallbackEthClient, round, trial)
@@ -404,7 +417,7 @@ func generateMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 	commitMu.Lock()
 	// Check if merkle root is already done before proceeding
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
-	if isMerkleRootSubmitted(uniqueKey) {
+	if GetMerkleRootSubmitted() {
 		log.Printf("Merkle root already submitted for round %s with trail %s, skipping.", roundNum, trialNum)
 		commitMu.Unlock()
 		return
@@ -500,6 +513,7 @@ func submitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 	)
 	if err != nil {
 		log.Printf("Failed to submit Merkle root for round %s with trail %s: %v", roundNum, trialNum, err)
+		atomic.StoreInt32(&merkleRootSubmitted, 0) // Reset flag on failure
 		return
 	}
 
