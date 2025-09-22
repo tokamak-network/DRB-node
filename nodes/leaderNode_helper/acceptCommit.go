@@ -124,6 +124,7 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		RequestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
 		RequestedToSubmitCvSig := parsedABI.Events["RequestedToSubmitCv"].ID
 		MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
+		RequestedToSubmitSFromIndexKSig := parsedABI.Events["RequestedToSubmitSFromIndexK"].ID
 
 		reconnect := false
 		for {
@@ -266,6 +267,22 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 					processRandomRequestNumber(fallbackEthClient, big.NewInt(int64(blockTimestamp)), eventData.CurRound, eventData.CurTrialNum, eventData.CurState)
 
 					// Stop requestToSubmitCo monitoring when Status event is received
+					stopRequestToSubmitCoMonitoring()
+
+				case RequestedToSubmitSFromIndexKSig:
+					eventData := struct {
+						Round    *big.Int
+						TrialNum *big.Int
+						IndexK   *big.Int
+					}{}
+
+					err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitSFromIndexK", vLog.Data)
+
+					if err != nil {
+						log.Printf("Failed to decode RequestedToSubmitSFromIndexK event log: %v", err)
+						continue
+					}
+					fmt.Printf("RequestedToSubmitSFromIndexK Event:\n Round %v, TrialNum %v, indexK %v\n", eventData.Round, eventData.TrialNum, eventData.IndexK)
 					stopRequestToSubmitCoMonitoring()
 
 				case SSubmittedSig:
@@ -1357,45 +1374,34 @@ func startRequestToSubmitCoMonitoring(fallbackEthClient *fallback_ethclient.Fall
 	SetRequestToSubmitCoTimerMonitoringActive(true)
 	log.Printf("Started requestToSubmitCo monitoring for round %s with trail %s", roundNum, trialNum)
 
-	go func() {
-		defer func() {
-			SetRequestToSubmitCoTimerMonitoringActive(false)
-			if RequestToSubmitCoTimerMonitoringTimer != nil {
-				RequestToSubmitCoTimerMonitoringTimer.Stop()
-				RequestToSubmitCoTimerMonitoringTimer = nil
-			}
-		}()
+	// Calculate the deadline: merkleRootSubmittedTime + s_offChainSubmissionPeriod(40) + s_requestOrSubmitOrFailDecisionPeriod(30)
+	s_offChainSubmissionPeriod := big.NewInt(40)
+	s_requestOrSubmitOrFailDecisionPeriod := big.NewInt(30)
 
-		// Calculate the deadline: merkleRootSubmittedTime + s_offChainSubmissionPeriod(40) + s_requestOrSubmitOrFailDecisionPeriod(30)
-		s_offChainSubmissionPeriod := big.NewInt(40)
-		s_requestOrSubmitOrFailDecisionPeriod := big.NewInt(30)
+	deadline := new(big.Int).Add(merkleRootSubmittedTime, s_offChainSubmissionPeriod)
+	deadline.Add(deadline, s_requestOrSubmitOrFailDecisionPeriod)
 
-		deadline := new(big.Int).Add(merkleRootSubmittedTime, s_offChainSubmissionPeriod)
-		deadline.Add(deadline, s_requestOrSubmitOrFailDecisionPeriod)
+	currentTime := big.NewInt(time.Now().Unix())
 
-		currentTime := big.NewInt(time.Now().Unix())
+	// Calculate how long to wait
+	waitDuration := new(big.Int).Sub(deadline, currentTime)
 
-		// Calculate how long to wait
-		waitDuration := new(big.Int).Sub(deadline, currentTime)
+	if waitDuration.Cmp(big.NewInt(0)) <= 0 {
+		log.Printf("Deadline already passed for requestToSubmitCo in round %s with trail %s", roundNum, trialNum)
+		callRequestToSubmitCoIfNeeded(fallbackEthClient, roundNum, trialNum, uniqueKey)
+		return
+	}
 
-		if waitDuration.Cmp(big.NewInt(0)) <= 0 {
-			log.Printf("Deadline already passed for requestToSubmitCo in round %s with trail %s", roundNum, trialNum)
-			callRequestToSubmitCoIfNeeded(fallbackEthClient, roundNum, trialNum, uniqueKey)
-			return
-		}
+	waitSeconds := waitDuration.Int64()
+	log.Printf("Waiting %d seconds before checking COS for round %s with trail %s", waitSeconds, roundNum, trialNum)
 
-		waitSeconds := waitDuration.Int64()
-		log.Printf("Waiting %d seconds before checking COS for round %s with trail %s", waitSeconds, roundNum, trialNum)
-
-		// Create timer with the calculated duration
-		RequestToSubmitCoTimerMonitoringTimer = time.NewTimer(time.Duration(waitSeconds) * time.Second)
-
-		<-RequestToSubmitCoTimerMonitoringTimer.C
+	// Use time.AfterFunc for the timer
+	RequestToSubmitCoTimerMonitoringTimer = time.AfterFunc(time.Duration(waitSeconds)*time.Second, func() {
 		if GetRequestToSubmitCoTimerMonitoringActive() {
-			log.Printf("⚠️ Deadline reached for COS in round %s with trail %s, checking if requestToSubmitCo is needed", roundNum, trialNum)
 			callRequestToSubmitCoIfNeeded(fallbackEthClient, roundNum, trialNum, uniqueKey)
 		}
-	}()
+		SetRequestToSubmitCoTimerMonitoringActive(false)
+	})
 }
 
 // callRequestToSubmitCoIfNeeded checks if COS are missing and calls requestToSubmitCo
@@ -1442,6 +1448,7 @@ func stopRequestToSubmitCoMonitoring() {
 		}
 		log.Printf("Stopped requestToSubmitCo monitoring")
 	}
+	SetRequestToSubmitCoTimerMonitoringActive(false)
 }
 
 // Define the types needed for COS requests (moved from leaderNode.go)
