@@ -19,11 +19,6 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-type SigRS struct {
-	R [32]byte
-	S [32]byte
-}
-
 // Tracks EOAs that have been sent requests per round - protected with mutex
 var revealRequestStatus = make(map[string][]string)
 var revealRequestStatusMu sync.RWMutex

@@ -38,6 +38,31 @@ func GetHalted() bool {
 	return atomic.LoadInt32(&Halted) == 1
 }
 
+// Getter and setter functions for submittingMerkleRoot atomic variable
+func SetSubmittingMerkleRoot(value bool) {
+	var val int32
+	if value {
+		val = 1
+	}
+	atomic.StoreInt32(&submittingMerkleRoot, val)
+}
+
+func GetSubmittingMerkleRoot() bool {
+	return atomic.LoadInt32(&submittingMerkleRoot) == 1
+}
+
+// CompareAndSwapSubmittingMerkleRoot performs atomic compare-and-swap operation
+func CompareAndSwapSubmittingMerkleRoot(old, new bool) bool {
+	var oldVal, newVal int32
+	if old {
+		oldVal = 1
+	}
+	if new {
+		newVal = 1
+	}
+	return atomic.CompareAndSwapInt32(&submittingMerkleRoot, oldVal, newVal)
+}
+
 // RequestedToSubmitCo monitoring management
 func SetRequestedToSubmitCoMonitoringActive(value bool) {
 	var val int32
@@ -75,6 +100,31 @@ func SetRequestToSubmitCvMonitoringActive(value bool) {
 
 func GetRequestToSubmitCvMonitoringActive() bool {
 	return atomic.LoadInt32(&RequestToSubmitCvMonitoringActive) == 1
+}
+
+// RequestToSubmitCo timer monitoring management
+func SetRequestToSubmitCoTimerMonitoringActive(value bool) {
+	var val int32
+	if value {
+		val = 1
+	}
+	atomic.StoreInt32(&RequestToSubmitCoTimerMonitoringActive, val)
+}
+
+func GetRequestToSubmitCoTimerMonitoringActive() bool {
+	return atomic.LoadInt32(&RequestToSubmitCoTimerMonitoringActive) == 1
+}
+
+func SetMerkleRootSubmittedTime(value *big.Int) {
+	atomic.StorePointer(&merkleRootSubmittedTime, unsafe.Pointer(value))
+}
+
+func GetMerkleRootSubmittedTime() *big.Int {
+	ptr := atomic.LoadPointer(&merkleRootSubmittedTime)
+	if ptr == nil {
+		return nil
+	}
+	return (*big.Int)(ptr)
 }
 
 // FailToSubmitS monitoring management
@@ -207,7 +257,6 @@ func GetCvOnChain(key string) (bool, bool) {
 	value, exists := CvOnChain[key]
 	return value, exists
 }
-
 
 // ============================================================================
 // MUTEX-PROTECTED STRUCT VARIABLES
