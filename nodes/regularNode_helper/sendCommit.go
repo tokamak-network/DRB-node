@@ -523,8 +523,14 @@ func processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
 
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
-	// Reset monitoring state for new round
+
+	// fetch the last round and trial, and cleanup the data (current round and trial has not been updated yet)
+	lastRound := GetCurrentRound()
+	lastTrial := GetCurrentTrialNum()
+	CleanupRoundDataByUniqueKey(utils.GetUniqueKey(lastRound, lastTrial))
+	
 	roundStr := round.String()
+	// Reset monitoring state for new round
 	ResetMonitoringState(round.String(), trialNum.String())
 
 	// Store the current round and trialNum from Status event
@@ -596,6 +602,12 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		MerkleRoot:   false,
 		RandomNumber: false,
 	})
+}
+
+func CleanupRoundDataByUniqueKey(uniqueKey string) {
+	DeleteRoundsData(uniqueKey)
+	DeleteSubmittedCvIndices(uniqueKey)
+	DeleteStrictOrder(uniqueKey)
 }
 
 func AllCosReceivedUnlocked(activatedOperator []string, round string, trialNum string) {

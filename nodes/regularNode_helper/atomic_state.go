@@ -158,6 +158,12 @@ func GetRoundData(key string) (RoundData, bool) {
 	return data, exists
 }
 
+func DeleteRoundsData(key string) {
+	RoundsDataMu.Lock()
+	defer RoundsDataMu.Unlock()
+	delete(RoundsData, key)
+}
+
 // StrictOrderWhileSecretRequest map management
 func SetStrictOrder(key string, value []string) {
 	strictOrderMu.Lock()
@@ -170,6 +176,19 @@ func GetStrictOrder(key string) ([]string, bool) {
 	defer strictOrderMu.RUnlock()
 	value, exists := strictOrderWhileSecretRequest[key]
 	return value, exists
+}
+
+func DeleteStrictOrder(key string) {
+	strictOrderMu.Lock()
+	defer strictOrderMu.Unlock()
+	delete(strictOrderWhileSecretRequest, key)
+}
+
+// DeleteSubmittedCvIndices deletes submittedCvIndices entry for uniqueKey
+func DeleteSubmittedCvIndices(uniqueKey string) {
+	submittedCvIndicesMutex.Lock()
+	defer submittedCvIndicesMutex.Unlock()
+	delete(submittedCvIndices, uniqueKey)
 }
 
 // ============================================================================

@@ -145,3 +145,10 @@ func ConvertByteArray(b []byte) [32]byte {
 	copy(arr[:], b)
 	return arr
 }
+
+// DeleteCommittedNodes deletes all data for a specific uniqueKey
+func DeleteCommittedNodes(uniqueKey string) {
+	CommittedNodesMu.Lock()
+	defer CommittedNodesMu.Unlock()
+	delete(CommittedNodes, uniqueKey)
+}

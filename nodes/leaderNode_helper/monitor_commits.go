@@ -22,7 +22,6 @@ import (
 var CvOnChain = make(map[string]bool)
 var CvOnChainMu sync.RWMutex
 
-
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
 func MonitorCommits(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	for {

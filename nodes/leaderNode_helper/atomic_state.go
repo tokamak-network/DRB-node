@@ -127,6 +127,45 @@ func GetMerkleRootSubmittedTime() *big.Int {
 	return (*big.Int)(ptr)
 }
 
+// ============================================================================
+// MAP CLEANUP FUNCTIONS
+// ============================================================================
+
+// DeleteActiveBroadcasts deletes activeBroadcasts entry for uniqueKey
+func DeleteActiveBroadcasts(uniqueKey string) {
+	activeBroadcastsMu.Lock()
+	defer activeBroadcastsMu.Unlock()
+	delete(activeBroadcasts, uniqueKey)
+}
+
+// DeleteCvOnChain deletes CvOnChain entry for uniqueKey
+func DeleteCvOnChain(uniqueKey string) {
+	CvOnChainMu.Lock()
+	defer CvOnChainMu.Unlock()
+	delete(CvOnChain, uniqueKey)
+}
+
+// DeleteRoundSecrets deletes RoundSecrets entry for uniqueKey
+func DeleteRoundSecrets(uniqueKey string) {
+	secretMapsMutex.Lock()
+	defer secretMapsMutex.Unlock()
+	delete(RoundSecrets, uniqueKey)
+}
+
+// DeleteRoundSecret deletes roundSecret entry for uniqueKey
+func DeleteRoundSecret(uniqueKey string) {
+	secretMapsMutex.Lock()
+	defer secretMapsMutex.Unlock()
+	delete(roundSecret, uniqueKey)
+}
+
+// DeleteSecretsOnChain deletes secretsOnChain entry for uniqueKey
+func DeleteSecretsOnChain(uniqueKey string) {
+	secretsOnChainMu.Lock()
+	defer secretsOnChainMu.Unlock()
+	delete(secretsOnChain, uniqueKey)
+}
+
 // FailToSubmitS monitoring management
 func SetFailToSubmitSMonitoringActive(value bool) {
 	var val int32
@@ -202,6 +241,12 @@ func GetRoundData(key string) (RoundData, bool) {
 	defer RoundsDataMu.RUnlock()
 	data, exists := RoundsData[key]
 	return data, exists
+}
+
+func DeleteRoundsData(key string) {
+	RoundsDataMu.Lock()
+	defer RoundsDataMu.Unlock()
+	delete(RoundsData, key)
 }
 
 // RevealRequestStatus map management

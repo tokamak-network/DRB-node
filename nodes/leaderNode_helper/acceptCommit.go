@@ -355,6 +355,12 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
+    // fetch the last round and trial, and cleanup the data (current round and trial has not been updated yet)
+	lastRound := GetCurrentRound()
+	lastTrial := GetCurrentTrial()
+	CleanupRoundDataByUniqueKey(utils.GetUniqueKey(lastRound, lastTrial))
+
+	// update the current round and trial
 	SetCurrentRound(round.String())
 	SetCurrentTrial(trialNum.String())
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
@@ -412,6 +418,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 		SetHalted(true)
 		// Delete round and trial data from database
 		database.DeleteRoundTrialDataForLeaderNode(GetCurrentRound(), GetCurrentTrial())
+
 		// resume the round
 		resuming(fallbackEthClient)
 	}
@@ -1449,6 +1456,26 @@ func stopRequestToSubmitCoMonitoring() {
 		log.Printf("Stopped requestToSubmitCo monitoring")
 	}
 	SetRequestToSubmitCoTimerMonitoringActive(false)
+}
+
+// CleanupRoundDataByUniqueKey cleans up all map entries for a specific uniqueKey
+func CleanupRoundDataByUniqueKey(uniqueKey string) {
+	// Clean up RoundsData
+	DeleteRoundsData(uniqueKey)
+	// Clean up CommittedNodes
+	utils.DeleteCommittedNodes(uniqueKey)
+
+	// Clean up other maps that use uniqueKey
+	DeleteActiveBroadcasts(uniqueKey)
+	DeleteCvOnChain(uniqueKey)
+	DeleteRevealRequestStatus(uniqueKey)
+	DeleteRoundSecrets(uniqueKey)
+	DeleteRoundSecret(uniqueKey)
+	DeleteSecretsOnChain(uniqueKey)
+	// DeleteStrictOrderWhileSecretRequest(uniqueKey)
+	// DeleteSubmittedCvIndices(uniqueKey)
+
+	log.Printf("Cleaned up data for uniqueKey: %s", uniqueKey)
 }
 
 // Define the types needed for COS requests (moved from leaderNode.go)

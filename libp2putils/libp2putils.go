@@ -17,11 +17,8 @@ import (
 )
 
 var (
-	privKey      crypto.PrivKey
-	peerID       peer.ID
 	HostInstance host.Host
 )
-var RegisteredNodes = make(map[string]peer.AddrInfo)
 
 type NodeInfo struct {
 	IP     string  `json:"ip"`

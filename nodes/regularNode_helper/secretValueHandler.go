@@ -21,7 +21,6 @@ import (
 var strictOrderWhileSecretRequest = make(map[string][]string)
 var strictOrderMu sync.RWMutex
 
-
 // checkPreviousSecretReceived checks if the previous node's secret was received via broadcast
 func checkPreviousSecretReceived(round, trialNum, previousNodeEOA string) bool {
 	// Check if we have the peer commit data (from broadcast) for the previous node

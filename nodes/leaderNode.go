@@ -22,30 +22,6 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-// Global variables with mutex protection for thread safety
-var cosTimerOnce = make(map[string]*sync.Once)
-var cosTimerOnceMu sync.RWMutex
-
-// Helper functions for cosTimerOnce map with mutex protection
-func SetCosTimerOnce(key string, once *sync.Once) {
-	cosTimerOnceMu.Lock()
-	defer cosTimerOnceMu.Unlock()
-	cosTimerOnce[key] = once
-}
-
-func GetCosTimerOnce(key string) (*sync.Once, bool) {
-	cosTimerOnceMu.RLock()
-	defer cosTimerOnceMu.RUnlock()
-	once, exists := cosTimerOnce[key]
-	return once, exists
-}
-
-func DeleteCosTimerOnce(key string) {
-	cosTimerOnceMu.Lock()
-	defer cosTimerOnceMu.Unlock()
-	delete(cosTimerOnce, key)
-}
-
 // Helper functions for merkleRootSubmitted atomic variable
 func SetMerkleRootSubmitted(value bool) {
 	var val int32
