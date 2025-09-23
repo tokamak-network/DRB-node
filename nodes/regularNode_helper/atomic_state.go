@@ -3,8 +3,11 @@ package regularNode_helper
 import (
 	"crypto/ecdsa"
 	"math/big"
+	"sync"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/eapache/queue"
 )
 
 // ============================================================================
@@ -48,6 +51,34 @@ func SetMerkleRootSubmittedEventEmitted(value bool) {
 
 func GetMerkleRootSubmittedEventEmitted() bool {
 	return atomic.LoadInt32(&merkleRootSubmittedEventEmitted) == 1
+}
+
+// =========================================================================
+// Cleanup queue for deferred round data cleanup
+// =========================================================================
+
+var cleanupQueue *queue.Queue = queue.New()
+var cleanupQueueMu sync.Mutex
+
+// EnqueueUniqueKeyForCleanup adds a uniqueKey to the cleanup queue. If the
+// queue size reaches 5 or more, it pops the oldest uniqueKey and cleans it up.
+func EnqueueUniqueKeyForCleanup(uniqueKey string) {
+	cleanupQueueMu.Lock()
+
+	// enqueue
+	cleanupQueue.Add(uniqueKey)
+	length := cleanupQueue.Length()
+	// if size >= 5, pop oldest and cleanup until size reaches 4
+	if length >= 5 {
+		for cleanupQueue.Length() >= 5 {
+			oldest := cleanupQueue.Remove().(string)
+			// perform cleanup outside
+			CleanupRoundDataByUniqueKey(oldest)
+		}
+		cleanupQueueMu.Unlock()
+		return
+	}
+	cleanupQueueMu.Unlock()
 }
 
 // ============================================================================

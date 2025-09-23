@@ -2,9 +2,11 @@ package leaderNode_helper
 
 import (
 	"math/big"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 
+	"github.com/eapache/queue"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -152,6 +154,35 @@ func DeleteSecretsOnChain(uniqueKey string) {
 	secretsOnChainMu.Lock()
 	defer secretsOnChainMu.Unlock()
 	delete(secretsOnChain, uniqueKey)
+}
+
+// =========================================================================
+// Cleanup queue for deferred round data cleanup
+// =========================================================================
+
+var cleanupQueue *queue.Queue = queue.New()
+var cleanupQueueMu sync.Mutex
+
+// EnqueueUniqueKeyForCleanup adds a uniqueKey to the cleanup queue. If the
+// queue size reaches 5 or more, it pops the oldest uniqueKey and cleans it up.
+func EnqueueUniqueKeyForCleanup(uniqueKey string) {
+	cleanupQueueMu.Lock()
+
+	// enqueue
+	cleanupQueue.Add(uniqueKey)
+	length := cleanupQueue.Length()
+	// if size >= 5, pop oldest and cleanup until size reaches 4
+	if length >= 5 {
+		for cleanupQueue.Length() >= 5 {
+			oldest := cleanupQueue.Remove().(string)
+			// perform cleanup
+			CleanupRoundDataByUniqueKey(oldest)
+		}
+		cleanupQueueMu.Unlock()
+		return
+	}
+	cleanupQueueMu.Unlock()
+
 }
 
 // FailToSubmitS monitoring management

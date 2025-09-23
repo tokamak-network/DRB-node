@@ -525,9 +525,8 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
 
 	// fetch the last round and trial, and cleanup the data (current round and trial has not been updated yet)
-	lastRound := GetCurrentRound()
-	lastTrial := GetCurrentTrialNum()
-	CleanupRoundDataByUniqueKey(utils.GetUniqueKey(lastRound, lastTrial))
+	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
+	EnqueueUniqueKeyForCleanup(uniqueKey)
 	
 	roundStr := round.String()
 	// Reset monitoring state for new round
@@ -544,7 +543,6 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	}
 	SetActivatedOperator(stringAddrs)
 	SetCurrentRound(round.String())
-	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 
 	if state.Cmp(big.NewInt(1)) == 0 {
 		// Set Halted to 0 to resume the round

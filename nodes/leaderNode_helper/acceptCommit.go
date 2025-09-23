@@ -35,7 +35,6 @@ var Halted int32    // 0 = false, 1 = true
 // Merkle root submission status flag (using atomic operations)
 var submittingMerkleRoot int32 // 0 = false, 1 = true (atomic)
 
-
 // Monitoring active flags - using atomic for thread safety
 var RequestedToSubmitCoMonitoringActive int32    // 0 = false, 1 = true
 var RequestedToSubmitCvMonitoringActive int32    // 0 = false, 1 = true
@@ -354,15 +353,13 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
-    // fetch the last round and trial, and cleanup the data (current round and trial has not been updated yet)
-	lastRound := GetCurrentRound()
-	lastTrial := GetCurrentTrial()
-	CleanupRoundDataByUniqueKey(utils.GetUniqueKey(lastRound, lastTrial))
+	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
+	// internally calls the cleanup function
+	EnqueueUniqueKeyForCleanup(uniqueKey)
 
 	// update the current round and trial
 	SetCurrentRound(round.String())
 	SetCurrentTrial(trialNum.String())
-	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 
 	// Reset leader monitoring state for new round or trail
 	ResetLeaderMonitoringState(round.String(), trialNum.String())
