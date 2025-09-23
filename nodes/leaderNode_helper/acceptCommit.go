@@ -35,8 +35,6 @@ var Halted int32    // 0 = false, 1 = true
 // Merkle root submission status flag (using atomic operations)
 var submittingMerkleRoot int32 // 0 = false, 1 = true (atomic)
 
-// MerkleRootSubmittedTime management
-var merkleRootSubmittedTime unsafe.Pointer // *big.Int
 
 // Monitoring active flags - using atomic for thread safety
 var RequestedToSubmitCoMonitoringActive int32    // 0 = false, 1 = true
@@ -196,12 +194,13 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 					// Mark Merkle root as submitted and stop leader monitoring
 					blockTimestamp, err := fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
-					SetMerkleRootSubmittedTime(big.NewInt(int64(blockTimestamp)))
 
 					if err != nil {
 						log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
 						continue
 					}
+					// Start requestToSubmitCo monitoring
+					startRequestToSubmitCoMonitoring(fallbackEthClient, eventData.Round.String(), eventData.TrialNum.String(), big.NewInt(int64(blockTimestamp)))
 
 				case RequestedToSubmitCoSig:
 					eventData := struct {
@@ -1341,9 +1340,6 @@ func SubmitMerkleRoot(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 	roundData.MerkleRoot = true
 	SetRoundData(uniqueKey, roundData)
 	updateCommitDataAfterSubmit(uniqueKey)
-
-	// Start new requestToSubmitCo monitoring with dynamic timing
-	startRequestToSubmitCoMonitoring(fallbackEthClient, roundNum, trialNum, GetMerkleRootSubmittedTime())
 }
 
 // updateCommitDataAfterSubmit updates commit data after successful merkle root submission
@@ -1359,8 +1355,10 @@ func updateCommitDataAfterSubmit(uniqueKey string) {
 		} else {
 			data.SubmitMerkleRootDone = true
 			utils.SetCommittedNodeData(uniqueKey, eoaAddress, data)
+			database.UpdateLeaderCommit(&data)
 		}
 	}
+
 }
 
 // startRequestToSubmitCoMonitoring starts monitoring for automatic requestToSubmitCo

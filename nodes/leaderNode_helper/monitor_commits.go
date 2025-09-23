@@ -50,6 +50,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 			log.Println("System is halted. Skipping checkRoundsForCompletion.")
 			return
 		}
+
 		// Defensive check: skip if all random_number_generated are already true for this round
 		leaderCommits, err := database.GetLeaderCommitsByRoundAndTrialNum(round.Round, round.TrialNum)
 		if err == nil && len(leaderCommits) > 0 {
@@ -65,6 +66,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 				continue
 			}
 		}
+
 		// Copy the activated operators from eth package
 		operatorAddresses := eth.ActivatedOperators
 
@@ -125,6 +127,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 			secretsOnChainMu.RLock()
 			notOnChain := !secretsOnChain[round.UniqueKey]
 			secretsOnChainMu.RUnlock()
+
 			if notOnChain {
 				cvOnChain, _ := GetCvOnChain(uniqueKey)
 				if !cvOnChain {

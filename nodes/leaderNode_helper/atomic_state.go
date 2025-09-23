@@ -115,18 +115,6 @@ func GetRequestToSubmitCoTimerMonitoringActive() bool {
 	return atomic.LoadInt32(&RequestToSubmitCoTimerMonitoringActive) == 1
 }
 
-func SetMerkleRootSubmittedTime(value *big.Int) {
-	atomic.StorePointer(&merkleRootSubmittedTime, unsafe.Pointer(value))
-}
-
-func GetMerkleRootSubmittedTime() *big.Int {
-	ptr := atomic.LoadPointer(&merkleRootSubmittedTime)
-	if ptr == nil {
-		return nil
-	}
-	return (*big.Int)(ptr)
-}
-
 // ============================================================================
 // MAP CLEANUP FUNCTIONS
 // ============================================================================
