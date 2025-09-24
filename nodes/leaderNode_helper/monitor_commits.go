@@ -26,7 +26,7 @@ var CvOnChainMu sync.RWMutex
 func MonitorCommits(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	for {
 		checkRoundsForCompletion(fallbackEthClient)
-		time.Sleep(10 * time.Second) // Adjust the interval as needed
+		time.Sleep(10 * time.Second)
 	}
 }
 
@@ -39,110 +39,108 @@ type RevealOrderData struct {
 type RevealOrders map[string]RevealOrderData
 
 func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
-	// Fetch rounds to process
-	roundsToProcess, err := database.GetRoundsToProcess()
-	if err != nil {
+	round := GetCurrentRound()
+	trialNum := GetCurrentTrial()
+	uniqueKey := utils.GetUniqueKey(round, trialNum)
+	if GetHalted() {
+		log.Println("System is halted. Skipping checkRoundsForCompletion.")
 		return
 	}
 
-	for _, round := range roundsToProcess {
-		if GetHalted() {
-			log.Println("System is halted. Skipping checkRoundsForCompletion.")
-			return
-		}
-
-		// Defensive check: skip if all random_number_generated are already true for this round
-		leaderCommits, err := database.GetLeaderCommitsByRoundAndTrialNum(round.Round, round.TrialNum)
-		if err == nil && len(leaderCommits) > 0 {
-			allRandomNumberGenerated := true
-			for _, lc := range leaderCommits {
-				if !lc.RandomNumberGenerated {
-					allRandomNumberGenerated = false
-					break
-				}
-			}
-			if allRandomNumberGenerated {
-				log.Printf("Skipping round %s with trial %s: all random numbers already generated.", round.Round, round.TrialNum)
-				continue
-			}
-		}
-
-		// Copy the activated operators from eth package
-		operatorAddresses := eth.ActivatedOperators
-
-		// Collect secret values, signatures (v, r, s), and round info in the order of activated operators
-		var secrets [][]byte
-		var vs []uint8
-		var rs []common.Hash
-		var ss []common.Hash
-		var index int
-		allEOAsSubmitted := true
-		uniqueKey := utils.GetUniqueKey(round.Round, round.TrialNum)
-		for i, operator := range operatorAddresses {
-			commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round.Round, round.TrialNum, operator.Hex())
-			if err != nil || commitData.SecretValue == [32]byte{} {
-				if !(commitData.Cos == [32]byte{}) {
-					log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round.Round)
-				}
-				allEOAsSubmitted = false
+	// Defensive check: skip if all random_number_generated are already true for this round
+	leaderCommits, err := database.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
+	if err == nil && len(leaderCommits) > 0 {
+		allRandomNumberGenerated := true
+		for _, lc := range leaderCommits {
+			if !lc.RandomNumberGenerated {
+				allRandomNumberGenerated = false
 				break
 			}
-
-			secrets = append(secrets, commitData.SecretValue[:])
-			// if Cv values are on-chain, than check this condition
-			cvOnChain, _ := GetCvOnChain(uniqueKey)
-			if cvOnChain {
-				indices := GetIndices()
-				if index < len(indices) && int64(i) <= indices[index].Int64() {
-					if int64(i) == indices[index].Int64() {
-						index++
-						continue
-					}
-				}
-			}
-
-			// Ensure the signature map contains valid data
-			if commitData.Sign.V == "" || commitData.Sign.R == "" || commitData.Sign.S == "" {
-				log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round.Round)
-				allEOAsSubmitted = false
-				continue
-			}
-
-			// Parse and validate signature components
-			vStr := commitData.Sign.V
-			vValue, err := strconv.ParseUint(vStr, 10, 8)
-			if err != nil {
-				log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round.Round, err)
-				allEOAsSubmitted = false
-				continue
-			}
-
-			vs = append(vs, uint8(vValue))
-			rs = append(rs, common.HexToHash(commitData.Sign.R))
-			ss = append(ss, common.HexToHash(commitData.Sign.S))
 		}
-		// If all EOAs have submitted, trigger the random number generation transaction
-		if allEOAsSubmitted {
-			log.Printf("All EOAs have submitted for round %s with trail %s. Initiating random number generation.", round.Round, round.TrialNum)
-			secretsOnChainMu.RLock()
-			notOnChain := !secretsOnChain[round.UniqueKey]
-			secretsOnChainMu.RUnlock()
+		if allRandomNumberGenerated {
+			return
+		}
+	}
 
-			if notOnChain {
-				cvOnChain, _ := GetCvOnChain(uniqueKey)
-				if !cvOnChain {
-					err = generateRandomNumberTransaction(fallbackEthClient, round.Round, round.TrialNum, secrets, vs, rs, ss)
-				} else {
-					err = generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient, round.Round, round.TrialNum, secrets, vs, rs, ss)
+	// Copy the activated operators from eth package
+	operatorAddresses := eth.ActivatedOperators
+	if len(operatorAddresses) < 2 {
+		return
+	}
+	// Collect secret values, signatures (v, r, s), and round info in the order of activated operators
+	var secrets [][]byte
+	var vs []uint8
+	var rs []common.Hash
+	var ss []common.Hash
+	var index int
+	allEOAsSubmitted := true
+	for i, operator := range operatorAddresses {
+		commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, trialNum, operator.Hex())
+		if err != nil {
+			log.Printf("Either Data not found or Error getting commit data for operator %s: %v", operator.Hex(), err)
+			return
+		} else {
+			if commitData.SecretValue == [32]byte{} {
+				if !(commitData.Cos == [32]byte{}) {
+					log.Printf("EOA %s has not submitted a secret value for round %s.", operator.Hex(), round)
+				}
+				return
+			}
+		}
+		secrets = append(secrets, commitData.SecretValue[:])
+		// if Cv values are on-chain, than check this condition
+		cvOnChain, _ := GetCvOnChain(uniqueKey)
+		if cvOnChain {
+			indices := GetIndices()
+			if index < len(indices) && int64(i) <= indices[index].Int64() {
+				if int64(i) == indices[index].Int64() {
+					index++
+					continue
 				}
 			}
-			if err != nil {
-				log.Printf("Failed to execute random number generation transaction for round %s with trail %s: %v", round.Round, round.TrialNum, err)
+		}
+
+		// Ensure the signature map contains valid data
+		if commitData.Sign.V == "" || commitData.Sign.R == "" || commitData.Sign.S == "" {
+			log.Printf("Incomplete signature for EOA %s in round %s", operator.Hex(), round)
+			allEOAsSubmitted = false
+			continue
+		}
+
+		// Parse and validate signature components
+		vStr := commitData.Sign.V
+		vValue, err := strconv.ParseUint(vStr, 10, 8)
+		if err != nil {
+			log.Printf("Error parsing v value for EOA %s in round %s: %v", operator.Hex(), round, err)
+			allEOAsSubmitted = false
+			continue
+		}
+
+		vs = append(vs, uint8(vValue))
+		rs = append(rs, common.HexToHash(commitData.Sign.R))
+		ss = append(ss, common.HexToHash(commitData.Sign.S))
+	}
+	// If all EOAs have submitted, trigger the random number generation transaction
+	if allEOAsSubmitted {
+		log.Printf("All EOAs have submitted for round %s with trail %s. Initiating random number generation.", round, trialNum)
+		secretsOnChainMu.RLock()
+		notOnChain := !secretsOnChain[uniqueKey]
+		secretsOnChainMu.RUnlock()
+
+		if notOnChain {
+			cvOnChain, _ := GetCvOnChain(uniqueKey)
+			if !cvOnChain {
+				err = generateRandomNumberTransaction(fallbackEthClient, round, trialNum, secrets, vs, rs, ss)
 			} else {
-				err = completeRound(round.Round, round.TrialNum)
-				if err != nil {
-					log.Printf("Failed to mark round %s as completed: %v", round.Round, err)
-				}
+				err = generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient, round, trialNum, secrets, vs, rs, ss)
+			}
+		}
+		if err != nil {
+			log.Printf("Failed to execute random number generation transaction for round %s with trail %s: %v", round, trialNum, err)
+		} else {
+			err = completeRound(round, trialNum)
+			if err != nil {
+				log.Printf("Failed to mark round %s as completed: %v", round, err)
 			}
 		}
 	}

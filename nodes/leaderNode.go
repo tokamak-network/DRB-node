@@ -35,7 +35,7 @@ func GetMerkleRootSubmitted() bool {
 	return atomic.LoadInt32(&merkleRootSubmitted) == 1
 }
 
-var merkleRootSubmitted int32  // 0 = false, 1 = true (atomic)
+var merkleRootSubmitted int32 // 0 = false, 1 = true (atomic)
 var commitMu sync.Mutex
 
 type Handler struct {
@@ -83,6 +83,7 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
 	eth.UpdateActivatedOperators(fallbackEthClient)
+	leaderNode_helper.UpdateCurrentRoundAndTrial(fallbackEthClient)
 	go leaderNode_helper.CheckHaltedState(fallbackEthClient)
 	go leaderNode_helper.MonitorCommits(fallbackEthClient)
 	go leaderNode_helper.ReceiveCommit(fallbackEthClient)
