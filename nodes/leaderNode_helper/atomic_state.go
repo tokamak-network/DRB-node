@@ -1,12 +1,15 @@
 package leaderNode_helper
 
 import (
+	"log"
 	"math/big"
 	"sync"
 	"sync/atomic"
 	"unsafe"
 
 	"github.com/eapache/queue"
+	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -350,4 +353,28 @@ func GetLastSubmitSTimestamp() *big.Int {
 	timestampMu.RLock()
 	defer timestampMu.RUnlock()
 	return lastSubmitSTimestamp
+}
+
+// ============================================================================
+// CONTRACT INTEGRATION FUNCTIONS
+// ============================================================================
+
+// UpdateCurrentRoundFromContract fetches the current round from the contract and updates local state
+func UpdateCurrentRoundAndTrial(fallbackEthClient *fallback_ethclient.FallbackRPCClient) error {
+	currentRound, err := eth.UpdateCurrentRoundFromContract(fallbackEthClient)
+	if err != nil {
+		log.Printf("failed to fetch current round from contract: %v", err)
+		return err
+	}
+
+	trialNumBig, err := eth.GetTrialNumFromContract(fallbackEthClient, currentRound)
+	if err != nil {
+		log.Printf("failed to fetch trial number for round %s: %v", trialNumBig.String(), err)
+		return err
+	}
+
+	// Update the local current round state
+	SetCurrentRound(currentRound.String())
+	SetCurrentTrial(trialNumBig.String())
+	return nil
 }

@@ -331,3 +331,63 @@ func UpdateActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCC
 	}
 	SetActivatedOperatorsCached(operators)
 }
+
+// UpdateCurrentRoundFromContract fetches the current round from the contract
+func UpdateCurrentRoundFromContract(fallbackEthClient *fallback_ethclient.FallbackRPCClient) (*big.Int, error) {
+	abiFilePath := "contract/abi/Commit2RevealDRB.json"
+	parsedABI, err := utils.LoadContractABI(abiFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		return nil, fmt.Errorf("CONTRACT_ADDRESS is not set in environment variables")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	// Call the s_currentRound() function (public getter for s_currentRound state variable)
+	result, err := CallSmartContract(fallbackEthClient, parsedABI, "s_currentRound", contractAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call s_currentRound: %v", err)
+	}
+
+	// The result is in *big.Int
+	currentRound, ok := result.(*big.Int)
+	if !ok {
+		return nil, fmt.Errorf("unexpected result type for s_currentRound: %T", result)
+	}
+
+	log.Printf("Fetched current round from contract: %s", currentRound.String())
+	return currentRound, nil
+}
+
+// GetTrialNumFromContract fetches the trial number for a given round from the smart contract
+func GetTrialNumFromContract(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int) (*big.Int, error) {
+	abiFilePath := "contract/abi/Commit2RevealDRB.json"
+	parsedABI, err := utils.LoadContractABI(abiFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+
+	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	if contractAddressStr == "" {
+		return nil, fmt.Errorf("CONTRACT_ADDRESS is not set in environment variables")
+	}
+
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	result, err := CallSmartContract(fallbackEthClient, parsedABI, "s_trialNum", contractAddress, round)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call s_trialNum: %v", err)
+	}
+
+	trialNum, ok := result.(*big.Int)
+	if !ok {
+		return nil, fmt.Errorf("unexpected result type for s_trialNum: %T", result)
+	}
+
+	log.Printf("Fetched trialNum for round %s from contract: %s", round.String(), trialNum.String())
+	return trialNum, nil
+}
