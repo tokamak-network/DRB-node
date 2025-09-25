@@ -215,6 +215,65 @@ func DeleteStrictOrder(key string) {
 	delete(strictOrderWhileSecretRequest, key)
 }
 
+// ============================================================================
+// SUBMITTEDCVINDICES MAP MANAGEMENT
+// ============================================================================
+
+// SetSubmittedCvIndicesValue sets a value in the submittedCvIndices map for a specific uniqueKey and index
+func SetSubmittedCvIndicesValue(uniqueKey, index string, value bool) {
+	submittedCvIndicesMutex.Lock()
+	defer submittedCvIndicesMutex.Unlock()
+	if submittedCvIndices == nil {
+		submittedCvIndices = make(map[string]map[string]bool)
+	}
+	if submittedCvIndices[uniqueKey] == nil {
+		submittedCvIndices[uniqueKey] = make(map[string]bool)
+	}
+	submittedCvIndices[uniqueKey][index] = value
+}
+
+// GetSubmittedCvIndicesValue gets a value from the submittedCvIndices map for a specific uniqueKey and index
+func GetSubmittedCvIndicesValue(uniqueKey, index string) (bool, bool) {
+	submittedCvIndicesMutex.RLock()
+	defer submittedCvIndicesMutex.RUnlock()
+	if submittedCvIndices == nil || submittedCvIndices[uniqueKey] == nil {
+		return false, false
+	}
+	value, exists := submittedCvIndices[uniqueKey][index]
+	return value, exists
+}
+
+// GetSubmittedCvIndicesMap gets the entire map for a specific uniqueKey
+func GetSubmittedCvIndicesMap(uniqueKey string) (map[string]bool, bool) {
+	submittedCvIndicesMutex.RLock()
+	defer submittedCvIndicesMutex.RUnlock()
+	if submittedCvIndices == nil || submittedCvIndices[uniqueKey] == nil {
+		return nil, false
+	}
+	// Return a copy to prevent external modifications
+	result := make(map[string]bool)
+	for k, v := range submittedCvIndices[uniqueKey] {
+		result[k] = v
+	}
+	return result, true
+}
+
+// SetSubmittedCvIndicesMap sets the entire map for a specific uniqueKey
+func SetSubmittedCvIndicesMap(uniqueKey string, value map[string]bool) {
+	submittedCvIndicesMutex.Lock()
+	defer submittedCvIndicesMutex.Unlock()
+	if submittedCvIndices == nil {
+		submittedCvIndices = make(map[string]map[string]bool)
+	}
+	if submittedCvIndices[uniqueKey] == nil {
+		submittedCvIndices[uniqueKey] = make(map[string]bool)
+	}
+	// Copy the input map to prevent external modifications
+	for k, v := range value {
+		submittedCvIndices[uniqueKey][k] = v
+	}
+}
+
 // DeleteSubmittedCvIndices deletes submittedCvIndices entry for uniqueKey
 func DeleteSubmittedCvIndices(uniqueKey string) {
 	submittedCvIndicesMutex.Lock()

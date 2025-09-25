@@ -145,6 +145,31 @@ func DeleteRoundSecrets(uniqueKey string) {
 	delete(RoundSecrets, uniqueKey)
 }
 
+// ============================================================================
+// ROUNDSECRET MAP MANAGEMENT
+// ============================================================================
+
+// SetRoundSecretValue sets a value in the roundSecret map for a specific uniqueKey and EOA
+func SetRoundSecretValue(uniqueKey, eoaAddress string, value bool) {
+	secretMapsMutex.Lock()
+	defer secretMapsMutex.Unlock()
+	if roundSecret[uniqueKey] == nil {
+		roundSecret[uniqueKey] = make(map[string]bool)
+	}
+	roundSecret[uniqueKey][eoaAddress] = value
+}
+
+// GetRoundSecretValue gets a value from the roundSecret map for a specific uniqueKey and EOA
+func GetRoundSecretValue(uniqueKey, eoaAddress string) (bool, bool) {
+	secretMapsMutex.RLock()
+	defer secretMapsMutex.RUnlock()
+	if roundSecret[uniqueKey] == nil {
+		return false, false
+	}
+	value, exists := roundSecret[uniqueKey][eoaAddress]
+	return value, exists
+}
+
 // DeleteRoundSecret deletes roundSecret entry for uniqueKey
 func DeleteRoundSecret(uniqueKey string) {
 	secretMapsMutex.Lock()
@@ -152,11 +177,58 @@ func DeleteRoundSecret(uniqueKey string) {
 	delete(roundSecret, uniqueKey)
 }
 
+// ============================================================================
+// SECRETSONCHAIN MAP MANAGEMENT
+// ============================================================================
+
+// SetSecretsOnChain sets a value in the secretsOnChain map for a specific uniqueKey
+func SetSecretsOnChain(uniqueKey string, value bool) {
+	secretsOnChainMu.Lock()
+	defer secretsOnChainMu.Unlock()
+	secretsOnChain[uniqueKey] = value
+}
+
+// GetSecretsOnChain gets a value from the secretsOnChain map for a specific uniqueKey
+func GetSecretsOnChain(uniqueKey string) (bool, bool) {
+	secretsOnChainMu.RLock()
+	defer secretsOnChainMu.RUnlock()
+	value, exists := secretsOnChain[uniqueKey]
+	return value, exists
+}
+
 // DeleteSecretsOnChain deletes secretsOnChain entry for uniqueKey
 func DeleteSecretsOnChain(uniqueKey string) {
 	secretsOnChainMu.Lock()
 	defer secretsOnChainMu.Unlock()
 	delete(secretsOnChain, uniqueKey)
+}
+
+// ============================================================================
+// ROUNDSECRETS MAP MANAGEMENT
+// ============================================================================
+
+// GetRoundSecretsValue gets a value from the RoundSecrets map for a specific uniqueKey
+func GetRoundSecretsValue(uniqueKey string) ([][32]byte, bool) {
+	secretMapsMutex.RLock()
+	defer secretMapsMutex.RUnlock()
+	value, exists := RoundSecrets[uniqueKey]
+	if !exists {
+		return nil, false
+	}
+	// Return a copy to prevent external modifications
+	result := make([][32]byte, len(value))
+	copy(result, value)
+	return result, true
+}
+
+// AppendToRoundSecrets appends a secret value to the RoundSecrets map for a specific uniqueKey
+func AppendToRoundSecrets(uniqueKey string, secretValue [32]byte) {
+	secretMapsMutex.Lock()
+	defer secretMapsMutex.Unlock()
+	if RoundSecrets[uniqueKey] == nil {
+		RoundSecrets[uniqueKey] = make([][32]byte, 0)
+	}
+	RoundSecrets[uniqueKey] = append(RoundSecrets[uniqueKey], secretValue)
 }
 
 // =========================================================================

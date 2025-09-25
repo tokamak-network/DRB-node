@@ -114,11 +114,10 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 			<-timer.C
 
 			// If the timer expires and the secret value is not received, call handleMissingSecretValue
-			if !roundSecret[uniqueKey][regularEoa] {
+			hasSecret, exists := GetRoundSecretValue(uniqueKey, regularEoa)
+			if !exists || !hasSecret {
 				log.Printf("Secret value not received for EOA %s in round %s with trail %s within 15 seconds. Handling missing secret value.", regularEoa, round, trialNum)
-				secretsOnChainMu.Lock()
-				secretsOnChain[uniqueKey] = true
-				secretsOnChainMu.Unlock()
+				SetSecretsOnChain(uniqueKey, true)
 				requestToSubmitS(fallbackEthClient, round, trialNum)
 			}
 		}()
@@ -235,7 +234,8 @@ func prepareArgumentsForRequestToSubmitS(round string, trialNum string) ([][32]b
 	packedRevealOrders := packRevealOrder(order)
 	packedVsForAllCvsNotOnChain := packVsValues(vsForNotOnChain)
 
-	return allCos, RoundSecrets[uniqueKey], packedVsForAllCvsNotOnChain, sigRSsForAllCvsNotOnChain, packedRevealOrders
+	roundSecrets, _ := GetRoundSecretsValue(uniqueKey)
+	return allCos, roundSecrets, packedVsForAllCvsNotOnChain, sigRSsForAllCvsNotOnChain, packedRevealOrders
 }
 
 func PackIndices(indices []*big.Int) *big.Int {

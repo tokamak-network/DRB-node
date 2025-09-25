@@ -24,7 +24,7 @@ var roundSecret = make(map[string]map[string]bool)
 var secretsOnChain = make(map[string]bool)
 var Indices []*big.Int
 var indicesMutex sync.RWMutex
-var secretMapsMutex sync.Mutex
+var secretMapsMutex sync.RWMutex
 var secretsOnChainMu sync.RWMutex
 
 // ResetIndicesForNewRound resets the Indices array for a new round
@@ -124,12 +124,9 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	}
 	var secretValueArray [32]byte
 	copy(secretValueArray[:], req.SecretValue[:]) // Convert req.SecretValue to [32]byte
-	secretMapsMutex.Lock()
-	if _, exists := RoundSecrets[uniqueKey]; !exists {
-		RoundSecrets[uniqueKey] = make([][32]byte, 0)
-	}
-	RoundSecrets[uniqueKey] = append(RoundSecrets[uniqueKey], secretValueArray)
-	secretMapsMutex.Unlock()
+
+	// Use the new atomic setter function
+	AppendToRoundSecrets(uniqueKey, secretValueArray)
 	// Store the secret value in both byte array and hex string formats
 	copy(leaderCommitData.SecretValue[:], req.SecretValue[:])
 	leaderCommitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
@@ -143,12 +140,9 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	}
 
 	log.Printf("Successfully saved secret value for round %s with trail %s and EOA %s", round, trial, req.RegularEoaAddress)
-	secretMapsMutex.Lock()
-	if _, exists := roundSecret[uniqueKey]; !exists {
-		roundSecret[uniqueKey] = make(map[string]bool)
-	}
-	roundSecret[uniqueKey][req.RegularEoaAddress] = true
-	secretMapsMutex.Unlock()
+
+	// Use the new atomic setter function
+	SetRoundSecretValue(uniqueKey, req.RegularEoaAddress, true)
 
 	// 🔄 Wait for broadcast to complete before proceeding to next node
 	log.Printf("🔄 Broadcasting secret from %s for round %s with trail %s...", req.RegularEoaAddress, round, trial)

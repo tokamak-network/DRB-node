@@ -316,23 +316,9 @@ func processCvSubmitted(round *big.Int, trialNum *big.Int, index *big.Int) {
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 
-	// Use mutex to protect access to submittedCvIndices
-	submittedCvIndicesMutex.Lock()
-	defer submittedCvIndicesMutex.Unlock()
-
-	// Initialize the tracking map if it doesn't exist
-	if submittedCvIndices == nil {
-		submittedCvIndices = make(map[string]map[string]bool)
-	}
-
-	// Initialize the inner map for this uniqueKey if it doesn't exist
-	if submittedCvIndices[uniqueKey] == nil {
-		submittedCvIndices[uniqueKey] = make(map[string]bool)
-	}
-
-	// Mark this index as submitted
+	// Use the new atomic setter function
 	indexStr := index.String()
-	submittedCvIndices[uniqueKey][indexStr] = true
+	SetSubmittedCvIndicesValue(uniqueKey, indexStr, true)
 
 	log.Printf("CV submitted for index %s in round %s with trail %s", indexStr, round.String(), trialNum.String())
 
@@ -341,12 +327,9 @@ func processCvSubmitted(round *big.Int, trialNum *big.Int, index *big.Int) {
 func checkAllCVsSubmittedOnChain(round string, trialNum string) bool {
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 
-	// Use read lock to protect access to submittedCvIndices
-	submittedCvIndicesMutex.RLock()
-	defer submittedCvIndicesMutex.RUnlock()
-
-	// Check if the outer map or inner map doesn't exist
-	if submittedCvIndices == nil || submittedCvIndices[uniqueKey] == nil {
+	// Check if the map doesn't exist
+	submittedCvIndicesMap, exists := GetSubmittedCvIndicesMap(uniqueKey)
+	if !exists {
 		return false
 	}
 
@@ -354,7 +337,8 @@ func checkAllCVsSubmittedOnChain(round string, trialNum string) bool {
 	indices := GetCvRequestIndices()
 	allSubmitted := true
 	for _, requestedIndex := range indices {
-		if !submittedCvIndices[uniqueKey][requestedIndex.String()] {
+		submitted, exists := submittedCvIndicesMap[requestedIndex.String()]
+		if !exists || !submitted {
 			allSubmitted = false
 			break
 		}
@@ -527,7 +511,7 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	// fetch the last round and trial, and cleanup the data (current round and trial has not been updated yet)
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 	EnqueueUniqueKeyForCleanup(uniqueKey)
-	
+
 	roundStr := round.String()
 	// Reset monitoring state for new round
 	ResetMonitoringState(round.String(), trialNum.String())
@@ -901,11 +885,9 @@ func ResetMonitoringState(round string, trialNum string) {
 	// requestedToSubmitCvTime = nil
 	MerkleRootSubmittedTOrRequestedCvTime(nil)
 
-	// Use mutex to protect access to submittedCvIndices
-	submittedCvIndicesMutex.Lock()
-	cvRequestIndices = nil
-	submittedCvIndices = nil
-	submittedCvIndicesMutex.Unlock()
+	// Reset monitoring state variables
+	ClearCvRequestIndices()
+	// Note: submittedCvIndices will be cleaned up by the cleanup queue system
 
 	log.Printf("Reset monitoring state")
 }
