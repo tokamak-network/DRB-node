@@ -128,23 +128,6 @@ func GetRegularNodeEOA() string {
 // MUTEX-PROTECTED SLICE VARIABLES
 // ============================================================================
 
-// ActivatedOperator slice management
-func SetActivatedOperator(operators []string) {
-	ActivatedOperatorMu.Lock()
-	defer ActivatedOperatorMu.Unlock()
-	ActivatedOperator = operators
-}
-
-func GetActivatedOperator() []string {
-	ActivatedOperatorMu.RLock()
-	defer ActivatedOperatorMu.RUnlock()
-
-	// Return a copy to prevent external modifications
-	result := make([]string, len(ActivatedOperator))
-	copy(result, ActivatedOperator)
-	return result
-}
-
 // CvRequestIndices slice management
 func SetCvRequestIndices(indices []*big.Int) {
 	cvRequestIndicesMu.Lock()

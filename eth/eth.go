@@ -40,6 +40,12 @@ func GetActivatedOperatorsCached() []common.Address {
 	return result
 }
 
+func GetActivatedOperatorsLength() int64 {
+	ActivatedOperatorsMu.RLock()
+	defer ActivatedOperatorsMu.RUnlock()
+	return int64(len(ActivatedOperators))
+}
+
 func SetActivatedOperatorsCached(operators []common.Address) {
 	ActivatedOperatorsMu.Lock()
 	defer ActivatedOperatorsMu.Unlock()

@@ -191,7 +191,7 @@ func prepareArgumentsForRequestToSubmitS(round string, trialNum string) ([][32]b
 	var notOnChainIndices []*big.Int
 	i := big.NewInt(0)
 	j := 0
-	length := big.NewInt(int64(len(eth.ActivatedOperators)))
+	length := big.NewInt(eth.GetActivatedOperatorsLength())
 
 	indices := GetIndices()
 	for i.Cmp(length) < 0 {

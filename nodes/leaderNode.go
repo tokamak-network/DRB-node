@@ -158,7 +158,8 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		return
 	}
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	leaderNode_helper.ReliableBroadCastCVS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cvs)
+	activatedOps := eth.GetActivatedOperatorsCached()
+	leaderNode_helper.ReliableBroadCastCVS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cvs, activatedOps)
 	// Check if all commits are ready after this update
 	if !GetMerkleRootSubmitted() && allCommitsReceivedUnlocked(uniqueKey) {
 		log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", round, req.TrialNum)
@@ -237,19 +238,13 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		return
 	}
 	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, round, trial, eoaAddress, commitData.Cos)
-	// Check if all commits are ready after this COS
-	// if !GetMerkleRootSubmitted() && allCommitsReceivedUnlocked(uniqueKey) {
-	// 	log.Printf("All CVS received for round %s with trail %s after COS, generating Merkle root...", round, trial)
-	// 	commitMu.Unlock()
-	// 	generateMerkleRoot(fallbackEthClient, round, trial)
-	// 	commitMu.Lock()
-	// }
+	activatedOps := eth.GetActivatedOperatorsCached()
+	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, round, trial, eoaAddress, commitData.Cos, activatedOps)
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if allCosReceivedUnlocked(uniqueKey) {
 		log.Printf("All COS received for round %s with trail %s.", round, trial)
-		_, err := commitreveal2.DetermineRevealOrder(round, trial, eth.ActivatedOperators)
+		_, err := commitreveal2.DetermineRevealOrder(round, trial, activatedOps)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, trial, err)
 			return
@@ -301,7 +296,7 @@ func allCommitsReceivedUnlocked(uniqueKey string) bool {
 	return true
 }
 func allCosReceivedUnlocked(uniqueKey string) bool {
-	ops := eth.ActivatedOperators
+	ops := eth.GetActivatedOperatorsCached()
 	if len(ops) == 0 {
 		return false
 	}
@@ -351,37 +346,6 @@ func UpdatedallCommitsReceivedUnlocked(fallbackEthClient *fallback_ethclient.Fal
 func updateInMemoryData(uniqueKey string, eoaAddress common.Address, commitData utils.LeaderCommitData) {
 	utils.SetCommittedNodeData(uniqueKey, eoaAddress, commitData)
 }
-
-// func updateCommitDataAfterSubmit(roundNum string, trialNum string, uniqueKey string) {
-// 	commitMu.Lock()
-// 	defer commitMu.Unlock()
-
-// 	roundMap, exists := utils.GetCommittedNodes(uniqueKey)
-// 	if !exists {
-// 		return
-// 	}
-
-// 	for eoaAddress, data := range roundMap {
-// 		log.Printf("Setting submit_merkle_root_done = true for key: %s+%s", uniqueKey, eoaAddress.Hex())
-
-// 		// Update database with marked submitmerkleroot as done
-// 		leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, trialNum, eoaAddress.Hex())
-// 		if err != nil {
-// 			log.Printf("Error loading leaderCommit data from database for round: %s, and eoaAddress: %s, error: %v", roundNum, eoaAddress.Hex(), err)
-// 			return
-// 		}
-
-// 		leaderCommitDBData.SubmitMerkleRootDone = true
-
-// 		if err := database.UpdateLeaderCommit(leaderCommitDBData); err != nil {
-// 			log.Printf("Failed to save updated commit data for %s in round %s: %v", eoaAddress.Hex(), uniqueKey, err)
-// 			return
-// 		} else {
-// 			data.SubmitMerkleRootDone = true
-// 			roundMap[eoaAddress] = data
-// 		}
-// 	}
-// }
 
 func isEOAActivatedForRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient, eoaAddress common.Address) (bool, bool) {
 	activatedOperators, err := eth.GetActivatedOperators(fallbackEthClient)

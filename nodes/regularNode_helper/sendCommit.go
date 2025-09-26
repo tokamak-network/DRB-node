@@ -37,10 +37,6 @@ type CommitData struct {
 var Execution int32 // 0 = false, 1 = true
 var Halted int32    // 0 = false, 1 = true
 
-// ActivatedOperator slice with mutex protection
-var ActivatedOperator []string
-var ActivatedOperatorMu sync.RWMutex
-
 // String variables - using atomic with unsafe.Pointer
 var CurrentRound unsafe.Pointer    // *string
 var CurrentTrialNum unsafe.Pointer // *string
@@ -396,10 +392,10 @@ func processSecretRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
 		log.Printf("Attempting to determine reveal order for regular node...")
 
+		// get activated operators
+		activatedOps := eth.GetActivatedOperatorsCached()
 		// Try to determine reveal order for regular node
-		ops := eth.ActivatedOperators
-
-		success, err := commitreveal2.DetermineRegularRevealOrder(round.String(), trialNum.String(), ops)
+		success, err := commitreveal2.DetermineRegularRevealOrder(round.String(), trialNum.String(), activatedOps)
 		if err != nil || !success {
 			log.Printf("Failed to determine reveal order: %v", err)
 			return
@@ -520,12 +516,6 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 	SetCurrentTrialNum(trialNum.String())
 
 	eth.UpdateActivatedOperators(fallbackEthClient)
-	// Convert []common.Address to []string for SetActivatedOperator
-	stringAddrs := make([]string, len(eth.ActivatedOperators))
-	for i, addr := range eth.ActivatedOperators {
-		stringAddrs[i] = addr.Hex()
-	}
-	SetActivatedOperator(stringAddrs)
 	SetCurrentRound(round.String())
 
 	if state.Cmp(big.NewInt(1)) == 0 {
@@ -539,14 +529,12 @@ func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRP
 
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
-		operators := FetchActivatedOperators(fallbackEthClient, roundStr)
-		SetActivatedOperator(operators)
 		SetExecution(true)
 		log.Printf("Execution started for round %s", roundStr)
 
 		// Start leader monitoring for the new round using block timestamp
 		StartLeaderMonitoring(fallbackEthClient, blockTimestamp, round.String(), trialNum.String())
-		go AllCosReceivedUnlocked(GetActivatedOperator(), round.String(), trialNum.String())
+		go AllCosReceivedUnlocked(round.String(), trialNum.String())
 	}
 
 	if state.Cmp(big.NewInt(2)) == 0 {
@@ -592,15 +580,15 @@ func CleanupRoundDataByUniqueKey(uniqueKey string) {
 	DeleteStrictOrder(uniqueKey)
 }
 
-func AllCosReceivedUnlocked(activatedOperator []string, round string, trialNum string) {
+func AllCosReceivedUnlocked(round string, trialNum string) {
 	for {
-		ops := eth.ActivatedOperators
+		activatedOps := eth.GetActivatedOperatorsCached()
 		if atomic.LoadInt32(&Halted) == 1 {
 			log.Println("System is halted. Skipping AllCosReceivedUnlocked.")
 			return
 		}
-		if allCosReceivedUnlockedRegular(round, trialNum, ops) {
-			flag, _ := commitreveal2.DetermineRegularRevealOrder(round, trialNum, ops)
+		if allCosReceivedUnlockedRegular(round, trialNum, activatedOps) {
+			flag, _ := commitreveal2.DetermineRegularRevealOrder(round, trialNum, activatedOps)
 			if flag {
 				break
 			}
@@ -611,9 +599,9 @@ func AllCosReceivedUnlocked(activatedOperator []string, round string, trialNum s
 	}
 }
 
-func allCosReceivedUnlockedRegular(round string, trialNum string, ops []common.Address) bool {
+func allCosReceivedUnlockedRegular(round string, trialNum string, activatedOps []common.Address) bool {
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	for _, op := range ops {
+	for _, op := range activatedOps {
 		v, ok := GetCosReceived(uniqueKey, op.Hex())
 		if !ok || !v {
 			return false
@@ -638,11 +626,17 @@ func processCommitRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	}
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 
-	acitvatedOps := GetActivatedOperator()
 	indices := unpackIndices(packedIndices)
 	// Copy indices by value (deep copy)
 	SetCvRequestIndices(indices)
-	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
+
+	// Convert eth.ActivatedOperators to []string for compatibility
+	activatedOps := eth.GetActivatedOperatorsCached()
+	activatedOpsStr := make([]string, len(activatedOps))
+	for i, addr := range activatedOps {
+		activatedOpsStr[i] = addr.Hex()
+	}
+	flag, err := findEOAAddress(indices, activatedOpsStr, eoaAddress)
 
 	if err != nil {
 		fmt.Println(err)
@@ -706,9 +700,14 @@ func processCosRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 	}
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 
-	acitvatedOps := GetActivatedOperator()
+	// Convert eth.ActivatedOperators to []string for compatibility
+	activatedOps := eth.GetActivatedOperatorsCached()
+	activatedOpsStr := make([]string, len(activatedOps))
+	for i, addr := range activatedOps {
+		activatedOpsStr[i] = addr.Hex()
+	}
 	indices := unpackIndicesWithLength(packedIndices, indicesLength)
-	flag, err := findEOAAddress(indices, acitvatedOps, eoaAddress)
+	flag, err := findEOAAddress(indices, activatedOpsStr, eoaAddress)
 
 	if err != nil {
 		fmt.Println(err)
@@ -798,20 +797,6 @@ func findEOAAddress(indices []*big.Int, activatedOps []string, eoaAddress string
 		}
 	}
 	return false, nil
-}
-
-func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string) []string {
-	var result []string
-	activatedOperators, err := eth.GetActivatedOperators(fallbackEthClient)
-	if err != nil {
-		log.Printf("Error fetching the activated operators %v", err)
-		return result
-	}
-	strAddresses := make([]string, len(activatedOperators))
-	for i, addr := range activatedOperators {
-		strAddresses[i] = addr.Hex()
-	}
-	return strAddresses
 }
 
 // StartLeaderMonitoring starts monitoring the leader for the current round
@@ -1063,7 +1048,7 @@ func StartRequestToSubmitSOrGenerateRandomNumberMonitoring(fallbackEthClient *fa
 
 	offChainSubmissionPeriod := big.NewInt(80)
 	offChainSubmissionPeriodPerOperator := big.NewInt(20)
-	activatedOperatorsLength := new(big.Int).SetInt64(int64(len(eth.ActivatedOperators)))
+	activatedOperatorsLength := new(big.Int).SetInt64(eth.GetActivatedOperatorsLength())
 	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
 
 	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod

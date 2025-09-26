@@ -348,7 +348,7 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 	}
 
 	// Broadcast the secret value to all activated regular nodes
-	ReliableBroadCastSSync(libp2putils.HostInstance, GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex(), secret)
+	ReliableBroadCastSSync(libp2putils.HostInstance, GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex(), secret, activatedOps)
 }
 
 func processRandomRequestNumber(fallbackEthClient *fallback_ethclient.FallbackRPCClient, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
@@ -576,7 +576,7 @@ func processCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *
 	fmt.Printf("Successfully stored COS for Round %s with Trail %s, EOA %s\n", roundStr, trialNumStr, eoa.Hex())
 
 	// Broadcast the COS value to all activated regular nodes
-	ReliableBroadCastCOS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cos)
+	ReliableBroadCastCOS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cos, activatedOps)
 
 	// Check if all COS values are received and stop monitoring if so
 	checkAndStopFailToSubmitCoMonitoring(roundStr, trialNumStr)
@@ -599,9 +599,11 @@ func updateCOS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round st
 	commitData.CosHex = cosHex
 	utils.SetCommittedNodeData(uniqueKey, eoa, commitData)
 
+	activatedOps := eth.GetActivatedOperatorsCached()
+
 	if AllCosReceivedUnlocked(uniqueKey) {
 		log.Printf("All COS received for round %s with trail %s.", round, trialNum)
-		_, err := commitreveal2.DetermineRevealOrder(round, trialNum, eth.ActivatedOperators)
+		_, err := commitreveal2.DetermineRevealOrder(round, trialNum, activatedOps)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, trialNum, err)
 			return
@@ -671,7 +673,7 @@ func processCVS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *
 	checkAndStopFailToSubmitCvMonitoring(roundStr, trialNumStr)
 
 	// Broadcast the CVS value to all activated regular nodes
-	ReliableBroadCastCVS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cvs)
+	ReliableBroadCastCVS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cvs, activatedOps)
 	if AllCvsReceivedUnlocked(uniqueKey) {
 		GenerateMerkleRoot(fallbackEthClient, roundStr, trialNumStr)
 	}
@@ -1185,7 +1187,7 @@ func callRequestToSubmitCv(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 // Helper function to get missing CVS operators
 func getMissingCvsOperators(uniqueKey string) []string {
 	var missingOperators []string
-	ops := eth.ActivatedOperators
+	ops := eth.GetActivatedOperatorsCached()
 
 	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists {

@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/database"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -146,7 +147,8 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 
 	// 🔄 Wait for broadcast to complete before proceeding to next node
 	log.Printf("🔄 Broadcasting secret from %s for round %s with trail %s...", req.RegularEoaAddress, round, trial)
-	broadcastCompleted := ReliableBroadCastSSync(h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue)
+	activatedOps := eth.GetActivatedOperatorsCached()
+	broadcastCompleted := ReliableBroadCastSSync(h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, activatedOps)
 
 	if broadcastCompleted {
 		log.Printf("✅ Broadcast completed for %s. Proceeding to next node in reveal order.", req.RegularEoaAddress)

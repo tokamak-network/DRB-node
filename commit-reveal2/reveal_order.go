@@ -9,7 +9,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/tokamak-network/DRB-node/database"
-	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -60,7 +59,7 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	return order
 }
 
-func DetermineRevealOrder(roundNum string, trialNum string, activatedOperators []common.Address) (bool, error) {
+func DetermineRevealOrder(roundNum string, trialNum string, activatedOps []common.Address) (bool, error) {
 	_, err := database.GetRevealOrder(roundNum, trialNum)
 	if err == nil {
 		log.Printf("Reveal order already exists for round %s with trail %s. Skipping calculation.", roundNum, trialNum)
@@ -69,9 +68,7 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOperators [
 
 	log.Printf("Determining reveal order for round %s with trail %s...", roundNum, trialNum)
 
-	operators := eth.ActivatedOperators
-
-	if len(operators) == 0 {
+	if len(activatedOps) == 0 {
 		log.Printf("No activated operators found for round %s with trail %s", roundNum, trialNum)
 		return false, fmt.Errorf("no activated operators found for round %s with trail %s", roundNum, trialNum)
 	}
@@ -79,7 +76,7 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOperators [
 	var cvsValues [][]byte
 	var cosValues [][]byte
 	var addresses []string
-	for _, eoaAddress := range operators {
+	for _, eoaAddress := range activatedOps {
 		eoaAddressStr := eoaAddress.Hex()
 
 		commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundNum, trialNum, eoaAddressStr)
@@ -127,7 +124,7 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOperators [
 	return true, nil
 }
 
-func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOperators []common.Address) (bool, error) {
+func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOps []common.Address) (bool, error) {
 	_, err := database.GetRevealOrder(roundNum, trialNum)
 	if err == nil {
 		log.Printf("Reveal order already exists for round %s with trial %s. Skipping calculation.", roundNum, trialNum)
@@ -136,9 +133,7 @@ func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOper
 
 	log.Printf("Determining reveal order for round %s with trial %s...", roundNum, trialNum)
 
-	operators := eth.ActivatedOperators
-
-	if len(operators) == 0 {
+	if len(activatedOps) == 0 {
 		log.Printf("No activated operators found for round %s", roundNum)
 		return false, fmt.Errorf("no activated operators found for round %s", roundNum)
 	}
@@ -146,7 +141,7 @@ func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOper
 	var cvsValues [][]byte
 	var cosValues [][]byte
 	var addresses []string
-	for _, eoaAddress := range operators {
+	for _, eoaAddress := range activatedOps {
 		eoaAddressStr := eoaAddress.Hex()
 
 		commitData, err := database.GetPeerCommitData(roundNum, trialNum, eoaAddressStr)

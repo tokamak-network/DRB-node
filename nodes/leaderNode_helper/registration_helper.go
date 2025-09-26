@@ -30,7 +30,7 @@ func RegisterNode(s network.Stream, abiFilePath string, fallbackEthClient *fallb
 
 	log.Printf("Verified registration for PeerID: %s", req.PeerID)
 	eth.UpdateActivatedOperators(fallbackEthClient)
-	operators := eth.ActivatedOperators
+	operators := eth.GetActivatedOperatorsCached()
 
 	// Check if the EOA is in the activated operators list
 	isActivated := false

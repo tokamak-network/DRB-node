@@ -17,7 +17,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/tokamak-network/DRB-node/database"
-	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -78,7 +77,7 @@ func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
 // }
 
 // ReliableBroadCastSSync broadcasts secret values with acknowledgment tracking and waits for completion
-func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte) bool {
+func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte, activatedOps []common.Address) bool {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress, "secret")
 
 	tracker := &utils.BroadcastTracker{
@@ -95,7 +94,7 @@ func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAd
 		Timeout:      3, // 3 seconds timeout
 	}
 
-	for _, op := range eth.ActivatedOperators {
+	for _, op := range activatedOps {
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
@@ -107,7 +106,7 @@ func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAd
 	SetActiveBroadcast(messageID, tracker)
 
 	// 🔄 Perform synchronous broadcast (wait for completion)
-	completed := performReliableBroadcastSync(h, tracker, "secret")
+	completed := performReliableBroadcastSync(h, tracker, "secret", activatedOps)
 
 	// Clean up from memory
 	DeleteActiveBroadcast(messageID)
@@ -116,7 +115,7 @@ func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAd
 }
 
 // ReliableBroadCastCOS broadcasts COS values with acknowledgment tracking
-func ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte) {
+func ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte, activatedOps []common.Address) {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cos")
 
 	tracker := &utils.BroadcastTracker{
@@ -133,7 +132,7 @@ func ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddr
 		Timeout:      3, // 30 seconds timeout
 	}
 
-	for _, op := range eth.ActivatedOperators {
+	for _, op := range activatedOps {
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
@@ -145,11 +144,11 @@ func ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddr
 	SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
-	go performReliableBroadcast(h, tracker, "cos")
+	go performReliableBroadcast(h, tracker, "cos", activatedOps)
 }
 
 // ReliableBroadCastCVS broadcasts CVS values with acknowledgment tracking
-func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte) {
+func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte, activatedOps []common.Address) {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cvs")
 
 	tracker := &utils.BroadcastTracker{
@@ -166,7 +165,7 @@ func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddr
 		Timeout:      3, // 3 seconds timeout
 	}
 
-	for _, op := range eth.ActivatedOperators {
+	for _, op := range activatedOps {
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
@@ -178,11 +177,11 @@ func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddr
 	SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
-	go performReliableBroadcast(h, tracker, "cvs")
+	go performReliableBroadcast(h, tracker, "cvs", activatedOps)
 }
 
 // performReliableBroadcast handles the actual broadcasting with retry logic
-func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broadcastType string) {
+func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) {
 	if GetHalted() {
 		DeleteActiveBroadcast(tracker.MessageID)
 		log.Println("System is halted. Skipping processCVS.")
@@ -236,7 +235,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		// Send to all activated operators
 		broadcastMutex.Lock()
 		operatorsToSend := make([]common.Address, 0)
-		for _, op := range eth.ActivatedOperators {
+		for _, op := range activatedOps {
 			if tracker.Acknowledged[op.Hex()] {
 				continue // Skip already acknowledged nodes
 			}
@@ -306,7 +305,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 }
 
 // performReliableBroadcastSync handles broadcasting synchronously and returns completion status
-func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, broadcastType string) bool {
+func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) bool {
 	if GetHalted() {
 		log.Println("System is halted. Skipping broadcast.")
 		return false
@@ -360,7 +359,7 @@ func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, 
 		// Send to all activated operators
 		broadcastMutex.Lock()
 		operatorsToSend := make([]common.Address, 0)
-		for _, op := range eth.ActivatedOperators {
+		for _, op := range activatedOps {
 			if tracker.Acknowledged[op.Hex()] {
 				continue // Skip already acknowledged nodes
 			}

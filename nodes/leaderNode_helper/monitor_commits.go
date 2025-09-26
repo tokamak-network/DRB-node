@@ -63,7 +63,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 	}
 
 	// Copy the activated operators from eth package
-	operatorAddresses := eth.ActivatedOperators
+	operatorAddresses := eth.GetActivatedOperatorsCached()
 	if len(operatorAddresses) < 2 {
 		return
 	}
@@ -167,7 +167,7 @@ func LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, 
 		log.Printf("Failed to load leader commits: %v", err)
 	}
 
-	// Sort leaderCommits based on eth.ActivatedOperators order
+	// Sort leaderCommits based on ActivatedOperators order
 	sortedLeaderCommits := sortLeaderCommitsByActivatedOperators(leaderCommits)
 
 	// Collect secret values, signatures (v, r, s), and round info in the order of activated operators
@@ -219,12 +219,9 @@ func LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, 
 // Updated function to use utils.LeaderCommitData
 func sortLeaderCommitsByActivatedOperators(leaderCommits []*utils.LeaderCommitData) []*utils.LeaderCommitData {
 	// Create a map for quick lookup of activated operators order
-	activatedOperatorsOrder := make(map[string]int)
-	for i, operator := range eth.ActivatedOperators {
-		activatedOperatorsOrder[operator.Hex()] = i
-	}
+	activatedOperatorsOrder := eth.GetActivatedOperatorsCached()
 
-	log.Printf("Activated operators order: %v", eth.ActivatedOperators)
+	log.Printf("Activated operators order: %v", activatedOperatorsOrder)
 
 	// Create a map of leaderCommits by EOA address for quick lookup
 	leaderCommitsMap := make(map[string]*utils.LeaderCommitData)
@@ -235,7 +232,7 @@ func sortLeaderCommitsByActivatedOperators(leaderCommits []*utils.LeaderCommitDa
 	// Create sorted array based on activated operators order
 	var sortedLeaderCommits []*utils.LeaderCommitData
 
-	for i, operator := range eth.ActivatedOperators {
+	for i, operator := range activatedOperatorsOrder {
 		operatorAddr := operator.Hex()
 		log.Printf("Looking for operator %s at position %d", operatorAddr, i)
 

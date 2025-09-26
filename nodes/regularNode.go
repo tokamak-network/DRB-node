@@ -336,12 +336,11 @@ func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitD
 
 // isEOAActivated checks if the current regular node's EOA address is in the activated operators list for the round
 func isEOAActivated(eoaAddress string) bool {
-	address := regularNode_helper.ActivatedOperator
 
-	// Compare with activated operators
-	for _, operator := range address {
+	activatedOps := eth.GetActivatedOperatorsCached()
+	for _, operator := range activatedOps {
 		// Compare operatorAddr with eoaAddr
-		if operator == eoaAddress {
+		if operator.Hex() == eoaAddress {
 			return true
 		}
 	}
