@@ -22,6 +22,7 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
+	"github.com/tokamak-network/DRB-node/pkg/constants"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -198,6 +199,8 @@ func receiveCommit(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 						log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
 						continue
 					}
+					// stop requestToSubmitCv monitoring
+					stopRequestToSubmitCvMonitoring()
 					// Start requestToSubmitCo monitoring
 					startRequestToSubmitCoMonitoring(fallbackEthClient, eventData.Round.String(), eventData.TrialNum.String(), big.NewInt(int64(blockTimestamp)))
 
@@ -331,10 +334,11 @@ func processSubmittedSecretRequest(round *big.Int, trialNum *big.Int, secret [32
 		return
 	}
 	regularNodeAddress := activatedOps[intValue]
-
-	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(GetSecretRequestSentForWhichRound(), regularNodeAddress.Hex(), regularNodeAddress.Hex())
+	fmt.Println("GetSecretRequestSentForWhichRound", GetSecretRequestSentForWhichRound())
+	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex())
 	if err != nil {
 		log.Printf("Failed to get leadercommit data from database by round and eoaAddress %v", err)
+		return
 	}
 
 	// Update leader commit data with secretValue
@@ -1387,8 +1391,18 @@ func startRequestToSubmitCoMonitoring(fallbackEthClient *fallback_ethclient.Fall
 
 	currentTime := big.NewInt(time.Now().Unix())
 
+	// Determine chainID from client and compute seconds buffer from configured block time
+	chainID, err := fallbackEthClient.NetworkID(context.Background())
+	if err != nil {
+		log.Printf("Failed to get network ID: %v", err)
+		return
+	}
+	blockTime := constants.Chains[chainID.Uint64()].BlockTime
+	bufferSeconds := int64(5*3) * int64(blockTime.Seconds())
+	buffer := big.NewInt(bufferSeconds)
 	// Calculate how long to wait
-	waitDuration := new(big.Int).Sub(deadline, currentTime)
+	duration := new(big.Int).Sub(deadline, currentTime)
+	waitDuration := new(big.Int).Sub(duration, buffer)
 
 	if waitDuration.Cmp(big.NewInt(0)) <= 0 {
 		log.Printf("Deadline already passed for requestToSubmitCo in round %s with trail %s", roundNum, trialNum)
