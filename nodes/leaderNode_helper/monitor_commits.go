@@ -124,9 +124,8 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 	if allEOAsSubmitted {
 		log.Printf("All EOAs have submitted for round %s with trail %s. Initiating random number generation.", round, trialNum)
 		secretsOnChainValue, _ := GetSecretsOnChain(uniqueKey)
-		notOnChain := !secretsOnChainValue
 
-		if notOnChain {
+		if !secretsOnChainValue {
 			cvOnChain, _ := GetCvOnChain(uniqueKey)
 			if !cvOnChain {
 				err = generateRandomNumberTransaction(fallbackEthClient, round, trialNum, secrets, vs, rs, ss)
