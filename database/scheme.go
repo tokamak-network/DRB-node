@@ -1,8 +1,8 @@
 package database
 
 type NodeInfoScheme struct {
-	ID         int    `pg:"id,pk"`
-	IP         string `pg:"ip,notnull"`
+	ID         int    `pg:"id"`
+	IP         string `pg:"ip,pk,notnull"`
 	Port       string `pg:"port,notnull"`
 	PeerID     string `pg:"peer_id,notnull"`
 	EOAAddress string `pg:"eoa_address,notnull"`
