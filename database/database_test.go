@@ -33,7 +33,5 @@ func TestMain(m *testing.M) {
 	// Run tests
 	code := m.Run()
 
-	// Teardown can be done here if needed (e.g., close DB, clean tables)
-
 	os.Exit(code)
 }

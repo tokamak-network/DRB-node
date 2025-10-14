@@ -38,11 +38,11 @@ func TestLeaderCommitCRUD(t *testing.T) {
 		TrialNum:       trialNum,
 		EOAAddress:     eoaAddr,
 		Cvs:            cvs,
-		CvsHex:         "", // should be auto-encoded
+		CvsHex:         "",
 		Cos:            cos,
-		CosHex:         "", // should be auto-encoded
+		CosHex:         "",
 		SecretValue:    secretValue,
-		SecretValueHex: "", // should be auto-encoded
+		SecretValueHex: "",
 		Sign: utils.SignInfo{
 			R: "rval",
 			S: "sval",

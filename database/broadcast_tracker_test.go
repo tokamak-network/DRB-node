@@ -27,8 +27,6 @@ func createTestTracker() *utils.BroadcastTracker {
 }
 
 func TestBroadcastTrackerCRUD(t *testing.T) {
-	// Assumes DB initialized before running tests
-
 	tracker := createTestTracker()
 
 	// Add tracker
