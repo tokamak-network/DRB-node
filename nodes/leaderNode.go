@@ -206,7 +206,24 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		return
 	}
 
-	recalculatedCvs := commitreveal2.Keccak256(req.Cos[:])
+	activatedOperators := eth.GetActivatedOperatorsCached()
+	operatorIndex := -1
+	for i, op := range activatedOperators {
+		if op.Hex() == req.EOAAddress {
+			operatorIndex = i
+			break
+		}
+	}
+
+	if operatorIndex == -1 {
+		log.Printf("Operator %s not found in activated operators", eoaAddress.Hex())
+		return
+	}
+	// Convert operatorIndex to a single byte
+	opIndexByte := []byte{uint8(operatorIndex)}
+	// Calculate CVS using abi.encodePacked(CO, uint8(operatorIndex))
+	recalculatedCvs := commitreveal2.Keccak256(commitreveal2.AbiEncodePacked(req.Cos[:], opIndexByte))
+
 	if !bytes.Equal(recalculatedCvs, commitData.Cvs[:]) {
 		log.Printf("COS hash mismatch for round %s with trail %s EOA %s. Rejecting COS.", round, trial, eoaAddress.Hex())
 		return

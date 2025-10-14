@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/tokamak-network/DRB-node/eth"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -25,15 +26,29 @@ func GenerateCommit(round string, operator string) ([32]byte, [32]byte, [32]byte
 
 	// Convert operator to Ethereum address
 	operatorAddress := common.HexToAddress(operator)
-
+	activatedOperators := eth.GetActivatedOperatorsCached()
+	operatorIndex := -1
+	for i, op := range activatedOperators {
+		if op.Hex() == operator {
+			operatorIndex = i
+			break
+		}
+	}
 	// Generate secret value using keccak256(abi.encodePacked(round, operator, timestamp))
-	secretValue := Keccak256(abiEncodePacked(intToBytes(roundInt), operatorAddress.Bytes(), intToBytes(timestamp)))
+	secretValue := Keccak256(AbiEncodePacked(IntToBytes(roundInt), operatorAddress.Bytes(), IntToBytes(timestamp)))
 
 	// Generate cos by hashing the secretValue using abi.encode
-	cos := Keccak256(abiEncode(secretValue))
+	cos := Keccak256(AbiEncode(secretValue))
 
-	// Generate cvs by hashing the cos using abi.encode
-	cvs := Keccak256(abiEncode(cos))
+	// Ensure operator index is found
+	if operatorIndex == -1 {
+		return [32]byte{}, [32]byte{}, [32]byte{}, fmt.Errorf("operator %s not found in activated operators", operator)
+	}
+
+	// Convert operatorIndex to a single byte
+	opIndexByte := []byte{uint8(operatorIndex)}
+	// Generate cvs by hashing abi.encodePacked(cos, uint8(operatorIndex))
+	cvs := Keccak256(AbiEncodePacked(cos, opIndexByte))
 
 	// Convert results into [32]byte format (Solidity's bytes32)
 	var secretValueBytes32, cosBytes32, cvsBytes32 [32]byte
@@ -57,7 +72,7 @@ func Keccak256(data []byte) []byte {
 }
 
 // abiEncode replicates Solidity's abi.encode behavior with 32-byte padding.
-func abiEncode(elements ...[]byte) []byte {
+func AbiEncode(elements ...[]byte) []byte {
 	var encoded []byte
 	for _, e := range elements {
 		encoded = append(encoded, common.LeftPadBytes(e, 32)...)
@@ -65,8 +80,8 @@ func abiEncode(elements ...[]byte) []byte {
 	return encoded
 }
 
-// abiEncodePacked replicates Solidity's abi.encodePacked behavior.
-func abiEncodePacked(elements ...[]byte) []byte {
+// AbiEncodePacked replicates Solidity's abi.encodePacked behavior.
+func AbiEncodePacked(elements ...[]byte) []byte {
 	var packed []byte
 	for _, e := range elements {
 		packed = append(packed, e...)
@@ -75,6 +90,6 @@ func abiEncodePacked(elements ...[]byte) []byte {
 }
 
 // intToBytes converts a *big.Int to its padded big-endian byte representation.
-func intToBytes(n *big.Int) []byte {
+func IntToBytes(n *big.Int) []byte {
 	return common.LeftPadBytes(n.Bytes(), 32)
 }
