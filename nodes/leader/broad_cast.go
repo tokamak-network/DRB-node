@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -20,10 +19,6 @@ import (
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/utils"
 )
-
-var broadcastMutex sync.Mutex
-var activeBroadcasts = make(map[string]*utils.BroadcastTracker)
-var activeBroadcastsMu sync.RWMutex
 
 // getLeaderPrivateKey retrieves the leader's private key from environment
 func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
@@ -233,7 +228,7 @@ func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.Broadc
 		}
 
 		// Send to all activated operators
-		broadcastMutex.Lock()
+		n.broadcastMutex.Lock()
 		operatorsToSend := make([]common.Address, 0)
 		for _, op := range activatedOps {
 			if tracker.Acknowledged[op.Hex()] {
@@ -241,7 +236,7 @@ func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.Broadc
 			}
 			operatorsToSend = append(operatorsToSend, op)
 		}
-		broadcastMutex.Unlock()
+		n.broadcastMutex.Unlock()
 
 		for _, op := range operatorsToSend {
 			// Add peer info into peer store
@@ -274,7 +269,7 @@ func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.Broadc
 		time.Sleep(time.Duration(tracker.Timeout) * time.Second)
 
 		// Check if all nodes have acknowledged
-		broadcastMutex.Lock()
+		n.broadcastMutex.Lock()
 		allAcknowledged := true
 		for _, acknowledged := range tracker.Acknowledged {
 			if !acknowledged {
@@ -284,7 +279,7 @@ func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.Broadc
 		}
 
 		if allAcknowledged {
-			broadcastMutex.Unlock()
+			n.broadcastMutex.Unlock()
 			break
 		}
 
@@ -297,7 +292,7 @@ func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.Broadc
 				}
 			}
 		}
-		broadcastMutex.Unlock()
+		n.broadcastMutex.Unlock()
 	}
 
 	// Clean up from memory
@@ -357,7 +352,7 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 		}
 
 		// Send to all activated operators
-		broadcastMutex.Lock()
+		n.broadcastMutex.Lock()
 		operatorsToSend := make([]common.Address, 0)
 		for _, op := range activatedOps {
 			if tracker.Acknowledged[op.Hex()] {
@@ -365,7 +360,7 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 			}
 			operatorsToSend = append(operatorsToSend, op)
 		}
-		broadcastMutex.Unlock()
+		n.broadcastMutex.Unlock()
 
 		for _, op := range operatorsToSend {
 			// Add peer info into peer store
@@ -398,7 +393,7 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 		time.Sleep(time.Duration(tracker.Timeout) * time.Second)
 
 		// Check if all nodes have acknowledged
-		broadcastMutex.Lock()
+		n.broadcastMutex.Lock()
 		allAcknowledged := true
 		for _, acknowledged := range tracker.Acknowledged {
 			if !acknowledged {
@@ -410,7 +405,7 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 		if allAcknowledged {
 			log.Printf("✅ All nodes acknowledged %s broadcast for round %s, EOA %s",
 				broadcastType, tracker.Round, tracker.EOAAddress)
-			broadcastMutex.Unlock()
+			n.broadcastMutex.Unlock()
 			return true
 		}
 
@@ -422,10 +417,10 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 					log.Printf("  - %s", eoa)
 				}
 			}
-			broadcastMutex.Unlock()
+			n.broadcastMutex.Unlock()
 			return false
 		}
-		broadcastMutex.Unlock()
+		n.broadcastMutex.Unlock()
 	}
 
 	return false
@@ -437,8 +432,8 @@ func (n *LeaderNode) HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
 		log.Println("System is halted. Skipping HandleAcknowledgment.")
 		return
 	}
-	broadcastMutex.Lock()
-	defer broadcastMutex.Unlock()
+	n.broadcastMutex.Lock()
+	defer n.broadcastMutex.Unlock()
 
 	tracker, exists := n.GetActiveBroadcast(ack.MessageID)
 	if !exists {

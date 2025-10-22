@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"log"
 	"math/big"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -20,29 +19,22 @@ import (
 )
 
 // var SecretValue [][32]byte
-var RoundSecrets = make(map[string][][32]byte)
-var roundSecret = make(map[string]map[string]bool)
-var secretsOnChain = make(map[string]bool)
-var Indices []*big.Int
-var indicesMutex sync.RWMutex
-var secretMapsMutex sync.RWMutex
-var secretsOnChainMu sync.RWMutex
 
 // ResetIndicesForNewRound resets the Indices array for a new round
-func ResetIndicesForNewRound() {
-	indicesMutex.Lock()
-	defer indicesMutex.Unlock()
-	Indices = make([]*big.Int, 0)
+func (n *LeaderNode) ResetIndicesForNewRound() {
+	n.indicesMutex.Lock()
+	defer n.indicesMutex.Unlock()
+	n.indices = make([]*big.Int, 0)
 }
 
 // GetIndices returns a copy of the current Indices array
 func (n *LeaderNode) GetIndices() []*big.Int {
-	indicesMutex.RLock()
-	defer indicesMutex.RUnlock()
+	n.indicesMutex.RLock()
+	defer n.indicesMutex.RUnlock()
 
 	// Return a copy to prevent external modifications
-	result := make([]*big.Int, len(Indices))
-	for i, idx := range Indices {
+	result := make([]*big.Int, len(n.indices))
+	for i, idx := range n.indices {
 		result[i] = new(big.Int).Set(idx)
 	}
 	return result
@@ -50,20 +42,20 @@ func (n *LeaderNode) GetIndices() []*big.Int {
 
 // AppendToIndices safely appends a new index to the Indices array
 func (n *LeaderNode) AppendToIndices(index *big.Int) {
-	indicesMutex.Lock()
-	defer indicesMutex.Unlock()
-	Indices = append(Indices, new(big.Int).Set(index))
+	n.indicesMutex.Lock()
+	defer n.indicesMutex.Unlock()
+	n.indices = append(n.indices, new(big.Int).Set(index))
 }
 
 // SetIndices safely sets the entire Indices array
 func (n *LeaderNode) SetIndices(indices []*big.Int) {
-	indicesMutex.Lock()
-	defer indicesMutex.Unlock()
+	n.indicesMutex.Lock()
+	defer n.indicesMutex.Unlock()
 
 	// Create a copy of the input slice
-	Indices = make([]*big.Int, len(indices))
+	n.indices = make([]*big.Int, len(indices))
 	for i, idx := range indices {
-		Indices[i] = new(big.Int).Set(idx)
+		n.indices[i] = new(big.Int).Set(idx)
 	}
 }
 

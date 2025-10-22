@@ -7,10 +7,7 @@ import (
 	"math/big"
 	"os"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -32,55 +29,23 @@ type CommitData struct {
 	Sign            map[string]string `json:"sign"`
 }
 
-// Atomic variables for thread safety
-var Execution int32 // 0 = false, 1 = true
-var Halted int32    // 0 = false, 1 = true
-
-// String variables - using atomic with unsafe.Pointer
-var CurrentRound unsafe.Pointer    // *string
-var CurrentTrialNum unsafe.Pointer // *string
-
-// Map variables with mutex protection
-var RoundsData map[string]RoundData
-var RoundsDataMu sync.RWMutex
-
-var StartTime *big.Int
-var StartTimeMu sync.RWMutex
-
 // StartTime getter/setter functions
 func (n *RegularNode) SetStartTime(timestamp *big.Int) {
-	StartTimeMu.Lock()
-	defer StartTimeMu.Unlock()
-	StartTime = timestamp
+	n.startTimeMu.Lock()
+	defer n.startTimeMu.Unlock()
+	n.startTime = timestamp
 }
 
 func (n *RegularNode) GetStartTime() *big.Int {
-	StartTimeMu.RLock()
-	defer StartTimeMu.RUnlock()
-	return StartTime
+	n.startTimeMu.RLock()
+	defer n.startTimeMu.RUnlock()
+	return n.startTime
 }
 
 type RoundData struct {
 	MerkleRoot   bool
 	RandomNumber bool
 }
-
-// Add new variables for monitoring with atomic protection
-var (
-	leaderMonitoringActive                                int32 // 0 = false, 1 = true
-	monitoringTimer                                       *time.Timer
-	merkleRootSubmittedEventEmitted                       int32 // 0 = false, 1 = true
-	merkleRootMonitoringTimer                             *time.Timer
-	requestToSubmitSOrGenerateRandomNumberMonitoringTimer *time.Timer
-	merkleRootSubmittedTOrRequestedCvTime                 *big.Int
-	merkleRootTimeMu                                      sync.RWMutex // Protect big.Int pointer
-)
-
-var cvRequestIndices []*big.Int
-var cvRequestIndicesMu sync.RWMutex
-
-var submittedCvIndices map[string]map[string]bool // Track which indices have submitted CV values
-var submittedCvIndicesMutex sync.RWMutex          // Protect access to submittedCvIndices
 
 func (n *RegularNode) MonitorCommitRequest() {
 	n.receiveCommitRequest()
@@ -304,10 +269,11 @@ func (n *RegularNode) receiveCommitRequest() {
 }
 
 func (n *RegularNode) processCvSubmitted(round *big.Int, trialNum *big.Int, index *big.Int) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping processCVS.")
 		return
 	}
+
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 
@@ -343,7 +309,7 @@ func (n *RegularNode) checkAllCVsSubmittedOnChain(round string, trialNum string)
 }
 
 func (n *RegularNode) processSubmittedSecretRequest(round, trialNum, index *big.Int) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
 	}
@@ -379,7 +345,7 @@ func (n *RegularNode) processSubmittedSecretRequest(round, trialNum, index *big.
 }
 
 func (n *RegularNode) processSecretRequest(round, trialNum, index *big.Int) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
 	}
@@ -485,7 +451,7 @@ func (n *RegularNode) submitS(round string, trialNum string) {
 }
 
 func (n *RegularNode) processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
 	}
@@ -519,7 +485,7 @@ func (n *RegularNode) processRandomRequestNumber(blockTimestamp *big.Int, round 
 
 	if state.Cmp(big.NewInt(1)) == 0 {
 		// Set Halted to 0 to resume the round
-		atomic.StoreInt32(&Halted, 0)
+		n.SetHalted(false)
 		// Delete old round data except current round from database
 		err := database.DeleteOldRoundDataForRegularNode(round.String())
 		if err != nil {
@@ -557,14 +523,14 @@ func (n *RegularNode) processRandomRequestNumber(blockTimestamp *big.Int, round 
 		// Delete round and trial data from database
 		database.DeleteRoundTrialDataForRegularNode(n.GetCurrentRound(), trialNum.String())
 		// resume the round
-		atomic.StoreInt32(&Halted, 1)
+		n.SetHalted(true)
 		// resuming(fallbackEthClient)
 		n.SetExecution(false)
 	}
 
 	// Update rounds data
-	if RoundsData == nil {
-		RoundsData = make(map[string]RoundData)
+	if n.roundsData == nil {
+		n.roundsData = make(map[string]RoundData)
 	}
 
 	n.SetRoundData(uniqueKey, RoundData{
@@ -582,7 +548,7 @@ func (n *RegularNode) CleanupRoundDataByUniqueKey(uniqueKey string) {
 func (n *RegularNode) AllCosReceivedUnlocked(round string, trialNum string) {
 	for {
 		activatedOps := eth.GetActivatedOperatorsCached()
-		if atomic.LoadInt32(&Halted) == 1 {
+		if n.GetHalted() {
 			log.Println("System is halted. Skipping AllCosReceivedUnlocked.")
 			return
 		}
@@ -610,7 +576,7 @@ func (n *RegularNode) allCosReceivedUnlockedRegular(round string, trialNum strin
 }
 
 func (n *RegularNode) processCommitRequest(round *big.Int, trialNum *big.Int, packedIndices *big.Int) error {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping processCommitRequest.")
 		return nil
 	}
@@ -684,7 +650,7 @@ func (n *RegularNode) processCommitRequest(round *big.Int, trialNum *big.Int, pa
 }
 
 func (n *RegularNode) processCosRequest(Round *big.Int, TrialNum *big.Int, packedIndices *big.Int, indicesLength *big.Int) error {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping processCosRequest.")
 		return nil
 	}
@@ -800,7 +766,7 @@ func (n *RegularNode) findEOAAddress(indices []*big.Int, activatedOps []string, 
 
 // StartLeaderMonitoring starts monitoring the leader for the current round
 func (n *RegularNode) StartLeaderMonitoring(startTime *big.Int, round string, trialNum string) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping StartLeaderMonitoring.")
 		return
 	}
@@ -838,7 +804,7 @@ func (n *RegularNode) StartLeaderMonitoring(startTime *big.Int, round string, tr
 	log.Printf("Starting leader monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 
 	// Set timer to call the function when deadline is reached
-	monitoringTimer = time.AfterFunc(duration, func() {
+	n.monitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToRequestSubmitCVOrSubmitMerkleRoot", round)
 		n.callFailToRequestSubmitCVOrSubmitMerkleRoot(round, trialNum)
 		n.SetLeaderMonitoringActive(false)
@@ -851,9 +817,9 @@ func (n *RegularNode) StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(roun
 		return
 	}
 
-	if monitoringTimer != nil {
-		monitoringTimer.Stop()
-		monitoringTimer = nil
+	if n.monitoringTimer != nil {
+		n.monitoringTimer.Stop()
+		n.monitoringTimer = nil
 	}
 
 	n.SetLeaderMonitoringActive(false)
@@ -945,7 +911,7 @@ func (n *RegularNode) StartMerkleRootMonitoring(round string, trialNum string, r
 	log.Printf("Starting merkle root monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 
 	// Set timer to call the function when deadline is reached
-	merkleRootMonitoringTimer = time.AfterFunc(duration, func() {
+	n.merkleRootMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, checking conditions before calling failToSubmitMerkleRootAfterDispute", round)
 
 		// Check if all CVs have been submitted on-chain and merkle root hasn't been submitted
@@ -961,9 +927,9 @@ func (n *RegularNode) StartMerkleRootMonitoring(round string, trialNum string, r
 // StopFailToSubmitMerkleRootAfterDisputeMonitoring stops the current merkle root monitoring
 func (n *RegularNode) StopFailToSubmitMerkleRootAfterDisputeMonitoring(round string, trialNum string) {
 
-	if merkleRootMonitoringTimer != nil {
-		merkleRootMonitoringTimer.Stop()
-		merkleRootMonitoringTimer = nil
+	if n.merkleRootMonitoringTimer != nil {
+		n.merkleRootMonitoringTimer.Stop()
+		n.merkleRootMonitoringTimer = nil
 	}
 
 	log.Printf("Stopped merkle root monitoring for round %s", round)
@@ -1040,7 +1006,7 @@ func (n *RegularNode) CheckAndStartMonitoring(round string, trialNum string) {
 
 // StartRequestToSubmitSOrGenerateRandomNumberMonitoring starts monitoring for failToRequestSOrGenerateRandomNumber condition
 func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(round string, trialNum string) {
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping StartRequestToSubmitSOrGenerateRandomNumberMonitoring.")
 		return
 	}
@@ -1066,7 +1032,7 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(roun
 		n.GetMerkleRootSubmittedTOrRequestedCvTime(), offChainSubmissionPeriod, offChainSubmissionPeriodPerOperator, activatedOperatorsLength, requestOrSubmitOrFailDecisionPeriod)
 
 	// Set timer to call the function when deadline is reached
-	requestToSubmitSOrGenerateRandomNumberMonitoringTimer = time.AfterFunc(duration, func() {
+	n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToRequestSOrGenerateRandomNumber", round)
 		n.callFailToRequestSOrGenerateRandomNumber(round, trialNum)
 	})
@@ -1075,9 +1041,9 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(roun
 // StopRequestToSubmitSOrGenerateRandomNumberMonitoring stops the monitoring
 func (n *RegularNode) StopRequestToSubmitSOrGenerateRandomNumberMonitoring(round string, trialNum string) {
 
-	if requestToSubmitSOrGenerateRandomNumberMonitoringTimer != nil {
-		requestToSubmitSOrGenerateRandomNumberMonitoringTimer.Stop()
-		requestToSubmitSOrGenerateRandomNumberMonitoringTimer = nil
+	if n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer != nil {
+		n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer.Stop()
+		n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer = nil
 	}
 
 	log.Printf("Stopped request to submit S or generate random number monitoring for round %s", round)

@@ -7,7 +7,6 @@ import (
 	"log"
 	"math/big"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -18,16 +17,6 @@ import (
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
-
-// Tracks EOAs that have been sent requests per round - protected with mutex
-var revealRequestStatus = make(map[string][]string)
-var revealRequestStatusMu sync.RWMutex
-
-// Variables for monitoring failToSubmitS condition - using atomic for thread safety
-var failToSubmitSMonitoringActive int32 // 0 = false, 1 = true
-var failToSubmitSMonitoringTimer *time.Timer
-var lastSubmitSTimestamp *big.Int
-var timestampMu sync.RWMutex // Protect big.Int pointers
 
 // StartSecretValueRequests initializes the secret value request process for a given round
 func (n *LeaderNode) StartSecretValueRequests(h host.Host, round string, trialNum string) {
@@ -355,7 +344,7 @@ func (n *LeaderNode) startMonitoringWithPeriod(round string, trialNum string, pe
 		n.GetLastSubmitSTimestamp(), period)
 
 	// Set timer to call the function when deadline is reached
-	failToSubmitSMonitoringTimer = time.AfterFunc(duration, func() {
+	n.failToSubmitSMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToSubmitS", round)
 		n.callFailToSubmitS(round, trialNum)
 		n.SetFailToSubmitSMonitoringActive(false)
@@ -368,9 +357,9 @@ func (n *LeaderNode) StopFailToSubmitSMonitoring(round string, trialNum string) 
 		return
 	}
 
-	if failToSubmitSMonitoringTimer != nil {
-		failToSubmitSMonitoringTimer.Stop()
-		failToSubmitSMonitoringTimer = nil
+	if n.failToSubmitSMonitoringTimer != nil {
+		n.failToSubmitSMonitoringTimer.Stop()
+		n.failToSubmitSMonitoringTimer = nil
 	}
 
 	n.SetFailToSubmitSMonitoringActive(false)

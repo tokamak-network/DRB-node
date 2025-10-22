@@ -9,10 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -25,42 +22,6 @@ import (
 	"github.com/tokamak-network/DRB-node/pkg/constants"
 	"github.com/tokamak-network/DRB-node/utils"
 )
-
-var CommitMu sync.Mutex
-
-// Atomic variables for thread safety
-var Execution int32 // 0 = false, 1 = true
-var Halted int32    // 0 = false, 1 = true
-
-// Merkle root submission status flag (using atomic operations)
-var submittingMerkleRoot int32 // 0 = false, 1 = true (atomic)
-
-// Monitoring active flags - using atomic for thread safety
-var RequestedToSubmitCoMonitoringActive int32    // 0 = false, 1 = true
-var RequestedToSubmitCvMonitoringActive int32    // 0 = false, 1 = true
-var RequestToSubmitCvMonitoringActive int32      // 0 = false, 1 = true
-var RequestToSubmitCoTimerMonitoringActive int32 // 0 = false, 1 = true
-
-// Timer variables (already safe as they're pointers)
-var RequestedToSubmitCoMonitoringTimer *time.Timer
-var RequestedToSubmitCvMonitoringTimer *time.Timer
-var RequestToSubmitCvMonitoringTimer *time.Timer
-var RequestToSubmitCoTimerMonitoringTimer *time.Timer
-
-// In case last SSubmitted event also get's emmitted with Status event and curState is IN_PROGRESS then CurrentRound vairable will not be consistent
-// Note: SecretRequestSentForWhichRound, CurrentRound, CurrentTrial, and Req are now handled with atomic operations
-// String variables - using atomic with unsafe.Pointer
-var SecretRequestSentForWhichRound unsafe.Pointer // *string
-var CurrentRound unsafe.Pointer                   // *string
-var CurrentTrial unsafe.Pointer                   // *string
-
-// Map variables with mutex protection
-var RoundsData map[string]RoundData
-var RoundsDataMu sync.RWMutex
-
-// Req is a struct so it needs mutex protection
-var Req RandomRequest
-var ReqMu sync.RWMutex
 
 type RandomRequest struct {
 	Round     *big.Int
@@ -374,7 +335,7 @@ func (n *LeaderNode) processRandomRequestNumber(blockTimestamp *big.Int, round *
 	})
 	if state.Cmp(big.NewInt(1)) == 0 {
 		// Set Halted to 0 to resume the round
-		atomic.StoreInt32(&Halted, 0)
+		n.SetHalted(false)
 		// Delete round and trial data from database
 		err := database.DeleteOldRoundDataForLeaderNode(round.String())
 		if err != nil {
@@ -386,7 +347,7 @@ func (n *LeaderNode) processRandomRequestNumber(blockTimestamp *big.Int, round *
 		// Update the activated operators
 		eth.UpdateActivatedOperators(n.fallbackEthClient)
 		// Reset the indices for the new round
-		ResetIndicesForNewRound()
+		n.ResetIndicesForNewRound()
 		log.Printf("Reset Indices array for new round %s with trail %s", n.GetCurrentRound(), n.GetCurrentTrial())
 
 		// Start monitoring for automatic requestToSubmitCv
@@ -799,7 +760,7 @@ func (n *LeaderNode) startFailToSubmitCoMonitoring(round string, trialNum string
 	log.Printf("Starting failToSubmitCo monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 
 	// Set timer to call the function when deadline is reached
-	RequestedToSubmitCoMonitoringTimer = time.AfterFunc(duration, func() {
+	n.requestedToSubmitCoMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToSubmitCo", round)
 		n.callFailToSubmitCo(round, trialNum)
 		n.SetRequestedToSubmitCoMonitoringActive(false)
@@ -808,9 +769,9 @@ func (n *LeaderNode) startFailToSubmitCoMonitoring(round string, trialNum string
 
 // Add function to stop failToSubmitCo monitoring
 func (n *LeaderNode) stopFailToSubmitCoMonitoring() {
-	if RequestedToSubmitCoMonitoringTimer != nil {
-		RequestedToSubmitCoMonitoringTimer.Stop()
-		RequestedToSubmitCoMonitoringTimer = nil
+	if n.requestedToSubmitCoMonitoringTimer != nil {
+		n.requestedToSubmitCoMonitoringTimer.Stop()
+		n.requestedToSubmitCoMonitoringTimer = nil
 	}
 	n.SetRequestedToSubmitCoMonitoringActive(false)
 	log.Printf("Stopped failToSubmitCo monitoring")
@@ -913,7 +874,7 @@ func (n *LeaderNode) startFailToSubmitCvMonitoring(round string, trialNum string
 	log.Printf("Starting failToSubmitCv monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 
 	// Set timer to call the function when deadline is reached
-	RequestedToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
+	n.requestedToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("⚠️ Deadline reached for round %s, calling failToSubmitCv", round)
 		n.callFailToSubmitCv(round, trialNum)
 		n.SetRequestedToSubmitCvMonitoringActive(false)
@@ -922,9 +883,9 @@ func (n *LeaderNode) startFailToSubmitCvMonitoring(round string, trialNum string
 
 // Add function to stop failToSubmitCv monitoring
 func (n *LeaderNode) stopFailToSubmitCvMonitoring() {
-	if RequestedToSubmitCvMonitoringTimer != nil {
-		RequestedToSubmitCvMonitoringTimer.Stop()
-		RequestedToSubmitCvMonitoringTimer = nil
+	if n.requestedToSubmitCvMonitoringTimer != nil {
+		n.requestedToSubmitCvMonitoringTimer.Stop()
+		n.requestedToSubmitCvMonitoringTimer = nil
 	}
 	n.SetRequestedToSubmitCvMonitoringActive(false)
 	log.Printf("Stopped failToSubmitCv monitoring")
@@ -989,23 +950,23 @@ func (n *LeaderNode) ResetCosAndCvsMonitoringState(round string, trialNum string
 
 	// Reset COS monitoring variables
 	n.SetRequestedToSubmitCoMonitoringActive(false)
-	if RequestedToSubmitCoMonitoringTimer != nil {
-		RequestedToSubmitCoMonitoringTimer.Stop()
-		RequestedToSubmitCoMonitoringTimer = nil
+	if n.requestedToSubmitCoMonitoringTimer != nil {
+		n.requestedToSubmitCoMonitoringTimer.Stop()
+		n.requestedToSubmitCoMonitoringTimer = nil
 	}
 
 	// Reset CVS monitoring variables (failToSubmitCv)
 	n.SetRequestedToSubmitCvMonitoringActive(false)
-	if RequestedToSubmitCvMonitoringTimer != nil {
-		RequestedToSubmitCvMonitoringTimer.Stop()
-		RequestedToSubmitCvMonitoringTimer = nil
+	if n.requestedToSubmitCvMonitoringTimer != nil {
+		n.requestedToSubmitCvMonitoringTimer.Stop()
+		n.requestedToSubmitCvMonitoringTimer = nil
 	}
 
 	// Reset requestToSubmitCv monitoring variables
 	n.SetRequestToSubmitCvMonitoringActive(false)
-	if RequestToSubmitCvMonitoringTimer != nil {
-		RequestToSubmitCvMonitoringTimer.Stop()
-		RequestToSubmitCvMonitoringTimer = nil
+	if n.requestToSubmitCvMonitoringTimer != nil {
+		n.requestToSubmitCvMonitoringTimer.Stop()
+		n.requestToSubmitCvMonitoringTimer = nil
 	}
 
 	// Reset secret request tracking variable
@@ -1047,7 +1008,7 @@ func (n *LeaderNode) CheckHaltedState() {
 	// If s_isInProcess equals 3, call resume function
 	if isInProcess.Cmp(big.NewInt(3)) == 0 {
 		// set Halted to 1 as protocol is halted
-		atomic.StoreInt32(&Halted, 1)
+		n.SetHalted(true)
 		n.resuming()
 	} else {
 		log.Printf("s_isInProcess is %v, no action needed", isInProcess)
@@ -1081,7 +1042,7 @@ func (n *LeaderNode) startRequestToSubmitCvMonitoring(round string, trialNum str
 		startTime, s_offChainSubmissionPeriod, s_requestOrSubmitOrFailDecisionPeriod)
 
 	// Set timer to call the function when deadline is reached
-	RequestToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
+	n.requestToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("⚠️ Deadline reached for round %s, calling requestToSubmitCv", round)
 		n.callRequestToSubmitCv(round, trialNum)
 		n.SetRequestToSubmitCvMonitoringActive(false)
@@ -1090,9 +1051,9 @@ func (n *LeaderNode) startRequestToSubmitCvMonitoring(round string, trialNum str
 
 // Add function to stop requestToSubmitCv monitoring
 func (n *LeaderNode) stopRequestToSubmitCvMonitoring() {
-	if RequestToSubmitCvMonitoringTimer != nil {
-		RequestToSubmitCvMonitoringTimer.Stop()
-		RequestToSubmitCvMonitoringTimer = nil
+	if n.requestToSubmitCvMonitoringTimer != nil {
+		n.requestToSubmitCvMonitoringTimer.Stop()
+		n.requestToSubmitCvMonitoringTimer = nil
 	}
 	n.SetRequestToSubmitCvMonitoringActive(false)
 	log.Printf("Stopped requestToSubmitCv monitoring")
@@ -1218,14 +1179,14 @@ func (n *LeaderNode) GenerateMerkleRoot(roundNum string, trialNum string) {
 		log.Println("System is halted. Skipping GenerateMerkleRoot.")
 		return
 	}
-	CommitMu.Lock()
+	n.commitMu.Lock()
 	// Check if merkle root is a-lready done before proceeding
 	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
 
 	// Check if merkle root is already submitted using atomic operation
 	if n.GetSubmittingMerkleRoot() {
 		log.Printf("Merkle root is already being submitted for round %s with trail %s, skipping.", roundNum, trialNum)
-		CommitMu.Unlock()
+		n.commitMu.Unlock()
 		return
 	}
 
@@ -1233,10 +1194,10 @@ func (n *LeaderNode) GenerateMerkleRoot(roundNum string, trialNum string) {
 	roundData, exists := n.GetRoundData(uniqueKey)
 	if exists && roundData.MerkleRoot {
 		log.Printf("Merkle root already submitted for round %s with trail %s, skipping.", roundNum, trialNum)
-		CommitMu.Unlock()
+		n.commitMu.Unlock()
 		return
 	}
-	CommitMu.Unlock()
+	n.commitMu.Unlock()
 
 	log.Printf("Generating Merkle root for round %s with trail %s...", roundNum, trialNum)
 
@@ -1244,11 +1205,11 @@ func (n *LeaderNode) GenerateMerkleRoot(roundNum string, trialNum string) {
 
 	log.Printf("Activated operators for round %s with trail %s in order: %v", roundNum, trialNum, activatedOperatorsList)
 
-	CommitMu.Lock()
+	n.commitMu.Lock()
 	roundMap, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists || len(roundMap) == 0 {
 		log.Printf("No commits found in-memory for round %s with trail %s, cannot generate Merkle root.", roundNum, trialNum)
-		CommitMu.Unlock()
+		n.commitMu.Unlock()
 		return
 	}
 
@@ -1257,14 +1218,14 @@ func (n *LeaderNode) GenerateMerkleRoot(roundNum string, trialNum string) {
 		data, ok := roundMap[opAddr]
 		if !ok || data.Cvs == [32]byte{} {
 			log.Printf("Missing CVS for operator %s in round %s with trail %s", opAddr.Hex(), roundNum, trialNum)
-			CommitMu.Unlock()
+			n.commitMu.Unlock()
 			return
 		}
 		leaves = append(leaves, data.Cvs[:])
 		log.Printf("Added CVS from operator %s for round %s with trail %s", opAddr.Hex(), roundNum, trialNum)
 	}
 
-	CommitMu.Unlock()
+	n.commitMu.Unlock()
 
 	if len(leaves) == 0 {
 		log.Printf("Error: No CVS commits found for round %s with trail %s. Cannot generate Merkle root.", roundNum, trialNum)
@@ -1413,7 +1374,7 @@ func (n *LeaderNode) startRequestToSubmitCoMonitoring(roundNum string, trialNum 
 	log.Printf("Waiting %d seconds before checking COS for round %s with trail %s", waitSeconds, roundNum, trialNum)
 
 	// Use time.AfterFunc for the timer
-	RequestToSubmitCoTimerMonitoringTimer = time.AfterFunc(time.Duration(waitSeconds)*time.Second, func() {
+	n.requestToSubmitCoTimerMonitoringTimer = time.AfterFunc(time.Duration(waitSeconds)*time.Second, func() {
 		if n.GetRequestToSubmitCoTimerMonitoringActive() {
 			n.callRequestToSubmitCoIfNeeded(roundNum, trialNum, uniqueKey)
 		}
@@ -1428,8 +1389,8 @@ func (n *LeaderNode) callRequestToSubmitCoIfNeeded(roundNum string, trialNum str
 		return
 	}
 
-	CommitMu.Lock()
-	defer CommitMu.Unlock()
+	n.commitMu.Lock()
+	defer n.commitMu.Unlock()
 
 	ops := eth.GetActivatedOperatorsCached()
 	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
@@ -1459,9 +1420,9 @@ func (n *LeaderNode) callRequestToSubmitCoIfNeeded(roundNum string, trialNum str
 func (n *LeaderNode) stopRequestToSubmitCoMonitoring() {
 	if n.GetRequestToSubmitCoTimerMonitoringActive() {
 		n.SetRequestToSubmitCoTimerMonitoringActive(false)
-		if RequestToSubmitCoTimerMonitoringTimer != nil {
-			RequestToSubmitCoTimerMonitoringTimer.Stop()
-			RequestToSubmitCoTimerMonitoringTimer = nil
+		if n.requestToSubmitCoTimerMonitoringTimer != nil {
+			n.requestToSubmitCoTimerMonitoringTimer.Stop()
+			n.requestToSubmitCoTimerMonitoringTimer = nil
 		}
 		log.Printf("Stopped requestToSubmitCo monitoring")
 	}

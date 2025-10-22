@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -16,10 +14,6 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/utils"
 )
-
-// Global variables with mutex protection for thread safety
-var strictOrderWhileSecretRequest = make(map[string][]string)
-var strictOrderMu sync.RWMutex
 
 // checkPreviousSecretReceived checks if the previous node's secret was received via broadcast
 func (n *RegularNode) checkPreviousSecretReceived(round, trialNum, previousNodeEOA string) bool {
@@ -58,7 +52,7 @@ func (n *RegularNode) checkPreviousSecretReceived(round, trialNum, previousNodeE
 func (n *RegularNode) HandleSecretValueRequest(h host.Host, s network.Stream) {
 	defer s.Close()
 
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleSecretValueRequest.")
 		return
 	}

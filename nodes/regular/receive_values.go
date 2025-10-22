@@ -2,13 +2,10 @@ package regular_node
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"encoding/json"
 	"log"
 	"os"
 	"sync"
-	"sync/atomic"
-	"unsafe"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -18,16 +15,6 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/utils"
 )
-
-// Global variables with atomic/mutex protection for thread safety
-var CosRecevied sync.Map // outer: string, inner: *sync.Map (string->bool) - sync.Map is already thread-safe
-
-// regularNodeEOA string with atomic protection
-var regularNodeEOA unsafe.Pointer // *string
-
-// Private key with mutex protection
-var regularNodePrivateKey *ecdsa.PrivateKey
-var privateKeyMu sync.RWMutex
 
 // generates a signature for the acknowledgment
 func (n *RegularNode) generateAcknowledgmentSignature(eoaAddress string) []byte {
@@ -58,7 +45,7 @@ func (n *RegularNode) sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack 
 func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 	defer s.Close()
 
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleCvs.")
 		return
 	}
@@ -154,7 +141,7 @@ func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 	defer s.Close()
 
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleCos.")
 		return
 	}
@@ -254,7 +241,7 @@ func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 	defer s.Close()
 
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleSecret.")
 		return
 	}
@@ -347,13 +334,13 @@ func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 }
 
 func (n *RegularNode) SetCosReceived(outer, inner string, value bool) {
-	actual, _ := CosRecevied.LoadOrStore(outer, &sync.Map{})
+	actual, _ := n.cosRecevied.LoadOrStore(outer, &sync.Map{})
 	innerMap := actual.(*sync.Map)
 	innerMap.Store(inner, value)
 }
 
 func (n *RegularNode) GetCosReceived(outer, inner string) (bool, bool) {
-	actual, ok := CosRecevied.Load(outer)
+	actual, ok := n.cosRecevied.Load(outer)
 	if !ok {
 		return false, false
 	}

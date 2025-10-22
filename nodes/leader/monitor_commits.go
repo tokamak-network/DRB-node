@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -19,8 +18,6 @@ import (
 )
 
 // Global variables with mutex protection for thread safety
-var CvOnChain = make(map[string]bool)
-var CvOnChainMu sync.RWMutex
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
 func (n *LeaderNode) MonitorCommits() {
