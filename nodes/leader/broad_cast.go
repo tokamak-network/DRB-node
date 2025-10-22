@@ -1,4 +1,4 @@
-package leaderNode_helper
+package leader_node
 
 import (
 	"context"
@@ -77,7 +77,7 @@ func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
 // }
 
 // ReliableBroadCastSSync broadcasts secret values with acknowledgment tracking and waits for completion
-func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte, activatedOps []common.Address) bool {
+func (n *LeaderNode) ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte, activatedOps []common.Address) bool {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress, "secret")
 
 	tracker := &utils.BroadcastTracker{
@@ -103,19 +103,19 @@ func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAd
 		return false
 	}
 
-	SetActiveBroadcast(messageID, tracker)
+	n.SetActiveBroadcast(messageID, tracker)
 
 	// 🔄 Perform synchronous broadcast (wait for completion)
-	completed := performReliableBroadcastSync(h, tracker, "secret", activatedOps)
+	completed := n.performReliableBroadcastSync(h, tracker, "secret", activatedOps)
 
 	// Clean up from memory
-	DeleteActiveBroadcast(messageID)
+	n.DeleteActiveBroadcast(messageID)
 
 	return completed
 }
 
 // ReliableBroadCastCOS broadcasts COS values with acknowledgment tracking
-func ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte, activatedOps []common.Address) {
+func (n *LeaderNode) ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte, activatedOps []common.Address) {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cos")
 
 	tracker := &utils.BroadcastTracker{
@@ -141,14 +141,14 @@ func ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddr
 		return
 	}
 
-	SetActiveBroadcast(messageID, tracker)
+	n.SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
-	go performReliableBroadcast(h, tracker, "cos", activatedOps)
+	go n.performReliableBroadcast(h, tracker, "cos", activatedOps)
 }
 
 // ReliableBroadCastCVS broadcasts CVS values with acknowledgment tracking
-func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte, activatedOps []common.Address) {
+func (n *LeaderNode) ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte, activatedOps []common.Address) {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cvs")
 
 	tracker := &utils.BroadcastTracker{
@@ -174,16 +174,16 @@ func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddr
 		return
 	}
 
-	SetActiveBroadcast(messageID, tracker)
+	n.SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
-	go performReliableBroadcast(h, tracker, "cvs", activatedOps)
+	go n.performReliableBroadcast(h, tracker, "cvs", activatedOps)
 }
 
 // performReliableBroadcast handles the actual broadcasting with retry logic
-func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) {
-	if GetHalted() {
-		DeleteActiveBroadcast(tracker.MessageID)
+func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) {
+	if n.GetHalted() {
+		n.DeleteActiveBroadcast(tracker.MessageID)
 		log.Println("System is halted. Skipping processCVS.")
 		return
 	}
@@ -301,12 +301,12 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 	}
 
 	// Clean up from memory
-	DeleteActiveBroadcast(tracker.MessageID)
+	n.DeleteActiveBroadcast(tracker.MessageID)
 }
 
 // performReliableBroadcastSync handles broadcasting synchronously and returns completion status
-func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) bool {
-	if GetHalted() {
+func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) bool {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping broadcast.")
 		return false
 	}
@@ -432,15 +432,15 @@ func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, 
 }
 
 // HandleAcknowledgment processes acknowledgments from regular nodes
-func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
-	if GetHalted() {
+func (n *LeaderNode) HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleAcknowledgment.")
 		return
 	}
 	broadcastMutex.Lock()
 	defer broadcastMutex.Unlock()
 
-	tracker, exists := GetActiveBroadcast(ack.MessageID)
+	tracker, exists := n.GetActiveBroadcast(ack.MessageID)
 	if !exists {
 		log.Printf("Received acknowledgment for unknown message ID: %s", ack.MessageID)
 		return

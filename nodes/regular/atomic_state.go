@@ -1,4 +1,4 @@
-package regularNode_helper
+package regular_node
 
 import (
 	"crypto/ecdsa"
@@ -15,7 +15,7 @@ import (
 // ============================================================================
 
 // Execution state management
-func SetExecution(value bool) {
+func (n *RegularNode) SetExecution(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -23,12 +23,12 @@ func SetExecution(value bool) {
 	atomic.StoreInt32(&Execution, val)
 }
 
-func GetExecution() bool {
+func (n *RegularNode) GetExecution() bool {
 	return atomic.LoadInt32(&Execution) == 1
 }
 
 // Leader monitoring state management
-func SetLeaderMonitoringActive(value bool) {
+func (n *RegularNode) SetLeaderMonitoringActive(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -36,12 +36,12 @@ func SetLeaderMonitoringActive(value bool) {
 	atomic.StoreInt32(&leaderMonitoringActive, val)
 }
 
-func GetLeaderMonitoringActive() bool {
+func (n *RegularNode) GetLeaderMonitoringActive() bool {
 	return atomic.LoadInt32(&leaderMonitoringActive) == 1
 }
 
 // MerkleRootSubmitted event tracking
-func SetMerkleRootSubmittedEventEmitted(value bool) {
+func (n *RegularNode) SetMerkleRootSubmittedEventEmitted(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -49,7 +49,7 @@ func SetMerkleRootSubmittedEventEmitted(value bool) {
 	atomic.StoreInt32(&merkleRootSubmittedEventEmitted, val)
 }
 
-func GetMerkleRootSubmittedEventEmitted() bool {
+func (n *RegularNode) GetMerkleRootSubmittedEventEmitted() bool {
 	return atomic.LoadInt32(&merkleRootSubmittedEventEmitted) == 1
 }
 
@@ -62,7 +62,7 @@ var cleanupQueueMu sync.Mutex
 
 // EnqueueUniqueKeyForCleanup adds a uniqueKey to the cleanup queue. If the
 // queue size reaches 5 or more, it pops the oldest uniqueKey and cleans it up.
-func EnqueueUniqueKeyForCleanup(uniqueKey string) {
+func (n *RegularNode) EnqueueUniqueKeyForCleanup(uniqueKey string) {
 	cleanupQueueMu.Lock()
 
 	// enqueue
@@ -73,7 +73,7 @@ func EnqueueUniqueKeyForCleanup(uniqueKey string) {
 		for cleanupQueue.Length() >= 5 {
 			oldest := cleanupQueue.Remove().(string)
 			// perform cleanup outside
-			CleanupRoundDataByUniqueKey(oldest)
+			n.CleanupRoundDataByUniqueKey(oldest)
 		}
 		cleanupQueueMu.Unlock()
 		return
@@ -86,11 +86,11 @@ func EnqueueUniqueKeyForCleanup(uniqueKey string) {
 // ============================================================================
 
 // CurrentRound management
-func SetCurrentRound(value string) {
+func (n *RegularNode) SetCurrentRound(value string) {
 	atomic.StorePointer(&CurrentRound, unsafe.Pointer(&value))
 }
 
-func GetCurrentRound() string {
+func (n *RegularNode) GetCurrentRound() string {
 	ptr := atomic.LoadPointer(&CurrentRound)
 	if ptr == nil {
 		return ""
@@ -99,11 +99,11 @@ func GetCurrentRound() string {
 }
 
 // CurrentTrialNum management
-func SetCurrentTrialNum(value string) {
+func (n *RegularNode) SetCurrentTrialNum(value string) {
 	atomic.StorePointer(&CurrentTrialNum, unsafe.Pointer(&value))
 }
 
-func GetCurrentTrialNum() string {
+func (n *RegularNode) GetCurrentTrialNum() string {
 	ptr := atomic.LoadPointer(&CurrentTrialNum)
 	if ptr == nil {
 		return ""
@@ -112,11 +112,11 @@ func GetCurrentTrialNum() string {
 }
 
 // RegularNodeEOA management
-func SetRegularNodeEOA(value string) {
+func (n *RegularNode) SetRegularNodeEOA(value string) {
 	atomic.StorePointer(&regularNodeEOA, unsafe.Pointer(&value))
 }
 
-func GetRegularNodeEOA() string {
+func (n *RegularNode) GetRegularNodeEOA() string {
 	ptr := atomic.LoadPointer(&regularNodeEOA)
 	if ptr == nil {
 		return ""
@@ -129,13 +129,13 @@ func GetRegularNodeEOA() string {
 // ============================================================================
 
 // CvRequestIndices slice management
-func SetCvRequestIndices(indices []*big.Int) {
+func (n *RegularNode) SetCvRequestIndices(indices []*big.Int) {
 	cvRequestIndicesMu.Lock()
 	defer cvRequestIndicesMu.Unlock()
 	cvRequestIndices = indices
 }
 
-func GetCvRequestIndices() []*big.Int {
+func (n *RegularNode) GetCvRequestIndices() []*big.Int {
 	cvRequestIndicesMu.RLock()
 	defer cvRequestIndicesMu.RUnlock()
 
@@ -145,7 +145,7 @@ func GetCvRequestIndices() []*big.Int {
 	return result
 }
 
-func ClearCvRequestIndices() {
+func (n *RegularNode) ClearCvRequestIndices() {
 	cvRequestIndicesMu.Lock()
 	defer cvRequestIndicesMu.Unlock()
 	cvRequestIndices = []*big.Int{}
@@ -156,7 +156,7 @@ func ClearCvRequestIndices() {
 // ============================================================================
 
 // RoundsData map management
-func SetRoundData(key string, data RoundData) {
+func (n *RegularNode) SetRoundData(key string, data RoundData) {
 	RoundsDataMu.Lock()
 	defer RoundsDataMu.Unlock()
 	if RoundsData == nil {
@@ -165,37 +165,49 @@ func SetRoundData(key string, data RoundData) {
 	RoundsData[key] = data
 }
 
-func GetRoundData(key string) (RoundData, bool) {
+func (n *RegularNode) GetRoundData(key string) (RoundData, bool) {
 	RoundsDataMu.RLock()
 	defer RoundsDataMu.RUnlock()
 	data, exists := RoundsData[key]
 	return data, exists
 }
 
-func DeleteRoundsData(key string) {
+func (n *RegularNode) DeleteRoundsData(key string) {
 	RoundsDataMu.Lock()
 	defer RoundsDataMu.Unlock()
 	delete(RoundsData, key)
 }
 
 // StrictOrderWhileSecretRequest map management
-func SetStrictOrder(key string, value []string) {
+func (n *RegularNode) SetStrictOrder(key string, value []string) {
 	strictOrderMu.Lock()
 	defer strictOrderMu.Unlock()
 	strictOrderWhileSecretRequest[key] = value
 }
 
-func GetStrictOrder(key string) ([]string, bool) {
+func (n *RegularNode) GetStrictOrder(key string) ([]string, bool) {
 	strictOrderMu.RLock()
 	defer strictOrderMu.RUnlock()
 	value, exists := strictOrderWhileSecretRequest[key]
 	return value, exists
 }
 
-func DeleteStrictOrder(key string) {
+func (n *RegularNode) DeleteStrictOrder(key string) {
 	strictOrderMu.Lock()
 	defer strictOrderMu.Unlock()
 	delete(strictOrderWhileSecretRequest, key)
+}
+
+func (n *RegularNode) GetHalted() bool {
+	return atomic.LoadInt32(&Halted) == 1
+}
+
+func (n *RegularNode) SetHalted(value bool) {
+	var val int32
+	if value {
+		val = 1
+	}
+	atomic.StoreInt32(&Halted, val)
 }
 
 // ============================================================================
@@ -203,7 +215,7 @@ func DeleteStrictOrder(key string) {
 // ============================================================================
 
 // SetSubmittedCvIndicesValue sets a value in the submittedCvIndices map for a specific uniqueKey and index
-func SetSubmittedCvIndicesValue(uniqueKey, index string, value bool) {
+func (n *RegularNode) SetSubmittedCvIndicesValue(uniqueKey, index string, value bool) {
 	submittedCvIndicesMutex.Lock()
 	defer submittedCvIndicesMutex.Unlock()
 	if submittedCvIndices == nil {
@@ -216,7 +228,7 @@ func SetSubmittedCvIndicesValue(uniqueKey, index string, value bool) {
 }
 
 // GetSubmittedCvIndicesValue gets a value from the submittedCvIndices map for a specific uniqueKey and index
-func GetSubmittedCvIndicesValue(uniqueKey, index string) (bool, bool) {
+func (n *RegularNode) GetSubmittedCvIndicesValue(uniqueKey, index string) (bool, bool) {
 	submittedCvIndicesMutex.RLock()
 	defer submittedCvIndicesMutex.RUnlock()
 	if submittedCvIndices == nil || submittedCvIndices[uniqueKey] == nil {
@@ -227,7 +239,7 @@ func GetSubmittedCvIndicesValue(uniqueKey, index string) (bool, bool) {
 }
 
 // GetSubmittedCvIndicesMap gets the entire map for a specific uniqueKey
-func GetSubmittedCvIndicesMap(uniqueKey string) (map[string]bool, bool) {
+func (n *RegularNode) GetSubmittedCvIndicesMap(uniqueKey string) (map[string]bool, bool) {
 	submittedCvIndicesMutex.RLock()
 	defer submittedCvIndicesMutex.RUnlock()
 	if submittedCvIndices == nil || submittedCvIndices[uniqueKey] == nil {
@@ -242,7 +254,7 @@ func GetSubmittedCvIndicesMap(uniqueKey string) (map[string]bool, bool) {
 }
 
 // SetSubmittedCvIndicesMap sets the entire map for a specific uniqueKey
-func SetSubmittedCvIndicesMap(uniqueKey string, value map[string]bool) {
+func (n *RegularNode) SetSubmittedCvIndicesMap(uniqueKey string, value map[string]bool) {
 	submittedCvIndicesMutex.Lock()
 	defer submittedCvIndicesMutex.Unlock()
 	if submittedCvIndices == nil {
@@ -258,7 +270,7 @@ func SetSubmittedCvIndicesMap(uniqueKey string, value map[string]bool) {
 }
 
 // DeleteSubmittedCvIndices deletes submittedCvIndices entry for uniqueKey
-func DeleteSubmittedCvIndices(uniqueKey string) {
+func (n *RegularNode) DeleteSubmittedCvIndices(uniqueKey string) {
 	submittedCvIndicesMutex.Lock()
 	defer submittedCvIndicesMutex.Unlock()
 	delete(submittedCvIndices, uniqueKey)
@@ -269,13 +281,13 @@ func DeleteSubmittedCvIndices(uniqueKey string) {
 // ============================================================================
 
 // RegularNodePrivateKey management
-func SetRegularNodePrivateKey(privateKey *ecdsa.PrivateKey) {
+func (n *RegularNode) SetRegularNodePrivateKey(privateKey *ecdsa.PrivateKey) {
 	privateKeyMu.Lock()
 	defer privateKeyMu.Unlock()
 	regularNodePrivateKey = privateKey
 }
 
-func GetRegularNodePrivateKey() *ecdsa.PrivateKey {
+func (n *RegularNode) GetRegularNodePrivateKey() *ecdsa.PrivateKey {
 	privateKeyMu.RLock()
 	defer privateKeyMu.RUnlock()
 	return regularNodePrivateKey
@@ -286,13 +298,13 @@ func GetRegularNodePrivateKey() *ecdsa.PrivateKey {
 // ============================================================================
 
 // MerkleRootSubmittedTime management
-func MerkleRootSubmittedTOrRequestedCvTime(timestamp *big.Int) {
+func (n *RegularNode) MerkleRootSubmittedTOrRequestedCvTime(timestamp *big.Int) {
 	merkleRootTimeMu.Lock()
 	defer merkleRootTimeMu.Unlock()
 	merkleRootSubmittedTOrRequestedCvTime = timestamp
 }
 
-func GetMerkleRootSubmittedTOrRequestedCvTime() *big.Int {
+func (n *RegularNode) GetMerkleRootSubmittedTOrRequestedCvTime() *big.Int {
 	merkleRootTimeMu.RLock()
 	defer merkleRootTimeMu.RUnlock()
 	return merkleRootSubmittedTOrRequestedCvTime

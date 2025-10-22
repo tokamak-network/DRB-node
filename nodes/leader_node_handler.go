@@ -17,32 +17,41 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
-	leaderNode_helper "github.com/tokamak-network/DRB-node/nodes/leaderNode_helper"
+	leader_node "github.com/tokamak-network/DRB-node/nodes/leader"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // Helper functions for merkleRootSubmitted atomic variable
-func SetMerkleRootSubmitted(value bool) {
+func (lh *LeaderNodeHandler) SetMerkleRootSubmitted(value bool) {
 	var val int32
 	if value {
 		val = 1
 	}
-	atomic.StoreInt32(&merkleRootSubmitted, val)
+	atomic.StoreInt32(&lh.merkleRootSubmitted, val)
 }
 
-func GetMerkleRootSubmitted() bool {
-	return atomic.LoadInt32(&merkleRootSubmitted) == 1
+func (lh *LeaderNodeHandler) GetMerkleRootSubmitted() bool {
+	return atomic.LoadInt32(&lh.merkleRootSubmitted) == 1
 }
 
-var merkleRootSubmitted int32 // 0 = false, 1 = true (atomic)
-var commitMu sync.Mutex
-
-type Handler struct {
-	fallbackEthClient *fallback_ethclient.FallbackRPCClient
+type LeaderNodeHandler struct {
+	fallbackEthClient   *fallback_ethclient.FallbackRPCClient
+	merkleRootSubmitted int32 // 0 = false, 1 = true (atomic)
+	commitMu            sync.Mutex
+	leaderNode          *leader_node.LeaderNode
 }
 
-func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient) *LeaderNodeHandler {
+	return &LeaderNodeHandler{
+		fallbackEthClient:   fallbackEthClient,
+		leaderNode:          leader_node.NewLeaderNode(fallbackEthClient),
+		merkleRootSubmitted: 0,
+		commitMu:            sync.Mutex{},
+	}
+}
+
+func (lh *LeaderNodeHandler) Run() {
 	port := os.Getenv("LEADER_PORT")
 	if port == "" {
 		log.Fatal("LEADER_PORT is not set in environment variables.")
@@ -61,36 +70,32 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	// Populate peerstore from DB
 	// libp2putils.PopulatePeerstoreFromDB(h)
 
-	handler := &Handler{
-		fallbackEthClient: fallbackEthClient,
-	}
-
 	defer h.Close()
 	libp2putils.SetHost(h)
-	h.SetStreamHandler("/register", handler.handleRegistrationRequest)
-	h.SetStreamHandler("/cvs", handler.handleCommitRequest)
+	h.SetStreamHandler("/register", lh.handleRegistrationRequest)
+	h.SetStreamHandler("/cvs", lh.handleCommitRequest)
 	h.SetStreamHandler("/cos", func(s network.Stream) {
-		handleCOSRequest(fallbackEthClient, h, s)
+		lh.handleCOSRequest(h, s)
 	})
 	h.SetStreamHandler("/secretValue", func(s network.Stream) {
-		leaderNode_helper.AcceptSecretValue(h, s, fallbackEthClient)
+		lh.leaderNode.AcceptSecretValue(h, s, lh.fallbackEthClient)
 	})
 	h.SetStreamHandler("/acknowledgment", func(s network.Stream) {
-		handleAcknowledgment(fallbackEthClient, s)
+		lh.handleAcknowledgment(s)
 	})
 
 	log.Printf("Leader node running on: %s", h.Addrs())
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
-	eth.UpdateActivatedOperators(fallbackEthClient)
-	leaderNode_helper.UpdateCurrentRoundAndTrial(fallbackEthClient)
-	go leaderNode_helper.CheckHaltedState(fallbackEthClient)
-	go leaderNode_helper.MonitorCommits(fallbackEthClient)
-	go leaderNode_helper.ReceiveCommit(fallbackEthClient)
+	eth.UpdateActivatedOperators(lh.fallbackEthClient)
+	lh.leaderNode.UpdateCurrentRoundAndTrial()
+	go lh.leaderNode.CheckHaltedState()
+	go lh.leaderNode.MonitorCommits()
+	go lh.leaderNode.ReceiveCommit()
 	// leaderNode_helper.StartBroadcastCleanup()
 	// leaderNode_helper.StartLeaderCommitCleanup()
 	for {
-		if !leaderNode_helper.GetExecution() {
+		if !lh.leaderNode.GetExecution() {
 			time.Sleep(10 * time.Second)
 			continue
 		}
@@ -100,23 +105,22 @@ func RunLeaderNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	}
 }
 
-func (h *Handler) handleRegistrationRequest(s network.Stream) {
+func (lh *LeaderNodeHandler) handleRegistrationRequest(s network.Stream) {
 	defer s.Close()
 
-	if err := leaderNode_helper.RegisterNode(s, "contract/abi/Commit2RevealDRB.json", h.fallbackEthClient); err != nil {
+	if err := lh.leaderNode.RegisterNode(s, "contract/abi/Commit2RevealDRB.json"); err != nil {
 		log.Printf("Failed to handle registration request: %v", err)
 		return
 	}
 	log.Println("Node registration completed.")
 }
 
-func (h *Handler) handleCommitRequest(s network.Stream) {
+func (lh *LeaderNodeHandler) handleCommitRequest(s network.Stream) {
 	defer s.Close()
-	if atomic.LoadInt32(&leaderNode_helper.Halted) == 1 {
+	if lh.leaderNode.GetHalted() {
 		log.Println("System is halted. Skipping handleCommitRequest.")
 		return
 	}
-	fallbackEthClient := h.fallbackEthClient
 
 	var req utils.CommitRequest
 	if err := json.NewDecoder(s).Decode(&req); err != nil {
@@ -131,17 +135,17 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		Signature:  req.Signature,
 	}
 
-	if !VerifySignatureAndCheckActivation(fallbackEthClient, commitVerificationRequest, "commit") {
+	if !lh.VerifySignatureAndCheckActivation(commitVerificationRequest, "commit") {
 		return
 	}
 
 	round := req.Round
 	eoaAddress := common.HexToAddress(req.EOAAddress)
 
-	commitMu.Lock()
-	defer commitMu.Unlock()
+	lh.commitMu.Lock()
+	defer lh.commitMu.Unlock()
 	uniqueKey := utils.GetUniqueKey(round, req.TrialNum)
-	commitData := leaderNode_helper.GetOrCreateLeaderCommitData(round, req.TrialNum, uniqueKey, eoaAddress)
+	commitData := lh.leaderNode.GetOrCreateLeaderCommitData(round, req.TrialNum, uniqueKey, eoaAddress)
 	if commitData.Cvs == [32]byte{} {
 		commitData.Cvs = req.Cvs
 		commitData.CvsHex = hex.EncodeToString(req.Cvs[:])
@@ -149,7 +153,7 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		commitData.SubmitMerkleRootDone = false
 		commitData.RandomNumberGenerated = false
 	}
-	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
+	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
 
 	// Update database for commit data from regular node
@@ -157,21 +161,21 @@ func (h *Handler) handleCommitRequest(s network.Stream) {
 		log.Printf("Error saving commit data for round %s EOA %s: %v", round, commitData.EOAAddress, err)
 		return
 	}
-	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
+	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	activatedOps := eth.GetActivatedOperatorsCached()
-	leaderNode_helper.ReliableBroadCastCVS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cvs, activatedOps)
+	lh.leaderNode.ReliableBroadCastCVS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cvs, activatedOps)
 	// Check if all commits are ready after this update
-	if !GetMerkleRootSubmitted() && allCommitsReceivedUnlocked(uniqueKey) {
+	if !lh.GetMerkleRootSubmitted() && lh.allCommitsReceivedUnlocked(uniqueKey) {
 		log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", round, req.TrialNum)
-		commitMu.Unlock() // Unlock before calling GenerateMerkleRoot
-		leaderNode_helper.GenerateMerkleRoot(fallbackEthClient, round, req.TrialNum)
-		commitMu.Lock() // Re-lock if needed
+		lh.commitMu.Unlock() // Unlock before calling GenerateMerkleRoot
+		lh.leaderNode.GenerateMerkleRoot(round, req.TrialNum)
+		lh.commitMu.Lock() // Re-lock if needed
 	}
 }
 
-func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h host.Host, s network.Stream) {
+func (lh *LeaderNodeHandler) handleCOSRequest(h host.Host, s network.Stream) {
 	defer s.Close()
-	if atomic.LoadInt32(&leaderNode_helper.Halted) == 1 {
+	if lh.leaderNode.GetHalted() {
 		log.Println("System is halted. Skipping handleCOSRequest.")
 		return
 	}
@@ -192,15 +196,15 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		return
 	}
 
-	round := leaderNode_helper.GetCurrentRound()
-	trial := leaderNode_helper.GetCurrentTrial()
+	round := lh.leaderNode.GetCurrentRound()
+	trial := lh.leaderNode.GetCurrentTrial()
 	eoaAddress := common.HexToAddress(req.EOAAddress)
 
-	commitMu.Lock()
-	defer commitMu.Unlock()
+	lh.commitMu.Lock()
+	defer lh.commitMu.Unlock()
 	uniqueKey := utils.GetUniqueKey(round, trial)
 	// Update in-memory data for leaderCommit's COS
-	commitData := leaderNode_helper.GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
+	commitData := lh.leaderNode.GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
 	if commitData.Cvs == [32]byte{} {
 		log.Printf("No CVS found for round %s with trail %s EOA %s, rejecting COS.", round, trial, eoaAddress.Hex())
 		return
@@ -237,7 +241,7 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 	commitData.Cos = req.Cos
 	commitData.CosHex = hex.EncodeToString(req.Cos[:])
 
-	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
+	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, eoaAddress.Hex())
 
 	// Update database for leaderCommit's COS
@@ -254,23 +258,23 @@ func handleCOSRequest(fallbackEthClient *fallback_ethclient.FallbackRPCClient, h
 		log.Printf("Error saving COS data for round %s with trail %s EOA %s: %v", round, trial, eoaAddress.Hex(), err)
 		return
 	}
-	updateInMemoryData(uniqueKey, eoaAddress, *commitData)
+	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	activatedOps := eth.GetActivatedOperatorsCached()
-	leaderNode_helper.ReliableBroadCastCOS(libp2putils.HostInstance, round, trial, eoaAddress, commitData.Cos, activatedOps)
+	lh.leaderNode.ReliableBroadCastCOS(libp2putils.HostInstance, round, trial, eoaAddress, commitData.Cos, activatedOps)
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
-	if allCosReceivedUnlocked(uniqueKey) {
+	if lh.allCosReceivedUnlocked(uniqueKey) {
 		log.Printf("All COS received for round %s with trail %s.", round, trial)
 		_, err := commitreveal2.DetermineRevealOrder(round, trial, activatedOps)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, trial, err)
 			return
 		}
-		leaderNode_helper.StartSecretValueRequests(h, fallbackEthClient, round, trial)
+		lh.leaderNode.StartSecretValueRequests(h, round, trial)
 	}
 }
 
-func VerifySignatureAndCheckActivation(fallbackEthClient *fallback_ethclient.FallbackRPCClient, req utils.Request, reqType string) bool {
+func (lh *LeaderNodeHandler) VerifySignatureAndCheckActivation(req utils.Request, reqType string) bool {
 	verifyReq := utils.Verification{EOAAddress: req.EOAAddress, Signature: req.Signature}
 	if !utils.VerifySignature(verifyReq) {
 		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
@@ -279,7 +283,7 @@ func VerifySignatureAndCheckActivation(fallbackEthClient *fallback_ethclient.Fal
 
 	eoaAddress := common.HexToAddress(req.EOAAddress)
 
-	IsNetworkError, isEOAActivated := isEOAActivatedForRound(fallbackEthClient, eoaAddress)
+	IsNetworkError, isEOAActivated := lh.isEOAActivatedForRound(eoaAddress)
 	if IsNetworkError {
 		log.Printf("Network error. Skipping activation check.")
 		return false
@@ -293,7 +297,7 @@ func VerifySignatureAndCheckActivation(fallbackEthClient *fallback_ethclient.Fal
 
 // allCommitsReceivedUnlocked checks if all operators have CVS in-memory.
 // Called with commitMu locked.
-func allCommitsReceivedUnlocked(uniqueKey string) bool {
+func (lh *LeaderNodeHandler) allCommitsReceivedUnlocked(uniqueKey string) bool {
 	ops := eth.GetActivatedOperatorsCached()
 	if len(ops) == 0 {
 		return false
@@ -312,7 +316,7 @@ func allCommitsReceivedUnlocked(uniqueKey string) bool {
 	}
 	return true
 }
-func allCosReceivedUnlocked(uniqueKey string) bool {
+func (lh *LeaderNodeHandler) allCosReceivedUnlocked(uniqueKey string) bool {
 	ops := eth.GetActivatedOperatorsCached()
 	if len(ops) == 0 {
 		return false
@@ -332,7 +336,7 @@ func allCosReceivedUnlocked(uniqueKey string) bool {
 	return true
 }
 
-func UpdatedallCommitsReceivedUnlocked(fallbackEthClient *fallback_ethclient.FallbackRPCClient, uniqueKey string) map[string]bool {
+func (lh *LeaderNodeHandler) UpdatedallCommitsReceivedUnlocked(fallbackEthClient *fallback_ethclient.FallbackRPCClient, uniqueKey string) map[string]bool {
 	result := make(map[string]bool)
 	ops, _ := eth.GetActivatedOperators(fallbackEthClient)
 
@@ -360,12 +364,12 @@ func UpdatedallCommitsReceivedUnlocked(fallbackEthClient *fallback_ethclient.Fal
 
 // updateInMemoryData updates committedNodes with the latest commitData.
 // Called with commitMu locked.
-func updateInMemoryData(uniqueKey string, eoaAddress common.Address, commitData utils.LeaderCommitData) {
+func (lh *LeaderNodeHandler) updateInMemoryData(uniqueKey string, eoaAddress common.Address, commitData utils.LeaderCommitData) {
 	utils.SetCommittedNodeData(uniqueKey, eoaAddress, commitData)
 }
 
-func isEOAActivatedForRound(fallbackEthClient *fallback_ethclient.FallbackRPCClient, eoaAddress common.Address) (bool, bool) {
-	activatedOperators, err := eth.GetActivatedOperators(fallbackEthClient)
+func (lh *LeaderNodeHandler) isEOAActivatedForRound(eoaAddress common.Address) (bool, bool) {
+	activatedOperators, err := eth.GetActivatedOperators(lh.fallbackEthClient)
 	if err != nil {
 		log.Printf("Error fetching the activated operators %v", err)
 		// Return true for network error flag, false for activation status
@@ -383,9 +387,9 @@ func isEOAActivatedForRound(fallbackEthClient *fallback_ethclient.FallbackRPCCli
 	return false, false
 }
 
-func handleAcknowledgment(fallbackEthClient *fallback_ethclient.FallbackRPCClient, s network.Stream) {
+func (lh *LeaderNodeHandler) handleAcknowledgment(s network.Stream) {
 	defer s.Close()
-	if atomic.LoadInt32(&leaderNode_helper.Halted) == 1 {
+	if lh.leaderNode.GetHalted() {
 		log.Println("System is halted. Skipping handleAcknowledgment.")
 		return
 	}
@@ -413,7 +417,7 @@ func handleAcknowledgment(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		Signature:  ack.Signature,
 	}
 
-	if !VerifySignatureAndCheckActivation(fallbackEthClient, commitVerificationRequest, "commit") {
+	if !lh.VerifySignatureAndCheckActivation(commitVerificationRequest, "commit") {
 		return
 	}
 
@@ -421,5 +425,5 @@ func handleAcknowledgment(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		ack.EOAAddress, ack.Type, ack.MessageID, ack.Status)
 
 	// Process the acknowledgment
-	leaderNode_helper.HandleAcknowledgment(ack)
+	lh.leaderNode.HandleAcknowledgment(ack)
 }

@@ -1,4 +1,4 @@
-package leaderNode_helper
+package leader_node
 
 import (
 	"bytes"
@@ -36,7 +36,7 @@ func ResetIndicesForNewRound() {
 }
 
 // GetIndices returns a copy of the current Indices array
-func GetIndices() []*big.Int {
+func (n *LeaderNode) GetIndices() []*big.Int {
 	indicesMutex.RLock()
 	defer indicesMutex.RUnlock()
 
@@ -49,14 +49,14 @@ func GetIndices() []*big.Int {
 }
 
 // AppendToIndices safely appends a new index to the Indices array
-func AppendToIndices(index *big.Int) {
+func (n *LeaderNode) AppendToIndices(index *big.Int) {
 	indicesMutex.Lock()
 	defer indicesMutex.Unlock()
 	Indices = append(Indices, new(big.Int).Set(index))
 }
 
 // SetIndices safely sets the entire Indices array
-func SetIndices(indices []*big.Int) {
+func (n *LeaderNode) SetIndices(indices []*big.Int) {
 	indicesMutex.Lock()
 	defer indicesMutex.Unlock()
 
@@ -68,9 +68,9 @@ func SetIndices(indices []*big.Int) {
 }
 
 // AcceptSecretValue processes and stores secret values sent by regular nodes.
-func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+func (n *LeaderNode) AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	defer s.Close()
-	if GetHalted() {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping AcceptSecretValue.")
 		return
 	}
@@ -94,12 +94,12 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 
 	// log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 
-	round := GetCurrentRound()
-	trial := GetCurrentTrial()
+	round := n.GetCurrentRound()
+	trial := n.GetCurrentTrial()
 	// log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 	uniqueKey := utils.GetUniqueKey(round, trial)
 	eoaAddress := common.HexToAddress(req.RegularEoaAddress)
-	commitData := GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
+	commitData := n.GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
 	if commitData.Cos == [32]byte{} {
 		log.Printf("No COS found for round %s with trail %s EOA %s, rejecting secret value.", round, trial, eoaAddress.Hex())
 		return
@@ -127,7 +127,7 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	copy(secretValueArray[:], req.SecretValue[:]) // Convert req.SecretValue to [32]byte
 
 	// Use the new atomic setter function
-	AppendToRoundSecrets(uniqueKey, secretValueArray)
+	n.AppendToRoundSecrets(uniqueKey, secretValueArray)
 	// Store the secret value in both byte array and hex string formats
 	copy(leaderCommitData.SecretValue[:], req.SecretValue[:])
 	leaderCommitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
@@ -143,27 +143,27 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	log.Printf("Successfully saved secret value for round %s with trail %s and EOA %s", round, trial, req.RegularEoaAddress)
 
 	// Use the new atomic setter function
-	SetRoundSecretValue(uniqueKey, req.RegularEoaAddress, true)
+	n.SetRoundSecretValue(uniqueKey, req.RegularEoaAddress, true)
 
 	// 🔄 Wait for broadcast to complete before proceeding to next node
 	log.Printf("🔄 Broadcasting secret from %s for round %s with trail %s...", req.RegularEoaAddress, round, trial)
 	activatedOps := eth.GetActivatedOperatorsCached()
-	broadcastCompleted := ReliableBroadCastSSync(h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, activatedOps)
+	broadcastCompleted := n.ReliableBroadCastSSync(h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, activatedOps)
 
 	if broadcastCompleted {
 		log.Printf("✅ Broadcast completed for %s. Proceeding to next node in reveal order.", req.RegularEoaAddress)
 		// Continue requesting secret values from remaining nodes in the reveal order
-		HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
+		n.HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
 	} else {
 		log.Printf("⚠️ Broadcast incomplete for %s. Proceeding anyway to next node.", req.RegularEoaAddress)
 		// Still continue even if broadcast incomplete (leader's decision)
-		HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
+		n.HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
 	}
 }
 
 // getOrCreateLeaderCommitData returns commitData from in-memory map or creates a new one.
 // Called with commitMu locked.
-func GetOrCreateLeaderCommitData(roundNum string, trialNum string, uniqueKey string, eoaAddress common.Address) *utils.LeaderCommitData {
+func (n *LeaderNode) GetOrCreateLeaderCommitData(roundNum string, trialNum string, uniqueKey string, eoaAddress common.Address) *utils.LeaderCommitData {
 	utils.EnsureCommittedNodesRoundExists(uniqueKey)
 
 	data, existsData := utils.GetCommittedNodeData(uniqueKey, eoaAddress)

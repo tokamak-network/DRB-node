@@ -1,4 +1,4 @@
-package regularNode_helper
+package regular_node
 
 import (
 	"encoding/hex"
@@ -12,9 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-
 // GenerateCvsSignature generates the EIP-712 signature components (v, r, s) for a given round, trialNum and CVS value.
-func GenerateCvsSignature(round *big.Int, trialNum *big.Int, cvs [32]byte) (uint8, string, string, error) {
+func (n *RegularNode) GenerateCvsSignature(round *big.Int, trialNum *big.Int, cvs [32]byte) (uint8, string, string, error) {
 	// Convert CVS to string for internal usage (optional, depending on use case)
 	cvsString := hex.EncodeToString(cvs[:])
 	log.Printf("Received CVS as [32]byte: %x", cvs)
@@ -58,11 +57,11 @@ func GenerateCvsSignature(round *big.Int, trialNum *big.Int, cvs [32]byte) (uint
 	versionHash := crypto.Keccak256Hash([]byte(version))
 
 	domainSeparator := crypto.Keccak256Hash(
-		abiEncode(
+		n.abiEncode(
 			domainTypeHash.Bytes(),
 			nameHash.Bytes(),
 			versionHash.Bytes(),
-			intToBytes(chainID),
+			n.intToBytes(chainID),
 			contractAddress.Bytes(),
 		),
 	)
@@ -70,18 +69,18 @@ func GenerateCvsSignature(round *big.Int, trialNum *big.Int, cvs [32]byte) (uint
 	// Step 2: Compute message hash
 	messageTypeHash := crypto.Keccak256Hash([]byte("Message(uint256 round,uint256 trialNum,bytes32 cv)"))
 	messageHash := crypto.Keccak256Hash(
-		abiEncode(
+		n.abiEncode(
 			messageTypeHash.Bytes(),
-			intToBytes(round),    // uint256 round
-			intToBytes(trialNum), // uint256 trialNum
-			cvs[:],               // bytes32 CVS as [32]byte
+			n.intToBytes(round),    // uint256 round
+			n.intToBytes(trialNum), // uint256 trialNum
+			cvs[:],                 // bytes32 CVS as [32]byte
 		),
 	)
 	log.Printf("Message Hash: %s", messageHash.Hex())
 
 	// Step 3: Compute the final typed data hash
 	typedDataHash := crypto.Keccak256Hash(
-		abiEncodePacked(
+		n.abiEncodePacked(
 			[]byte{0x19, 0x01}, // EIP-712 prefix
 			domainSeparator.Bytes(),
 			messageHash.Bytes(),
@@ -105,7 +104,7 @@ func GenerateCvsSignature(round *big.Int, trialNum *big.Int, cvs [32]byte) (uint
 }
 
 // Helper: abiEncode replicates Solidity's `abi.encode` behavior with 32-byte padding.
-func abiEncode(elements ...[]byte) []byte {
+func (n *RegularNode) abiEncode(elements ...[]byte) []byte {
 	var encoded []byte
 	for _, e := range elements {
 		encoded = append(encoded, common.LeftPadBytes(e, 32)...)
@@ -114,7 +113,7 @@ func abiEncode(elements ...[]byte) []byte {
 }
 
 // Helper: abiEncodePacked replicates Solidity's `abi.encodePacked` behavior.
-func abiEncodePacked(elements ...[]byte) []byte {
+func (n *RegularNode) abiEncodePacked(elements ...[]byte) []byte {
 	var packed []byte
 	for _, e := range elements {
 		packed = append(packed, e...)
@@ -123,6 +122,6 @@ func abiEncodePacked(elements ...[]byte) []byte {
 }
 
 // Helper: intToBytes converts a *big.Int to its padded big-endian byte representation.
-func intToBytes(n *big.Int) []byte {
-	return common.LeftPadBytes(n.Bytes(), 32)
+func (n *RegularNode) intToBytes(num *big.Int) []byte {
+	return common.LeftPadBytes(num.Bytes(), 32)
 }

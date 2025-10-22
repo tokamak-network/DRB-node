@@ -1,4 +1,4 @@
-package regularNode_helper
+package regular_node
 
 import (
 	"context"
@@ -29,18 +29,17 @@ var regularNodeEOA unsafe.Pointer // *string
 var regularNodePrivateKey *ecdsa.PrivateKey
 var privateKeyMu sync.RWMutex
 
-
 // generates a signature for the acknowledgment
-func generateAcknowledgmentSignature(eoaAddress string) []byte {
-	if GetRegularNodePrivateKey() == nil {
+func (n *RegularNode) generateAcknowledgmentSignature(eoaAddress string) []byte {
+	if n.GetRegularNodePrivateKey() == nil {
 		log.Printf("Regular node private key not set, cannot sign acknowledgment")
 		return nil
 	}
-	return utils.SignData(eoaAddress, GetRegularNodePrivateKey())
+	return utils.SignData(eoaAddress, n.GetRegularNodePrivateKey())
 }
 
 // sendAcknowledgment sends an acknowledgment back to the leader
-func sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack utils.AcknowledgmentMessage) {
+func (n *RegularNode) sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack utils.AcknowledgmentMessage) {
 	stream, err := h.NewStream(context.Background(), leaderPeerID, protocol.ID("/acknowledgment"))
 	if err != nil {
 		log.Printf("Failed to create acknowledgment stream: %v", err)
@@ -56,7 +55,7 @@ func sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack utils.Acknowledgm
 }
 
 // HandleCvs processes incoming CVS values and sends acknowledgment
-func HandleCvs(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 	defer s.Close()
 
 	if atomic.LoadInt32(&Halted) == 1 {
@@ -122,8 +121,8 @@ func HandleCvs(h host.Host, s network.Stream) {
 	log.Printf("Successfully saved CVS data for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
-	eoaAddress := GetRegularNodeEOA()
-	signature := generateAcknowledgmentSignature(eoaAddress)
+	eoaAddress := n.GetRegularNodeEOA()
+	signature := n.generateAcknowledgmentSignature(eoaAddress)
 
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
@@ -148,11 +147,11 @@ func HandleCvs(h host.Host, s network.Stream) {
 		return
 	}
 
-	sendAcknowledgment(h, leaderPeerID, ack)
+	n.sendAcknowledgment(h, leaderPeerID, ack)
 }
 
 // HandleCos processes incoming COS values and sends acknowledgment
-func HandleCos(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 	defer s.Close()
 
 	if atomic.LoadInt32(&Halted) == 1 {
@@ -189,7 +188,7 @@ func HandleCos(h host.Host, s network.Stream) {
 
 	// Process the COS data
 	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
-	SetCosReceived(uniqueKey, message.EOAAddress, true)
+	n.SetCosReceived(uniqueKey, message.EOAAddress, true)
 
 	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
@@ -222,8 +221,8 @@ func HandleCos(h host.Host, s network.Stream) {
 	log.Printf("Successfully saved COS data for round %s with trail %s and EOA %s", message.Round, message.TrialNum, message.EOAAddress)
 
 	// Send acknowledgment
-	eoaAddress := GetRegularNodeEOA()
-	signature := generateAcknowledgmentSignature(eoaAddress)
+	eoaAddress := n.GetRegularNodeEOA()
+	signature := n.generateAcknowledgmentSignature(eoaAddress)
 
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
@@ -248,11 +247,11 @@ func HandleCos(h host.Host, s network.Stream) {
 		return
 	}
 
-	sendAcknowledgment(h, leaderPeerID, ack)
+	n.sendAcknowledgment(h, leaderPeerID, ack)
 }
 
 // HandleSecret processes incoming secret values and sends acknowledgment
-func HandleSecret(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 	defer s.Close()
 
 	if atomic.LoadInt32(&Halted) == 1 {
@@ -318,8 +317,8 @@ func HandleSecret(h host.Host, s network.Stream) {
 	log.Printf("Successfully saved secret value for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
-	eoaAddress := GetRegularNodeEOA()
-	signature := generateAcknowledgmentSignature(eoaAddress)
+	eoaAddress := n.GetRegularNodeEOA()
+	signature := n.generateAcknowledgmentSignature(eoaAddress)
 
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
@@ -344,16 +343,16 @@ func HandleSecret(h host.Host, s network.Stream) {
 		return
 	}
 
-	sendAcknowledgment(h, leaderPeerID, ack)
+	n.sendAcknowledgment(h, leaderPeerID, ack)
 }
 
-func SetCosReceived(outer, inner string, value bool) {
+func (n *RegularNode) SetCosReceived(outer, inner string, value bool) {
 	actual, _ := CosRecevied.LoadOrStore(outer, &sync.Map{})
 	innerMap := actual.(*sync.Map)
 	innerMap.Store(inner, value)
 }
 
-func GetCosReceived(outer, inner string) (bool, bool) {
+func (n *RegularNode) GetCosReceived(outer, inner string) (bool, bool) {
 	actual, ok := CosRecevied.Load(outer)
 	if !ok {
 		return false, false

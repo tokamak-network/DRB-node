@@ -1,4 +1,4 @@
-package leaderNode_helper
+package leader_node
 
 import (
 	"context"
@@ -30,8 +30,8 @@ var lastSubmitSTimestamp *big.Int
 var timestampMu sync.RWMutex // Protect big.Int pointers
 
 // StartSecretValueRequests initializes the secret value request process for a given round
-func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
-	if GetHalted() {
+func (n *LeaderNode) StartSecretValueRequests(h host.Host, round string, trialNum string) {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping StartSecretValueRequests.")
 		return
 	}
@@ -51,8 +51,8 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	}
 
 	// Initialize reveal request status for the round if not already done
-	if _, exists := GetRevealRequestStatus(uniqueKey); !exists {
-		SetRevealRequestStatus(uniqueKey, []string{})
+	if _, exists := n.GetRevealRequestStatus(uniqueKey); !exists {
+		n.SetRevealRequestStatus(uniqueKey, []string{})
 	}
 
 	// Send the request to the first node in the reveal order
@@ -60,14 +60,14 @@ func StartSecretValueRequests(h host.Host, fallbackEthClient *fallback_ethclient
 	eoa := eoaArray[0]
 	for _, node := range nodes {
 		if node.EOAAddress == eoa {
-			sendSecretValueRequestToNode(h, fallbackEthClient, round, trialNum, uniqueKey, eoa, node, 0)
+			n.sendSecretValueRequestToNode(h, round, trialNum, uniqueKey, eoa, node, 0)
 		} else {
 			continue
 		}
 	}
 }
 
-func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, uniqueKey string, regularEoa string, nodeInfo *utils.NodeInfo, order int) {
+func (n *LeaderNode) sendSecretValueRequestToNode(h host.Host, round string, trialNum string, uniqueKey string, regularEoa string, nodeInfo *utils.NodeInfo, order int) {
 	// Load private key from environment variable
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -114,24 +114,24 @@ func sendSecretValueRequestToNode(h host.Host, fallbackEthClient *fallback_ethcl
 			<-timer.C
 
 			// If the timer expires and the secret value is not received, call handleMissingSecretValue
-			hasSecret, exists := GetRoundSecretValue(uniqueKey, regularEoa)
+			hasSecret, exists := n.GetRoundSecretValue(uniqueKey, regularEoa)
 			if !exists || !hasSecret {
 				log.Printf("Secret value not received for EOA %s in round %s with trail %s within 15 seconds. Handling missing secret value.", regularEoa, round, trialNum)
-				SetSecretsOnChain(uniqueKey, true)
-				requestToSubmitS(fallbackEthClient, round, trialNum)
+				n.SetSecretsOnChain(uniqueKey, true)
+				n.requestToSubmitS(round, trialNum)
 			}
 		}()
 
 		// Mark this EOA as requested
-		currentStatus, _ := GetRevealRequestStatus(uniqueKey)
+		currentStatus, _ := n.GetRevealRequestStatus(uniqueKey)
 		currentStatus = append(currentStatus, regularEoa)
-		SetRevealRequestStatus(uniqueKey, currentStatus)
+		n.SetRevealRequestStatus(uniqueKey, currentStatus)
 	}
 }
 
-func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
-	SetSecretRequestSentForWhichRound(GetCurrentRound())
-	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := prepareArgumentsForRequestToSubmitS(round, trialNum)
+func (n *LeaderNode) requestToSubmitS(round string, trialNum string) {
+	n.SetSecretRequestSentForWhichRound(n.GetCurrentRound())
+	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := n.prepareArgumentsForRequestToSubmitS(round, trialNum)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -165,7 +165,7 @@ func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
-		fallbackEthClient,
+		n.fallbackEthClient,
 		"requestToSubmitS",
 		big.NewInt(0),
 		allCos,
@@ -183,17 +183,17 @@ func requestToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, r
 
 	// Start monitoring for failToSubmitS condition
 	requestTimestamp := big.NewInt(time.Now().Unix())
-	StartFailToSubmitSMonitoring(fallbackEthClient, round, trialNum, requestTimestamp)
+	n.StartFailToSubmitSMonitoring(round, trialNum, requestTimestamp)
 }
 
-func prepareArgumentsForRequestToSubmitS(round string, trialNum string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
-	_, cos, _, vs, rs, ss := LoadNodeData(round, trialNum)
+func (n *LeaderNode) prepareArgumentsForRequestToSubmitS(round string, trialNum string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
+	_, cos, _, vs, rs, ss := n.LoadNodeData(round, trialNum)
 	var notOnChainIndices []*big.Int
 	i := big.NewInt(0)
 	j := 0
 	length := big.NewInt(eth.GetActivatedOperatorsLength())
 
-	indices := GetIndices()
+	indices := n.GetIndices()
 	for i.Cmp(length) < 0 {
 		if j < len(indices) && i.Cmp(indices[j]) == 0 {
 			i = new(big.Int).Add(i, big.NewInt(1))
@@ -234,7 +234,7 @@ func prepareArgumentsForRequestToSubmitS(round string, trialNum string) ([][32]b
 	packedRevealOrders := packRevealOrder(order)
 	packedVsForAllCvsNotOnChain := packVsValues(vsForNotOnChain)
 
-	roundSecrets, _ := GetRoundSecretsValue(uniqueKey)
+	roundSecrets, _ := n.GetRoundSecretsValue(uniqueKey)
 	return allCos, roundSecrets, packedVsForAllCvsNotOnChain, sigRSsForAllCvsNotOnChain, packedRevealOrders
 }
 
@@ -247,8 +247,8 @@ func PackIndices(indices []*big.Int) *big.Int {
 }
 
 // handleSecretValueResponse processes a response and sends the next request if applicable
-func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, eoa string) {
-	if GetHalted() {
+func (n *LeaderNode) HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, eoa string) {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleSecretValueResponse.")
 		return
 	}
@@ -269,13 +269,13 @@ func HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclien
 	}
 
 	// Check which node is next in the reveal order
-	currentStatus, _ := GetRevealRequestStatus(uniqueKey)
+	currentStatus, _ := n.GetRevealRequestStatus(uniqueKey)
 	for order, eoa := range roundRevealData.OrderedNodes {
 		if !contains(currentStatus, eoa) {
 			log.Printf("🎯 Next node in reveal order: %s (order %d) for round %s with trail %s", eoa, order, round, trialNum)
 			for _, node := range nodes {
 				if node.EOAAddress == eoa {
-					sendSecretValueRequestToNode(h, fallbackEthClient, round, trialNum, uniqueKey, eoa, node, order)
+					n.sendSecretValueRequestToNode(h, round, trialNum, uniqueKey, eoa, node, order)
 					return
 				}
 			}
@@ -319,52 +319,52 @@ func contains(slice []string, item string) bool {
 
 // StartFailToSubmitSMonitoring starts monitoring for failToSubmitS condition
 // Should be called when requestToSubmitS transaction is confirmed
-func StartFailToSubmitSMonitoring(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, requestTimestamp *big.Int) {
-	if GetHalted() {
+func (n *LeaderNode) StartFailToSubmitSMonitoring(round string, trialNum string, requestTimestamp *big.Int) {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping StartFailToSubmitSMonitoring.")
 		return
 	}
 
-	if GetFailToSubmitSMonitoringActive() {
+	if n.GetFailToSubmitSMonitoringActive() {
 		log.Printf("FailToSubmitS monitoring already active for round %s", round)
 		return
 	}
 
-	if GetLastSubmitSTimestamp() == nil {
-		SetLastSubmitSTimestamp(requestTimestamp)
+	if n.GetLastSubmitSTimestamp() == nil {
+		n.SetLastSubmitSTimestamp(requestTimestamp)
 	}
 
 	onChainSubmissionPeriodPerOperator := big.NewInt(40)
-	startMonitoringWithPeriod(fallbackEthClient, round, trialNum, onChainSubmissionPeriodPerOperator)
+	n.startMonitoringWithPeriod(round, trialNum, onChainSubmissionPeriodPerOperator)
 }
 
 // startMonitoringWithPeriod starts the actual monitoring with the given period
-func startMonitoringWithPeriod(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, period *big.Int) {
+func (n *LeaderNode) startMonitoringWithPeriod(round string, trialNum string, period *big.Int) {
 	// Calculate deadline: s_previousSSubmitTimestamp + s_onChainSubmissionPeriodPerOperator
-	deadline := new(big.Int).Add(GetLastSubmitSTimestamp(), period)
+	deadline := new(big.Int).Add(n.GetLastSubmitSTimestamp(), period)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
 	now := time.Now()
 	duration := deadlineTime.Sub(now)
 
-	SetFailToSubmitSMonitoringActive(true)
+	n.SetFailToSubmitSMonitoringActive(true)
 
 	log.Printf("Starting failToSubmitS monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 	log.Printf("Parameters - lastSubmitSTimestamp: %v, onChainSubmissionPeriodPerOperator: %v",
-		GetLastSubmitSTimestamp(), period)
+		n.GetLastSubmitSTimestamp(), period)
 
 	// Set timer to call the function when deadline is reached
 	failToSubmitSMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToSubmitS", round)
-		callFailToSubmitS(fallbackEthClient, round, trialNum)
-		SetFailToSubmitSMonitoringActive(false)
+		n.callFailToSubmitS(round, trialNum)
+		n.SetFailToSubmitSMonitoringActive(false)
 	})
 }
 
 // StopFailToSubmitSMonitoring stops the monitoring
-func StopFailToSubmitSMonitoring(round string, trialNum string) {
-	if !GetFailToSubmitSMonitoringActive() {
+func (n *LeaderNode) StopFailToSubmitSMonitoring(round string, trialNum string) {
+	if !n.GetFailToSubmitSMonitoringActive() {
 		return
 	}
 
@@ -373,29 +373,29 @@ func StopFailToSubmitSMonitoring(round string, trialNum string) {
 		failToSubmitSMonitoringTimer = nil
 	}
 
-	SetFailToSubmitSMonitoringActive(false)
+	n.SetFailToSubmitSMonitoringActive(false)
 	log.Printf("Stopped failToSubmitS monitoring for round %s", round)
 }
 
 // UpdateLastSubmitSTimestamp updates the timestamp when a submitS event is received
 // This should be called when SSubmitted event is received
-func UpdateLastSubmitSTimestamp(newTimestamp *big.Int, round string, trialNum string) {
-	SetLastSubmitSTimestamp(newTimestamp)
+func (n *LeaderNode) UpdateLastSubmitSTimestamp(newTimestamp *big.Int, round string, trialNum string) {
+	n.SetLastSubmitSTimestamp(newTimestamp)
 	log.Printf("Updated lastSubmitSTimestamp to %v for round %s", newTimestamp, round)
 
 	// If monitoring is active, restart it with the new timestamp
-	if GetFailToSubmitSMonitoringActive() {
+	if n.GetFailToSubmitSMonitoringActive() {
 		log.Printf("Restarting failToSubmitS monitoring with updated timestamp")
-		StopFailToSubmitSMonitoring(round, trialNum)
+		n.StopFailToSubmitSMonitoring(round, trialNum)
 
 		// Use hardcoded period for restart - this should ideally get the period from contract
 		onChainSubmissionPeriodPerOperator := big.NewInt(30) // 30 seconds
-		startMonitoringWithPeriod(nil, round, trialNum, onChainSubmissionPeriodPerOperator)
+		n.startMonitoringWithPeriod(round, trialNum, onChainSubmissionPeriodPerOperator)
 	}
 }
 
 // callFailToSubmitS calls the contract function to fail
-func callFailToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string) {
+func (n *LeaderNode) callFailToSubmitS(round string, trialNum string) {
 	log.Printf("Calling failToSubmitS for round %s with trial %s", round, trialNum)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
@@ -430,7 +430,7 @@ func callFailToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
-		fallbackEthClient,
+		n.fallbackEthClient,
 		"failToSubmitS",
 		big.NewInt(0),
 	)
@@ -443,19 +443,19 @@ func callFailToSubmitS(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 }
 
 // ResetLeaderMonitoringState resets all leader monitoring variables for a round
-func ResetLeaderMonitoringState(round string, trialNum string) {
+func (n *LeaderNode) ResetLeaderMonitoringState(round string, trialNum string) {
 	// Stop secret submission monitoring (S monitoring)
-	StopFailToSubmitSMonitoring(round, trialNum)
+	n.StopFailToSubmitSMonitoring(round, trialNum)
 
 	// Reset secret submission monitoring timestamps
-	SetLastSubmitSTimestamp(nil)
+	n.SetLastSubmitSTimestamp(nil)
 
 	// Reset reveal request status for the round
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	DeleteRevealRequestStatus(uniqueKey)
+	n.DeleteRevealRequestStatus(uniqueKey)
 
 	// Call COS and CVS monitoring reset from acceptCommit.go
-	ResetCosAndCvsMonitoringState(round, trialNum)
+	n.ResetCosAndCvsMonitoringState(round, trialNum)
 
 	log.Printf("Reset all leader monitoring state for round %s", round)
 }

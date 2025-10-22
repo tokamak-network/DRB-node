@@ -1,4 +1,4 @@
-package leaderNode_helper
+package leader_node
 
 import (
 	"log"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/eapache/queue"
 	"github.com/tokamak-network/DRB-node/eth"
-	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -18,7 +17,7 @@ import (
 // ============================================================================
 
 // Execution state management
-func SetExecution(value bool) {
+func (n *LeaderNode) SetExecution(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -26,12 +25,12 @@ func SetExecution(value bool) {
 	atomic.StoreInt32(&Execution, val)
 }
 
-func GetExecution() bool {
+func (n *LeaderNode) GetExecution() bool {
 	return atomic.LoadInt32(&Execution) == 1
 }
 
 // Halted state management (already using atomic in original code)
-func SetHalted(value bool) {
+func (n *LeaderNode) SetHalted(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -39,12 +38,12 @@ func SetHalted(value bool) {
 	atomic.StoreInt32(&Halted, val)
 }
 
-func GetHalted() bool {
+func (n *LeaderNode) GetHalted() bool {
 	return atomic.LoadInt32(&Halted) == 1
 }
 
 // Getter and setter functions for submittingMerkleRoot atomic variable
-func SetSubmittingMerkleRoot(value bool) {
+func (n *LeaderNode) SetSubmittingMerkleRoot(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -52,12 +51,12 @@ func SetSubmittingMerkleRoot(value bool) {
 	atomic.StoreInt32(&submittingMerkleRoot, val)
 }
 
-func GetSubmittingMerkleRoot() bool {
+func (n *LeaderNode) GetSubmittingMerkleRoot() bool {
 	return atomic.LoadInt32(&submittingMerkleRoot) == 1
 }
 
 // CompareAndSwapSubmittingMerkleRoot performs atomic compare-and-swap operation
-func CompareAndSwapSubmittingMerkleRoot(old, new bool) bool {
+func (n *LeaderNode) CompareAndSwapSubmittingMerkleRoot(old, new bool) bool {
 	var oldVal, newVal int32
 	if old {
 		oldVal = 1
@@ -69,7 +68,7 @@ func CompareAndSwapSubmittingMerkleRoot(old, new bool) bool {
 }
 
 // RequestedToSubmitCo monitoring management
-func SetRequestedToSubmitCoMonitoringActive(value bool) {
+func (n *LeaderNode) SetRequestedToSubmitCoMonitoringActive(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -77,12 +76,12 @@ func SetRequestedToSubmitCoMonitoringActive(value bool) {
 	atomic.StoreInt32(&RequestedToSubmitCoMonitoringActive, val)
 }
 
-func GetRequestedToSubmitCoMonitoringActive() bool {
+func (n *LeaderNode) GetRequestedToSubmitCoMonitoringActive() bool {
 	return atomic.LoadInt32(&RequestedToSubmitCoMonitoringActive) == 1
 }
 
 // RequestedToSubmitCv monitoring management
-func SetRequestedToSubmitCvMonitoringActive(value bool) {
+func (n *LeaderNode) SetRequestedToSubmitCvMonitoringActive(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -90,12 +89,12 @@ func SetRequestedToSubmitCvMonitoringActive(value bool) {
 	atomic.StoreInt32(&RequestedToSubmitCvMonitoringActive, val)
 }
 
-func GetRequestedToSubmitCvMonitoringActive() bool {
+func (n *LeaderNode) GetRequestedToSubmitCvMonitoringActive() bool {
 	return atomic.LoadInt32(&RequestedToSubmitCvMonitoringActive) == 1
 }
 
 // RequestToSubmitCv monitoring management
-func SetRequestToSubmitCvMonitoringActive(value bool) {
+func (n *LeaderNode) SetRequestToSubmitCvMonitoringActive(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -103,12 +102,12 @@ func SetRequestToSubmitCvMonitoringActive(value bool) {
 	atomic.StoreInt32(&RequestToSubmitCvMonitoringActive, val)
 }
 
-func GetRequestToSubmitCvMonitoringActive() bool {
+func (n *LeaderNode) GetRequestToSubmitCvMonitoringActive() bool {
 	return atomic.LoadInt32(&RequestToSubmitCvMonitoringActive) == 1
 }
 
 // RequestToSubmitCo timer monitoring management
-func SetRequestToSubmitCoTimerMonitoringActive(value bool) {
+func (n *LeaderNode) SetRequestToSubmitCoTimerMonitoringActive(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -116,7 +115,7 @@ func SetRequestToSubmitCoTimerMonitoringActive(value bool) {
 	atomic.StoreInt32(&RequestToSubmitCoTimerMonitoringActive, val)
 }
 
-func GetRequestToSubmitCoTimerMonitoringActive() bool {
+func (n *LeaderNode) GetRequestToSubmitCoTimerMonitoringActive() bool {
 	return atomic.LoadInt32(&RequestToSubmitCoTimerMonitoringActive) == 1
 }
 
@@ -125,21 +124,21 @@ func GetRequestToSubmitCoTimerMonitoringActive() bool {
 // ============================================================================
 
 // DeleteActiveBroadcasts deletes activeBroadcasts entry for uniqueKey
-func DeleteActiveBroadcasts(uniqueKey string) {
+func (n *LeaderNode) DeleteActiveBroadcasts(uniqueKey string) {
 	activeBroadcastsMu.Lock()
 	defer activeBroadcastsMu.Unlock()
 	delete(activeBroadcasts, uniqueKey)
 }
 
 // DeleteCvOnChain deletes CvOnChain entry for uniqueKey
-func DeleteCvOnChain(uniqueKey string) {
+func (n *LeaderNode) DeleteCvOnChain(uniqueKey string) {
 	CvOnChainMu.Lock()
 	defer CvOnChainMu.Unlock()
 	delete(CvOnChain, uniqueKey)
 }
 
 // DeleteRoundSecrets deletes RoundSecrets entry for uniqueKey
-func DeleteRoundSecrets(uniqueKey string) {
+func (n *LeaderNode) DeleteRoundSecrets(uniqueKey string) {
 	secretMapsMutex.Lock()
 	defer secretMapsMutex.Unlock()
 	delete(RoundSecrets, uniqueKey)
@@ -150,7 +149,7 @@ func DeleteRoundSecrets(uniqueKey string) {
 // ============================================================================
 
 // SetRoundSecretValue sets a value in the roundSecret map for a specific uniqueKey and EOA
-func SetRoundSecretValue(uniqueKey, eoaAddress string, value bool) {
+func (n *LeaderNode) SetRoundSecretValue(uniqueKey, eoaAddress string, value bool) {
 	secretMapsMutex.Lock()
 	defer secretMapsMutex.Unlock()
 	if roundSecret[uniqueKey] == nil {
@@ -160,7 +159,7 @@ func SetRoundSecretValue(uniqueKey, eoaAddress string, value bool) {
 }
 
 // GetRoundSecretValue gets a value from the roundSecret map for a specific uniqueKey and EOA
-func GetRoundSecretValue(uniqueKey, eoaAddress string) (bool, bool) {
+func (n *LeaderNode) GetRoundSecretValue(uniqueKey, eoaAddress string) (bool, bool) {
 	secretMapsMutex.RLock()
 	defer secretMapsMutex.RUnlock()
 	if roundSecret[uniqueKey] == nil {
@@ -171,7 +170,7 @@ func GetRoundSecretValue(uniqueKey, eoaAddress string) (bool, bool) {
 }
 
 // DeleteRoundSecret deletes roundSecret entry for uniqueKey
-func DeleteRoundSecret(uniqueKey string) {
+func (n *LeaderNode) DeleteRoundSecret(uniqueKey string) {
 	secretMapsMutex.Lock()
 	defer secretMapsMutex.Unlock()
 	delete(roundSecret, uniqueKey)
@@ -182,14 +181,14 @@ func DeleteRoundSecret(uniqueKey string) {
 // ============================================================================
 
 // SetSecretsOnChain sets a value in the secretsOnChain map for a specific uniqueKey
-func SetSecretsOnChain(uniqueKey string, value bool) {
+func (n *LeaderNode) SetSecretsOnChain(uniqueKey string, value bool) {
 	secretsOnChainMu.Lock()
 	defer secretsOnChainMu.Unlock()
 	secretsOnChain[uniqueKey] = value
 }
 
 // GetSecretsOnChain gets a value from the secretsOnChain map for a specific uniqueKey
-func GetSecretsOnChain(uniqueKey string) (bool, bool) {
+func (n *LeaderNode) GetSecretsOnChain(uniqueKey string) (bool, bool) {
 	secretsOnChainMu.RLock()
 	defer secretsOnChainMu.RUnlock()
 	value, exists := secretsOnChain[uniqueKey]
@@ -197,7 +196,7 @@ func GetSecretsOnChain(uniqueKey string) (bool, bool) {
 }
 
 // DeleteSecretsOnChain deletes secretsOnChain entry for uniqueKey
-func DeleteSecretsOnChain(uniqueKey string) {
+func (n *LeaderNode) DeleteSecretsOnChain(uniqueKey string) {
 	secretsOnChainMu.Lock()
 	defer secretsOnChainMu.Unlock()
 	delete(secretsOnChain, uniqueKey)
@@ -208,7 +207,7 @@ func DeleteSecretsOnChain(uniqueKey string) {
 // ============================================================================
 
 // GetRoundSecretsValue gets a value from the RoundSecrets map for a specific uniqueKey
-func GetRoundSecretsValue(uniqueKey string) ([][32]byte, bool) {
+func (n *LeaderNode) GetRoundSecretsValue(uniqueKey string) ([][32]byte, bool) {
 	secretMapsMutex.RLock()
 	defer secretMapsMutex.RUnlock()
 	value, exists := RoundSecrets[uniqueKey]
@@ -222,7 +221,7 @@ func GetRoundSecretsValue(uniqueKey string) ([][32]byte, bool) {
 }
 
 // AppendToRoundSecrets appends a secret value to the RoundSecrets map for a specific uniqueKey
-func AppendToRoundSecrets(uniqueKey string, secretValue [32]byte) {
+func (n *LeaderNode) AppendToRoundSecrets(uniqueKey string, secretValue [32]byte) {
 	secretMapsMutex.Lock()
 	defer secretMapsMutex.Unlock()
 	if RoundSecrets[uniqueKey] == nil {
@@ -240,7 +239,7 @@ var cleanupQueueMu sync.Mutex
 
 // EnqueueUniqueKeyForCleanup adds a uniqueKey to the cleanup queue. If the
 // queue size reaches 5 or more, it pops the oldest uniqueKey and cleans it up.
-func EnqueueUniqueKeyForCleanup(uniqueKey string) {
+func (n *LeaderNode) EnqueueUniqueKeyForCleanup(uniqueKey string) {
 	cleanupQueueMu.Lock()
 
 	// enqueue
@@ -251,7 +250,7 @@ func EnqueueUniqueKeyForCleanup(uniqueKey string) {
 		for cleanupQueue.Length() >= 5 {
 			oldest := cleanupQueue.Remove().(string)
 			// perform cleanup
-			CleanupRoundDataByUniqueKey(oldest)
+			n.CleanupRoundDataByUniqueKey(oldest)
 		}
 		cleanupQueueMu.Unlock()
 		return
@@ -261,7 +260,7 @@ func EnqueueUniqueKeyForCleanup(uniqueKey string) {
 }
 
 // FailToSubmitS monitoring management
-func SetFailToSubmitSMonitoringActive(value bool) {
+func (n *LeaderNode) SetFailToSubmitSMonitoringActive(value bool) {
 	var val int32
 	if value {
 		val = 1
@@ -269,7 +268,7 @@ func SetFailToSubmitSMonitoringActive(value bool) {
 	atomic.StoreInt32(&failToSubmitSMonitoringActive, val)
 }
 
-func GetFailToSubmitSMonitoringActive() bool {
+func (n *LeaderNode) GetFailToSubmitSMonitoringActive() bool {
 	return atomic.LoadInt32(&failToSubmitSMonitoringActive) == 1
 }
 
@@ -278,11 +277,11 @@ func GetFailToSubmitSMonitoringActive() bool {
 // ============================================================================
 
 // SecretRequestSentForWhichRound management
-func SetSecretRequestSentForWhichRound(value string) {
+func (n *LeaderNode) SetSecretRequestSentForWhichRound(value string) {
 	atomic.StorePointer(&SecretRequestSentForWhichRound, unsafe.Pointer(&value))
 }
 
-func GetSecretRequestSentForWhichRound() string {
+func (n *LeaderNode) GetSecretRequestSentForWhichRound() string {
 	ptr := atomic.LoadPointer(&SecretRequestSentForWhichRound)
 	if ptr == nil {
 		return ""
@@ -291,11 +290,11 @@ func GetSecretRequestSentForWhichRound() string {
 }
 
 // CurrentRound management
-func SetCurrentRound(value string) {
+func (n *LeaderNode) SetCurrentRound(value string) {
 	atomic.StorePointer(&CurrentRound, unsafe.Pointer(&value))
 }
 
-func GetCurrentRound() string {
+func (n *LeaderNode) GetCurrentRound() string {
 	ptr := atomic.LoadPointer(&CurrentRound)
 	if ptr == nil {
 		return ""
@@ -304,11 +303,11 @@ func GetCurrentRound() string {
 }
 
 // CurrentTrial management
-func SetCurrentTrial(value string) {
+func (n *LeaderNode) SetCurrentTrial(value string) {
 	atomic.StorePointer(&CurrentTrial, unsafe.Pointer(&value))
 }
 
-func GetCurrentTrial() string {
+func (n *LeaderNode) GetCurrentTrial() string {
 	ptr := atomic.LoadPointer(&CurrentTrial)
 	if ptr == nil {
 		return ""
@@ -321,7 +320,7 @@ func GetCurrentTrial() string {
 // ============================================================================
 
 // RoundsData map management
-func SetRoundData(key string, data RoundData) {
+func (n *LeaderNode) SetRoundData(key string, data RoundData) {
 	RoundsDataMu.Lock()
 	defer RoundsDataMu.Unlock()
 	if RoundsData == nil {
@@ -330,67 +329,67 @@ func SetRoundData(key string, data RoundData) {
 	RoundsData[key] = data
 }
 
-func GetRoundData(key string) (RoundData, bool) {
+func (n *LeaderNode) GetRoundData(key string) (RoundData, bool) {
 	RoundsDataMu.RLock()
 	defer RoundsDataMu.RUnlock()
 	data, exists := RoundsData[key]
 	return data, exists
 }
 
-func DeleteRoundsData(key string) {
+func (n *LeaderNode) DeleteRoundsData(key string) {
 	RoundsDataMu.Lock()
 	defer RoundsDataMu.Unlock()
 	delete(RoundsData, key)
 }
 
 // RevealRequestStatus map management
-func SetRevealRequestStatus(key string, value []string) {
+func (n *LeaderNode) SetRevealRequestStatus(key string, value []string) {
 	revealRequestStatusMu.Lock()
 	defer revealRequestStatusMu.Unlock()
 	revealRequestStatus[key] = value
 }
 
-func GetRevealRequestStatus(key string) ([]string, bool) {
+func (n *LeaderNode) GetRevealRequestStatus(key string) ([]string, bool) {
 	revealRequestStatusMu.RLock()
 	defer revealRequestStatusMu.RUnlock()
 	value, exists := revealRequestStatus[key]
 	return value, exists
 }
 
-func DeleteRevealRequestStatus(key string) {
+func (n *LeaderNode) DeleteRevealRequestStatus(key string) {
 	revealRequestStatusMu.Lock()
 	defer revealRequestStatusMu.Unlock()
 	delete(revealRequestStatus, key)
 }
 
 // ActiveBroadcasts map management
-func SetActiveBroadcast(key string, tracker *utils.BroadcastTracker) {
+func (n *LeaderNode) SetActiveBroadcast(key string, tracker *utils.BroadcastTracker) {
 	activeBroadcastsMu.Lock()
 	defer activeBroadcastsMu.Unlock()
 	activeBroadcasts[key] = tracker
 }
 
-func GetActiveBroadcast(key string) (*utils.BroadcastTracker, bool) {
+func (n *LeaderNode) GetActiveBroadcast(key string) (*utils.BroadcastTracker, bool) {
 	activeBroadcastsMu.RLock()
 	defer activeBroadcastsMu.RUnlock()
 	tracker, exists := activeBroadcasts[key]
 	return tracker, exists
 }
 
-func DeleteActiveBroadcast(key string) {
+func (n *LeaderNode) DeleteActiveBroadcast(key string) {
 	activeBroadcastsMu.Lock()
 	defer activeBroadcastsMu.Unlock()
 	delete(activeBroadcasts, key)
 }
 
 // CvOnChain map management
-func SetCvOnChain(key string, value bool) {
+func (n *LeaderNode) SetCvOnChain(key string, value bool) {
 	CvOnChainMu.Lock()
 	defer CvOnChainMu.Unlock()
 	CvOnChain[key] = value
 }
 
-func GetCvOnChain(key string) (bool, bool) {
+func (n *LeaderNode) GetCvOnChain(key string) (bool, bool) {
 	CvOnChainMu.RLock()
 	defer CvOnChainMu.RUnlock()
 	value, exists := CvOnChain[key]
@@ -402,26 +401,26 @@ func GetCvOnChain(key string) (bool, bool) {
 // ============================================================================
 
 // Req struct management
-func SetReq(req RandomRequest) {
+func (n *LeaderNode) SetReq(req RandomRequest) {
 	ReqMu.Lock()
 	defer ReqMu.Unlock()
 	Req = req
 }
 
-func GetReq() RandomRequest {
+func (n *LeaderNode) GetReq() RandomRequest {
 	ReqMu.RLock()
 	defer ReqMu.RUnlock()
 	return Req
 }
 
 // LastSubmitS timestamp management
-func SetLastSubmitSTimestamp(timestamp *big.Int) {
+func (n *LeaderNode) SetLastSubmitSTimestamp(timestamp *big.Int) {
 	timestampMu.Lock()
 	defer timestampMu.Unlock()
 	lastSubmitSTimestamp = timestamp
 }
 
-func GetLastSubmitSTimestamp() *big.Int {
+func (n *LeaderNode) GetLastSubmitSTimestamp() *big.Int {
 	timestampMu.RLock()
 	defer timestampMu.RUnlock()
 	return lastSubmitSTimestamp
@@ -432,21 +431,21 @@ func GetLastSubmitSTimestamp() *big.Int {
 // ============================================================================
 
 // UpdateCurrentRoundFromContract fetches the current round from the contract and updates local state
-func UpdateCurrentRoundAndTrial(fallbackEthClient *fallback_ethclient.FallbackRPCClient) error {
-	currentRound, err := eth.UpdateCurrentRoundFromContract(fallbackEthClient)
+func (n *LeaderNode) UpdateCurrentRoundAndTrial() error {
+	currentRound, err := eth.UpdateCurrentRoundFromContract(n.fallbackEthClient)
 	if err != nil {
 		log.Printf("failed to fetch current round from contract: %v", err)
 		return err
 	}
 
-	trialNumBig, err := eth.GetTrialNumFromContract(fallbackEthClient, currentRound)
+	trialNumBig, err := eth.GetTrialNumFromContract(n.fallbackEthClient, currentRound)
 	if err != nil {
 		log.Printf("failed to fetch trial number for round %s: %v", trialNumBig.String(), err)
 		return err
 	}
 
 	// Update the local current round state
-	SetCurrentRound(currentRound.String())
-	SetCurrentTrial(trialNumBig.String())
+	n.SetCurrentRound(currentRound.String())
+	n.SetCurrentTrial(trialNumBig.String())
 	return nil
 }
