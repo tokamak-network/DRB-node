@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
@@ -41,10 +42,33 @@ type LeaderNodeHandler struct {
 	leaderNode          *LeaderNode
 }
 
-func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient) *LeaderNodeHandler {
+func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient, db *pg.DB) *LeaderNodeHandler {
+	leaderCommitRepository := database.NewLeaderCommitRepository(db)
+	batchRepository := database.NewBatchRepository(db)
+	broadcastTrackerRepository := database.NewBroadcastTrackerRepository(db)
+	reavealOrderRepository := database.NewRevealOrderRepository(db)
+	nodeInfoRepository := database.NewNodeInfoRepository(db)
+	peerCommitRepository := database.NewPeerCommitRepository(db)
+	revealOrderService := commitreveal2.NewRevealOrderService(
+		reavealOrderRepository,
+		peerCommitRepository,
+		leaderCommitRepository,
+	)
+	p2pClient := libp2putils.NewP2PClient(nodeInfoRepository)
+	leaderNode := NewLeaderNode(
+		fallbackEthClient,
+		revealOrderService,
+		p2pClient,
+		leaderCommitRepository,
+		batchRepository,
+		broadcastTrackerRepository,
+		reavealOrderRepository,
+		nodeInfoRepository,
+	)
+
 	return &LeaderNodeHandler{
 		fallbackEthClient:   fallbackEthClient,
-		leaderNode:          NewLeaderNode(fallbackEthClient),
+		leaderNode:          leaderNode,
 		merkleRootSubmitted: 0,
 		commitMu:            sync.Mutex{},
 	}
@@ -61,7 +85,7 @@ func (lh *LeaderNodeHandler) Run() {
 		log.Fatal("NODE_TYPE is not set in environment variables.")
 	}
 
-	h, peerID, err := libp2putils.CreateHost(port, nodeType)
+	h, peerID, err := lh.leaderNode.CreateHost(port, nodeType)
 	if err != nil {
 		log.Fatalf("Error creating host: %v", err)
 	}
@@ -70,7 +94,7 @@ func (lh *LeaderNodeHandler) Run() {
 	// libp2putils.PopulatePeerstoreFromDB(h)
 
 	defer h.Close()
-	libp2putils.SetHost(h)
+	lh.leaderNode.SetHost(h)
 	h.SetStreamHandler("/register", lh.handleRegistrationRequest)
 	h.SetStreamHandler("/cvs", lh.handleCommitRequest)
 	h.SetStreamHandler("/cos", func(s network.Stream) {
@@ -156,13 +180,13 @@ func (lh *LeaderNodeHandler) handleCommitRequest(s network.Stream) {
 	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
 
 	// Update database for commit data from regular node
-	if err := database.AddLeaderCommit(commitData); err != nil {
+	if err := lh.leaderNode.AddLeaderCommit(commitData); err != nil {
 		log.Printf("Error saving commit data for round %s EOA %s: %v", round, commitData.EOAAddress, err)
 		return
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	activatedOps := eth.GetActivatedOperatorsCached()
-	lh.leaderNode.ReliableBroadCastCVS(libp2putils.HostInstance, round, req.TrialNum, eoaAddress, commitData.Cvs, activatedOps)
+	lh.leaderNode.ReliableBroadCastCVS(round, req.TrialNum, eoaAddress, commitData.Cvs, activatedOps)
 	// Check if all commits are ready after this update
 	if !lh.GetMerkleRootSubmitted() && lh.allCommitsReceivedUnlocked(uniqueKey) {
 		log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", round, req.TrialNum)
@@ -244,7 +268,7 @@ func (lh *LeaderNodeHandler) handleCOSRequest(h host.Host, s network.Stream) {
 	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, eoaAddress.Hex())
 
 	// Update database for leaderCommit's COS
-	leaderCommitDBData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, trial, eoaAddress.Hex())
+	leaderCommitDBData, err := lh.leaderNode.GetLeaderCommitByRoundAndEoaAddr(round, trial, eoaAddress.Hex())
 	if err != nil {
 		log.Printf("Error loading leaderCommit data from database for round: %s, trail: %s, and eoaAddress: %s, error: %v", round, trial, eoaAddress.Hex(), err)
 		return
@@ -253,18 +277,18 @@ func (lh *LeaderNodeHandler) handleCOSRequest(h host.Host, s network.Stream) {
 	leaderCommitDBData.Cos = req.Cos
 	leaderCommitDBData.CosHex = hex.EncodeToString(req.Cos[:])
 
-	if err := database.UpdateLeaderCommit(leaderCommitDBData); err != nil {
+	if err := lh.leaderNode.UpdateLeaderCommit(leaderCommitDBData); err != nil {
 		log.Printf("Error saving COS data for round %s with trail %s EOA %s: %v", round, trial, eoaAddress.Hex(), err)
 		return
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	activatedOps := eth.GetActivatedOperatorsCached()
-	lh.leaderNode.ReliableBroadCastCOS(libp2putils.HostInstance, round, trial, eoaAddress, commitData.Cos, activatedOps)
+	lh.leaderNode.ReliableBroadCastCOS(round, trial, eoaAddress, commitData.Cos, activatedOps)
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if lh.allCosReceivedUnlocked(uniqueKey) {
 		log.Printf("All COS received for round %s with trail %s.", round, trial)
-		_, err := commitreveal2.DetermineRevealOrder(round, trial, activatedOps)
+		_, err := lh.leaderNode.DetermineRevealOrder(round, trial, activatedOps)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, trial, err)
 			return

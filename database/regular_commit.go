@@ -3,26 +3,35 @@ package database
 import (
 	"log"
 
+	"github.com/go-pg/pg/v10"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-func AddCommit(commit *utils.CommitData) error {
+type RegularCommitRepository struct {
+	db *pg.DB
+}
+
+func NewRegularCommitRepository(db *pg.DB) *RegularCommitRepository {
+	return &RegularCommitRepository{db: db}
+}
+
+func (r *RegularCommitRepository) AddCommit(commit *utils.CommitData) error {
 	model := mapCommitDataToScheme(commit)
-	_, err := GetDB().Model(&model).Insert()
+	_, err := r.db.Model(&model).Insert()
 	return err
 }
 
-func UpdateCommit(commit *utils.CommitData) error {
+func (r *RegularCommitRepository) UpdateCommit(commit *utils.CommitData) error {
 	model := mapCommitDataToScheme(commit)
-	_, err := GetDB().Model(&model).
+	_, err := r.db.Model(&model).
 		Where("round = ? AND trial_num = ?", model.Round, model.TrialNum).
 		Update()
 	return err
 }
 
-func GetCommitByRound(round, trialNum string) (*utils.CommitData, error) {
+func (r *RegularCommitRepository) GetCommitByRound(round, trialNum string) (*utils.CommitData, error) {
 	var model CommitDataScheme
-	err := GetDB().Model(&model).
+	err := r.db.Model(&model).
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Limit(1).
 		Select()

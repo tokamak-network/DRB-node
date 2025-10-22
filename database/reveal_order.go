@@ -1,16 +1,27 @@
 package database
 
-import "github.com/tokamak-network/DRB-node/utils"
+import (
+	"github.com/go-pg/pg/v10"
+	"github.com/tokamak-network/DRB-node/utils"
+)
 
-func AddRevealOrder(order *utils.RevealOrderData) error {
+type RevealOrderRepository struct {
+	db *pg.DB
+}
+
+func NewRevealOrderRepository(db *pg.DB) *RevealOrderRepository {
+	return &RevealOrderRepository{db: db}
+}
+
+func (r *RevealOrderRepository) AddRevealOrder(order *utils.RevealOrderData) error {
 	model := mapRevealOrderDataToScheme(order)
-	_, err := GetDB().Model(&model).Insert()
+	_, err := r.db.Model(&model).Insert()
 	return err
 }
 
-func GetRevealOrder(round, trialNum string) (*utils.RevealOrderData, error) {
+func (r *RevealOrderRepository) GetRevealOrder(round, trialNum string) (*utils.RevealOrderData, error) {
 	var model RevealOrderScheme
-	err := GetDB().Model(&model).
+	err := r.db.Model(&model).
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Limit(1).
 		Select()

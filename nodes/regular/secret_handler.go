@@ -11,14 +11,13 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // checkPreviousSecretReceived checks if the previous node's secret was received via broadcast
 func (n *RegularNode) checkPreviousSecretReceived(round, trialNum, previousNodeEOA string) bool {
 	// Check if we have the peer commit data (from broadcast) for the previous node
-	peerCommitData, err := database.GetPeerCommitData(round, trialNum, previousNodeEOA)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(round, trialNum, previousNodeEOA)
 	if err != nil {
 		log.Printf("Failed to get peer commit data for previous node %s: %v", previousNodeEOA, err)
 		return false
@@ -64,7 +63,7 @@ func (n *RegularNode) HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)
 	for {
-		roundData, err := database.GetRevealOrder(req.Round, req.TrialNum)
+		roundData, err := n.revealOrderRepository.GetRevealOrder(req.Round, req.TrialNum)
 		if err != nil {
 			log.Printf("Failed to load reveal order with trail %s for round %s: %v", req.TrialNum, req.Round, err)
 		} else if roundData != nil {
@@ -120,7 +119,7 @@ func (n *RegularNode) HandleSecretValueRequest(h host.Host, s network.Stream) {
 	log.Printf("Verified secret value request for round %s with trail %s from leader %s", req.Round, req.TrialNum, req.LeaderEoaAddress)
 
 	// Fetch the secret value for the specified round
-	commitData, err := database.GetCommitByRound(req.Round, req.TrialNum)
+	commitData, err := n.regularCommitRepository.GetCommitByRound(req.Round, req.TrialNum)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s with trail %s: %v", req.Round, req.TrialNum, err)
 		return
@@ -149,7 +148,7 @@ func (n *RegularNode) HandleSecretValueRequest(h host.Host, s network.Stream) {
 // SendSecretValue sends the secret value for a round to the leader node
 func (n *RegularNode) SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string, trialNum string) {
 	// Load the commit data for the specified round
-	commitData, err := database.GetCommitByRound(roundNum, trialNum)
+	commitData, err := n.regularCommitRepository.GetCommitByRound(roundNum, trialNum)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s with trial %s: %v", roundNum, trialNum, err)
 		return

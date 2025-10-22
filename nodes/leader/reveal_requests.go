@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -26,14 +25,14 @@ func (n *LeaderNode) StartSecretValueRequests(h host.Host, round string, trialNu
 	}
 	// Load reveal order for the round
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	roundRevealData, err := database.GetRevealOrder(round, trialNum)
+	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return
 	}
 
 	// Load registered nodes
-	nodes, err := database.GetNodeInfos()
+	nodes, err := n.nodeInfoRepository.GetNodeInfos()
 	if err != nil {
 		log.Printf("Failed to load registered nodes: %v", err)
 		return
@@ -214,7 +213,7 @@ func (n *LeaderNode) prepareArgumentsForRequestToSubmitS(round string, trialNum 
 		sigRSsForAllCvsNotOnChain = append(sigRSsForAllCvsNotOnChain, cvAndSigRS)
 	}
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	revealOrders, err := database.GetRevealOrder(round, trialNum)
+	revealOrders, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order for round %s with trail %s: %v", round, trialNum, err)
 	}
@@ -244,14 +243,14 @@ func (n *LeaderNode) HandleSecretValueResponse(h host.Host, fallbackEthClient *f
 	log.Printf("Secret value received for round %s with trail %s from EOA %s", round, trialNum, eoa)
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	// Load reveal order for the round
-	roundRevealData, err := database.GetRevealOrder(round, trialNum)
+	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return
 	}
 
 	// Load registered nodes
-	nodes, err := database.GetNodeInfos()
+	nodes, err := n.nodeInfoRepository.GetNodeInfos()
 	if err != nil {
 		log.Printf("Failed to load registered nodes: %v", err)
 		return

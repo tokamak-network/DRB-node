@@ -16,9 +16,16 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 )
 
-var (
-	HostInstance host.Host
-)
+type P2PClient struct {
+	hostInstance       host.Host
+	nodeInfoRepository *database.NodeInfoRepository
+}
+
+func NewP2PClient(nodeInfoRepository *database.NodeInfoRepository) *P2PClient {
+	return &P2PClient{
+		nodeInfoRepository: nodeInfoRepository,
+	}
+}
 
 type NodeInfo struct {
 	IP     string  `json:"ip"`
@@ -26,12 +33,16 @@ type NodeInfo struct {
 	PeerID peer.ID `json:"peer_id"`
 }
 
-func SetHost(h host.Host) {
-	HostInstance = h
+func (p *P2PClient) SetHost(h host.Host) {
+	p.hostInstance = h
+}
+
+func (p *P2PClient) GetHostInstance() host.Host {
+	return p.hostInstance
 }
 
 // CreateHost creates a new libp2p host with a given port and private key.
-func CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
+func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
 	// Define the file path based on nodeType to separate keys for leader and regular nodes
 	filePath := fmt.Sprintf("/app/static-key/%snode.bin", nodeType)
 
@@ -92,7 +103,7 @@ func CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
 }
 
 // ConnectToPeer connects to a specified peer using its multiaddress.
-func ConnectToPeer(h host.Host, leaderIP, leaderPort, leaderPeerID string) (*peer.AddrInfo, error) {
+func (p *P2PClient) ConnectToPeer(leaderIP, leaderPort, leaderPeerID string) (*peer.AddrInfo, error) {
 	// leaderAddrString := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
 	leaderAddrString := fmt.Sprintf("/dns/leadernode/tcp/%s/p2p/%s", leaderPort, leaderPeerID)
 	log.Printf("Leader multiaddress: %s", leaderAddrString)
@@ -107,12 +118,12 @@ func ConnectToPeer(h host.Host, leaderIP, leaderPort, leaderPeerID string) (*pee
 		return nil, fmt.Errorf("failed to create peer info from leader multiaddress: %v", err)
 	}
 
-	h.Peerstore().AddAddrs(leaderInfo.ID, leaderInfo.Addrs, peerstore.PermanentAddrTTL)
-	return leaderInfo, h.Connect(context.Background(), *leaderInfo)
+	p.hostInstance.Peerstore().AddAddrs(leaderInfo.ID, leaderInfo.Addrs, peerstore.PermanentAddrTTL)
+	return leaderInfo, p.hostInstance.Connect(context.Background(), *leaderInfo)
 }
 
-func GetConnectedPeers() map[string]NodeInfo {
-	nodes, err := database.GetNodeInfos()
+func (p *P2PClient) GetConnectedPeers() map[string]NodeInfo {
+	nodes, err := p.nodeInfoRepository.GetNodeInfos()
 	if err != nil {
 		log.Printf("Failed to get node infos: %v", err)
 		return nil

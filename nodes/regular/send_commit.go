@@ -13,8 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -315,7 +313,7 @@ func (n *RegularNode) processSubmittedSecretRequest(round, trialNum, index *big.
 	}
 
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
-	data, err := database.GetRevealOrder(round.String(), trialNum.String())
+	data, err := n.revealOrderRepository.GetRevealOrder(round.String(), trialNum.String())
 	if err != nil {
 		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
 	}
@@ -352,7 +350,7 @@ func (n *RegularNode) processSecretRequest(round, trialNum, index *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 
 	// Try to get reveal order, if it doesn't exist, try to create it
-	revealOrder, err := database.GetRevealOrder(round.String(), trialNum.String())
+	revealOrder, err := n.revealOrderRepository.GetRevealOrder(round.String(), trialNum.String())
 	if err != nil {
 		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
 		log.Printf("Attempting to determine reveal order for regular node...")
@@ -360,14 +358,14 @@ func (n *RegularNode) processSecretRequest(round, trialNum, index *big.Int) {
 		// get activated operators
 		activatedOps := eth.GetActivatedOperatorsCached()
 		// Try to determine reveal order for regular node
-		success, err := commitreveal2.DetermineRegularRevealOrder(round.String(), trialNum.String(), activatedOps)
+		success, err := n.revealOrderService.DetermineRegularRevealOrder(round.String(), trialNum.String(), activatedOps)
 		if err != nil || !success {
 			log.Printf("Failed to determine reveal order: %v", err)
 			return
 		}
 
 		// Try to get reveal order again after creation
-		revealOrder, err = database.GetRevealOrder(round.String(), trialNum.String())
+		revealOrder, err = n.revealOrderRepository.GetRevealOrder(round.String(), trialNum.String())
 		if err != nil {
 			log.Printf("Still failed to get reveal order after creation: %v", err)
 			return
@@ -399,7 +397,7 @@ func (n *RegularNode) processSecretRequest(round, trialNum, index *big.Int) {
 }
 
 func (n *RegularNode) submitS(round string, trialNum string) {
-	roundData, err := database.GetCommitByRound(round, trialNum)
+	roundData, err := n.regularCommitRepository.GetCommitByRound(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to get regular commit for round %s with : %v", round, err)
 	}
@@ -487,7 +485,7 @@ func (n *RegularNode) processRandomRequestNumber(blockTimestamp *big.Int, round 
 		// Set Halted to 0 to resume the round
 		n.SetHalted(false)
 		// Delete old round data except current round from database
-		err := database.DeleteOldRoundDataForRegularNode(round.String())
+		err := n.batchRepository.DeleteOldRoundDataForRegularNode(round.String())
 		if err != nil {
 			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
 		}
@@ -504,7 +502,7 @@ func (n *RegularNode) processRandomRequestNumber(blockTimestamp *big.Int, round 
 
 	if state.Cmp(big.NewInt(2)) == 0 {
 		// Delete old round data except current round from database
-		err := database.DeleteOldRoundDataForRegularNode(round.String())
+		err := n.batchRepository.DeleteOldRoundDataForRegularNode(round.String())
 		if err != nil {
 			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
 		}
@@ -521,7 +519,7 @@ func (n *RegularNode) processRandomRequestNumber(blockTimestamp *big.Int, round 
 
 	if state.Cmp(big.NewInt(3)) == 0 {
 		// Delete round and trial data from database
-		database.DeleteRoundTrialDataForRegularNode(n.GetCurrentRound(), trialNum.String())
+		n.batchRepository.DeleteRoundTrialDataForRegularNode(n.GetCurrentRound(), trialNum.String())
 		// resume the round
 		n.SetHalted(true)
 		// resuming(fallbackEthClient)
@@ -553,7 +551,7 @@ func (n *RegularNode) AllCosReceivedUnlocked(round string, trialNum string) {
 			return
 		}
 		if n.allCosReceivedUnlockedRegular(round, trialNum, activatedOps) {
-			flag, _ := commitreveal2.DetermineRegularRevealOrder(round, trialNum, activatedOps)
+			flag, _ := n.revealOrderService.DetermineRegularRevealOrder(round, trialNum, activatedOps)
 			if flag {
 				break
 			}
@@ -629,7 +627,7 @@ func (n *RegularNode) processCommitRequest(round *big.Int, trialNum *big.Int, pa
 		ContractABI:     parsedABI,
 	}
 
-	commitData, err := database.GetCommitByRound(round.String(), trialNum.String())
+	commitData, err := n.regularCommitRepository.GetCommitByRound(round.String(), trialNum.String())
 	if err != nil {
 		return err
 	}
@@ -700,7 +698,7 @@ func (n *RegularNode) processCosRequest(Round *big.Int, TrialNum *big.Int, packe
 		ContractABI:     parsedABI,
 	}
 
-	commitData, err := database.GetCommitByRound(Round.String(), TrialNum.String())
+	commitData, err := n.regularCommitRepository.GetCommitByRound(Round.String(), TrialNum.String())
 	if err != nil {
 		fmt.Println("Error loading commits:", err)
 		return err

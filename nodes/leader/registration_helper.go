@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -65,7 +64,7 @@ func (n *LeaderNode) RegisterNode(s network.Stream, abiFilePath string) error {
 	}
 
 	// Save updated nodes
-	err := database.AddNodeInfo(&nodeInfo)
+	err := n.nodeInfoRepository.AddNodeInfo(&nodeInfo)
 	if err != nil {
 		return fmt.Errorf("failed to save registered nodes: %v", err)
 	}

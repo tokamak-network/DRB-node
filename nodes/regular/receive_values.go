@@ -77,7 +77,7 @@ func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 	log.Printf("Received CVS broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
-	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
@@ -87,7 +87,7 @@ func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 				EOAAddress: message.EOAAddress,
 				Cvs:        message.Data[:],
 			}
-			if err = database.AddPeerCommitData(peerCommitData); err != nil {
+			if err = n.peerCommitDataRepository.AddPeerCommitData(peerCommitData); err != nil {
 				log.Printf("Failed to add new peer commit data: %v", err)
 				return
 			}
@@ -99,7 +99,7 @@ func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 		// Existing record found, update fields
 		peerCommitData.Cvs = message.Data[:]
 
-		if err = database.UpdatePeerCommitData(peerCommitData); err != nil {
+		if err = n.peerCommitDataRepository.UpdatePeerCommitData(peerCommitData); err != nil {
 			log.Printf("Failed to update peer commit data: %v", err)
 			return
 		}
@@ -177,7 +177,7 @@ func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
 	n.SetCosReceived(uniqueKey, message.EOAAddress, true)
 
-	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
@@ -187,7 +187,7 @@ func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 				EOAAddress: message.EOAAddress,
 				Cos:        message.Data[:],
 			}
-			if err = database.AddPeerCommitData(peerCommitData); err != nil {
+			if err = n.peerCommitDataRepository.AddPeerCommitData(peerCommitData); err != nil {
 				log.Printf("Failed to add new peer commit data: %v", err)
 				return
 			}
@@ -199,7 +199,7 @@ func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 		// Existing record found, update fields
 		peerCommitData.Cos = message.Data[:]
 
-		if err = database.UpdatePeerCommitData(peerCommitData); err != nil {
+		if err = n.peerCommitDataRepository.UpdatePeerCommitData(peerCommitData); err != nil {
 			log.Printf("Failed to update peer commit data: %v", err)
 			return
 		}
@@ -273,7 +273,7 @@ func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 	log.Printf("Received secret broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
-	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
@@ -283,7 +283,7 @@ func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 				EOAAddress:  message.EOAAddress,
 				SecretValue: message.Data[:],
 			}
-			if err = database.AddPeerCommitData(peerCommitData); err != nil {
+			if err = n.peerCommitDataRepository.AddPeerCommitData(peerCommitData); err != nil {
 				log.Printf("Failed to add new peer commit data: %v", err)
 				return
 			}
@@ -295,7 +295,7 @@ func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 		// Existing record found, update fields
 		peerCommitData.SecretValue = message.Data[:]
 
-		if err = database.UpdatePeerCommitData(peerCommitData); err != nil {
+		if err = n.peerCommitDataRepository.UpdatePeerCommitData(peerCommitData); err != nil {
 			log.Printf("Failed to update peer commit data: %v", err)
 			return
 		}

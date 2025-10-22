@@ -12,7 +12,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -105,7 +104,7 @@ func (n *LeaderNode) AcceptSecretValue(h host.Host, s network.Stream, fallbackEt
 
 	log.Printf("Secret value hash matches for round %s with trail %s EOA %s.", round, trial, eoaAddress.Hex())
 	// Fetch or initialize the leader commit data for the given round and EOA
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, trial, req.RegularEoaAddress)
+	leaderCommitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(round, trial, req.RegularEoaAddress)
 	if err != nil {
 		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", round, req.RegularEoaAddress)
 		leaderCommitData = &utils.LeaderCommitData{
@@ -127,7 +126,7 @@ func (n *LeaderNode) AcceptSecretValue(h host.Host, s network.Stream, fallbackEt
 	log.Printf("Received secret value for round %s with trail %s and EOA %s: byte=%x, hex=%s",
 		round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, leaderCommitData.SecretValueHex)
 
-	if err := database.UpdateLeaderCommit(leaderCommitData); err != nil {
+	if err := n.leaderCommitRepository.UpdateLeaderCommit(leaderCommitData); err != nil {
 		log.Printf("Failed to save updated commit data for %s in round %s with trail %s: %v", req.RegularEoaAddress, round, trial, err)
 		return
 	}

@@ -11,7 +11,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -45,7 +44,7 @@ func (n *LeaderNode) checkRoundsForCompletion() {
 	}
 
 	// Defensive check: skip if all random_number_generated are already true for this round
-	leaderCommits, err := database.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
+	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
 	if err == nil && len(leaderCommits) > 0 {
 		allRandomNumberGenerated := true
 		for _, lc := range leaderCommits {
@@ -72,7 +71,7 @@ func (n *LeaderNode) checkRoundsForCompletion() {
 	var index int
 	allEOAsSubmitted := true
 	for i, operator := range operatorAddresses {
-		commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, trialNum, operator.Hex())
+		commitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(round, trialNum, operator.Hex())
 		if err != nil {
 			log.Printf("Either Data not found or Error getting commit data for operator %s: %v", operator.Hex(), err)
 			return
@@ -158,7 +157,7 @@ func (n *LeaderNode) FetchActivatedOperators(fallbackEthClient *fallback_ethclie
 
 func (n *LeaderNode) LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash) {
 
-	leaderCommits, err := database.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
+	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load leader commits: %v", err)
 	}
@@ -296,7 +295,7 @@ func (n *LeaderNode) generateRandomNumberTransaction(round string, trialNum stri
 		})
 	}
 
-	roundRevealData, err := database.GetRevealOrder(round, trialNum)
+	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return err
@@ -370,7 +369,7 @@ func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(round string, 
 		allSecrets = append(allSecrets, secret)
 	}
 
-	roundRevealData, err := database.GetRevealOrder(round, trialNum)
+	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return err
@@ -420,7 +419,7 @@ func packVsValues(vs []uint8) *big.Int {
 
 // completeRound updates to mark a round as completed and deletes old round data
 func (n *LeaderNode) completeRound(round string, trialNum string) error {
-	err := database.UpdateLeaderCommitRandomNumberGenerated(round, trialNum)
+	err := n.leaderCommitRepository.UpdateLeaderCommitRandomNumberGenerated(round, trialNum)
 	if err != nil {
 		return err
 	}

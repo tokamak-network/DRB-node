@@ -41,10 +41,12 @@ func main() {
 
 	switch nodeType {
 	case "leader":
-		leaderNodeHandler := leader_node.NewLeaderNodeHandler(fallbackEthClient)
+		db := database.GetDB()
+		leaderNodeHandler := leader_node.NewLeaderNodeHandler(fallbackEthClient, db)
 		leaderNodeHandler.Run()
 	case "regular":
-		regularNodeHandler := regular_node.NewRegularNodeHandler(fallbackEthClient)
+		db := database.GetDB()
+		regularNodeHandler := regular_node.NewRegularNodeHandler(fallbackEthClient, db)
 		regularNodeHandler.Run()
 	default:
 		log.Fatal("NODE_TYPE must be set to either 'leader' or 'regular'")

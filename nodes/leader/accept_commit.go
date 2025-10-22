@@ -16,9 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
-	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/pkg/constants"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -295,7 +293,7 @@ func (n *LeaderNode) processSubmittedSecretRequest(round *big.Int, trialNum *big
 	}
 	regularNodeAddress := activatedOps[intValue]
 	fmt.Println("GetSecretRequestSentForWhichRound", n.GetSecretRequestSentForWhichRound())
-	leaderCommits, err := database.GetLeaderCommitByRoundAndEoaAddr(n.GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex())
+	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(n.GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex())
 	if err != nil {
 		log.Printf("Failed to get leadercommit data from database by round and eoaAddress %v", err)
 		return
@@ -306,13 +304,13 @@ func (n *LeaderNode) processSubmittedSecretRequest(round *big.Int, trialNum *big
 	secretHex := hex.EncodeToString(secret[:])
 	leaderCommits.SecretValueHex = secretHex
 
-	err = database.UpdateLeaderCommit(leaderCommits)
+	err = n.leaderCommitRepository.UpdateLeaderCommit(leaderCommits)
 	if err != nil {
 		log.Printf("Failed to save updated leader commits: %v", err)
 	}
 
 	// Broadcast the secret value to all activated regular nodes
-	n.ReliableBroadCastSSync(libp2putils.HostInstance, n.GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex(), secret, activatedOps)
+	n.ReliableBroadCastSSync(n.p2pClient.GetHostInstance(), n.GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex(), secret, activatedOps)
 }
 
 func (n *LeaderNode) processRandomRequestNumber(blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
@@ -337,7 +335,7 @@ func (n *LeaderNode) processRandomRequestNumber(blockTimestamp *big.Int, round *
 		// Set Halted to 0 to resume the round
 		n.SetHalted(false)
 		// Delete round and trial data from database
-		err := database.DeleteOldRoundDataForLeaderNode(round.String())
+		err := n.batchRepository.DeleteOldRoundDataForLeaderNode(round.String())
 		if err != nil {
 			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
 		}
@@ -365,7 +363,7 @@ func (n *LeaderNode) processRandomRequestNumber(blockTimestamp *big.Int, round *
 		n.SetExecution(false)
 
 		// Delete round and trial data from database
-		err := database.DeleteOldRoundDataForLeaderNode(round.String())
+		err := n.batchRepository.DeleteOldRoundDataForLeaderNode(round.String())
 		if err != nil {
 			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
 		}
@@ -377,7 +375,7 @@ func (n *LeaderNode) processRandomRequestNumber(blockTimestamp *big.Int, round *
 		// Set Halted to 1 to halt the round
 		n.SetHalted(true)
 		// Delete round and trial data from database
-		database.DeleteRoundTrialDataForLeaderNode(n.GetCurrentRound(), n.GetCurrentTrial())
+		n.batchRepository.DeleteRoundTrialDataForLeaderNode(n.GetCurrentRound(), n.GetCurrentTrial())
 
 		// resume the round
 		n.resuming()
@@ -499,7 +497,7 @@ func (n *LeaderNode) processCOS(round *big.Int, trialNum *big.Int, cos [32]byte,
 	trialNumStr := trialNum.String()
 	uniqueKey := utils.GetUniqueKey(roundStr, trialNumStr)
 
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundStr, trialNumStr, eoa.Hex())
+	leaderCommitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(roundStr, trialNumStr, eoa.Hex())
 	if err != nil {
 		signInfo := utils.SignInfo{
 			R: "",
@@ -522,7 +520,7 @@ func (n *LeaderNode) processCOS(round *big.Int, trialNum *big.Int, cos [32]byte,
 			RandomNumberGenerated: false,
 			CreatedAt:             time.Now().Unix(),
 		}
-		err := database.AddLeaderCommit(&leaderCommit)
+		err := n.leaderCommitRepository.AddLeaderCommit(&leaderCommit)
 		if err != nil {
 			fmt.Printf("Failed to add leader commit: %v", err)
 		}
@@ -530,7 +528,7 @@ func (n *LeaderNode) processCOS(round *big.Int, trialNum *big.Int, cos [32]byte,
 		leaderCommitData.Cos = cos
 		leaderCommitData.CosHex = cosHex
 
-		err := database.UpdateLeaderCommit(leaderCommitData)
+		err := n.leaderCommitRepository.UpdateLeaderCommit(leaderCommitData)
 		if err != nil {
 			fmt.Printf("Failed to update leader commit: %v", err)
 		}
@@ -540,7 +538,7 @@ func (n *LeaderNode) processCOS(round *big.Int, trialNum *big.Int, cos [32]byte,
 	fmt.Printf("Successfully stored COS for Round %s with Trail %s, EOA %s\n", roundStr, trialNumStr, eoa.Hex())
 
 	// Broadcast the COS value to all activated regular nodes
-	n.ReliableBroadCastCOS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cos, activatedOps)
+	n.ReliableBroadCastCOS(roundStr, trialNumStr, eoa, cos, activatedOps)
 
 	// Check if all COS values are received and stop monitoring if so
 	n.checkAndStopFailToSubmitCoMonitoring(roundStr, trialNumStr)
@@ -567,12 +565,12 @@ func (n *LeaderNode) updateCOS(round string, trialNum string, uniqueKey string, 
 
 	if n.AllCosReceivedUnlocked(uniqueKey) {
 		log.Printf("All COS received for round %s with trail %s.", round, trialNum)
-		_, err := commitreveal2.DetermineRevealOrder(round, trialNum, activatedOps)
+		_, err := n.revealOrderService.DetermineRevealOrder(round, trialNum, activatedOps)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, trialNum, err)
 			return
 		}
-		n.StartSecretValueRequests(libp2putils.HostInstance, round, trialNum)
+		n.StartSecretValueRequests(n.p2pClient.GetHostInstance(), round, trialNum)
 	}
 }
 
@@ -593,7 +591,7 @@ func (n *LeaderNode) processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte,
 	cvsHex := hex.EncodeToString(cvs[:])
 
 	uniqueKey := utils.GetUniqueKey(roundStr, trialNumStr)
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(roundStr, trialNumStr, eoa.Hex())
+	leaderCommitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(roundStr, trialNumStr, eoa.Hex())
 	if err != nil {
 		signInfo := utils.SignInfo{
 			R: "",
@@ -616,7 +614,7 @@ func (n *LeaderNode) processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte,
 			RandomNumberGenerated: false,
 			CreatedAt:             time.Now().Unix(),
 		}
-		err := database.AddLeaderCommit(&leaderCommit)
+		err := n.leaderCommitRepository.AddLeaderCommit(&leaderCommit)
 		if err != nil {
 			fmt.Printf("Failed to add leader commit: %v", err)
 		}
@@ -624,7 +622,7 @@ func (n *LeaderNode) processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte,
 		leaderCommitData.Cvs = cvs
 		leaderCommitData.CvsHex = cvsHex
 
-		err := database.UpdateLeaderCommit(leaderCommitData)
+		err := n.leaderCommitRepository.UpdateLeaderCommit(leaderCommitData)
 		if err != nil {
 			fmt.Printf("Failed to update leader commit: %v", err)
 		}
@@ -637,7 +635,7 @@ func (n *LeaderNode) processCVS(round *big.Int, trialNum *big.Int, cvs [32]byte,
 	n.checkAndStopFailToSubmitCvMonitoring(roundStr, trialNumStr)
 
 	// Broadcast the CVS value to all activated regular nodes
-	n.ReliableBroadCastCVS(libp2putils.HostInstance, roundStr, trialNumStr, eoa, cvs, activatedOps)
+	n.ReliableBroadCastCVS(roundStr, trialNumStr, eoa, cvs, activatedOps)
 	if n.AllCvsReceivedUnlocked(uniqueKey) {
 		n.GenerateMerkleRoot(roundStr, trialNumStr)
 	}
@@ -1302,11 +1300,11 @@ func (n *LeaderNode) SubmitMerkleRoot(roundNum string, trialNum string, merkleRo
 	}
 	roundData.MerkleRoot = true
 	n.SetRoundData(uniqueKey, roundData)
-	updateCommitDataAfterSubmit(uniqueKey)
+	n.updateCommitDataAfterSubmit(uniqueKey)
 }
 
 // updateCommitDataAfterSubmit updates commit data after successful merkle root submission
-func updateCommitDataAfterSubmit(uniqueKey string) {
+func (n *LeaderNode) updateCommitDataAfterSubmit(uniqueKey string) {
 	roundMap, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists {
 		return
@@ -1318,7 +1316,7 @@ func updateCommitDataAfterSubmit(uniqueKey string) {
 		} else {
 			data.SubmitMerkleRootDone = true
 			utils.SetCommittedNodeData(uniqueKey, eoaAddress, data)
-			database.UpdateLeaderCommit(&data)
+			n.leaderCommitRepository.UpdateLeaderCommit(&data)
 		}
 	}
 

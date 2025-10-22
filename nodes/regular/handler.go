@@ -12,6 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/go-pg/pg/v10"
 	core "github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -37,10 +38,28 @@ type RegularNodeHandler struct {
 	regularNode       *RegularNode
 }
 
-func NewRegularNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient) *RegularNodeHandler {
+func NewRegularNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient, db *pg.DB) *RegularNodeHandler {
+	peerCommitDataRepository := database.NewPeerCommitRepository(db)
+	revealOrderRepository := database.NewRevealOrderRepository(db)
+	regularCommitRepository := database.NewRegularCommitRepository(db)
+	batchRepository := database.NewBatchRepository(db)
+	nodeInfoRepository := database.NewNodeInfoRepository(db)
+	leaderCommitRepository := database.NewLeaderCommitRepository(db)
+	revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepository, peerCommitDataRepository, leaderCommitRepository)
+	p2pClient := libp2putils.NewP2PClient(nodeInfoRepository)
+	regularNode := NewRegularNode(
+		fallbackEthClient,
+		revealOrderService,
+		p2pClient,
+		peerCommitDataRepository,
+		revealOrderRepository,
+		regularCommitRepository,
+		batchRepository,
+		nodeInfoRepository,
+	)
 	return &RegularNodeHandler{
 		fallbackEthClient: fallbackEthClient,
-		regularNode:       NewRegularNode(fallbackEthClient),
+		regularNode:       regularNode,
 	}
 }
 
@@ -58,7 +77,7 @@ func (rh *RegularNodeHandler) Run() {
 		log.Fatal("NODE_TYPE is not set in environment variables.")
 	}
 
-	h, peerID, err := libp2putils.CreateHost(port, nodeType)
+	h, peerID, err := rh.regularNode.CreateHost(port, nodeType)
 	if err != nil {
 		log.Fatalf("Error creating host: %v", err)
 	}
@@ -123,12 +142,12 @@ func (rh *RegularNodeHandler) Run() {
 		EOAAddress: eoaAddress,
 	}
 
-	if err := database.AddNodeInfo(&nodeInfo); err != nil {
+	if err := rh.regularNode.AddNodeInfo(&nodeInfo); err != nil {
 		log.Printf("Failed to save node info: %v", err)
 	}
 
 	// Connect to the leader
-	leaderInfo, err := libp2putils.ConnectToPeer(h, leaderIP, leaderPort, leaderPeerID)
+	leaderInfo, err := rh.regularNode.ConnectToLeader(leaderIP, leaderPort, leaderPeerID)
 	if err != nil {
 		log.Fatalf("Error connecting to leader: %v", err)
 	}
@@ -244,7 +263,7 @@ func (rh *RegularNodeHandler) Run() {
 		if isEOAActivated(eoaAddress) {
 
 			// Check if this round has already been committed (store it locally)
-			commitData, err := database.GetCommitByRound(round, trialNum)
+			commitData, err := rh.regularNode.GetCommitByRound(round, trialNum)
 			if err != nil && err.Error() != "pg: no rows in result set" {
 				log.Printf("Error loading commit data: %v", err)
 				continue
@@ -279,7 +298,7 @@ func (rh *RegularNodeHandler) Run() {
 				}
 
 				// Save commit data locally to prevent resending
-				err = database.AddCommit(&commitData)
+				err = rh.regularNode.AddCommit(&commitData)
 				if err != nil {
 					log.Printf("Error saving commit data: %v", err)
 					continue
@@ -295,7 +314,7 @@ func (rh *RegularNodeHandler) Run() {
 				if merkleRootSubmitted && !randomNumberSubmitted {
 					log.Printf("Merkle Root is set but Random Number is not. Sending COS for round %s.", round)
 					// Send COS to leader
-					sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress, privateKey)
+					rh.sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress, privateKey)
 				}
 				continue
 			}
@@ -306,7 +325,7 @@ func (rh *RegularNodeHandler) Run() {
 	}
 }
 
-func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
+func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	// Create commit request structure with signed COS and round data
 	req := utils.CosRequest{
 		UniqueKey:  commitData.UniqueKey,
@@ -338,7 +357,7 @@ func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitD
 
 		// Update SendCosToLeader flag to true after successful send
 		commitData.SendCosToLeader = true
-		if err := database.UpdateCommit(&commitData); err != nil {
+		if err := rh.regularNode.UpdateCommit(&commitData); err != nil {
 			log.Printf("Failed to update SendCosToLeader flag: %v", err)
 		}
 	}
@@ -537,7 +556,7 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 
 	// Save commit data locally with v, r, s
 	commitData.Sign = req.Sign
-	if err := database.UpdateCommit(&commitData); err != nil {
+	if err := rh.regularNode.UpdateCommit(&commitData); err != nil {
 		log.Printf("Failed to save commit data locally: %v", err)
 		return
 	}
@@ -558,7 +577,7 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 
 		// Update SendToLeader flag to true after successful send
 		commitData.SendToLeader = true
-		if err := database.UpdateCommit(&commitData); err != nil {
+		if err := rh.regularNode.UpdateCommit(&commitData); err != nil {
 			log.Printf("Failed to update SendToLeader flag: %v", err)
 		}
 	}

@@ -15,8 +15,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/tokamak-network/DRB-node/database"
-	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -93,7 +91,7 @@ func (n *LeaderNode) ReliableBroadCastSSync(h host.Host, roundNum string, trialN
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := database.AddBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.AddBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return false
 	}
@@ -110,7 +108,7 @@ func (n *LeaderNode) ReliableBroadCastSSync(h host.Host, roundNum string, trialN
 }
 
 // ReliableBroadCastCOS broadcasts COS values with acknowledgment tracking
-func (n *LeaderNode) ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte, activatedOps []common.Address) {
+func (n *LeaderNode) ReliableBroadCastCOS(roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte, activatedOps []common.Address) {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cos")
 
 	tracker := &utils.BroadcastTracker{
@@ -131,7 +129,7 @@ func (n *LeaderNode) ReliableBroadCastCOS(h host.Host, roundNum string, trialNum
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := database.AddBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.AddBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return
 	}
@@ -139,11 +137,11 @@ func (n *LeaderNode) ReliableBroadCastCOS(h host.Host, roundNum string, trialNum
 	n.SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
-	go n.performReliableBroadcast(h, tracker, "cos", activatedOps)
+	go n.performReliableBroadcast(n.p2pClient.GetHostInstance(), tracker, "cos", activatedOps)
 }
 
 // ReliableBroadCastCVS broadcasts CVS values with acknowledgment tracking
-func (n *LeaderNode) ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte, activatedOps []common.Address) {
+func (n *LeaderNode) ReliableBroadCastCVS(roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte, activatedOps []common.Address) {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cvs")
 
 	tracker := &utils.BroadcastTracker{
@@ -164,7 +162,7 @@ func (n *LeaderNode) ReliableBroadCastCVS(h host.Host, roundNum string, trialNum
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := database.AddBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.AddBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return
 	}
@@ -172,7 +170,7 @@ func (n *LeaderNode) ReliableBroadCastCVS(h host.Host, roundNum string, trialNum
 	n.SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
-	go n.performReliableBroadcast(h, tracker, "cvs", activatedOps)
+	go n.performReliableBroadcast(n.p2pClient.GetHostInstance(), tracker, "cvs", activatedOps)
 }
 
 // performReliableBroadcast handles the actual broadcasting with retry logic
@@ -182,7 +180,7 @@ func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.Broadc
 		log.Println("System is halted. Skipping processCVS.")
 		return
 	}
-	nodeInfo := libp2putils.GetConnectedPeers()
+	nodeInfo := n.p2pClient.GetConnectedPeers()
 
 	for tracker.Attempts < tracker.MaxAttempts {
 		tracker.Attempts++
@@ -261,7 +259,7 @@ func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.Broadc
 		}
 
 		// Update tracker
-		if err := database.UpdateBroadcastTracker(tracker); err != nil {
+		if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(tracker); err != nil {
 			log.Printf("Failed to update broadcast tracker: %v", err)
 		}
 
@@ -314,7 +312,7 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 	}
 
 	// Get connected peer information
-	nodeInfo := libp2putils.GetConnectedPeers()
+	nodeInfo := n.p2pClient.GetConnectedPeers()
 
 	// Create message
 	message := utils.BroadcastMessage{
@@ -385,7 +383,7 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 		}
 
 		// Update tracker
-		if err := database.UpdateBroadcastTracker(tracker); err != nil {
+		if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(tracker); err != nil {
 			log.Printf("Failed to update broadcast tracker: %v", err)
 		}
 
@@ -465,7 +463,7 @@ func (n *LeaderNode) HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
 	}
 
 	// Update tracker
-	if err := database.UpdateBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to update broadcast tracker: %v", err)
 	}
 }
