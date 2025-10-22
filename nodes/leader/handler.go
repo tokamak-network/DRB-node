@@ -1,4 +1,4 @@
-package nodes
+package leader_node
 
 import (
 	"bytes"
@@ -17,7 +17,6 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
-	leader_node "github.com/tokamak-network/DRB-node/nodes/leader"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -39,13 +38,13 @@ type LeaderNodeHandler struct {
 	fallbackEthClient   *fallback_ethclient.FallbackRPCClient
 	merkleRootSubmitted int32 // 0 = false, 1 = true (atomic)
 	commitMu            sync.Mutex
-	leaderNode          *leader_node.LeaderNode
+	leaderNode          *LeaderNode
 }
 
 func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient) *LeaderNodeHandler {
 	return &LeaderNodeHandler{
 		fallbackEthClient:   fallbackEthClient,
-		leaderNode:          leader_node.NewLeaderNode(fallbackEthClient),
+		leaderNode:          NewLeaderNode(fallbackEthClient),
 		merkleRootSubmitted: 0,
 		commitMu:            sync.Mutex{},
 	}

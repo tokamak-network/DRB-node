@@ -5,11 +5,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tokamak-network/DRB-node/nodes"
-
 	"github.com/joho/godotenv"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/logger"
+	leader_node "github.com/tokamak-network/DRB-node/nodes/leader"
+	regular_node "github.com/tokamak-network/DRB-node/nodes/regular"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 )
 
@@ -41,10 +41,10 @@ func main() {
 
 	switch nodeType {
 	case "leader":
-		leaderNodeHandler := nodes.NewLeaderNodeHandler(fallbackEthClient)
+		leaderNodeHandler := leader_node.NewLeaderNodeHandler(fallbackEthClient)
 		leaderNodeHandler.Run()
 	case "regular":
-		regularNodeHandler := nodes.NewRegularNodeHandler(fallbackEthClient)
+		regularNodeHandler := regular_node.NewRegularNodeHandler(fallbackEthClient)
 		regularNodeHandler.Run()
 	default:
 		log.Fatal("NODE_TYPE must be set to either 'leader' or 'regular'")

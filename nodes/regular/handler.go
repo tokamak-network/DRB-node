@@ -1,4 +1,4 @@
-package nodes
+package regular_node
 
 import (
 	"context"
@@ -20,7 +20,6 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
-	regular_node "github.com/tokamak-network/DRB-node/nodes/regular"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -35,13 +34,13 @@ var (
 
 type RegularNodeHandler struct {
 	fallbackEthClient *fallback_ethclient.FallbackRPCClient
-	regularNode       *regular_node.RegularNode
+	regularNode       *RegularNode
 }
 
 func NewRegularNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient) *RegularNodeHandler {
 	return &RegularNodeHandler{
 		fallbackEthClient: fallbackEthClient,
-		regularNode:       regular_node.NewRegularNode(fallbackEthClient),
+		regularNode:       NewRegularNode(fallbackEthClient),
 	}
 }
 
@@ -228,7 +227,7 @@ func (rh *RegularNodeHandler) Run() {
 		}
 		roundData, exists := rh.regularNode.GetRoundData(uniqueKey)
 		if !exists {
-			roundData = regular_node.RoundData{}
+			roundData = RoundData{}
 		}
 		merkleRootSubmitted := roundData.MerkleRoot
 		randomNumberSubmitted := roundData.RandomNumber
