@@ -18,14 +18,14 @@ import (
 )
 
 type LeaderNode struct {
-	fallbackEthClient *fallback_ethclient.FallbackRPCClient
+	fallbackEthClient fallback_ethclient.IFallbackEthClient
 
 	// Repositories for managing leader node data on database
-	leaderCommitRepository     *database.LeaderCommitRepository
-	batchRepository            *database.BatchRepository
-	broadcastTrackerRepository *database.BroadcastTrackerRepository
-	reavealOrderRepository     *database.RevealOrderRepository
-	nodeInfoRepository         *database.NodeInfoRepository
+	leaderCommitRepository     database.ILeaderCommitRepository
+	batchRepository            database.IBatchRepository
+	broadcastTrackerRepository database.IBroadcastTrackerRepository
+	reavealOrderRepository     database.IRevealOrderRepository
+	nodeInfoRepository         database.INodeInfoRepository
 
 	// External services
 	revealOrderService *commitreveal2.RevealOrderService
@@ -113,11 +113,11 @@ func NewLeaderNode(
 	fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 	revealOrderService *commitreveal2.RevealOrderService,
 	p2pClient *libp2putils.P2PClient,
-	leaderCommitRepository *database.LeaderCommitRepository,
+	leaderCommitRepository database.ILeaderCommitRepository,
 	batchRepository *database.BatchRepository,
-	broadcastTrackerRepository *database.BroadcastTrackerRepository,
-	reavealOrderRepository *database.RevealOrderRepository,
-	nodeInfoRepository *database.NodeInfoRepository,
+	broadcastTrackerRepository database.IBroadcastTrackerRepository,
+	reavealOrderRepository database.IRevealOrderRepository,
+	nodeInfoRepository database.INodeInfoRepository,
 ) *LeaderNode {
 	return &LeaderNode{
 		fallbackEthClient:          fallbackEthClient,

@@ -21,11 +21,11 @@ type RegularNode struct {
 	fallbackEthClient *fallback_ethclient.FallbackRPCClient
 
 	// Repositories for managing regular node data on database
-	peerCommitDataRepository *database.PeerCommitRepository
-	revealOrderRepository    *database.RevealOrderRepository
-	regularCommitRepository  *database.RegularCommitRepository
-	batchRepository          *database.BatchRepository
-	nodeInfoRepository       *database.NodeInfoRepository
+	peerCommitDataRepository database.IPeerCommitRepository
+	revealOrderRepository    database.IRevealOrderRepository
+	regularCommitRepository  database.IRegularCommitRepository
+	batchRepository          database.IBatchRepository
+	nodeInfoRepository       database.INodeInfoRepository
 
 	// External services
 	revealOrderService *commitreveal2.RevealOrderService

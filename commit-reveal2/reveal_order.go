@@ -12,29 +12,16 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-type RevealOrderRepository interface {
-	GetRevealOrder(round, trialNum string) (*utils.RevealOrderData, error)
-	AddRevealOrder(order *utils.RevealOrderData) error
-}
-
-type PeerCommitRepository interface {
-	GetPeerCommitData(round, trialNum, eoaAddress string) (*database.PeerCommitDataScheme, error)
-}
-
-type LeaderCommitRepository interface {
-	GetLeaderCommitByRoundAndEoaAddr(round, trialNum, eoaAddress string) (*utils.LeaderCommitData, error)
-}
-
 type RevealOrderService struct {
-	revealOrderRepository  RevealOrderRepository
-	peerCommitRepository   PeerCommitRepository
-	leaderCommitRepository LeaderCommitRepository
+	revealOrderRepository  database.IRevealOrderRepository
+	peerCommitRepository   database.IPeerCommitRepository
+	leaderCommitRepository database.ILeaderCommitRepository
 }
 
 func NewRevealOrderService(
-	revealOrderRepository RevealOrderRepository,
-	peerCommitRepository PeerCommitRepository,
-	leaderCommitRepository LeaderCommitRepository,
+	revealOrderRepository database.IRevealOrderRepository,
+	peerCommitRepository database.IPeerCommitRepository,
+	leaderCommitRepository database.ILeaderCommitRepository,
 ) *RevealOrderService {
 	return &RevealOrderService{
 		revealOrderRepository:  revealOrderRepository,

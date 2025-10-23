@@ -18,10 +18,10 @@ import (
 
 type P2PClient struct {
 	hostInstance       host.Host
-	nodeInfoRepository *database.NodeInfoRepository
+	nodeInfoRepository database.INodeInfoRepository
 }
 
-func NewP2PClient(nodeInfoRepository *database.NodeInfoRepository) *P2PClient {
+func NewP2PClient(nodeInfoRepository database.INodeInfoRepository) *P2PClient {
 	return &P2PClient{
 		nodeInfoRepository: nodeInfoRepository,
 	}
