@@ -82,6 +82,8 @@ func (rh *RegularNodeHandler) Run() {
 		log.Fatalf("Error creating host: %v", err)
 	}
 
+	rh.regularNode.SetHost(h) 
+	
 	defer h.Close()
 
 	h.SetStreamHandler("/sendSecretValue", func(s network.Stream) {
