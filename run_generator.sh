@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the file path for the Go source
-GO_FILE_PATH="cmd/run-generator/main.go"
+GO_FILE_PATH="cmd/generator/main.go"
 # Define the name for the compiled binary
 BINARY_NAME="peer_id_generator"
 # Define the target file to be checked/created
