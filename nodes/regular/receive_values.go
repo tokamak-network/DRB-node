@@ -1,14 +1,11 @@
-package regularNode_helper
+package regular_node
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"encoding/json"
 	"log"
 	"os"
 	"sync"
-	"sync/atomic"
-	"unsafe"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -19,28 +16,17 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-// Global variables with atomic/mutex protection for thread safety
-var CosRecevied sync.Map // outer: string, inner: *sync.Map (string->bool) - sync.Map is already thread-safe
-
-// regularNodeEOA string with atomic protection
-var regularNodeEOA unsafe.Pointer // *string
-
-// Private key with mutex protection
-var regularNodePrivateKey *ecdsa.PrivateKey
-var privateKeyMu sync.RWMutex
-
-
 // generates a signature for the acknowledgment
-func generateAcknowledgmentSignature(eoaAddress string) []byte {
-	if GetRegularNodePrivateKey() == nil {
+func (n *RegularNode) generateAcknowledgmentSignature(eoaAddress string) []byte {
+	if n.GetRegularNodePrivateKey() == nil {
 		log.Printf("Regular node private key not set, cannot sign acknowledgment")
 		return nil
 	}
-	return utils.SignData(eoaAddress, GetRegularNodePrivateKey())
+	return utils.SignData(eoaAddress, n.GetRegularNodePrivateKey())
 }
 
 // sendAcknowledgment sends an acknowledgment back to the leader
-func sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack utils.AcknowledgmentMessage) {
+func (n *RegularNode) sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack utils.AcknowledgmentMessage) {
 	stream, err := h.NewStream(context.Background(), leaderPeerID, protocol.ID("/acknowledgment"))
 	if err != nil {
 		log.Printf("Failed to create acknowledgment stream: %v", err)
@@ -56,10 +42,10 @@ func sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack utils.Acknowledgm
 }
 
 // HandleCvs processes incoming CVS values and sends acknowledgment
-func HandleCvs(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 	defer s.Close()
 
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleCvs.")
 		return
 	}
@@ -91,7 +77,7 @@ func HandleCvs(h host.Host, s network.Stream) {
 	log.Printf("Received CVS broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
-	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
@@ -101,7 +87,7 @@ func HandleCvs(h host.Host, s network.Stream) {
 				EOAAddress: message.EOAAddress,
 				Cvs:        message.Data[:],
 			}
-			if err = database.AddPeerCommitData(peerCommitData); err != nil {
+			if err = n.peerCommitDataRepository.AddPeerCommitData(peerCommitData); err != nil {
 				log.Printf("Failed to add new peer commit data: %v", err)
 				return
 			}
@@ -113,7 +99,7 @@ func HandleCvs(h host.Host, s network.Stream) {
 		// Existing record found, update fields
 		peerCommitData.Cvs = message.Data[:]
 
-		if err = database.UpdatePeerCommitData(peerCommitData); err != nil {
+		if err = n.peerCommitDataRepository.UpdatePeerCommitData(peerCommitData); err != nil {
 			log.Printf("Failed to update peer commit data: %v", err)
 			return
 		}
@@ -122,8 +108,8 @@ func HandleCvs(h host.Host, s network.Stream) {
 	log.Printf("Successfully saved CVS data for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
-	eoaAddress := GetRegularNodeEOA()
-	signature := generateAcknowledgmentSignature(eoaAddress)
+	eoaAddress := n.GetRegularNodeEOA()
+	signature := n.generateAcknowledgmentSignature(eoaAddress)
 
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
@@ -148,14 +134,14 @@ func HandleCvs(h host.Host, s network.Stream) {
 		return
 	}
 
-	sendAcknowledgment(h, leaderPeerID, ack)
+	n.sendAcknowledgment(h, leaderPeerID, ack)
 }
 
 // HandleCos processes incoming COS values and sends acknowledgment
-func HandleCos(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 	defer s.Close()
 
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleCos.")
 		return
 	}
@@ -189,9 +175,9 @@ func HandleCos(h host.Host, s network.Stream) {
 
 	// Process the COS data
 	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
-	SetCosReceived(uniqueKey, message.EOAAddress, true)
+	n.SetCosReceived(uniqueKey, message.EOAAddress, true)
 
-	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
@@ -201,7 +187,7 @@ func HandleCos(h host.Host, s network.Stream) {
 				EOAAddress: message.EOAAddress,
 				Cos:        message.Data[:],
 			}
-			if err = database.AddPeerCommitData(peerCommitData); err != nil {
+			if err = n.peerCommitDataRepository.AddPeerCommitData(peerCommitData); err != nil {
 				log.Printf("Failed to add new peer commit data: %v", err)
 				return
 			}
@@ -213,7 +199,7 @@ func HandleCos(h host.Host, s network.Stream) {
 		// Existing record found, update fields
 		peerCommitData.Cos = message.Data[:]
 
-		if err = database.UpdatePeerCommitData(peerCommitData); err != nil {
+		if err = n.peerCommitDataRepository.UpdatePeerCommitData(peerCommitData); err != nil {
 			log.Printf("Failed to update peer commit data: %v", err)
 			return
 		}
@@ -222,8 +208,8 @@ func HandleCos(h host.Host, s network.Stream) {
 	log.Printf("Successfully saved COS data for round %s with trail %s and EOA %s", message.Round, message.TrialNum, message.EOAAddress)
 
 	// Send acknowledgment
-	eoaAddress := GetRegularNodeEOA()
-	signature := generateAcknowledgmentSignature(eoaAddress)
+	eoaAddress := n.GetRegularNodeEOA()
+	signature := n.generateAcknowledgmentSignature(eoaAddress)
 
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
@@ -248,14 +234,14 @@ func HandleCos(h host.Host, s network.Stream) {
 		return
 	}
 
-	sendAcknowledgment(h, leaderPeerID, ack)
+	n.sendAcknowledgment(h, leaderPeerID, ack)
 }
 
 // HandleSecret processes incoming secret values and sends acknowledgment
-func HandleSecret(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 	defer s.Close()
 
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleSecret.")
 		return
 	}
@@ -287,7 +273,7 @@ func HandleSecret(h host.Host, s network.Stream) {
 	log.Printf("Received secret broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
-	peerCommitData, err := database.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
@@ -297,7 +283,7 @@ func HandleSecret(h host.Host, s network.Stream) {
 				EOAAddress:  message.EOAAddress,
 				SecretValue: message.Data[:],
 			}
-			if err = database.AddPeerCommitData(peerCommitData); err != nil {
+			if err = n.peerCommitDataRepository.AddPeerCommitData(peerCommitData); err != nil {
 				log.Printf("Failed to add new peer commit data: %v", err)
 				return
 			}
@@ -309,7 +295,7 @@ func HandleSecret(h host.Host, s network.Stream) {
 		// Existing record found, update fields
 		peerCommitData.SecretValue = message.Data[:]
 
-		if err = database.UpdatePeerCommitData(peerCommitData); err != nil {
+		if err = n.peerCommitDataRepository.UpdatePeerCommitData(peerCommitData); err != nil {
 			log.Printf("Failed to update peer commit data: %v", err)
 			return
 		}
@@ -318,8 +304,8 @@ func HandleSecret(h host.Host, s network.Stream) {
 	log.Printf("Successfully saved secret value for round %s and EOA %s", message.Round, message.EOAAddress)
 
 	// Send acknowledgment
-	eoaAddress := GetRegularNodeEOA()
-	signature := generateAcknowledgmentSignature(eoaAddress)
+	eoaAddress := n.GetRegularNodeEOA()
+	signature := n.generateAcknowledgmentSignature(eoaAddress)
 
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
@@ -344,17 +330,17 @@ func HandleSecret(h host.Host, s network.Stream) {
 		return
 	}
 
-	sendAcknowledgment(h, leaderPeerID, ack)
+	n.sendAcknowledgment(h, leaderPeerID, ack)
 }
 
-func SetCosReceived(outer, inner string, value bool) {
-	actual, _ := CosRecevied.LoadOrStore(outer, &sync.Map{})
+func (n *RegularNode) SetCosReceived(outer, inner string, value bool) {
+	actual, _ := n.cosRecevied.LoadOrStore(outer, &sync.Map{})
 	innerMap := actual.(*sync.Map)
 	innerMap.Store(inner, value)
 }
 
-func GetCosReceived(outer, inner string) (bool, bool) {
-	actual, ok := CosRecevied.Load(outer)
+func (n *RegularNode) GetCosReceived(outer, inner string) (bool, bool) {
+	actual, ok := n.cosRecevied.Load(outer)
 	if !ok {
 		return false, false
 	}

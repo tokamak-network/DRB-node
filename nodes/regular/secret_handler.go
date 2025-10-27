@@ -1,30 +1,23 @@
-package regularNode_helper
+package regular_node
 
 import (
 	"context"
 	"encoding/json"
 	"log"
 	"os"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-// Global variables with mutex protection for thread safety
-var strictOrderWhileSecretRequest = make(map[string][]string)
-var strictOrderMu sync.RWMutex
-
 // checkPreviousSecretReceived checks if the previous node's secret was received via broadcast
-func checkPreviousSecretReceived(round, trialNum, previousNodeEOA string) bool {
+func (n *RegularNode) checkPreviousSecretReceived(round, trialNum, previousNodeEOA string) bool {
 	// Check if we have the peer commit data (from broadcast) for the previous node
-	peerCommitData, err := database.GetPeerCommitData(round, trialNum, previousNodeEOA)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(round, trialNum, previousNodeEOA)
 	if err != nil {
 		log.Printf("Failed to get peer commit data for previous node %s: %v", previousNodeEOA, err)
 		return false
@@ -55,10 +48,10 @@ func checkPreviousSecretReceived(round, trialNum, previousNodeEOA string) bool {
 }
 
 // HandleSecretValueRequest processes secret value requests from the leader node
-func HandleSecretValueRequest(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleSecretValueRequest(h host.Host, s network.Stream) {
 	defer s.Close()
 
-	if atomic.LoadInt32(&Halted) == 1 {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleSecretValueRequest.")
 		return
 	}
@@ -70,18 +63,18 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)
 	for {
-		roundData, err := database.GetRevealOrder(req.Round, req.TrialNum)
+		roundData, err := n.revealOrderRepository.GetRevealOrder(req.Round, req.TrialNum)
 		if err != nil {
 			log.Printf("Failed to load reveal order with trail %s for round %s: %v", req.TrialNum, req.Round, err)
 		} else if roundData != nil {
-			SetStrictOrder(uniqueKey, roundData.OrderedNodes)
+			n.SetStrictOrder(uniqueKey, roundData.OrderedNodes)
 			break
 		} else {
 			log.Printf("Reveal order not yet calculated for round %s with trail %s. Waiting...", req.Round, req.TrialNum)
 		}
 		time.Sleep(5 * time.Second)
 	}
-	strictOrder, exists := GetStrictOrder(uniqueKey)
+	strictOrder, exists := n.GetStrictOrder(uniqueKey)
 	if !exists || len(strictOrder) == 0 || req.Order >= len(strictOrder) || strictOrder[req.Order] != req.RegularEoaAddress {
 		log.Printf("EOA %s is not next in the reveal order %v for round %s with trail %s", req.RegularEoaAddress, req.Order, req.Round, req.TrialNum)
 		return
@@ -93,7 +86,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		log.Printf("🔍 Checking if previous node's secret was received from EOA %s", previousNodeEOA)
 
 		// Check if we received the previous node's secret via broadcast
-		hasPreviousSecret := checkPreviousSecretReceived(req.Round, req.TrialNum, previousNodeEOA)
+		hasPreviousSecret := n.checkPreviousSecretReceived(req.Round, req.TrialNum, previousNodeEOA)
 		if !hasPreviousSecret {
 			log.Printf("❌ Previous node's secret from %s not yet received. Cannot send secret yet.", previousNodeEOA)
 			return
@@ -126,7 +119,7 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 	log.Printf("Verified secret value request for round %s with trail %s from leader %s", req.Round, req.TrialNum, req.LeaderEoaAddress)
 
 	// Fetch the secret value for the specified round
-	commitData, err := database.GetCommitByRound(req.Round, req.TrialNum)
+	commitData, err := n.regularCommitRepository.GetCommitByRound(req.Round, req.TrialNum)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s with trail %s: %v", req.Round, req.TrialNum, err)
 		return
@@ -149,13 +142,13 @@ func HandleSecretValueRequest(h host.Host, s network.Stream) {
 		return
 	}
 
-	SendSecretValue(h, leaderPeerID, req.Round, req.TrialNum)
+	n.SendSecretValue(h, leaderPeerID, req.Round, req.TrialNum)
 }
 
 // SendSecretValue sends the secret value for a round to the leader node
-func SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string, trialNum string) {
+func (n *RegularNode) SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string, trialNum string) {
 	// Load the commit data for the specified round
-	commitData, err := database.GetCommitByRound(roundNum, trialNum)
+	commitData, err := n.regularCommitRepository.GetCommitByRound(roundNum, trialNum)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s with trial %s: %v", roundNum, trialNum, err)
 		return

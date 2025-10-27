@@ -1,4 +1,4 @@
-package nodes
+package regular_node
 
 import (
 	"context"
@@ -8,11 +8,11 @@ import (
 	"log"
 	"math/big"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/go-pg/pg/v10"
 	core "github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -21,7 +21,6 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
-	"github.com/tokamak-network/DRB-node/nodes/regularNode_helper"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -34,8 +33,38 @@ var (
 	activateCalledInThisRun bool = false
 )
 
+type RegularNodeHandler struct {
+	fallbackEthClient *fallback_ethclient.FallbackRPCClient
+	regularNode       *RegularNode
+}
+
+func NewRegularNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient, db *pg.DB) *RegularNodeHandler {
+	peerCommitDataRepository := database.NewPeerCommitRepository(db)
+	revealOrderRepository := database.NewRevealOrderRepository(db)
+	regularCommitRepository := database.NewRegularCommitRepository(db)
+	batchRepository := database.NewBatchRepository(db)
+	nodeInfoRepository := database.NewNodeInfoRepository(db)
+	leaderCommitRepository := database.NewLeaderCommitRepository(db)
+	revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepository, peerCommitDataRepository, leaderCommitRepository)
+	p2pClient := libp2putils.NewP2PClient(nodeInfoRepository)
+	regularNode := NewRegularNode(
+		fallbackEthClient,
+		revealOrderService,
+		p2pClient,
+		peerCommitDataRepository,
+		revealOrderRepository,
+		regularCommitRepository,
+		batchRepository,
+		nodeInfoRepository,
+	)
+	return &RegularNodeHandler{
+		fallbackEthClient: fallbackEthClient,
+		regularNode:       regularNode,
+	}
+}
+
 // RunRegularNode handles the behavior for a regular node
-func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+func (rh *RegularNodeHandler) Run() {
 	ctx := context.Background()
 
 	port := os.Getenv("PORT")
@@ -48,27 +77,29 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		log.Fatal("NODE_TYPE is not set in environment variables.")
 	}
 
-	h, peerID, err := libp2putils.CreateHost(port, nodeType)
+	h, peerID, err := rh.regularNode.CreateHost(port, nodeType)
 	if err != nil {
 		log.Fatalf("Error creating host: %v", err)
 	}
 
+	rh.regularNode.SetHost(h) 
+	
 	defer h.Close()
 
 	h.SetStreamHandler("/sendSecretValue", func(s network.Stream) {
-		regularNode_helper.HandleSecretValueRequest(h, s)
+		rh.regularNode.HandleSecretValueRequest(h, s)
 	})
 	h.SetStreamHandler("/cvsBroadcast", func(s network.Stream) {
-		regularNode_helper.HandleCvs(h, s)
+		rh.regularNode.HandleCvs(h, s)
 	})
 	h.SetStreamHandler("/cosBroadcast", func(s network.Stream) {
-		regularNode_helper.HandleCos(h, s)
+		rh.regularNode.HandleCos(h, s)
 	})
 	h.SetStreamHandler("/secretBroadcast", func(s network.Stream) {
-		regularNode_helper.HandleSecret(h, s)
+		rh.regularNode.HandleSecret(h, s)
 	})
 
-	go regularNode_helper.MonitorCommitRequest(fallbackEthClient)
+	go rh.regularNode.MonitorCommitRequest()
 
 	// Get leader's multiaddress
 	leaderIP := os.Getenv("LEADER_IP")
@@ -98,8 +129,8 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	}
 
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	regularNode_helper.SetRegularNodeEOA(eoaAddress)
-	regularNode_helper.SetRegularNodePrivateKey(privateKey)
+	rh.regularNode.SetRegularNodeEOA(eoaAddress)
+	rh.regularNode.SetRegularNodePrivateKey(privateKey)
 	log.Printf("EOA Address: %s", eoaAddress)
 
 	// Get the local IP address of the node
@@ -113,12 +144,12 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		EOAAddress: eoaAddress,
 	}
 
-	if err := database.AddNodeInfo(&nodeInfo); err != nil {
+	if err := rh.regularNode.AddNodeInfo(&nodeInfo); err != nil {
 		log.Printf("Failed to save node info: %v", err)
 	}
 
 	// Connect to the leader
-	leaderInfo, err := libp2putils.ConnectToPeer(h, leaderIP, leaderPort, leaderPeerID)
+	leaderInfo, err := rh.regularNode.ConnectToLeader(leaderIP, leaderPort, leaderPeerID)
 	if err != nil {
 		log.Fatalf("Error connecting to leader: %v", err)
 	}
@@ -141,7 +172,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	}
 	for {
 		// Check activation status
-		IsNetworkError, isActivated := checkActivationStatus(fallbackEthClient, clientUtils, eoaAddress)
+		IsNetworkError, isActivated := rh.checkActivationStatus(clientUtils, eoaAddress)
 		if IsNetworkError {
 			log.Println("Network error. Skipping activation check.")
 			time.Sleep(30 * time.Second)
@@ -156,7 +187,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 			// Check and ensure deposit is sufficient (only if not already called this run)
 			// This ensures deposit is called only once per program run
 			if !depositCalledInThisRun {
-				depositSufficient, err := checkDepositAmount(fallbackEthClient, clientUtils, eoaAddress)
+				depositSufficient, err := rh.checkDepositAmount(clientUtils, eoaAddress)
 				if err != nil {
 					log.Printf("Error checking deposit amount: %v", err)
 					time.Sleep(30 * time.Second)
@@ -165,7 +196,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 				if !depositSufficient {
 					log.Println("Deposit insufficient. Initiating deposit transaction...")
-					txSent, err := deposit(ctx, fallbackEthClient, eoaAddress, privateKey)
+					txSent, err := rh.deposit(ctx, eoaAddress, privateKey)
 					if err != nil {
 						log.Printf("Error during deposit transaction: %v", err)
 						time.Sleep(30 * time.Second)
@@ -183,7 +214,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 
 			// Call activate only if not already called this run
 			if !activateCalledInThisRun {
-				err = activateOnChain(fallbackEthClient, abiFilePath)
+				err = rh.activateOnChain(abiFilePath)
 				if err != nil {
 					log.Printf("failed to activate EOA %s on-chain: %v", eoaAddress, err)
 					time.Sleep(30 * time.Second)
@@ -193,31 +224,31 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				log.Println("Activation successful")
 				// Send registration request to leader
 				log.Println("Sending registration request to leader...")
-				sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
+				rh.sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
 			} else {
 				log.Println("Activation already attempted this run. Skipping activation.")
 			}
 		}
 
-		if !regularNode_helper.GetExecution() {
+		if !rh.regularNode.GetExecution() {
 			time.Sleep(10 * time.Second)
 			continue
 		}
 		time.Sleep(5 * time.Second)
 
 		// Check and start leader monitoring
-		round := regularNode_helper.GetCurrentRound()
-		trialNum := regularNode_helper.GetCurrentTrialNum()
-		regularNode_helper.CheckAndStartMonitoring(fallbackEthClient, round, trialNum)
+		round := rh.regularNode.GetCurrentRound()
+		trialNum := rh.regularNode.GetCurrentTrialNum()
+		rh.regularNode.CheckAndStartMonitoring(round, trialNum)
 
 		uniqueKey := utils.GetUniqueKey(round, trialNum)
-		if atomic.LoadInt32(&regularNode_helper.Halted) == 1 {
+		if rh.regularNode.GetHalted() {
 			log.Println("System is halted. Skipping checkAndStartMonitoring.")
 			continue
 		}
-		roundData, exists := regularNode_helper.GetRoundData(uniqueKey)
+		roundData, exists := rh.regularNode.GetRoundData(uniqueKey)
 		if !exists {
-			roundData = regularNode_helper.RoundData{}
+			roundData = RoundData{}
 		}
 		merkleRootSubmitted := roundData.MerkleRoot
 		randomNumberSubmitted := roundData.RandomNumber
@@ -234,7 +265,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 		if isEOAActivated(eoaAddress) {
 
 			// Check if this round has already been committed (store it locally)
-			commitData, err := database.GetCommitByRound(round, trialNum)
+			commitData, err := rh.regularNode.GetCommitByRound(round, trialNum)
 			if err != nil && err.Error() != "pg: no rows in result set" {
 				log.Printf("Error loading commit data: %v", err)
 				continue
@@ -269,14 +300,14 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				}
 
 				// Save commit data locally to prevent resending
-				err = database.AddCommit(&commitData)
+				err = rh.regularNode.AddCommit(&commitData)
 				if err != nil {
 					log.Printf("Error saving commit data: %v", err)
 					continue
 				}
 
 				// Send commit to leader
-				sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, round, trialNum, eoaAddress)
+				rh.sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, round, trialNum, eoaAddress)
 			}
 
 			// If commit data exists and SendCosToLeader is false, send COS to leader
@@ -285,7 +316,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 				if merkleRootSubmitted && !randomNumberSubmitted {
 					log.Printf("Merkle Root is set but Random Number is not. Sending COS for round %s.", round)
 					// Send COS to leader
-					sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress, privateKey)
+					rh.sendCosToLeader(ctx, h, leaderInfo.ID, *commitData, eoaAddress, privateKey)
 				}
 				continue
 			}
@@ -296,7 +327,7 @@ func RunRegularNode(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	}
 }
 
-func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
+func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	// Create commit request structure with signed COS and round data
 	req := utils.CosRequest{
 		UniqueKey:  commitData.UniqueKey,
@@ -328,7 +359,7 @@ func sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitD
 
 		// Update SendCosToLeader flag to true after successful send
 		commitData.SendCosToLeader = true
-		if err := database.UpdateCommit(&commitData); err != nil {
+		if err := rh.regularNode.UpdateCommit(&commitData); err != nil {
 			log.Printf("Failed to update SendCosToLeader flag: %v", err)
 		}
 	}
@@ -347,8 +378,8 @@ func isEOAActivated(eoaAddress string) bool {
 	return false
 }
 
-func checkActivationStatus(fallbackEthClient *fallback_ethclient.FallbackRPCClient, client *utils.Client, eoaAddress string) (bool, bool) {
-	activatedOperatorsResult, err := eth.CallSmartContract(fallbackEthClient, client.ContractABI, "getActivatedOperators", client.ContractAddress)
+func (rh *RegularNodeHandler) checkActivationStatus(client *utils.Client, eoaAddress string) (bool, bool) {
+	activatedOperatorsResult, err := eth.CallSmartContract(rh.fallbackEthClient, client.ContractABI, "getActivatedOperators", client.ContractAddress)
 	if err != nil {
 		log.Printf("Failed to call getActivatedOperators: %v", err)
 		// Return true for network error flag, false for activation status
@@ -366,7 +397,7 @@ func checkActivationStatus(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 }
 
 // sendRegistrationRequestToLeader sends the registration request to the leader node
-func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID peer.ID, eoaAddress string, privateKey *ecdsa.PrivateKey) {
+func (rh *RegularNodeHandler) sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID peer.ID, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	req := utils.RegistrationRequest{
 		EOAAddress: eoaAddress,
 		Signature:  utils.SignData(eoaAddress, privateKey),
@@ -388,7 +419,7 @@ func sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID 
 	}
 }
 
-func deposit(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
+func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
@@ -402,14 +433,14 @@ func deposit(ctx context.Context, fallbackEthClient *fallback_ethclient.Fallback
 	}
 
 	// Fetch deposit amount
-	depositAmountResult, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.CallSmartContract(rh.fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := eth.CallSmartContract(fallbackEthClient, parsedABI, "s_activationThreshold", contractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(rh.fallbackEthClient, parsedABI, "s_activationThreshold", contractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -421,7 +452,7 @@ func deposit(ctx context.Context, fallbackEthClient *fallback_ethclient.Fallback
 		log.Printf("Deposit insufficient. Adding remaining: %s", remaining.String())
 
 		// Check account balance
-		balance, err := fallbackEthClient.BalanceAt(ctx, common.HexToAddress(eoaAddress), nil)
+		balance, err := rh.fallbackEthClient.BalanceAt(ctx, common.HexToAddress(eoaAddress), nil)
 		if err != nil {
 			return false, fmt.Errorf("failed to fetch account balance: %v", err)
 		}
@@ -439,7 +470,7 @@ func deposit(ctx context.Context, fallbackEthClient *fallback_ethclient.Fallback
 				PrivateKey:      privateKey,
 				ContractABI:     parsedABI,
 			},
-			fallbackEthClient,
+			rh.fallbackEthClient,
 			"deposit",
 			remaining,
 		)
@@ -454,16 +485,16 @@ func deposit(ctx context.Context, fallbackEthClient *fallback_ethclient.Fallback
 	return false, nil
 }
 
-func checkDepositAmount(fallbackEthClient *fallback_ethclient.FallbackRPCClient, client *utils.Client, eoaAddress string) (bool, error) {
+func (rh *RegularNodeHandler) checkDepositAmount(client *utils.Client, eoaAddress string) (bool, error) {
 	// Fetch deposit amount
-	depositAmountResult, err := eth.CallSmartContract(fallbackEthClient, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.CallSmartContract(rh.fallbackEthClient, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := eth.CallSmartContract(fallbackEthClient, client.ContractABI, "s_activationThreshold", client.ContractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(rh.fallbackEthClient, client.ContractABI, "s_activationThreshold", client.ContractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -480,7 +511,7 @@ func checkDepositAmount(fallbackEthClient *fallback_ethclient.FallbackRPCClient,
 }
 
 // sendCommitToLeader sends the generated commit to the leader node
-func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, round string, trialNum string, eoaAddress string) {
+func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, round string, trialNum string, eoaAddress string) {
 	// Create commit request structure with signed round value and CVS
 	req := utils.CommitRequest{
 		UniqueKey:  commitData.UniqueKey,
@@ -512,7 +543,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 	}
 	trailNumBigIntValue, _ := big.NewInt(0).SetString(trialNum, 10)
 	roundBigIntValue, _ := big.NewInt(0).SetString(round, 10)
-	v, r, s, err := regularNode_helper.GenerateCvsSignature(roundBigIntValue, trailNumBigIntValue, req.Cvs)
+	v, r, s, err := rh.regularNode.GenerateCvsSignature(roundBigIntValue, trailNumBigIntValue, req.Cvs)
 	if err != nil {
 		log.Printf("Failed to generate v, r, s for CVS: %v", err)
 		return
@@ -527,7 +558,7 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 
 	// Save commit data locally with v, r, s
 	commitData.Sign = req.Sign
-	if err := database.UpdateCommit(&commitData); err != nil {
+	if err := rh.regularNode.UpdateCommit(&commitData); err != nil {
 		log.Printf("Failed to save commit data locally: %v", err)
 		return
 	}
@@ -548,13 +579,13 @@ func sendCommitToLeader(ctx context.Context, h core.Host, leaderID peer.ID, comm
 
 		// Update SendToLeader flag to true after successful send
 		commitData.SendToLeader = true
-		if err := database.UpdateCommit(&commitData); err != nil {
+		if err := rh.regularNode.UpdateCommit(&commitData); err != nil {
 			log.Printf("Failed to update SendToLeader flag: %v", err)
 		}
 	}
 }
 
-func activateOnChain(fallbackEthClient *fallback_ethclient.FallbackRPCClient, abiFilePath string) error {
+func (rh *RegularNodeHandler) activateOnChain(abiFilePath string) error {
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
@@ -584,7 +615,7 @@ func activateOnChain(fallbackEthClient *fallback_ethclient.FallbackRPCClient, ab
 	_, _, err = eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
-		fallbackEthClient,
+		rh.fallbackEthClient,
 		"activate",
 		big.NewInt(0),
 	)

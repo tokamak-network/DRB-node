@@ -59,7 +59,7 @@ func GetActivatedOperatorsUnsafe() []common.Address {
 }
 
 // Smart contract call helper function
-func CallSmartContract(fallbackEthClient *fallback_ethclient.FallbackRPCClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
+func CallSmartContract(fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
 	data, err := parsedABI.Pack(method, params...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack data for %s: %v", method, err)
@@ -85,7 +85,7 @@ func CallSmartContract(fallbackEthClient *fallback_ethclient.FallbackRPCClient, 
 func ExecuteTransaction(
 	ctx context.Context,
 	client *utils.Client,
-	fallbackEthClient *fallback_ethclient.FallbackRPCClient,
+	fallbackEthClient fallback_ethclient.IFallbackEthClient,
 	functionName string,
 	amount *big.Int,
 	params ...interface{},
@@ -159,7 +159,7 @@ func ExecuteTransaction(
 
 func sendWithRetry(
 	ctx context.Context,
-	client *fallback_ethclient.FallbackRPCClient,
+	client fallback_ethclient.IFallbackEthClient,
 	chainID *big.Int,
 	auth *bind.TransactOpts,
 	toAddr common.Address,
@@ -270,7 +270,7 @@ func sendWithRetry(
 	return nil, nil, fmt.Errorf("unexpected end of retry loop")
 }
 
-func waitForTransactionSuccess(ctx context.Context, client *fallback_ethclient.FallbackRPCClient, tx *types.Transaction, timeout time.Duration) (*types.Receipt, error) {
+func waitForTransactionSuccess(ctx context.Context, client fallback_ethclient.IFallbackEthClient, tx *types.Transaction, timeout time.Duration) (*types.Receipt, error) {
 	log.Printf("Waiting for transaction %s to be mined...", tx.Hash().Hex())
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -305,7 +305,7 @@ func waitForTransactionSuccess(ctx context.Context, client *fallback_ethclient.F
 	}
 }
 
-func GetActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient) ([]common.Address, error) {
+func GetActivatedOperators(fallbackEthClient fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
 	var activatedOperators []common.Address
 	abiFilePath := "contract/abi/Commit2RevealDRB.json"
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
@@ -329,7 +329,7 @@ func GetActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 	return activatedOperators, nil
 }
 
-func UpdateActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+func UpdateActivatedOperators(fallbackEthClient fallback_ethclient.IFallbackEthClient) {
 	operators, err := GetActivatedOperators(fallbackEthClient)
 	if err != nil {
 		log.Printf("Error updating ActivatedOperators: %v", err)
@@ -339,7 +339,7 @@ func UpdateActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCC
 }
 
 // UpdateCurrentRoundFromContract fetches the current round from the contract
-func UpdateCurrentRoundFromContract(fallbackEthClient *fallback_ethclient.FallbackRPCClient) (*big.Int, error) {
+func UpdateCurrentRoundFromContract(fallbackEthClient fallback_ethclient.IFallbackEthClient) (*big.Int, error) {
 	abiFilePath := "contract/abi/Commit2RevealDRB.json"
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
@@ -370,7 +370,7 @@ func UpdateCurrentRoundFromContract(fallbackEthClient *fallback_ethclient.Fallba
 }
 
 // GetTrialNumFromContract fetches the trial number for a given round from the smart contract
-func GetTrialNumFromContract(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round *big.Int) (*big.Int, error) {
+func GetTrialNumFromContract(fallbackEthClient fallback_ethclient.IFallbackEthClient, round *big.Int) (*big.Int, error) {
 	abiFilePath := "contract/abi/Commit2RevealDRB.json"
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {

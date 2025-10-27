@@ -1,4 +1,4 @@
-package leaderNode_helper
+package leader_node
 
 import (
 	"encoding/json"
@@ -7,14 +7,12 @@ import (
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
-	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // RegisterNode handles both saving node information and activating the node on-chain.
-func RegisterNode(s network.Stream, abiFilePath string, fallbackEthClient *fallback_ethclient.FallbackRPCClient) error {
+func (n *LeaderNode) RegisterNode(s network.Stream, abiFilePath string) error {
 	var req utils.RegistrationRequest
 	if err := json.NewDecoder(s).Decode(&req); err != nil {
 		return fmt.Errorf("failed to decode registration request: %v", err)
@@ -29,7 +27,7 @@ func RegisterNode(s network.Stream, abiFilePath string, fallbackEthClient *fallb
 	}
 
 	log.Printf("Verified registration for PeerID: %s", req.PeerID)
-	eth.UpdateActivatedOperators(fallbackEthClient)
+	eth.UpdateActivatedOperators(n.fallbackEthClient)
 	operators := eth.GetActivatedOperatorsCached()
 
 	// Check if the EOA is in the activated operators list
@@ -66,7 +64,7 @@ func RegisterNode(s network.Stream, abiFilePath string, fallbackEthClient *fallb
 	}
 
 	// Save updated nodes
-	err := database.AddNodeInfo(&nodeInfo)
+	err := n.nodeInfoRepository.AddNodeInfo(&nodeInfo)
 	if err != nil {
 		return fmt.Errorf("failed to save registered nodes: %v", err)
 	}

@@ -4,10 +4,19 @@ import (
 	"encoding/hex"
 	"time"
 
+	"github.com/go-pg/pg/v10"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-func AddLeaderCommit(commitData *utils.LeaderCommitData) error {
+type LeaderCommitRepository struct {
+	db *pg.DB
+}
+
+func NewLeaderCommitRepository(db *pg.DB) *LeaderCommitRepository {
+	return &LeaderCommitRepository{db: db}
+}
+
+func (r *LeaderCommitRepository) AddLeaderCommit(commitData *utils.LeaderCommitData) error {
 	leaderCommit := mapLeaderCommitDataToScheme(commitData)
 	leaderCommit.CreatedAt = time.Now().Unix()
 
@@ -22,13 +31,13 @@ func AddLeaderCommit(commitData *utils.LeaderCommitData) error {
 		leaderCommit.SecretValueHex = hex.EncodeToString(leaderCommit.SecretValue)
 	}
 
-	_, err := GetDB().Model(&leaderCommit).Insert()
+	_, err := r.db.Model(&leaderCommit).Insert()
 	return err
 }
 
-func GetLeaderCommitByRoundAndEoaAddr(round, trialNum, eoaAddr string) (*utils.LeaderCommitData, error) {
+func (r *LeaderCommitRepository) GetLeaderCommitByRoundAndEoaAddr(round, trialNum, eoaAddr string) (*utils.LeaderCommitData, error) {
 	var model LeaderCommitScheme
-	err := GetDB().Model(&model).
+	err := r.db.Model(&model).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
 		Limit(1).
 		Select()
@@ -38,9 +47,9 @@ func GetLeaderCommitByRoundAndEoaAddr(round, trialNum, eoaAddr string) (*utils.L
 	return mapLeaderCommitSchemeToData(model), nil
 }
 
-func GetLeaderCommitsByRoundAndTrialNum(round, trialNum string) ([]*utils.LeaderCommitData, error) {
+func (r *LeaderCommitRepository) GetLeaderCommitsByRoundAndTrialNum(round, trialNum string) ([]*utils.LeaderCommitData, error) {
 	var models []LeaderCommitScheme
-	if err := GetDB().Model(&models).
+	if err := r.db.Model(&models).
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Select(); err != nil {
 		return nil, err
@@ -52,9 +61,9 @@ func GetLeaderCommitsByRoundAndTrialNum(round, trialNum string) ([]*utils.Leader
 	return commits, nil
 }
 
-func GetRoundsToProcess() ([]*utils.LeaderCommitData, error) {
+func (r *LeaderCommitRepository) GetRoundsToProcess() ([]*utils.LeaderCommitData, error) {
 	var models []LeaderCommitScheme
-	if err := GetDB().Model(&models).
+	if err := r.db.Model(&models).
 		Where("random_number_generated = ? AND submit_merkle_root_done = ?", false, true).
 		Select(); err != nil {
 		return nil, err
@@ -66,19 +75,19 @@ func GetRoundsToProcess() ([]*utils.LeaderCommitData, error) {
 	return commits, nil
 }
 
-func UpdateLeaderCommit(leaderCommit *utils.LeaderCommitData) error {
+func (r *LeaderCommitRepository) UpdateLeaderCommit(leaderCommit *utils.LeaderCommitData) error {
 	model := mapLeaderCommitDataToScheme(leaderCommit)
 	model.CreatedAt = leaderCommit.CreatedAt
 
-	_, err := GetDB().Model(&model).
+	_, err := r.db.Model(&model).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", model.Round, model.TrialNum, model.EOAAddress).
 		Update()
 	return err
 }
 
-func UpdateLeaderCommitRandomNumberGenerated(round, trialNum string) error {
+func (r *LeaderCommitRepository) UpdateLeaderCommitRandomNumberGenerated(round, trialNum string) error {
 	model := LeaderCommitScheme{RandomNumberGenerated: true}
-	_, err := GetDB().Model(&model).
+	_, err := r.db.Model(&model).
 		Column("random_number_generated").
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Update()

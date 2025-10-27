@@ -1,4 +1,4 @@
-package leaderNode_helper
+package leader_node
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -16,14 +15,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/tokamak-network/DRB-node/database"
-	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/utils"
 )
-
-var broadcastMutex sync.Mutex
-var activeBroadcasts = make(map[string]*utils.BroadcastTracker)
-var activeBroadcastsMu sync.RWMutex
 
 // getLeaderPrivateKey retrieves the leader's private key from environment
 func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
@@ -77,7 +70,7 @@ func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
 // }
 
 // ReliableBroadCastSSync broadcasts secret values with acknowledgment tracking and waits for completion
-func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte, activatedOps []common.Address) bool {
+func (n *LeaderNode) ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte, activatedOps []common.Address) bool {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress, "secret")
 
 	tracker := &utils.BroadcastTracker{
@@ -98,24 +91,24 @@ func ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAd
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := database.AddBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.AddBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return false
 	}
 
-	SetActiveBroadcast(messageID, tracker)
+	n.SetActiveBroadcast(messageID, tracker)
 
 	// 🔄 Perform synchronous broadcast (wait for completion)
-	completed := performReliableBroadcastSync(h, tracker, "secret", activatedOps)
+	completed := n.performReliableBroadcastSync(h, tracker, "secret", activatedOps)
 
 	// Clean up from memory
-	DeleteActiveBroadcast(messageID)
+	n.DeleteActiveBroadcast(messageID)
 
 	return completed
 }
 
 // ReliableBroadCastCOS broadcasts COS values with acknowledgment tracking
-func ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte, activatedOps []common.Address) {
+func (n *LeaderNode) ReliableBroadCastCOS(roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte, activatedOps []common.Address) {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cos")
 
 	tracker := &utils.BroadcastTracker{
@@ -136,19 +129,19 @@ func ReliableBroadCastCOS(h host.Host, roundNum string, trialNum string, eoaAddr
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := database.AddBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.AddBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return
 	}
 
-	SetActiveBroadcast(messageID, tracker)
+	n.SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
-	go performReliableBroadcast(h, tracker, "cos", activatedOps)
+	go n.performReliableBroadcast(n.p2pClient.GetHostInstance(), tracker, "cos", activatedOps)
 }
 
 // ReliableBroadCastCVS broadcasts CVS values with acknowledgment tracking
-func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte, activatedOps []common.Address) {
+func (n *LeaderNode) ReliableBroadCastCVS(roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte, activatedOps []common.Address) {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cvs")
 
 	tracker := &utils.BroadcastTracker{
@@ -169,25 +162,25 @@ func ReliableBroadCastCVS(h host.Host, roundNum string, trialNum string, eoaAddr
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := database.AddBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.AddBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return
 	}
 
-	SetActiveBroadcast(messageID, tracker)
+	n.SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
-	go performReliableBroadcast(h, tracker, "cvs", activatedOps)
+	go n.performReliableBroadcast(n.p2pClient.GetHostInstance(), tracker, "cvs", activatedOps)
 }
 
 // performReliableBroadcast handles the actual broadcasting with retry logic
-func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) {
-	if GetHalted() {
-		DeleteActiveBroadcast(tracker.MessageID)
+func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) {
+	if n.GetHalted() {
+		n.DeleteActiveBroadcast(tracker.MessageID)
 		log.Println("System is halted. Skipping processCVS.")
 		return
 	}
-	nodeInfo := libp2putils.GetConnectedPeers()
+	nodeInfo := n.p2pClient.GetConnectedPeers()
 
 	for tracker.Attempts < tracker.MaxAttempts {
 		tracker.Attempts++
@@ -233,7 +226,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		}
 
 		// Send to all activated operators
-		broadcastMutex.Lock()
+		n.broadcastMutex.Lock()
 		operatorsToSend := make([]common.Address, 0)
 		for _, op := range activatedOps {
 			if tracker.Acknowledged[op.Hex()] {
@@ -241,7 +234,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 			}
 			operatorsToSend = append(operatorsToSend, op)
 		}
-		broadcastMutex.Unlock()
+		n.broadcastMutex.Unlock()
 
 		for _, op := range operatorsToSend {
 			// Add peer info into peer store
@@ -266,7 +259,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		}
 
 		// Update tracker
-		if err := database.UpdateBroadcastTracker(tracker); err != nil {
+		if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(tracker); err != nil {
 			log.Printf("Failed to update broadcast tracker: %v", err)
 		}
 
@@ -274,7 +267,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		time.Sleep(time.Duration(tracker.Timeout) * time.Second)
 
 		// Check if all nodes have acknowledged
-		broadcastMutex.Lock()
+		n.broadcastMutex.Lock()
 		allAcknowledged := true
 		for _, acknowledged := range tracker.Acknowledged {
 			if !acknowledged {
@@ -284,7 +277,7 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 		}
 
 		if allAcknowledged {
-			broadcastMutex.Unlock()
+			n.broadcastMutex.Unlock()
 			break
 		}
 
@@ -297,16 +290,16 @@ func performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broa
 				}
 			}
 		}
-		broadcastMutex.Unlock()
+		n.broadcastMutex.Unlock()
 	}
 
 	// Clean up from memory
-	DeleteActiveBroadcast(tracker.MessageID)
+	n.DeleteActiveBroadcast(tracker.MessageID)
 }
 
 // performReliableBroadcastSync handles broadcasting synchronously and returns completion status
-func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) bool {
-	if GetHalted() {
+func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) bool {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping broadcast.")
 		return false
 	}
@@ -319,7 +312,7 @@ func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, 
 	}
 
 	// Get connected peer information
-	nodeInfo := libp2putils.GetConnectedPeers()
+	nodeInfo := n.p2pClient.GetConnectedPeers()
 
 	// Create message
 	message := utils.BroadcastMessage{
@@ -357,7 +350,7 @@ func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, 
 		}
 
 		// Send to all activated operators
-		broadcastMutex.Lock()
+		n.broadcastMutex.Lock()
 		operatorsToSend := make([]common.Address, 0)
 		for _, op := range activatedOps {
 			if tracker.Acknowledged[op.Hex()] {
@@ -365,7 +358,7 @@ func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, 
 			}
 			operatorsToSend = append(operatorsToSend, op)
 		}
-		broadcastMutex.Unlock()
+		n.broadcastMutex.Unlock()
 
 		for _, op := range operatorsToSend {
 			// Add peer info into peer store
@@ -390,7 +383,7 @@ func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, 
 		}
 
 		// Update tracker
-		if err := database.UpdateBroadcastTracker(tracker); err != nil {
+		if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(tracker); err != nil {
 			log.Printf("Failed to update broadcast tracker: %v", err)
 		}
 
@@ -398,7 +391,7 @@ func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, 
 		time.Sleep(time.Duration(tracker.Timeout) * time.Second)
 
 		// Check if all nodes have acknowledged
-		broadcastMutex.Lock()
+		n.broadcastMutex.Lock()
 		allAcknowledged := true
 		for _, acknowledged := range tracker.Acknowledged {
 			if !acknowledged {
@@ -410,7 +403,7 @@ func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, 
 		if allAcknowledged {
 			log.Printf("✅ All nodes acknowledged %s broadcast for round %s, EOA %s",
 				broadcastType, tracker.Round, tracker.EOAAddress)
-			broadcastMutex.Unlock()
+			n.broadcastMutex.Unlock()
 			return true
 		}
 
@@ -422,25 +415,25 @@ func performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, 
 					log.Printf("  - %s", eoa)
 				}
 			}
-			broadcastMutex.Unlock()
+			n.broadcastMutex.Unlock()
 			return false
 		}
-		broadcastMutex.Unlock()
+		n.broadcastMutex.Unlock()
 	}
 
 	return false
 }
 
 // HandleAcknowledgment processes acknowledgments from regular nodes
-func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
-	if GetHalted() {
+func (n *LeaderNode) HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleAcknowledgment.")
 		return
 	}
-	broadcastMutex.Lock()
-	defer broadcastMutex.Unlock()
+	n.broadcastMutex.Lock()
+	defer n.broadcastMutex.Unlock()
 
-	tracker, exists := GetActiveBroadcast(ack.MessageID)
+	tracker, exists := n.GetActiveBroadcast(ack.MessageID)
 	if !exists {
 		log.Printf("Received acknowledgment for unknown message ID: %s", ack.MessageID)
 		return
@@ -470,7 +463,7 @@ func HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
 	}
 
 	// Update tracker
-	if err := database.UpdateBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(tracker); err != nil {
 		log.Printf("Failed to update broadcast tracker: %v", err)
 	}
 }

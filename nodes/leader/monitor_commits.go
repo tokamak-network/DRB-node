@@ -1,4 +1,4 @@
-package leaderNode_helper
+package leader_node
 
 import (
 	"context"
@@ -7,25 +7,21 @@ import (
 	"math/big"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // Global variables with mutex protection for thread safety
-var CvOnChain = make(map[string]bool)
-var CvOnChainMu sync.RWMutex
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
-func MonitorCommits(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+func (n *LeaderNode) MonitorCommits() {
 	for {
-		checkRoundsForCompletion(fallbackEthClient)
+		n.checkRoundsForCompletion()
 		time.Sleep(10 * time.Second)
 	}
 }
@@ -38,17 +34,17 @@ type RevealOrderData struct {
 
 type RevealOrders map[string]RevealOrderData
 
-func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
-	round := GetCurrentRound()
-	trialNum := GetCurrentTrial()
+func (n *LeaderNode) checkRoundsForCompletion() {
+	round := n.GetCurrentRound()
+	trialNum := n.GetCurrentTrial()
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	if GetHalted() {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping checkRoundsForCompletion.")
 		return
 	}
 
 	// Defensive check: skip if all random_number_generated are already true for this round
-	leaderCommits, err := database.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
+	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
 	if err == nil && len(leaderCommits) > 0 {
 		allRandomNumberGenerated := true
 		for _, lc := range leaderCommits {
@@ -75,7 +71,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 	var index int
 	allEOAsSubmitted := true
 	for i, operator := range operatorAddresses {
-		commitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, trialNum, operator.Hex())
+		commitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(round, trialNum, operator.Hex())
 		if err != nil {
 			log.Printf("Either Data not found or Error getting commit data for operator %s: %v", operator.Hex(), err)
 			return
@@ -89,9 +85,9 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 		}
 		secrets = append(secrets, commitData.SecretValue[:])
 		// if Cv values are on-chain, than check this condition
-		cvOnChain, _ := GetCvOnChain(uniqueKey)
+		cvOnChain, _ := n.GetCvOnChain(uniqueKey)
 		if cvOnChain {
-			indices := GetIndices()
+			indices := n.GetIndices()
 			if index < len(indices) && int64(i) <= indices[index].Int64() {
 				if int64(i) == indices[index].Int64() {
 					index++
@@ -123,20 +119,20 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 	// If all EOAs have submitted, trigger the random number generation transaction
 	if allEOAsSubmitted {
 		log.Printf("All EOAs have submitted for round %s with trail %s. Initiating random number generation.", round, trialNum)
-		secretsOnChainValue, _ := GetSecretsOnChain(uniqueKey)
+		secretsOnChainValue, _ := n.GetSecretsOnChain(uniqueKey)
 
 		if !secretsOnChainValue {
-			cvOnChain, _ := GetCvOnChain(uniqueKey)
+			cvOnChain, _ := n.GetCvOnChain(uniqueKey)
 			if !cvOnChain {
-				err = generateRandomNumberTransaction(fallbackEthClient, round, trialNum, secrets, vs, rs, ss)
+				err = n.generateRandomNumberTransaction(round, trialNum, secrets, vs, rs, ss)
 			} else {
-				err = generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient, round, trialNum, secrets, vs, rs, ss)
+				err = n.generateRandomNumberTransactionSomeCvOnChain(round, trialNum, secrets, vs, rs, ss)
 			}
 		}
 		if err != nil {
 			log.Printf("Failed to execute random number generation transaction for round %s with trail %s: %v", round, trialNum, err)
 		} else {
-			err = completeRound(round, trialNum)
+			err = n.completeRound(round, trialNum)
 			if err != nil {
 				log.Printf("Failed to mark round %s as completed: %v", round, err)
 			}
@@ -145,7 +141,7 @@ func checkRoundsForCompletion(fallbackEthClient *fallback_ethclient.FallbackRPCC
 }
 
 // Fetch activated operators for a specific round
-func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string) ([]string, error) {
+func (n *LeaderNode) FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string) ([]string, error) {
 	var result []string
 	activatedOperators, err := eth.GetActivatedOperators(fallbackEthClient)
 	if err != nil {
@@ -159,9 +155,9 @@ func FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCCl
 	return strAddresses, nil
 }
 
-func LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash) {
+func (n *LeaderNode) LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash) {
 
-	leaderCommits, err := database.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
+	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load leader commits: %v", err)
 	}
@@ -247,7 +243,7 @@ func sortLeaderCommitsByActivatedOperators(leaderCommits []*utils.LeaderCommitDa
 }
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
-func generateRandomNumberTransaction(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
+func (n *LeaderNode) generateRandomNumberTransaction(round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumber...")
 
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
@@ -299,7 +295,7 @@ func generateRandomNumberTransaction(fallbackEthClient *fallback_ethclient.Fallb
 		})
 	}
 
-	roundRevealData, err := database.GetRevealOrder(round, trialNum)
+	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return err
@@ -312,7 +308,7 @@ func generateRandomNumberTransaction(fallbackEthClient *fallback_ethclient.Fallb
 	tx, _, err := eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
-		fallbackEthClient,
+		n.fallbackEthClient,
 		"generateRandomNumber",
 		big.NewInt(0),
 		secretSigRSs,
@@ -327,7 +323,7 @@ func generateRandomNumberTransaction(fallbackEthClient *fallback_ethclient.Fallb
 	return nil
 }
 
-func generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
+func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumberTransactionSomeCvOnChain...")
 
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
@@ -373,7 +369,7 @@ func generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient *fallback_et
 		allSecrets = append(allSecrets, secret)
 	}
 
-	roundRevealData, err := database.GetRevealOrder(round, trialNum)
+	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return err
@@ -385,7 +381,7 @@ func generateRandomNumberTransactionSomeCvOnChain(fallbackEthClient *fallback_et
 	tx, _, err := eth.ExecuteTransaction(
 		context.Background(),
 		clientUtils,
-		fallbackEthClient,
+		n.fallbackEthClient,
 		"generateRandomNumberWhenSomeCvsAreOnChain",
 		big.NewInt(0),
 		allSecrets,
@@ -422,18 +418,18 @@ func packVsValues(vs []uint8) *big.Int {
 }
 
 // completeRound updates to mark a round as completed and deletes old round data
-func completeRound(round string, trialNum string) error {
-	err := database.UpdateLeaderCommitRandomNumberGenerated(round, trialNum)
+func (n *LeaderNode) completeRound(round string, trialNum string) error {
+	err := n.leaderCommitRepository.UpdateLeaderCommitRandomNumberGenerated(round, trialNum)
 	if err != nil {
 		return err
 	}
 
-	data, exists := GetRoundData(round)
+	data, exists := n.GetRoundData(round)
 	if !exists {
 		data = RoundData{}
 	}
 	data.RandomNumber = true
-	SetRoundData(round, data)
+	n.SetRoundData(round, data)
 
 	return nil
 }

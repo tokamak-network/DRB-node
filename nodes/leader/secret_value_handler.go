@@ -1,4 +1,4 @@
-package leaderNode_helper
+package leader_node
 
 import (
 	"bytes"
@@ -6,71 +6,62 @@ import (
 	"encoding/json"
 	"log"
 	"math/big"
-	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
-	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // var SecretValue [][32]byte
-var RoundSecrets = make(map[string][][32]byte)
-var roundSecret = make(map[string]map[string]bool)
-var secretsOnChain = make(map[string]bool)
-var Indices []*big.Int
-var indicesMutex sync.RWMutex
-var secretMapsMutex sync.RWMutex
-var secretsOnChainMu sync.RWMutex
 
 // ResetIndicesForNewRound resets the Indices array for a new round
-func ResetIndicesForNewRound() {
-	indicesMutex.Lock()
-	defer indicesMutex.Unlock()
-	Indices = make([]*big.Int, 0)
+func (n *LeaderNode) ResetIndicesForNewRound() {
+	n.indicesMutex.Lock()
+	defer n.indicesMutex.Unlock()
+	n.indices = make([]*big.Int, 0)
 }
 
 // GetIndices returns a copy of the current Indices array
-func GetIndices() []*big.Int {
-	indicesMutex.RLock()
-	defer indicesMutex.RUnlock()
+func (n *LeaderNode) GetIndices() []*big.Int {
+	n.indicesMutex.RLock()
+	defer n.indicesMutex.RUnlock()
 
 	// Return a copy to prevent external modifications
-	result := make([]*big.Int, len(Indices))
-	for i, idx := range Indices {
+	result := make([]*big.Int, len(n.indices))
+	for i, idx := range n.indices {
 		result[i] = new(big.Int).Set(idx)
 	}
 	return result
 }
 
 // AppendToIndices safely appends a new index to the Indices array
-func AppendToIndices(index *big.Int) {
-	indicesMutex.Lock()
-	defer indicesMutex.Unlock()
-	Indices = append(Indices, new(big.Int).Set(index))
+func (n *LeaderNode) AppendToIndices(index *big.Int) {
+	n.indicesMutex.Lock()
+	defer n.indicesMutex.Unlock()
+	n.indices = append(n.indices, new(big.Int).Set(index))
 }
 
 // SetIndices safely sets the entire Indices array
-func SetIndices(indices []*big.Int) {
-	indicesMutex.Lock()
-	defer indicesMutex.Unlock()
+func (n *LeaderNode) SetIndices(indices []*big.Int) {
+	n.indicesMutex.Lock()
+	defer n.indicesMutex.Unlock()
 
 	// Create a copy of the input slice
-	Indices = make([]*big.Int, len(indices))
+	n.indices = make([]*big.Int, len(indices))
 	for i, idx := range indices {
-		Indices[i] = new(big.Int).Set(idx)
+		n.indices[i] = new(big.Int).Set(idx)
 	}
 }
 
 // AcceptSecretValue processes and stores secret values sent by regular nodes.
-func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+func (n *LeaderNode) AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	defer s.Close()
-	if GetHalted() {
+	if n.GetHalted() {
 		log.Println("System is halted. Skipping AcceptSecretValue.")
 		return
 	}
@@ -94,12 +85,12 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 
 	// log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 
-	round := GetCurrentRound()
-	trial := GetCurrentTrial()
+	round := n.GetCurrentRound()
+	trial := n.GetCurrentTrial()
 	// log.Printf("Successfully verified signature for EOA: %s", req.RegularEoaAddress)
 	uniqueKey := utils.GetUniqueKey(round, trial)
 	eoaAddress := common.HexToAddress(req.RegularEoaAddress)
-	commitData := GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
+	commitData := n.GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
 	if commitData.Cos == [32]byte{} {
 		log.Printf("No COS found for round %s with trail %s EOA %s, rejecting secret value.", round, trial, eoaAddress.Hex())
 		return
@@ -113,7 +104,7 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 
 	log.Printf("Secret value hash matches for round %s with trail %s EOA %s.", round, trial, eoaAddress.Hex())
 	// Fetch or initialize the leader commit data for the given round and EOA
-	leaderCommitData, err := database.GetLeaderCommitByRoundAndEoaAddr(round, trial, req.RegularEoaAddress)
+	leaderCommitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(round, trial, req.RegularEoaAddress)
 	if err != nil {
 		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", round, req.RegularEoaAddress)
 		leaderCommitData = &utils.LeaderCommitData{
@@ -127,7 +118,7 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	copy(secretValueArray[:], req.SecretValue[:]) // Convert req.SecretValue to [32]byte
 
 	// Use the new atomic setter function
-	AppendToRoundSecrets(uniqueKey, secretValueArray)
+	n.AppendToRoundSecrets(uniqueKey, secretValueArray)
 	// Store the secret value in both byte array and hex string formats
 	copy(leaderCommitData.SecretValue[:], req.SecretValue[:])
 	leaderCommitData.SecretValueHex = hex.EncodeToString(req.SecretValue[:])
@@ -135,7 +126,7 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	log.Printf("Received secret value for round %s with trail %s and EOA %s: byte=%x, hex=%s",
 		round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, leaderCommitData.SecretValueHex)
 
-	if err := database.UpdateLeaderCommit(leaderCommitData); err != nil {
+	if err := n.leaderCommitRepository.UpdateLeaderCommit(leaderCommitData); err != nil {
 		log.Printf("Failed to save updated commit data for %s in round %s with trail %s: %v", req.RegularEoaAddress, round, trial, err)
 		return
 	}
@@ -143,27 +134,27 @@ func AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallbac
 	log.Printf("Successfully saved secret value for round %s with trail %s and EOA %s", round, trial, req.RegularEoaAddress)
 
 	// Use the new atomic setter function
-	SetRoundSecretValue(uniqueKey, req.RegularEoaAddress, true)
+	n.SetRoundSecretValue(uniqueKey, req.RegularEoaAddress, true)
 
 	// 🔄 Wait for broadcast to complete before proceeding to next node
 	log.Printf("🔄 Broadcasting secret from %s for round %s with trail %s...", req.RegularEoaAddress, round, trial)
 	activatedOps := eth.GetActivatedOperatorsCached()
-	broadcastCompleted := ReliableBroadCastSSync(h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, activatedOps)
+	broadcastCompleted := n.ReliableBroadCastSSync(h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, activatedOps)
 
 	if broadcastCompleted {
 		log.Printf("✅ Broadcast completed for %s. Proceeding to next node in reveal order.", req.RegularEoaAddress)
 		// Continue requesting secret values from remaining nodes in the reveal order
-		HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
+		n.HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
 	} else {
 		log.Printf("⚠️ Broadcast incomplete for %s. Proceeding anyway to next node.", req.RegularEoaAddress)
 		// Still continue even if broadcast incomplete (leader's decision)
-		HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
+		n.HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
 	}
 }
 
 // getOrCreateLeaderCommitData returns commitData from in-memory map or creates a new one.
 // Called with commitMu locked.
-func GetOrCreateLeaderCommitData(roundNum string, trialNum string, uniqueKey string, eoaAddress common.Address) *utils.LeaderCommitData {
+func (n *LeaderNode) GetOrCreateLeaderCommitData(roundNum string, trialNum string, uniqueKey string, eoaAddress common.Address) *utils.LeaderCommitData {
 	utils.EnsureCommittedNodesRoundExists(uniqueKey)
 
 	data, existsData := utils.GetCommittedNodeData(uniqueKey, eoaAddress)
