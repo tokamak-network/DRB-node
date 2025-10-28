@@ -1,6 +1,8 @@
 package database
 
 import (
+	"context"
+
 	"github.com/go-pg/pg/v10"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -13,18 +15,18 @@ func NewNodeInfoRepository(db *pg.DB) *NodeInfoRepository {
 	return &NodeInfoRepository{db: db}
 }
 
-func (r *NodeInfoRepository) AddNodeInfo(nodeInfo *utils.NodeInfo) error {
+func (r *NodeInfoRepository) AddNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
 	node := &NodeInfoScheme{
 		IP:         nodeInfo.IP,
 		Port:       nodeInfo.Port,
 		PeerID:     nodeInfo.PeerID,
 		EOAAddress: nodeInfo.EOAAddress,
 	}
-	_, err := r.db.Model(node).Insert()
+	_, err := r.db.Model(node).Insert(ctx)
 	return err
 }
 
-func (r *NodeInfoRepository) UpdateNodeInfo(nodeInfo *utils.NodeInfo) error {
+func (r *NodeInfoRepository) UpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
 	node := &NodeInfoScheme{
 		IP:         nodeInfo.IP,
 		Port:       nodeInfo.Port,
@@ -33,13 +35,13 @@ func (r *NodeInfoRepository) UpdateNodeInfo(nodeInfo *utils.NodeInfo) error {
 	}
 	_, err := r.db.Model(node).
 		Where("ip = ?", nodeInfo.IP).
-		Update()
+		Update(ctx)
 	return err
 }
 
-func (r *NodeInfoRepository) GetNodeInfos() ([]*utils.NodeInfo, error) {
+func (r *NodeInfoRepository) GetNodeInfos(ctx context.Context) ([]*utils.NodeInfo, error) {
 	var nodes []NodeInfoScheme
-	if err := r.db.Model(&nodes).Select(); err != nil {
+	if err := r.db.Model(&nodes).Select(ctx); err != nil {
 		return nil, err
 	}
 	nodeInfos := make([]*utils.NodeInfo, 0, len(nodes))

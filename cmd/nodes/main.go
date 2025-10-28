@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"strings"
@@ -18,6 +19,8 @@ func main() {
 		log.Println("No .env file found")
 	}
 
+	ctx := context.Background()
+
 	logger.InitLogger()
 	defer logger.CloseLogger()
 
@@ -25,7 +28,7 @@ func main() {
 	// Load configuration
 	cfg := database.LoadConfig()
 
-	err := database.InitSQLDB(cfg.PostgresPort, cfg.PostgresHost, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresName)
+	err := database.InitSQLDB(ctx, cfg.PostgresPort, cfg.PostgresHost, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresName)
 	if err != nil {
 		log.Fatalf("Error initializing sql db: %v", err)
 	}
@@ -43,11 +46,11 @@ func main() {
 	case "leader":
 		db := database.GetDB()
 		leaderNodeHandler := leader_node.NewLeaderNodeHandler(fallbackEthClient, db)
-		leaderNodeHandler.Run()
+		leaderNodeHandler.Run(ctx)
 	case "regular":
 		db := database.GetDB()
 		regularNodeHandler := regular_node.NewRegularNodeHandler(fallbackEthClient, db)
-		regularNodeHandler.Run()
+		regularNodeHandler.Run(ctx)
 	default:
 		log.Fatal("NODE_TYPE must be set to either 'leader' or 'regular'")
 	}

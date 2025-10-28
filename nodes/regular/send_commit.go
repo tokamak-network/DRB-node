@@ -45,11 +45,11 @@ type RoundData struct {
 	RandomNumber bool
 }
 
-func (n *RegularNode) MonitorCommitRequest() {
-	n.receiveCommitRequest()
+func (n *RegularNode) MonitorCommitRequest(ctx context.Context) {
+	n.receiveCommitRequest(ctx)
 }
 
-func (n *RegularNode) receiveCommitRequest() {
+func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 	contractAddress := os.Getenv("CONTRACT_ADDRESS")
 	contractAddr := common.HexToAddress(contractAddress)
 
@@ -64,7 +64,7 @@ func (n *RegularNode) receiveCommitRequest() {
 
 	for { // Outer loop for reconnection
 		logs := make(chan types.Log)
-		sub, err := n.fallbackEthClient.SubscribeFilterLogs(context.Background(), query, logs)
+		sub, err := n.fallbackEthClient.SubscribeFilterLogs(ctx, query, logs)
 		if err != nil {
 			log.Printf("Failed to subscribe to logs: %v. Retrying in 5 seconds...", err)
 			time.Sleep(5 * time.Second)
@@ -119,7 +119,7 @@ func (n *RegularNode) receiveCommitRequest() {
 						n.StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 
 						// Get the block timestamp for the RequestedToSubmitCv event
-						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
 						if err != nil {
 							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
 							continue
@@ -127,9 +127,9 @@ func (n *RegularNode) receiveCommitRequest() {
 						// requestedToSubmitCvTime = big.NewInt(int64(blockTimestamp))
 
 						// Start monitoring for merkle root submission
-						n.StartMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String(), big.NewInt(int64(blockTimestamp)))
+						n.StartMerkleRootMonitoring(ctx, eventData.Round.String(), eventData.TrialNum.String(), big.NewInt(int64(blockTimestamp)))
 
-						n.processCommitRequest(eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
+						n.processCommitRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
 
 					case StatusSig:
 						eventData := struct {
@@ -145,13 +145,13 @@ func (n *RegularNode) receiveCommitRequest() {
 						}
 
 						// Get the actual block timestamp
-						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
 						if err != nil {
 							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
 							continue
 						}
 
-						n.processRandomRequestNumber(big.NewInt(int64(blockTimestamp)), eventData.CurRound, eventData.CurTrialNum, eventData.CurState)
+						n.processRandomRequestNumber(ctx, big.NewInt(int64(blockTimestamp)), eventData.CurRound, eventData.CurTrialNum, eventData.CurState)
 
 					case MerkleRootSubmittedSig:
 						eventData := struct {
@@ -170,12 +170,12 @@ func (n *RegularNode) receiveCommitRequest() {
 
 						// Mark Merkle root as submitted and stop leader monitoring
 						n.SetMerkleRootSubmittedEventEmitted(true)
-						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
 						n.MerkleRootSubmittedTOrRequestedCvTime(big.NewInt(int64(blockTimestamp)))
 
 						n.StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 						n.StopFailToSubmitMerkleRootAfterDisputeMonitoring(eventData.Round.String(), eventData.TrialNum.String())
-						n.StartRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+						n.StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx, eventData.Round.String(), eventData.TrialNum.String())
 
 						n.processMerkleRoot(eventData.Round, eventData.TrialNum)
 
@@ -198,7 +198,7 @@ func (n *RegularNode) receiveCommitRequest() {
 						}
 						fmt.Printf("RequestedToSubmitCo Event: Round %v, TrialNum %v, indicesLength %v\n, indices %v\n", eventData.Round, eventData.TrialNum, eventData.IndicesLength, eventData.PackedIndices)
 
-						n.processCosRequest(eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
+						n.processCosRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
 
 					case RequestedToSubmitSFromIndexKSig:
 						eventData := struct {
@@ -217,13 +217,13 @@ func (n *RegularNode) receiveCommitRequest() {
 
 						// Stop request to submit S or generate random number monitoring when RequestedToSubmitSFromIndexK event is received
 						n.StopRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
-						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(context.Background(), big.NewInt(int64(vLog.BlockNumber)))
+						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
 						n.MerkleRootSubmittedTOrRequestedCvTime(big.NewInt(int64(blockTimestamp)))
 						if err != nil {
 							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
 							continue
 						}
-						n.processSecretRequest(eventData.Round, eventData.TrialNum, eventData.IndexK)
+						n.processSecretRequest(ctx, eventData.Round, eventData.TrialNum, eventData.IndexK)
 
 					case SSubmittedSig:
 						eventData := struct {
@@ -240,7 +240,7 @@ func (n *RegularNode) receiveCommitRequest() {
 							continue
 						}
 						fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
-						n.processSubmittedSecretRequest(eventData.Round, eventData.TrialNum, eventData.Index)
+						n.processSubmittedSecretRequest(ctx, eventData.Round, eventData.TrialNum, eventData.Index)
 					case CvsEventSig:
 						eventData := struct {
 							Round    *big.Int
@@ -306,14 +306,14 @@ func (n *RegularNode) checkAllCVsSubmittedOnChain(round string, trialNum string)
 	return allSubmitted
 }
 
-func (n *RegularNode) processSubmittedSecretRequest(round, trialNum, index *big.Int) {
+func (n *RegularNode) processSubmittedSecretRequest(ctx context.Context, round, trialNum, index *big.Int) {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
 	}
 
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
-	data, err := n.revealOrderRepository.GetRevealOrder(round.String(), trialNum.String())
+	data, err := n.revealOrderRepository.GetRevealOrder(ctx, round.String(), trialNum.String())
 	if err != nil {
 		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
 	}
@@ -336,13 +336,13 @@ func (n *RegularNode) processSubmittedSecretRequest(round, trialNum, index *big.
 			regularEoaAddress := orderedNodes[indexInRevealOrder+1]
 			if eoaAddress == regularEoaAddress {
 				fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, TrialNum: %v, EOA: %v\n", round.String(), trialNum.String(), regularEoaAddress)
-				n.submitS(round.String(), trialNum.String())
+				n.submitS(ctx, round.String(), trialNum.String())
 			}
 		}
 	}
 }
 
-func (n *RegularNode) processSecretRequest(round, trialNum, index *big.Int) {
+func (n *RegularNode) processSecretRequest(ctx context.Context, round, trialNum, index *big.Int) {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
@@ -350,7 +350,7 @@ func (n *RegularNode) processSecretRequest(round, trialNum, index *big.Int) {
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 
 	// Try to get reveal order, if it doesn't exist, try to create it
-	revealOrder, err := n.revealOrderRepository.GetRevealOrder(round.String(), trialNum.String())
+	revealOrder, err := n.revealOrderRepository.GetRevealOrder(ctx, round.String(), trialNum.String())
 	if err != nil {
 		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
 		log.Printf("Attempting to determine reveal order for regular node...")
@@ -358,14 +358,14 @@ func (n *RegularNode) processSecretRequest(round, trialNum, index *big.Int) {
 		// get activated operators
 		activatedOps := eth.GetActivatedOperatorsCached()
 		// Try to determine reveal order for regular node
-		success, err := n.revealOrderService.DetermineRegularRevealOrder(round.String(), trialNum.String(), activatedOps)
+		success, err := n.revealOrderService.DetermineRegularRevealOrder(ctx, round.String(), trialNum.String(), activatedOps)
 		if err != nil || !success {
 			log.Printf("Failed to determine reveal order: %v", err)
 			return
 		}
 
 		// Try to get reveal order again after creation
-		revealOrder, err = n.revealOrderRepository.GetRevealOrder(round.String(), trialNum.String())
+		revealOrder, err = n.revealOrderRepository.GetRevealOrder(ctx, round.String(), trialNum.String())
 		if err != nil {
 			log.Printf("Still failed to get reveal order after creation: %v", err)
 			return
@@ -392,12 +392,12 @@ func (n *RegularNode) processSecretRequest(round, trialNum, index *big.Int) {
 	regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
 	if n.GetRegularNodeEOA() == regularEoaAddress {
 		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", round, regularEoaAddress)
-		n.submitS(round.String(), trialNum.String())
+		n.submitS(ctx, round.String(), trialNum.String())
 	}
 }
 
-func (n *RegularNode) submitS(round string, trialNum string) {
-	roundData, err := n.regularCommitRepository.GetCommitByRound(round, trialNum)
+func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string) {
+	roundData, err := n.regularCommitRepository.GetCommitByRound(ctx, round, trialNum)
 	if err != nil {
 		log.Printf("Failed to get regular commit for round %s with : %v", round, err)
 	}
@@ -433,7 +433,7 @@ func (n *RegularNode) submitS(round string, trialNum string) {
 	}
 
 	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		n.fallbackEthClient,
 		"submitS",
@@ -463,7 +463,7 @@ func (n *RegularNode) processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
 	n.SetRoundData(uniqueKey, roundData)
 }
 
-func (n *RegularNode) processRandomRequestNumber(blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
+func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
 
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
 
@@ -478,14 +478,14 @@ func (n *RegularNode) processRandomRequestNumber(blockTimestamp *big.Int, round 
 	// Store the current round and trialNum from Status event
 	n.SetCurrentTrialNum(trialNum.String())
 
-	eth.UpdateActivatedOperators(n.fallbackEthClient)
+	eth.UpdateActivatedOperators(ctx, n.fallbackEthClient)
 	n.SetCurrentRound(round.String())
 
 	if state.Cmp(big.NewInt(1)) == 0 {
 		// Set Halted to 0 to resume the round
 		n.SetHalted(false)
 		// Delete old round data except current round from database
-		err := n.batchRepository.DeleteOldRoundDataForRegularNode(round.String())
+		err := n.batchRepository.DeleteOldRoundDataForRegularNode(ctx, round.String())
 		if err != nil {
 			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
 		}
@@ -496,13 +496,13 @@ func (n *RegularNode) processRandomRequestNumber(blockTimestamp *big.Int, round 
 		log.Printf("Execution started for round %s", roundStr)
 
 		// Start leader monitoring for the new round using block timestamp
-		n.StartLeaderMonitoring(blockTimestamp, round.String(), trialNum.String())
-		go n.AllCosReceivedUnlocked(round.String(), trialNum.String())
+		n.StartLeaderMonitoring(ctx, blockTimestamp, round.String(), trialNum.String())
+		go n.AllCosReceivedUnlocked(ctx, round.String(), trialNum.String())
 	}
 
 	if state.Cmp(big.NewInt(2)) == 0 {
 		// Delete old round data except current round from database
-		err := n.batchRepository.DeleteOldRoundDataForRegularNode(round.String())
+		err := n.batchRepository.DeleteOldRoundDataForRegularNode(ctx, round.String())
 		if err != nil {
 			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
 		}
@@ -519,7 +519,7 @@ func (n *RegularNode) processRandomRequestNumber(blockTimestamp *big.Int, round 
 
 	if state.Cmp(big.NewInt(3)) == 0 {
 		// Delete round and trial data from database
-		n.batchRepository.DeleteRoundTrialDataForRegularNode(n.GetCurrentRound(), trialNum.String())
+		n.batchRepository.DeleteRoundTrialDataForRegularNode(ctx, n.GetCurrentRound(), trialNum.String())
 		// resume the round
 		n.SetHalted(true)
 		// resuming(fallbackEthClient)
@@ -543,7 +543,7 @@ func (n *RegularNode) CleanupRoundDataByUniqueKey(uniqueKey string) {
 	n.DeleteStrictOrder(uniqueKey)
 }
 
-func (n *RegularNode) AllCosReceivedUnlocked(round string, trialNum string) {
+func (n *RegularNode) AllCosReceivedUnlocked(ctx context.Context, round string, trialNum string) {
 	for {
 		activatedOps := eth.GetActivatedOperatorsCached()
 		if n.GetHalted() {
@@ -551,7 +551,7 @@ func (n *RegularNode) AllCosReceivedUnlocked(round string, trialNum string) {
 			return
 		}
 		if n.allCosReceivedUnlockedRegular(round, trialNum, activatedOps) {
-			flag, _ := n.revealOrderService.DetermineRegularRevealOrder(round, trialNum, activatedOps)
+			flag, _ := n.revealOrderService.DetermineRegularRevealOrder(ctx, round, trialNum, activatedOps)
 			if flag {
 				break
 			}
@@ -573,7 +573,7 @@ func (n *RegularNode) allCosReceivedUnlockedRegular(round string, trialNum strin
 	return true
 }
 
-func (n *RegularNode) processCommitRequest(round *big.Int, trialNum *big.Int, packedIndices *big.Int) error {
+func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, trialNum *big.Int, packedIndices *big.Int) error {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping processCommitRequest.")
 		return nil
@@ -627,13 +627,13 @@ func (n *RegularNode) processCommitRequest(round *big.Int, trialNum *big.Int, pa
 		ContractABI:     parsedABI,
 	}
 
-	commitData, err := n.regularCommitRepository.GetCommitByRound(round.String(), trialNum.String())
+	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, round.String(), trialNum.String())
 	if err != nil {
 		return err
 	}
 
 	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		n.fallbackEthClient,
 		"submitCv",
@@ -647,7 +647,7 @@ func (n *RegularNode) processCommitRequest(round *big.Int, trialNum *big.Int, pa
 	return nil
 }
 
-func (n *RegularNode) processCosRequest(Round *big.Int, TrialNum *big.Int, packedIndices *big.Int, indicesLength *big.Int) error {
+func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, TrialNum *big.Int, packedIndices *big.Int, indicesLength *big.Int) error {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping processCosRequest.")
 		return nil
@@ -698,14 +698,14 @@ func (n *RegularNode) processCosRequest(Round *big.Int, TrialNum *big.Int, packe
 		ContractABI:     parsedABI,
 	}
 
-	commitData, err := n.regularCommitRepository.GetCommitByRound(Round.String(), TrialNum.String())
+	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, Round.String(), TrialNum.String())
 	if err != nil {
 		fmt.Println("Error loading commits:", err)
 		return err
 	}
 
 	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		n.fallbackEthClient,
 		"submitCo",
@@ -763,7 +763,7 @@ func (n *RegularNode) findEOAAddress(indices []*big.Int, activatedOps []string, 
 }
 
 // StartLeaderMonitoring starts monitoring the leader for the current round
-func (n *RegularNode) StartLeaderMonitoring(startTime *big.Int, round string, trialNum string) {
+func (n *RegularNode) StartLeaderMonitoring(ctx context.Context, startTime *big.Int, round string, trialNum string) {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping StartLeaderMonitoring.")
 		return
@@ -795,7 +795,7 @@ func (n *RegularNode) StartLeaderMonitoring(startTime *big.Int, round string, tr
 
 	if duration <= 0 {
 		log.Printf("Deadline has already passed for round %s with trail %s, calling failToRequestSubmitCVOrSubmitMerkleRoot immediately", round, trialNum)
-		n.callFailToRequestSubmitCVOrSubmitMerkleRoot(round, trialNum)
+		n.callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx, round, trialNum)
 		return
 	}
 
@@ -804,7 +804,7 @@ func (n *RegularNode) StartLeaderMonitoring(startTime *big.Int, round string, tr
 	// Set timer to call the function when deadline is reached
 	n.monitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToRequestSubmitCVOrSubmitMerkleRoot", round)
-		n.callFailToRequestSubmitCVOrSubmitMerkleRoot(round, trialNum)
+		n.callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx, round, trialNum)
 		n.SetLeaderMonitoringActive(false)
 	})
 }
@@ -841,7 +841,7 @@ func (n *RegularNode) ResetMonitoringState(round string, trialNum string) {
 }
 
 // callFailToRequestSubmitCVOrSubmitMerkleRoot calls the contract function to fail the leader
-func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(round string, trialNum string) {
+func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx context.Context, round string, trialNum string) {
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
@@ -871,7 +871,7 @@ func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(round string, 
 	}
 
 	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		n.fallbackEthClient,
 		"failToRequestSubmitCvOrSubmitMerkleRoot",
@@ -886,7 +886,7 @@ func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(round string, 
 }
 
 // StartMerkleRootMonitoring starts monitoring for merkle root submission after CV request
-func (n *RegularNode) StartMerkleRootMonitoring(round string, trialNum string, requestedToSubmitCvTime *big.Int) {
+func (n *RegularNode) StartMerkleRootMonitoring(ctx context.Context, round string, trialNum string, requestedToSubmitCvTime *big.Int) {
 
 	if requestedToSubmitCvTime == nil {
 		log.Printf("RequestedToSubmitCvTime is nil, cannot start merkle root monitoring")
@@ -915,7 +915,7 @@ func (n *RegularNode) StartMerkleRootMonitoring(round string, trialNum string, r
 		// Check if all CVs have been submitted on-chain and merkle root hasn't been submitted
 		if n.checkAllCVsSubmittedOnChain(round, trialNum) && !n.GetMerkleRootSubmittedEventEmitted() {
 			log.Printf("All CVs submitted on-chain but merkle root not submitted, calling failToSubmitMerkleRootAfterDispute")
-			n.callFailToSubmitMerkleRootAfterDispute(round, trialNum)
+			n.callFailToSubmitMerkleRootAfterDispute(ctx, round, trialNum)
 		} else {
 			log.Printf("Conditions not met for failToSubmitMerkleRootAfterDispute - CVs not all submitted or merkle root already submitted")
 		}
@@ -934,7 +934,7 @@ func (n *RegularNode) StopFailToSubmitMerkleRootAfterDisputeMonitoring(round str
 }
 
 // callFailToSubmitMerkleRootAfterDispute calls the contract function to fail the leader for not submitting merkle root
-func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(round string, trialNum string) {
+func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(ctx context.Context, round string, trialNum string) {
 	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
@@ -964,7 +964,7 @@ func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(round string, trial
 	}
 
 	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		n.fallbackEthClient,
 		"failToSubmitMerkleRootAfterDispute",
@@ -979,7 +979,7 @@ func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(round string, trial
 }
 
 // CheckAndStartMonitoring checks if monitoring should be started and starts it if needed
-func (n *RegularNode) CheckAndStartMonitoring(round string, trialNum string) {
+func (n *RegularNode) CheckAndStartMonitoring(ctx context.Context, round string, trialNum string) {
 	// Check if monitoring is already active
 	if n.GetLeaderMonitoringActive() {
 		log.Printf("Leader monitoring already active for round %s", round)
@@ -999,11 +999,11 @@ func (n *RegularNode) CheckAndStartMonitoring(round string, trialNum string) {
 		return
 	}
 
-	n.StartLeaderMonitoring(startTime, round, trialNum)
+	n.StartLeaderMonitoring(ctx, startTime, round, trialNum)
 }
 
 // StartRequestToSubmitSOrGenerateRandomNumberMonitoring starts monitoring for failToRequestSOrGenerateRandomNumber condition
-func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(round string, trialNum string) {
+func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx context.Context, round string, trialNum string) {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping StartRequestToSubmitSOrGenerateRandomNumberMonitoring.")
 		return
@@ -1032,7 +1032,7 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(roun
 	// Set timer to call the function when deadline is reached
 	n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToRequestSOrGenerateRandomNumber", round)
-		n.callFailToRequestSOrGenerateRandomNumber(round, trialNum)
+		n.callFailToRequestSOrGenerateRandomNumber(ctx, round, trialNum)
 	})
 }
 
@@ -1048,7 +1048,7 @@ func (n *RegularNode) StopRequestToSubmitSOrGenerateRandomNumberMonitoring(round
 }
 
 // callFailToRequestSOrGenerateRandomNumber calls the contract function to fail
-func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(round string, trialNum string) {
+func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(ctx context.Context, round string, trialNum string) {
 	log.Printf("Calling failToRequestSOrGenerateRandomNumber for round %s with trial %s", round, trialNum)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
@@ -1081,7 +1081,7 @@ func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(round string, tri
 
 	// Execute the transaction
 	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		n.fallbackEthClient,
 		"failToRequestSorGenerateRandomNumber",

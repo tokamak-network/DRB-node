@@ -59,13 +59,13 @@ func GetActivatedOperatorsUnsafe() []common.Address {
 }
 
 // Smart contract call helper function
-func CallSmartContract(fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
+func CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
 	data, err := parsedABI.Pack(method, params...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack data for %s: %v", method, err)
 	}
 
-	result, err := fallbackEthClient.CallContract(context.Background(), ethereum.CallMsg{
+	result, err := fallbackEthClient.CallContract(ctx, ethereum.CallMsg{
 		To:   &contractAddress,
 		Data: data,
 	}, nil)
@@ -305,7 +305,7 @@ func waitForTransactionSuccess(ctx context.Context, client fallback_ethclient.IF
 	}
 }
 
-func GetActivatedOperators(fallbackEthClient fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
+func GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
 	var activatedOperators []common.Address
 	abiFilePath := "contract/abi/Commit2RevealDRB.json"
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
@@ -320,7 +320,7 @@ func GetActivatedOperators(fallbackEthClient fallback_ethclient.IFallbackEthClie
 
 	contractAddress := common.HexToAddress(contractAddressStr)
 
-	result, err := CallSmartContract(fallbackEthClient, parsedABI, "getActivatedOperators", contractAddress)
+	result, err := CallSmartContract(ctx, fallbackEthClient, parsedABI, "getActivatedOperators", contractAddress)
 	if err != nil {
 		log.Printf("Failed to fetch activated operators: %v", err)
 		return activatedOperators, err
@@ -329,8 +329,8 @@ func GetActivatedOperators(fallbackEthClient fallback_ethclient.IFallbackEthClie
 	return activatedOperators, nil
 }
 
-func UpdateActivatedOperators(fallbackEthClient fallback_ethclient.IFallbackEthClient) {
-	operators, err := GetActivatedOperators(fallbackEthClient)
+func UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
+	operators, err := GetActivatedOperators(ctx, fallbackEthClient)
 	if err != nil {
 		log.Printf("Error updating ActivatedOperators: %v", err)
 		return
@@ -339,7 +339,7 @@ func UpdateActivatedOperators(fallbackEthClient fallback_ethclient.IFallbackEthC
 }
 
 // UpdateCurrentRoundFromContract fetches the current round from the contract
-func UpdateCurrentRoundFromContract(fallbackEthClient fallback_ethclient.IFallbackEthClient) (*big.Int, error) {
+func UpdateCurrentRoundFromContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) (*big.Int, error) {
 	abiFilePath := "contract/abi/Commit2RevealDRB.json"
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
@@ -354,7 +354,7 @@ func UpdateCurrentRoundFromContract(fallbackEthClient fallback_ethclient.IFallba
 	contractAddress := common.HexToAddress(contractAddressStr)
 
 	// Call the s_currentRound() function (public getter for s_currentRound state variable)
-	result, err := CallSmartContract(fallbackEthClient, parsedABI, "s_currentRound", contractAddress)
+	result, err := CallSmartContract(ctx, fallbackEthClient, parsedABI, "s_currentRound", contractAddress)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call s_currentRound: %v", err)
 	}
@@ -370,7 +370,7 @@ func UpdateCurrentRoundFromContract(fallbackEthClient fallback_ethclient.IFallba
 }
 
 // GetTrialNumFromContract fetches the trial number for a given round from the smart contract
-func GetTrialNumFromContract(fallbackEthClient fallback_ethclient.IFallbackEthClient, round *big.Int) (*big.Int, error) {
+func GetTrialNumFromContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, round *big.Int) (*big.Int, error) {
 	abiFilePath := "contract/abi/Commit2RevealDRB.json"
 	parsedABI, err := utils.LoadContractABI(abiFilePath)
 	if err != nil {
@@ -384,7 +384,7 @@ func GetTrialNumFromContract(fallbackEthClient fallback_ethclient.IFallbackEthCl
 
 	contractAddress := common.HexToAddress(contractAddressStr)
 
-	result, err := CallSmartContract(fallbackEthClient, parsedABI, "s_trialNum", contractAddress, round)
+	result, err := CallSmartContract(ctx, fallbackEthClient, parsedABI, "s_trialNum", contractAddress, round)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call s_trialNum: %v", err)
 	}

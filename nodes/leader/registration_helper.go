@@ -1,6 +1,7 @@
 package leader_node
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,7 +13,7 @@ import (
 )
 
 // RegisterNode handles both saving node information and activating the node on-chain.
-func (n *LeaderNode) RegisterNode(s network.Stream, abiFilePath string) error {
+func (n *LeaderNode) RegisterNode(ctx context.Context, s network.Stream, abiFilePath string) error {
 	var req utils.RegistrationRequest
 	if err := json.NewDecoder(s).Decode(&req); err != nil {
 		return fmt.Errorf("failed to decode registration request: %v", err)
@@ -27,7 +28,7 @@ func (n *LeaderNode) RegisterNode(s network.Stream, abiFilePath string) error {
 	}
 
 	log.Printf("Verified registration for PeerID: %s", req.PeerID)
-	eth.UpdateActivatedOperators(n.fallbackEthClient)
+	eth.UpdateActivatedOperators(ctx, n.fallbackEthClient)
 	operators := eth.GetActivatedOperatorsCached()
 
 	// Check if the EOA is in the activated operators list
@@ -64,7 +65,7 @@ func (n *LeaderNode) RegisterNode(s network.Stream, abiFilePath string) error {
 	}
 
 	// Save updated nodes
-	err := n.nodeInfoRepository.AddNodeInfo(&nodeInfo)
+	err := n.nodeInfoRepository.AddNodeInfo(ctx, &nodeInfo)
 	if err != nil {
 		return fmt.Errorf("failed to save registered nodes: %v", err)
 	}

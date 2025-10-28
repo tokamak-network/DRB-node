@@ -1,6 +1,7 @@
 package leader_node
 
 import (
+	"context"
 	"math/big"
 	"sync"
 	"time"
@@ -140,20 +141,20 @@ func NewLeaderNode(
 	}
 }
 
-func (n *LeaderNode) AddLeaderCommit(commitData *utils.LeaderCommitData) error {
-	return n.leaderCommitRepository.AddLeaderCommit(commitData)
+func (n *LeaderNode) AddLeaderCommit(ctx context.Context, commitData *utils.LeaderCommitData) error {
+	return n.leaderCommitRepository.AddLeaderCommit(ctx, commitData)
 }
 
-func (n *LeaderNode) GetLeaderCommitByRoundAndEoaAddr(round, trialNum, eoaAddr string) (*utils.LeaderCommitData, error) {
-	return n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(round, trialNum, eoaAddr)
+func (n *LeaderNode) GetLeaderCommitByRoundAndEoaAddr(ctx context.Context, round, trialNum, eoaAddr string) (*utils.LeaderCommitData, error) {
+	return n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, round, trialNum, eoaAddr)
 }
 
-func (n *LeaderNode) UpdateLeaderCommit(commitData *utils.LeaderCommitData) error {
-	return n.leaderCommitRepository.UpdateLeaderCommit(commitData)
+func (n *LeaderNode) UpdateLeaderCommit(ctx context.Context, commitData *utils.LeaderCommitData) error {
+	return n.leaderCommitRepository.UpdateLeaderCommit(ctx, commitData)
 }
 
-func (n *LeaderNode) DetermineRevealOrder(round, trialNum string, activatedOps []common.Address) (bool, error) {
-	return n.revealOrderService.DetermineRevealOrder(round, trialNum, activatedOps)
+func (n *LeaderNode) DetermineRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
+	return n.revealOrderService.DetermineRevealOrder(ctx, round, trialNum, activatedOps)
 }
 
 func (n *LeaderNode) CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {

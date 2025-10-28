@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-pg/pg/v10"
@@ -15,15 +16,15 @@ func NewBroadcastTrackerRepository(db *pg.DB) *BroadcastTrackerRepository {
 	return &BroadcastTrackerRepository{db: db}
 }
 
-func (r *BroadcastTrackerRepository) AddBroadcastTracker(trackerData *utils.BroadcastTracker) error {
+func (r *BroadcastTrackerRepository) AddBroadcastTracker(ctx context.Context, trackerData *utils.BroadcastTracker) error {
 	tracker := mapBroadcastTrackerToScheme(trackerData)
-	_, err := r.db.Model(&tracker).Insert()
+	_, err := r.db.Model(&tracker).Insert(ctx)
 	return err
 }
 
-func (r *BroadcastTrackerRepository) GetBroadcastTrackers() ([]*utils.BroadcastTracker, error) {
+func (r *BroadcastTrackerRepository) GetBroadcastTrackers(ctx context.Context) ([]*utils.BroadcastTracker, error) {
 	var models []BroadcastTrackerScheme
-	if err := r.db.Model(&models).Select(); err != nil {
+	if err := r.db.Model(&models).Select(ctx); err != nil {
 		return nil, err
 	}
 	trackers := make([]*utils.BroadcastTracker, 0, len(models))
@@ -33,19 +34,19 @@ func (r *BroadcastTrackerRepository) GetBroadcastTrackers() ([]*utils.BroadcastT
 	return trackers, nil
 }
 
-func (r *BroadcastTrackerRepository) UpdateBroadcastTracker(tracker *utils.BroadcastTracker) error {
+func (r *BroadcastTrackerRepository) UpdateBroadcastTracker(ctx context.Context, tracker *utils.BroadcastTracker) error {
 	model := mapBroadcastTrackerToScheme(tracker)
 	_, err := r.db.Model(&model).
 		Where("round = ? AND trial_num = ? AND eoa_address = ? AND type = ? AND message_id = ?",
 			model.Round, model.TrialNum, model.EOAAddress, model.Type, model.MessageID).
-		Update()
+		Update(ctx)
 	return err
 }
 
-func (r *BroadcastTrackerRepository) AddAllBroadcastTrackers(trackers []*utils.BroadcastTracker) error {
+func (r *BroadcastTrackerRepository) AddAllBroadcastTrackers(ctx context.Context, trackers []*utils.BroadcastTracker) error {
 	// Consider batch insert if supported by ORM for better performance
 	for _, tracker := range trackers {
-		if err := r.AddBroadcastTracker(tracker); err != nil {
+		if err := r.AddBroadcastTracker(ctx, tracker); err != nil {
 			return fmt.Errorf("failed to add broadcast tracker data for %s_%s_%s_%s_%s: %w",
 				tracker.Round, tracker.TrialNum, tracker.EOAAddress, tracker.Type, tracker.MessageID, err)
 		}
@@ -53,12 +54,12 @@ func (r *BroadcastTrackerRepository) AddAllBroadcastTrackers(trackers []*utils.B
 	return nil
 }
 
-func (r *BroadcastTrackerRepository) DeleteBroadcastTracker(tracker *utils.BroadcastTracker) error {
+func (r *BroadcastTrackerRepository) DeleteBroadcastTracker(ctx context.Context, tracker *utils.BroadcastTracker) error {
 	model := mapBroadcastTrackerToScheme(tracker)
 	_, err := r.db.Model(&model).
 		Where("round = ? AND trial_num = ? AND eoa_address = ? AND type = ? AND message_id = ?",
 			model.Round, model.TrialNum, model.EOAAddress, model.Type, model.MessageID).
-		Delete()
+		Delete(ctx)
 	return err
 }
 

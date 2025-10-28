@@ -18,21 +18,21 @@ import (
 )
 
 // StartSecretValueRequests initializes the secret value request process for a given round
-func (n *LeaderNode) StartSecretValueRequests(h host.Host, round string, trialNum string) {
+func (n *LeaderNode) StartSecretValueRequests(ctx context.Context, h host.Host, round string, trialNum string) {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping StartSecretValueRequests.")
 		return
 	}
 	// Load reveal order for the round
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
+	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(ctx, round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return
 	}
 
 	// Load registered nodes
-	nodes, err := n.nodeInfoRepository.GetNodeInfos()
+	nodes, err := n.nodeInfoRepository.GetNodeInfos(ctx)
 	if err != nil {
 		log.Printf("Failed to load registered nodes: %v", err)
 		return
@@ -48,14 +48,14 @@ func (n *LeaderNode) StartSecretValueRequests(h host.Host, round string, trialNu
 	eoa := eoaArray[0]
 	for _, node := range nodes {
 		if node.EOAAddress == eoa {
-			n.sendSecretValueRequestToNode(h, round, trialNum, uniqueKey, eoa, node, 0)
+			n.sendSecretValueRequestToNode(ctx, h, round, trialNum, uniqueKey, eoa, node, 0)
 		} else {
 			continue
 		}
 	}
 }
 
-func (n *LeaderNode) sendSecretValueRequestToNode(h host.Host, round string, trialNum string, uniqueKey string, regularEoa string, nodeInfo *utils.NodeInfo, order int) {
+func (n *LeaderNode) sendSecretValueRequestToNode(ctx context.Context, h host.Host, round string, trialNum string, uniqueKey string, regularEoa string, nodeInfo *utils.NodeInfo, order int) {
 	// Load private key from environment variable
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
 	if privateKeyHex == "" {
@@ -87,7 +87,7 @@ func (n *LeaderNode) sendSecretValueRequestToNode(h host.Host, round string, tri
 	fmt.Println("Sending secret value request to EOA:", regularEoa)
 
 	// Send the request
-	err = sendToRegularNode(h, *nodeInfo, "/sendSecretValue", req)
+	err = sendToRegularNode(ctx, h, *nodeInfo, "/sendSecretValue", req)
 	if err != nil {
 		log.Printf("Failed to send secret value request to EOA %s for round %s with trail %s: %v", regularEoa, round, trialNum, err)
 	} else {
@@ -106,7 +106,7 @@ func (n *LeaderNode) sendSecretValueRequestToNode(h host.Host, round string, tri
 			if !exists || !hasSecret {
 				log.Printf("Secret value not received for EOA %s in round %s with trail %s within 15 seconds. Handling missing secret value.", regularEoa, round, trialNum)
 				n.SetSecretsOnChain(uniqueKey, true)
-				n.requestToSubmitS(round, trialNum)
+				n.requestToSubmitS(ctx, round, trialNum)
 			}
 		}()
 
@@ -117,9 +117,9 @@ func (n *LeaderNode) sendSecretValueRequestToNode(h host.Host, round string, tri
 	}
 }
 
-func (n *LeaderNode) requestToSubmitS(round string, trialNum string) {
+func (n *LeaderNode) requestToSubmitS(ctx context.Context, round string, trialNum string) {
 	n.SetSecretRequestSentForWhichRound(n.GetCurrentRound())
-	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := n.prepareArgumentsForRequestToSubmitS(round, trialNum)
+	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := n.prepareArgumentsForRequestToSubmitS(ctx, round, trialNum)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
@@ -151,7 +151,7 @@ func (n *LeaderNode) requestToSubmitS(round string, trialNum string) {
 	}
 
 	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		n.fallbackEthClient,
 		"requestToSubmitS",
@@ -171,11 +171,11 @@ func (n *LeaderNode) requestToSubmitS(round string, trialNum string) {
 
 	// Start monitoring for failToSubmitS condition
 	requestTimestamp := big.NewInt(time.Now().Unix())
-	n.StartFailToSubmitSMonitoring(round, trialNum, requestTimestamp)
+	n.StartFailToSubmitSMonitoring(ctx, round, trialNum, requestTimestamp)
 }
 
-func (n *LeaderNode) prepareArgumentsForRequestToSubmitS(round string, trialNum string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
-	_, cos, _, vs, rs, ss := n.LoadNodeData(round, trialNum)
+func (n *LeaderNode) prepareArgumentsForRequestToSubmitS(ctx context.Context, round string, trialNum string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
+	_, cos, _, vs, rs, ss := n.LoadNodeData(ctx, round, trialNum)
 	var notOnChainIndices []*big.Int
 	i := big.NewInt(0)
 	j := 0
@@ -213,7 +213,7 @@ func (n *LeaderNode) prepareArgumentsForRequestToSubmitS(round string, trialNum 
 		sigRSsForAllCvsNotOnChain = append(sigRSsForAllCvsNotOnChain, cvAndSigRS)
 	}
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
-	revealOrders, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
+	revealOrders, err := n.reavealOrderRepository.GetRevealOrder(ctx, round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order for round %s with trail %s: %v", round, trialNum, err)
 	}
@@ -235,7 +235,7 @@ func PackIndices(indices []*big.Int) *big.Int {
 }
 
 // handleSecretValueResponse processes a response and sends the next request if applicable
-func (n *LeaderNode) HandleSecretValueResponse(h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, eoa string) {
+func (n *LeaderNode) HandleSecretValueResponse(ctx context.Context, h host.Host, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string, trialNum string, eoa string) {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleSecretValueResponse.")
 		return
@@ -243,14 +243,14 @@ func (n *LeaderNode) HandleSecretValueResponse(h host.Host, fallbackEthClient *f
 	log.Printf("Secret value received for round %s with trail %s from EOA %s", round, trialNum, eoa)
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	// Load reveal order for the round
-	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
+	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(ctx, round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return
 	}
 
 	// Load registered nodes
-	nodes, err := n.nodeInfoRepository.GetNodeInfos()
+	nodes, err := n.nodeInfoRepository.GetNodeInfos(ctx)
 	if err != nil {
 		log.Printf("Failed to load registered nodes: %v", err)
 		return
@@ -263,7 +263,7 @@ func (n *LeaderNode) HandleSecretValueResponse(h host.Host, fallbackEthClient *f
 			log.Printf("🎯 Next node in reveal order: %s (order %d) for round %s with trail %s", eoa, order, round, trialNum)
 			for _, node := range nodes {
 				if node.EOAAddress == eoa {
-					n.sendSecretValueRequestToNode(h, round, trialNum, uniqueKey, eoa, node, order)
+					n.sendSecretValueRequestToNode(ctx, h, round, trialNum, uniqueKey, eoa, node, order)
 					return
 				}
 			}
@@ -275,8 +275,8 @@ func (n *LeaderNode) HandleSecretValueResponse(h host.Host, fallbackEthClient *f
 }
 
 // sendToRegularNode sends a request to a specific regular node
-func sendToRegularNode(h host.Host, nodeInfo utils.NodeInfo, protocol string, data interface{}) error {
-	stream, err := utils.CreateStream(h, utils.NodeInfo{
+func sendToRegularNode(ctx context.Context, h host.Host, nodeInfo utils.NodeInfo, protocol string, data interface{}) error {
+	stream, err := utils.CreateStream(ctx, h, utils.NodeInfo{
 		IP:     nodeInfo.IP,
 		Port:   nodeInfo.Port,
 		PeerID: nodeInfo.PeerID,
@@ -307,7 +307,7 @@ func contains(slice []string, item string) bool {
 
 // StartFailToSubmitSMonitoring starts monitoring for failToSubmitS condition
 // Should be called when requestToSubmitS transaction is confirmed
-func (n *LeaderNode) StartFailToSubmitSMonitoring(round string, trialNum string, requestTimestamp *big.Int) {
+func (n *LeaderNode) StartFailToSubmitSMonitoring(ctx context.Context, round string, trialNum string, requestTimestamp *big.Int) {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping StartFailToSubmitSMonitoring.")
 		return
@@ -323,11 +323,11 @@ func (n *LeaderNode) StartFailToSubmitSMonitoring(round string, trialNum string,
 	}
 
 	onChainSubmissionPeriodPerOperator := big.NewInt(40)
-	n.startMonitoringWithPeriod(round, trialNum, onChainSubmissionPeriodPerOperator)
+	n.startMonitoringWithPeriod(ctx, round, trialNum, onChainSubmissionPeriodPerOperator)
 }
 
 // startMonitoringWithPeriod starts the actual monitoring with the given period
-func (n *LeaderNode) startMonitoringWithPeriod(round string, trialNum string, period *big.Int) {
+func (n *LeaderNode) startMonitoringWithPeriod(ctx context.Context, round string, trialNum string, period *big.Int) {
 	// Calculate deadline: s_previousSSubmitTimestamp + s_onChainSubmissionPeriodPerOperator
 	deadline := new(big.Int).Add(n.GetLastSubmitSTimestamp(), period)
 
@@ -345,13 +345,13 @@ func (n *LeaderNode) startMonitoringWithPeriod(round string, trialNum string, pe
 	// Set timer to call the function when deadline is reached
 	n.failToSubmitSMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToSubmitS", round)
-		n.callFailToSubmitS(round, trialNum)
+		n.callFailToSubmitS(ctx, round, trialNum)
 		n.SetFailToSubmitSMonitoringActive(false)
 	})
 }
 
 // StopFailToSubmitSMonitoring stops the monitoring
-func (n *LeaderNode) StopFailToSubmitSMonitoring(round string, trialNum string) {
+func (n *LeaderNode) StopFailToSubmitSMonitoring(ctx context.Context, round string, trialNum string) {
 	if !n.GetFailToSubmitSMonitoringActive() {
 		return
 	}
@@ -367,23 +367,23 @@ func (n *LeaderNode) StopFailToSubmitSMonitoring(round string, trialNum string) 
 
 // UpdateLastSubmitSTimestamp updates the timestamp when a submitS event is received
 // This should be called when SSubmitted event is received
-func (n *LeaderNode) UpdateLastSubmitSTimestamp(newTimestamp *big.Int, round string, trialNum string) {
+func (n *LeaderNode) UpdateLastSubmitSTimestamp(ctx context.Context, newTimestamp *big.Int, round string, trialNum string) {
 	n.SetLastSubmitSTimestamp(newTimestamp)
 	log.Printf("Updated lastSubmitSTimestamp to %v for round %s", newTimestamp, round)
 
 	// If monitoring is active, restart it with the new timestamp
 	if n.GetFailToSubmitSMonitoringActive() {
 		log.Printf("Restarting failToSubmitS monitoring with updated timestamp")
-		n.StopFailToSubmitSMonitoring(round, trialNum)
+		n.StopFailToSubmitSMonitoring(ctx, round, trialNum)
 
 		// Use hardcoded period for restart - this should ideally get the period from contract
 		onChainSubmissionPeriodPerOperator := big.NewInt(30) // 30 seconds
-		n.startMonitoringWithPeriod(round, trialNum, onChainSubmissionPeriodPerOperator)
+		n.startMonitoringWithPeriod(ctx, round, trialNum, onChainSubmissionPeriodPerOperator)
 	}
 }
 
 // callFailToSubmitS calls the contract function to fail
-func (n *LeaderNode) callFailToSubmitS(round string, trialNum string) {
+func (n *LeaderNode) callFailToSubmitS(ctx context.Context, round string, trialNum string) {
 	log.Printf("Calling failToSubmitS for round %s with trial %s", round, trialNum)
 
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
@@ -416,7 +416,7 @@ func (n *LeaderNode) callFailToSubmitS(round string, trialNum string) {
 
 	// Execute the transaction
 	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		n.fallbackEthClient,
 		"failToSubmitS",
@@ -431,9 +431,9 @@ func (n *LeaderNode) callFailToSubmitS(round string, trialNum string) {
 }
 
 // ResetLeaderMonitoringState resets all leader monitoring variables for a round
-func (n *LeaderNode) ResetLeaderMonitoringState(round string, trialNum string) {
+func (n *LeaderNode) ResetLeaderMonitoringState(ctx context.Context, round string, trialNum string) {
 	// Stop secret submission monitoring (S monitoring)
-	n.StopFailToSubmitSMonitoring(round, trialNum)
+	n.StopFailToSubmitSMonitoring(ctx, round, trialNum)
 
 	// Reset secret submission monitoring timestamps
 	n.SetLastSubmitSTimestamp(nil)

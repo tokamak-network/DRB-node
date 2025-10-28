@@ -103,7 +103,7 @@ func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID
 }
 
 // ConnectToPeer connects to a specified peer using its multiaddress.
-func (p *P2PClient) ConnectToPeer(leaderIP, leaderPort, leaderPeerID string) (*peer.AddrInfo, error) {
+func (p *P2PClient) ConnectToPeer(ctx context.Context, leaderIP, leaderPort, leaderPeerID string) (*peer.AddrInfo, error) {
 	// leaderAddrString := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
 	leaderAddrString := fmt.Sprintf("/dns/leadernode/tcp/%s/p2p/%s", leaderPort, leaderPeerID)
 	log.Printf("Leader multiaddress: %s", leaderAddrString)
@@ -119,11 +119,11 @@ func (p *P2PClient) ConnectToPeer(leaderIP, leaderPort, leaderPeerID string) (*p
 	}
 
 	p.hostInstance.Peerstore().AddAddrs(leaderInfo.ID, leaderInfo.Addrs, peerstore.PermanentAddrTTL)
-	return leaderInfo, p.hostInstance.Connect(context.Background(), *leaderInfo)
+	return leaderInfo, p.hostInstance.Connect(ctx, *leaderInfo)
 }
 
-func (p *P2PClient) GetConnectedPeers() map[string]NodeInfo {
-	nodes, err := p.nodeInfoRepository.GetNodeInfos()
+func (p *P2PClient) GetConnectedPeers(ctx context.Context) map[string]NodeInfo {
+	nodes, err := p.nodeInfoRepository.GetNodeInfos(ctx)
 	if err != nil {
 		log.Printf("Failed to get node infos: %v", err)
 		return nil

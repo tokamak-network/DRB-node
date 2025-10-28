@@ -17,7 +17,7 @@ var (
 	once     sync.Once
 )
 
-func InitSQLDB(port int, host, user, password, name string) error {
+func InitSQLDB(ctx context.Context, port int, host, user, password, name string) error {
 	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", user, password, host, port, name)
 
 	db, err := sql.Open("postgres", dsn)
@@ -51,7 +51,7 @@ func InitSQLDB(port int, host, user, password, name string) error {
 		}
 		dbClient = pg.Connect(opts)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		if err := dbClient.Ping(ctx); err != nil {
 			dbClient = nil
@@ -59,7 +59,7 @@ func InitSQLDB(port int, host, user, password, name string) error {
 		}
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := GetDB().Ping(ctx); err != nil {
 		return fmt.Errorf("error pinging main DB client after initialization: %v", err)

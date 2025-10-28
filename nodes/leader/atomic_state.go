@@ -1,6 +1,7 @@
 package leader_node
 
 import (
+	"context"
 	"log"
 	"math/big"
 	"sync/atomic"
@@ -422,14 +423,14 @@ func (n *LeaderNode) GetLastSubmitSTimestamp() *big.Int {
 // ============================================================================
 
 // UpdateCurrentRoundFromContract fetches the current round from the contract and updates local state
-func (n *LeaderNode) UpdateCurrentRoundAndTrial() error {
-	currentRound, err := eth.UpdateCurrentRoundFromContract(n.fallbackEthClient)
+func (n *LeaderNode) UpdateCurrentRoundAndTrial(ctx context.Context) error {
+	currentRound, err := eth.UpdateCurrentRoundFromContract(ctx, n.fallbackEthClient)
 	if err != nil {
 		log.Printf("failed to fetch current round from contract: %v", err)
 		return err
 	}
 
-	trialNumBig, err := eth.GetTrialNumFromContract(n.fallbackEthClient, currentRound)
+	trialNumBig, err := eth.GetTrialNumFromContract(ctx, n.fallbackEthClient, currentRound)
 	if err != nil {
 		log.Printf("failed to fetch trial number for round %s: %v", trialNumBig.String(), err)
 		return err
