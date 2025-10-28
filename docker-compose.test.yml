@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  testdb:
+    image: postgres:14.13
+    container_name: testdb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: testdb
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
