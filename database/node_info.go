@@ -31,7 +31,9 @@ func (r *NodeInfoRepository) UpdateNodeInfo(nodeInfo *utils.NodeInfo) error {
 		PeerID:     nodeInfo.PeerID,
 		EOAAddress: nodeInfo.EOAAddress,
 	}
-	_, err := r.db.Model(node).WherePK().Update()
+	_, err := r.db.Model(node).
+		Where("ip = ?", nodeInfo.IP).
+		Update()
 	return err
 }
 
