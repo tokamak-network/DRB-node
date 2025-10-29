@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -331,4 +332,27 @@ func TestNodeInfoRepository_ConcurrentInserts(t *testing.T) {
 
 	// Cleanup
 	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", testIP).Delete()
+}
+
+// Test error handling for GetNodeInfos when database fails
+func TestNodeInfoRepository_GetNodeInfos_ErrorHandling(t *testing.T) {
+	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+
+	// Drop the table to force an error
+	_, err := GetDB().Exec("DROP TABLE IF EXISTS node_info_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to get node infos - should get an error because table doesn't exist
+	_, err = repo.GetNodeInfos()
+	assert.Error(t, err, "Expected error when table is missing")
+
+	// Restore the schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
 }

@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -290,4 +291,50 @@ func TestBroadcastTrackerRepository_AddAll(t *testing.T) {
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Delete()
+}
+
+// Test error handling for GetBroadcastTrackers when database fails
+func TestBroadcastTrackerRepository_GetBroadcastTrackers_ErrorHandling(t *testing.T) {
+	repo := NewBroadcastTrackerRepository(GetDB())
+
+	// Drop the table to force an error
+	_, err := GetDB().Exec("DROP TABLE IF EXISTS broadcast_tracker_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to get trackers - should get an error because table doesn't exist
+	_, err = repo.GetBroadcastTrackers()
+	assert.Error(t, err, "Expected error when table is missing")
+
+	// Restore the schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+}
+
+// Test error handling for AddAllBroadcastTrackers when insert fails
+func TestBroadcastTrackerRepository_AddAllBroadcastTrackers_ErrorHandling(t *testing.T) {
+	repo := NewBroadcastTrackerRepository(GetDB())
+
+	// Drop the table to force an error during batch insert
+	_, err := GetDB().Exec("DROP TABLE IF EXISTS broadcast_tracker_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to add trackers - should fail because table doesn't exist
+	trackers := []*utils.BroadcastTracker{
+		{Round: "test", TrialNum: "test", EOAAddress: "0xtest1", Type: "cvs", MessageID: "msg1"},
+		{Round: "test", TrialNum: "test", EOAAddress: "0xtest2", Type: "cvs", MessageID: "msg2"},
+	}
+
+	err = repo.AddAllBroadcastTrackers(trackers)
+	assert.Error(t, err, "Expected error when table is missing")
+	assert.Contains(t, err.Error(), "failed to add broadcast tracker data", "Error should contain expected message")
+
+	// Restore the schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
 }

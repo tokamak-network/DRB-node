@@ -306,3 +306,78 @@ func TestRevealOrderRepository_EmptyArrays(t *testing.T) {
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Delete()
 }
+
+// Test out-of-bounds indices in reveal order
+func TestRevealOrderRepository_OutOfBoundsIndices(t *testing.T) {
+	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewRevealOrderRepository(GetDB())
+
+	round := "bounds_round"
+	trialNum := "bounds_trial"
+
+	// Cleanup
+	GetDB().Model(&RevealOrderScheme{}).
+		Where("round = ? AND trial_num = ?", round, trialNum).
+		Delete()
+
+	// Test with index greater than maxIndex
+	orderData := &utils.RevealOrderData{
+		Round:        round,
+		TrialNum:     trialNum,
+		OrderedNodes: []string{"0xnode1", "0xnode2", "0xnode3"}, // 3 nodes (indices 0-2)
+		RevealOrder:  []int{0, 1, 5},                            // Index 5 is out of bounds!
+		RV:           "rv_bounds",
+	}
+
+	err := repo.AddRevealOrder(orderData)
+	assert.Error(t, err, "Should reject out-of-bounds indices")
+	assert.Contains(t, err.Error(), "out-of-bounds")
+	assert.Contains(t, err.Error(), "max: 2")
+
+	// Cleanup
+	GetDB().Model(&RevealOrderScheme{}).
+		Where("round = ? AND trial_num = ?", round, trialNum).
+		Delete()
+}
+
+// Test with only empty orderedNodes (to cover that specific check at line 32)
+func TestRevealOrderRepository_EmptyOrderedNodes(t *testing.T) {
+	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewRevealOrderRepository(GetDB())
+
+	orderData := &utils.RevealOrderData{
+		Round:        "test_round",
+		TrialNum:     "test_trial",
+		OrderedNodes: []string{},     // Empty
+		RevealOrder:  []int{0, 1, 2}, // Not empty
+		RV:           "rv_test",
+	}
+
+	err := repo.AddRevealOrder(orderData)
+	assert.Error(t, err, "Should reject empty orderedNodes")
+	assert.Contains(t, err.Error(), "orderedNodes cannot be empty")
+}
+
+// Test with only empty revealOrder (to cover that specific check at line 35)
+func TestRevealOrderRepository_EmptyRevealOrder(t *testing.T) {
+	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewRevealOrderRepository(GetDB())
+
+	orderData := &utils.RevealOrderData{
+		Round:        "test_round",
+		TrialNum:     "test_trial",
+		OrderedNodes: []string{"node1", "node2"}, // Not empty
+		RevealOrder:  []int{},                    // Empty
+		RV:           "rv_test",
+	}
+
+	err := repo.AddRevealOrder(orderData)
+	assert.Error(t, err, "Should reject empty revealOrder")
+	assert.Contains(t, err.Error(), "revealOrder cannot be empty")
+}

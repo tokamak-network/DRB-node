@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -74,26 +75,26 @@ func TestLeaderCommitRepository_AddWithEmptyFields(t *testing.T) {
 
 	// Empty round
 	emptyRound := &utils.LeaderCommitData{
-		Round:      "",
-		TrialNum:   "trial1",
-		EOAAddress: "0xtest",
-		Cvs:        cvs,
-		Cos:        cvs,
+		Round:       "",
+		TrialNum:    "trial1",
+		EOAAddress:  "0xtest",
+		Cvs:         cvs,
+		Cos:         cvs,
 		SecretValue: cvs,
-		CreatedAt:  time.Now().Unix(),
+		CreatedAt:   time.Now().Unix(),
 	}
 	err := repo.AddLeaderCommit(emptyRound)
 	assert.Error(t, err, "Should reject empty round")
 
 	// Empty EOAAddress
 	emptyEOA := &utils.LeaderCommitData{
-		Round:      "round1",
-		TrialNum:   "trial1",
-		EOAAddress: "",
-		Cvs:        cvs,
-		Cos:        cvs,
+		Round:       "round1",
+		TrialNum:    "trial1",
+		EOAAddress:  "",
+		Cvs:         cvs,
+		Cos:         cvs,
 		SecretValue: cvs,
-		CreatedAt:  time.Now().Unix(),
+		CreatedAt:   time.Now().Unix(),
 	}
 	err = repo.AddLeaderCommit(emptyEOA)
 	assert.Error(t, err, "Should reject empty EOAAddress")
@@ -159,13 +160,13 @@ func TestLeaderCommitRepository_UpdateNonExistent(t *testing.T) {
 	var cvs [32]byte
 
 	nonExistent := &utils.LeaderCommitData{
-		Round:      "nonexistent",
-		TrialNum:   "nonexistent",
-		EOAAddress: "0xnonexistent",
-		Cvs:        cvs,
-		Cos:        cvs,
+		Round:       "nonexistent",
+		TrialNum:    "nonexistent",
+		EOAAddress:  "0xnonexistent",
+		Cvs:         cvs,
+		Cos:         cvs,
 		SecretValue: cvs,
-		CreatedAt:  time.Now().Unix(),
+		CreatedAt:   time.Now().Unix(),
 	}
 
 	err := repo.UpdateLeaderCommit(nonExistent)
@@ -245,26 +246,26 @@ func TestLeaderCommitRepository_GetRoundsToProcess(t *testing.T) {
 	// Add commits with different states
 	commits := []*utils.LeaderCommitData{
 		{
-			Round:                   round,
-			TrialNum:                trialNum,
-			EOAAddress:              "0x1",
-			Cvs:                     cvs,
-			Cos:                     cvs,
-			SecretValue:             cvs,
-			SubmitMerkleRootDone:    true,
-			RandomNumberGenerated:   false,
-			CreatedAt:               time.Now().Unix(),
+			Round:                 round,
+			TrialNum:              trialNum,
+			EOAAddress:            "0x1",
+			Cvs:                   cvs,
+			Cos:                   cvs,
+			SecretValue:           cvs,
+			SubmitMerkleRootDone:  true,
+			RandomNumberGenerated: false,
+			CreatedAt:             time.Now().Unix(),
 		},
 		{
-			Round:                   round,
-			TrialNum:                trialNum,
-			EOAAddress:              "0x2",
-			Cvs:                     cvs,
-			Cos:                     cvs,
-			SecretValue:             cvs,
-			SubmitMerkleRootDone:    false,
-			RandomNumberGenerated:   false,
-			CreatedAt:               time.Now().Unix(),
+			Round:                 round,
+			TrialNum:              trialNum,
+			EOAAddress:            "0x2",
+			Cvs:                   cvs,
+			Cos:                   cvs,
+			SecretValue:           cvs,
+			SubmitMerkleRootDone:  false,
+			RandomNumberGenerated: false,
+			CreatedAt:             time.Now().Unix(),
 		},
 	}
 
@@ -314,13 +315,13 @@ func TestLeaderCommitRepository_GetByRoundAndTrialNum(t *testing.T) {
 	// Add multiple commits
 	for _, eoa := range eoas {
 		commit := &utils.LeaderCommitData{
-			Round:      round,
-			TrialNum:   trialNum,
-			EOAAddress: eoa,
-			Cvs:        cvs,
-			Cos:        cvs,
+			Round:       round,
+			TrialNum:    trialNum,
+			EOAAddress:  eoa,
+			Cvs:         cvs,
+			Cos:         cvs,
 			SecretValue: cvs,
-			CreatedAt:  time.Now().Unix(),
+			CreatedAt:   time.Now().Unix(),
 		}
 		err := repo.AddLeaderCommit(commit)
 		assert.NoError(t, err)
@@ -381,4 +382,50 @@ func TestLeaderCommitRepository_UpdateRandomNumberGenerated(t *testing.T) {
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Delete()
+}
+
+// Test error handling for GetLeaderCommitsByRoundAndTrialNum when database fails
+func TestLeaderCommitRepository_GetByRoundAndTrialNum_ErrorHandling(t *testing.T) {
+	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewLeaderCommitRepository(GetDB())
+
+	// Drop the table to force an error
+	_, err := GetDB().Exec("DROP TABLE IF EXISTS leader_commit_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to get commits - should get an error because table doesn't exist
+	_, err = repo.GetLeaderCommitsByRoundAndTrialNum("test_round", "test_trial")
+	assert.Error(t, err, "Expected error when table is missing")
+
+	// Restore the schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+}
+
+// Test error handling for GetRoundsToProcess when database fails
+func TestLeaderCommitRepository_GetRoundsToProcess_ErrorHandling(t *testing.T) {
+	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewLeaderCommitRepository(GetDB())
+
+	// Drop the table to force an error
+	_, err := GetDB().Exec("DROP TABLE IF EXISTS leader_commit_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to get rounds to process - should get an error because table doesn't exist
+	_, err = repo.GetRoundsToProcess()
+	assert.Error(t, err, "Expected error when table is missing")
+
+	// Restore the schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
 }

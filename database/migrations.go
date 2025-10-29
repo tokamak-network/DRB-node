@@ -14,7 +14,12 @@ func init() {
 	migrations = &migrate.PackrMigrationSource{
 		Box: packr.New("drb-db-migrations", "./migrations"),
 	}
-	ms, err := migrations.FindMigrations()
+	validateMigrations(migrations)
+}
+
+// validateMigrations checks if migrations are valid and panics if not
+func validateMigrations(migrationSource *migrate.PackrMigrationSource) {
+	ms, err := migrationSource.FindMigrations()
 	if err != nil {
 		panic(err)
 	}
@@ -22,6 +27,7 @@ func init() {
 		panic(fmt.Errorf("no SQL migrations found"))
 	}
 }
+
 
 func MigrationsUp(db *sql.DB) error {
 	n, err := migrate.Exec(db, "postgres", migrations, migrate.Up)
