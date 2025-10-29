@@ -2,6 +2,7 @@ package commitreveal2
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -77,8 +78,8 @@ func (s *RevealOrderService) determineOrder(rv [32]byte, cvsValues [][]byte) []i
 	return order
 }
 
-func (s *RevealOrderService) DetermineRevealOrder(roundNum string, trialNum string, activatedOps []common.Address) (bool, error) {
-	_, err := s.revealOrderRepository.GetRevealOrder(roundNum, trialNum)
+func (s *RevealOrderService) DetermineRevealOrder(ctx context.Context, roundNum string, trialNum string, activatedOps []common.Address) (bool, error) {
+	_, err := s.revealOrderRepository.GetRevealOrder(ctx, roundNum, trialNum)
 	if err == nil {
 		log.Printf("Reveal order already exists for round %s with trail %s. Skipping calculation.", roundNum, trialNum)
 		return true, nil
@@ -97,7 +98,7 @@ func (s *RevealOrderService) DetermineRevealOrder(roundNum string, trialNum stri
 	for _, eoaAddress := range activatedOps {
 		eoaAddressStr := eoaAddress.Hex()
 
-		commitData, err := s.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(roundNum, trialNum, eoaAddressStr)
+		commitData, err := s.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, roundNum, trialNum, eoaAddressStr)
 		if err != nil {
 			log.Printf("Failed to load leader commit for operator %s in round %s with trail %s: %v", eoaAddressStr, roundNum, trialNum, err)
 			return false, fmt.Errorf("failed to load leader commit for operator %s in round %s with trail %s", eoaAddressStr, roundNum, trialNum)
@@ -132,7 +133,7 @@ func (s *RevealOrderService) DetermineRevealOrder(roundNum string, trialNum stri
 		RV:           hex.EncodeToString(rv[:]),
 	}
 
-	err = s.revealOrderRepository.AddRevealOrder(&revealOrderData)
+	err = s.revealOrderRepository.AddRevealOrder(ctx, &revealOrderData)
 	if err != nil {
 		log.Printf("Failed to save reveal order for round %s with trail %s: %v", roundNum, trialNum, err)
 		return false, fmt.Errorf("failed to save reveal order for round %s with trail %s", roundNum, trialNum)
@@ -142,8 +143,8 @@ func (s *RevealOrderService) DetermineRevealOrder(roundNum string, trialNum stri
 	return true, nil
 }
 
-func (s *RevealOrderService) DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOps []common.Address) (bool, error) {
-	_, err := s.revealOrderRepository.GetRevealOrder(roundNum, trialNum)
+func (s *RevealOrderService) DetermineRegularRevealOrder(ctx context.Context, roundNum string, trialNum string, activatedOps []common.Address) (bool, error) {
+	_, err := s.revealOrderRepository.GetRevealOrder(ctx, roundNum, trialNum)
 	if err == nil {
 		log.Printf("Reveal order already exists for round %s with trial %s. Skipping calculation.", roundNum, trialNum)
 		return true, nil
@@ -162,7 +163,7 @@ func (s *RevealOrderService) DetermineRegularRevealOrder(roundNum string, trialN
 	for _, eoaAddress := range activatedOps {
 		eoaAddressStr := eoaAddress.Hex()
 
-		commitData, err := s.peerCommitRepository.GetPeerCommitData(roundNum, trialNum, eoaAddressStr)
+		commitData, err := s.peerCommitRepository.GetPeerCommitData(ctx, roundNum, trialNum, eoaAddressStr)
 		if err != nil {
 			log.Printf("Failed to load leader commit for operator %s in round %s: %v", eoaAddressStr, roundNum, err)
 			return false, fmt.Errorf("failed to load leader commit for operator %s", eoaAddressStr)
@@ -197,7 +198,7 @@ func (s *RevealOrderService) DetermineRegularRevealOrder(roundNum string, trialN
 		RV:           hex.EncodeToString(rv[:]),
 	}
 
-	err = s.revealOrderRepository.AddRevealOrder(&revealOrderData)
+	err = s.revealOrderRepository.AddRevealOrder(ctx, &revealOrderData)
 	if err != nil {
 		log.Printf("Failed to save reveal order for round %s: %v", roundNum, err)
 		return false, fmt.Errorf("failed to save reveal order for round %s", roundNum)

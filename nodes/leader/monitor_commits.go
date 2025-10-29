@@ -19,9 +19,9 @@ import (
 // Global variables with mutex protection for thread safety
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
-func (n *LeaderNode) MonitorCommits() {
+func (n *LeaderNode) MonitorCommits(ctx context.Context) {
 	for {
-		n.checkRoundsForCompletion()
+		n.checkRoundsForCompletion(ctx)
 		time.Sleep(10 * time.Second)
 	}
 }
@@ -34,7 +34,7 @@ type RevealOrderData struct {
 
 type RevealOrders map[string]RevealOrderData
 
-func (n *LeaderNode) checkRoundsForCompletion() {
+func (n *LeaderNode) checkRoundsForCompletion(ctx context.Context) {
 	round := n.GetCurrentRound()
 	trialNum := n.GetCurrentTrial()
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
@@ -44,7 +44,7 @@ func (n *LeaderNode) checkRoundsForCompletion() {
 	}
 
 	// Defensive check: skip if all random_number_generated are already true for this round
-	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
+	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(ctx, round, trialNum)
 	if err == nil && len(leaderCommits) > 0 {
 		allRandomNumberGenerated := true
 		for _, lc := range leaderCommits {
@@ -71,7 +71,7 @@ func (n *LeaderNode) checkRoundsForCompletion() {
 	var index int
 	allEOAsSubmitted := true
 	for i, operator := range operatorAddresses {
-		commitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(round, trialNum, operator.Hex())
+		commitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, round, trialNum, operator.Hex())
 		if err != nil {
 			log.Printf("Either Data not found or Error getting commit data for operator %s: %v", operator.Hex(), err)
 			return
@@ -124,15 +124,15 @@ func (n *LeaderNode) checkRoundsForCompletion() {
 		if !secretsOnChainValue {
 			cvOnChain, _ := n.GetCvOnChain(uniqueKey)
 			if !cvOnChain {
-				err = n.generateRandomNumberTransaction(round, trialNum, secrets, vs, rs, ss)
+				err = n.generateRandomNumberTransaction(ctx, round, trialNum, secrets, vs, rs, ss)
 			} else {
-				err = n.generateRandomNumberTransactionSomeCvOnChain(round, trialNum, secrets, vs, rs, ss)
+				err = n.generateRandomNumberTransactionSomeCvOnChain(ctx, round, trialNum, secrets, vs, rs, ss)
 			}
 		}
 		if err != nil {
 			log.Printf("Failed to execute random number generation transaction for round %s with trail %s: %v", round, trialNum, err)
 		} else {
-			err = n.completeRound(round, trialNum)
+			err = n.completeRound(ctx, round, trialNum)
 			if err != nil {
 				log.Printf("Failed to mark round %s as completed: %v", round, err)
 			}
@@ -141,9 +141,9 @@ func (n *LeaderNode) checkRoundsForCompletion() {
 }
 
 // Fetch activated operators for a specific round
-func (n *LeaderNode) FetchActivatedOperators(fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string) ([]string, error) {
+func (n *LeaderNode) FetchActivatedOperators(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string) ([]string, error) {
 	var result []string
-	activatedOperators, err := eth.GetActivatedOperators(fallbackEthClient)
+	activatedOperators, err := eth.GetActivatedOperators(ctx, fallbackEthClient)
 	if err != nil {
 		log.Printf("Error fetching the activated operators %v", err)
 		return result, err
@@ -155,9 +155,9 @@ func (n *LeaderNode) FetchActivatedOperators(fallbackEthClient *fallback_ethclie
 	return strAddresses, nil
 }
 
-func (n *LeaderNode) LoadNodeData(round string, trialNum string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash) {
+func (n *LeaderNode) LoadNodeData(ctx context.Context, round string, trialNum string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash) {
 
-	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
+	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(ctx, round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load leader commits: %v", err)
 	}
@@ -243,7 +243,7 @@ func sortLeaderCommitsByActivatedOperators(leaderCommits []*utils.LeaderCommitDa
 }
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
-func (n *LeaderNode) generateRandomNumberTransaction(round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
+func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumber...")
 
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
@@ -295,7 +295,7 @@ func (n *LeaderNode) generateRandomNumberTransaction(round string, trialNum stri
 		})
 	}
 
-	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
+	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(ctx, round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return err
@@ -306,7 +306,7 @@ func (n *LeaderNode) generateRandomNumberTransaction(round string, trialNum stri
 	packedVs := packVsValues(vs)
 
 	tx, _, err := eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		n.fallbackEthClient,
 		"generateRandomNumber",
@@ -323,7 +323,7 @@ func (n *LeaderNode) generateRandomNumberTransaction(round string, trialNum stri
 	return nil
 }
 
-func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
+func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(ctx context.Context, round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumberTransactionSomeCvOnChain...")
 
 	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
@@ -369,7 +369,7 @@ func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(round string, 
 		allSecrets = append(allSecrets, secret)
 	}
 
-	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(round, trialNum)
+	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(ctx, round, trialNum)
 	if err != nil {
 		log.Printf("Failed to load reveal order: %v", err)
 		return err
@@ -379,7 +379,7 @@ func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(round string, 
 	packedRevealOrder := packRevealOrder(order)
 	packedVs := packVsValues(vsArray)
 	tx, _, err := eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		n.fallbackEthClient,
 		"generateRandomNumberWhenSomeCvsAreOnChain",
@@ -418,8 +418,8 @@ func packVsValues(vs []uint8) *big.Int {
 }
 
 // completeRound updates to mark a round as completed and deletes old round data
-func (n *LeaderNode) completeRound(round string, trialNum string) error {
-	err := n.leaderCommitRepository.UpdateLeaderCommitRandomNumberGenerated(round, trialNum)
+func (n *LeaderNode) completeRound(ctx context.Context, round string, trialNum string) error {
+	err := n.leaderCommitRepository.UpdateLeaderCommitRandomNumberGenerated(ctx, round, trialNum)
 	if err != nil {
 		return err
 	}

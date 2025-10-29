@@ -26,8 +26,8 @@ func (n *RegularNode) generateAcknowledgmentSignature(eoaAddress string) []byte 
 }
 
 // sendAcknowledgment sends an acknowledgment back to the leader
-func (n *RegularNode) sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack utils.AcknowledgmentMessage) {
-	stream, err := h.NewStream(context.Background(), leaderPeerID, protocol.ID("/acknowledgment"))
+func (n *RegularNode) sendAcknowledgment(ctx context.Context, h host.Host, leaderPeerID peer.ID, ack utils.AcknowledgmentMessage) {
+	stream, err := h.NewStream(ctx, leaderPeerID, protocol.ID("/acknowledgment"))
 	if err != nil {
 		log.Printf("Failed to create acknowledgment stream: %v", err)
 		return
@@ -42,7 +42,7 @@ func (n *RegularNode) sendAcknowledgment(h host.Host, leaderPeerID peer.ID, ack 
 }
 
 // HandleCvs processes incoming CVS values and sends acknowledgment
-func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleCvs(ctx context.Context, h host.Host, s network.Stream) {
 	defer s.Close()
 
 	if n.GetHalted() {
@@ -77,7 +77,7 @@ func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 	log.Printf("Received CVS broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
-	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(ctx, message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
@@ -87,7 +87,7 @@ func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 				EOAAddress: message.EOAAddress,
 				Cvs:        message.Data[:],
 			}
-			if err = n.peerCommitDataRepository.AddPeerCommitData(peerCommitData); err != nil {
+			if err = n.peerCommitDataRepository.AddPeerCommitData(ctx, peerCommitData); err != nil {
 				log.Printf("Failed to add new peer commit data: %v", err)
 				return
 			}
@@ -99,7 +99,7 @@ func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 		// Existing record found, update fields
 		peerCommitData.Cvs = message.Data[:]
 
-		if err = n.peerCommitDataRepository.UpdatePeerCommitData(peerCommitData); err != nil {
+		if err = n.peerCommitDataRepository.UpdatePeerCommitData(ctx, peerCommitData); err != nil {
 			log.Printf("Failed to update peer commit data: %v", err)
 			return
 		}
@@ -134,11 +134,11 @@ func (n *RegularNode) HandleCvs(h host.Host, s network.Stream) {
 		return
 	}
 
-	n.sendAcknowledgment(h, leaderPeerID, ack)
+	n.sendAcknowledgment(ctx, h, leaderPeerID, ack)
 }
 
 // HandleCos processes incoming COS values and sends acknowledgment
-func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleCos(ctx context.Context, h host.Host, s network.Stream) {
 	defer s.Close()
 
 	if n.GetHalted() {
@@ -177,7 +177,7 @@ func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 	uniqueKey := utils.GetUniqueKey(message.Round, message.TrialNum)
 	n.SetCosReceived(uniqueKey, message.EOAAddress, true)
 
-	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(ctx, message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
@@ -187,7 +187,7 @@ func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 				EOAAddress: message.EOAAddress,
 				Cos:        message.Data[:],
 			}
-			if err = n.peerCommitDataRepository.AddPeerCommitData(peerCommitData); err != nil {
+			if err = n.peerCommitDataRepository.AddPeerCommitData(ctx, peerCommitData); err != nil {
 				log.Printf("Failed to add new peer commit data: %v", err)
 				return
 			}
@@ -199,7 +199,7 @@ func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 		// Existing record found, update fields
 		peerCommitData.Cos = message.Data[:]
 
-		if err = n.peerCommitDataRepository.UpdatePeerCommitData(peerCommitData); err != nil {
+		if err = n.peerCommitDataRepository.UpdatePeerCommitData(ctx, peerCommitData); err != nil {
 			log.Printf("Failed to update peer commit data: %v", err)
 			return
 		}
@@ -234,11 +234,11 @@ func (n *RegularNode) HandleCos(h host.Host, s network.Stream) {
 		return
 	}
 
-	n.sendAcknowledgment(h, leaderPeerID, ack)
+	n.sendAcknowledgment(ctx, h, leaderPeerID, ack)
 }
 
 // HandleSecret processes incoming secret values and sends acknowledgment
-func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleSecret(ctx context.Context, h host.Host, s network.Stream) {
 	defer s.Close()
 
 	if n.GetHalted() {
@@ -273,7 +273,7 @@ func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 	log.Printf("Received secret broadcast for round %s with trail %s from EOA %s (message ID: %s)",
 		message.Round, message.TrialNum, message.EOAAddress, message.MessageID)
 
-	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(message.Round, message.TrialNum, message.EOAAddress)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(ctx, message.Round, message.TrialNum, message.EOAAddress)
 	if err != nil {
 		if err == pg.ErrNoRows {
 			// No existing record, create new and insert
@@ -283,7 +283,7 @@ func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 				EOAAddress:  message.EOAAddress,
 				SecretValue: message.Data[:],
 			}
-			if err = n.peerCommitDataRepository.AddPeerCommitData(peerCommitData); err != nil {
+			if err = n.peerCommitDataRepository.AddPeerCommitData(ctx, peerCommitData); err != nil {
 				log.Printf("Failed to add new peer commit data: %v", err)
 				return
 			}
@@ -295,7 +295,7 @@ func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 		// Existing record found, update fields
 		peerCommitData.SecretValue = message.Data[:]
 
-		if err = n.peerCommitDataRepository.UpdatePeerCommitData(peerCommitData); err != nil {
+		if err = n.peerCommitDataRepository.UpdatePeerCommitData(ctx, peerCommitData); err != nil {
 			log.Printf("Failed to update peer commit data: %v", err)
 			return
 		}
@@ -330,7 +330,7 @@ func (n *RegularNode) HandleSecret(h host.Host, s network.Stream) {
 		return
 	}
 
-	n.sendAcknowledgment(h, leaderPeerID, ack)
+	n.sendAcknowledgment(ctx, h, leaderPeerID, ack)
 }
 
 func (n *RegularNode) SetCosReceived(outer, inner string, value bool) {

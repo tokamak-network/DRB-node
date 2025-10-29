@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"log"
 
 	"github.com/go-pg/pg/v10"
@@ -15,26 +16,26 @@ func NewRegularCommitRepository(db *pg.DB) *RegularCommitRepository {
 	return &RegularCommitRepository{db: db}
 }
 
-func (r *RegularCommitRepository) AddCommit(commit *utils.CommitData) error {
+func (r *RegularCommitRepository) AddCommit(ctx context.Context, commit *utils.CommitData) error {
 	model := mapCommitDataToScheme(commit)
-	_, err := r.db.Model(&model).Insert()
+	_, err := r.db.Model(&model).Insert(ctx)
 	return err
 }
 
-func (r *RegularCommitRepository) UpdateCommit(commit *utils.CommitData) error {
+func (r *RegularCommitRepository) UpdateCommit(ctx context.Context, commit *utils.CommitData) error {
 	model := mapCommitDataToScheme(commit)
 	_, err := r.db.Model(&model).
 		Where("round = ? AND trial_num = ?", model.Round, model.TrialNum).
-		Update()
+		Update(ctx)
 	return err
 }
 
-func (r *RegularCommitRepository) GetCommitByRound(round, trialNum string) (*utils.CommitData, error) {
+func (r *RegularCommitRepository) GetCommitByRound(ctx context.Context, round, trialNum string) (*utils.CommitData, error) {
 	var model CommitDataScheme
 	err := r.db.Model(&model).
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Limit(1).
-		Select()
+		Select(ctx)
 	if err != nil {
 		log.Printf("Failed to get commit info: %v", err)
 		return nil, err

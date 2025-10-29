@@ -64,9 +64,7 @@ func NewRegularNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClie
 }
 
 // RunRegularNode handles the behavior for a regular node
-func (rh *RegularNodeHandler) Run() {
-	ctx := context.Background()
-
+func (rh *RegularNodeHandler) Run(ctx context.Context) {
 	port := os.Getenv("PORT")
 	if port == "" {
 		log.Fatal("PORT not set in environment variables.")
@@ -82,24 +80,24 @@ func (rh *RegularNodeHandler) Run() {
 		log.Fatalf("Error creating host: %v", err)
 	}
 
-	rh.regularNode.SetHost(h) 
-	
+	rh.regularNode.SetHost(h)
+
 	defer h.Close()
 
 	h.SetStreamHandler("/sendSecretValue", func(s network.Stream) {
-		rh.regularNode.HandleSecretValueRequest(h, s)
+		rh.regularNode.HandleSecretValueRequest(ctx, h, s)
 	})
 	h.SetStreamHandler("/cvsBroadcast", func(s network.Stream) {
-		rh.regularNode.HandleCvs(h, s)
+		rh.regularNode.HandleCvs(ctx, h, s)
 	})
 	h.SetStreamHandler("/cosBroadcast", func(s network.Stream) {
-		rh.regularNode.HandleCos(h, s)
+		rh.regularNode.HandleCos(ctx, h, s)
 	})
 	h.SetStreamHandler("/secretBroadcast", func(s network.Stream) {
-		rh.regularNode.HandleSecret(h, s)
+		rh.regularNode.HandleSecret(ctx, h, s)
 	})
 
-	go rh.regularNode.MonitorCommitRequest()
+	go rh.regularNode.MonitorCommitRequest(ctx)
 
 	// Get leader's multiaddress
 	leaderIP := os.Getenv("LEADER_IP")
@@ -144,12 +142,12 @@ func (rh *RegularNodeHandler) Run() {
 		EOAAddress: eoaAddress,
 	}
 
-	if err := rh.regularNode.AddNodeInfo(&nodeInfo); err != nil {
+	if err := rh.regularNode.AddNodeInfo(ctx, &nodeInfo); err != nil {
 		log.Printf("Failed to save node info: %v", err)
 	}
 
 	// Connect to the leader
-	leaderInfo, err := rh.regularNode.ConnectToLeader(leaderIP, leaderPort, leaderPeerID)
+	leaderInfo, err := rh.regularNode.ConnectToLeader(ctx, leaderIP, leaderPort, leaderPeerID)
 	if err != nil {
 		log.Fatalf("Error connecting to leader: %v", err)
 	}
@@ -172,7 +170,7 @@ func (rh *RegularNodeHandler) Run() {
 	}
 	for {
 		// Check activation status
-		IsNetworkError, isActivated := rh.checkActivationStatus(clientUtils, eoaAddress)
+		IsNetworkError, isActivated := rh.checkActivationStatus(ctx, clientUtils, eoaAddress)
 		if IsNetworkError {
 			log.Println("Network error. Skipping activation check.")
 			time.Sleep(30 * time.Second)
@@ -187,7 +185,7 @@ func (rh *RegularNodeHandler) Run() {
 			// Check and ensure deposit is sufficient (only if not already called this run)
 			// This ensures deposit is called only once per program run
 			if !depositCalledInThisRun {
-				depositSufficient, err := rh.checkDepositAmount(clientUtils, eoaAddress)
+				depositSufficient, err := rh.checkDepositAmount(ctx, clientUtils, eoaAddress)
 				if err != nil {
 					log.Printf("Error checking deposit amount: %v", err)
 					time.Sleep(30 * time.Second)
@@ -214,7 +212,7 @@ func (rh *RegularNodeHandler) Run() {
 
 			// Call activate only if not already called this run
 			if !activateCalledInThisRun {
-				err = rh.activateOnChain(abiFilePath)
+				err = rh.activateOnChain(ctx, abiFilePath)
 				if err != nil {
 					log.Printf("failed to activate EOA %s on-chain: %v", eoaAddress, err)
 					time.Sleep(30 * time.Second)
@@ -239,7 +237,7 @@ func (rh *RegularNodeHandler) Run() {
 		// Check and start leader monitoring
 		round := rh.regularNode.GetCurrentRound()
 		trialNum := rh.regularNode.GetCurrentTrialNum()
-		rh.regularNode.CheckAndStartMonitoring(round, trialNum)
+		rh.regularNode.CheckAndStartMonitoring(ctx, round, trialNum)
 
 		uniqueKey := utils.GetUniqueKey(round, trialNum)
 		if rh.regularNode.GetHalted() {
@@ -265,7 +263,7 @@ func (rh *RegularNodeHandler) Run() {
 		if isEOAActivated(eoaAddress) {
 
 			// Check if this round has already been committed (store it locally)
-			commitData, err := rh.regularNode.GetCommitByRound(round, trialNum)
+			commitData, err := rh.regularNode.GetCommitByRound(ctx, round, trialNum)
 			if err != nil && err.Error() != "pg: no rows in result set" {
 				log.Printf("Error loading commit data: %v", err)
 				continue
@@ -300,7 +298,7 @@ func (rh *RegularNodeHandler) Run() {
 				}
 
 				// Save commit data locally to prevent resending
-				err = rh.regularNode.AddCommit(&commitData)
+				err = rh.regularNode.AddCommit(ctx, &commitData)
 				if err != nil {
 					log.Printf("Error saving commit data: %v", err)
 					continue
@@ -359,7 +357,7 @@ func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, 
 
 		// Update SendCosToLeader flag to true after successful send
 		commitData.SendCosToLeader = true
-		if err := rh.regularNode.UpdateCommit(&commitData); err != nil {
+		if err := rh.regularNode.UpdateCommit(ctx, &commitData); err != nil {
 			log.Printf("Failed to update SendCosToLeader flag: %v", err)
 		}
 	}
@@ -378,8 +376,8 @@ func isEOAActivated(eoaAddress string) bool {
 	return false
 }
 
-func (rh *RegularNodeHandler) checkActivationStatus(client *utils.Client, eoaAddress string) (bool, bool) {
-	activatedOperatorsResult, err := eth.CallSmartContract(rh.fallbackEthClient, client.ContractABI, "getActivatedOperators", client.ContractAddress)
+func (rh *RegularNodeHandler) checkActivationStatus(ctx context.Context, client *utils.Client, eoaAddress string) (bool, bool) {
+	activatedOperatorsResult, err := eth.CallSmartContract(ctx, rh.fallbackEthClient, client.ContractABI, "getActivatedOperators", client.ContractAddress)
 	if err != nil {
 		log.Printf("Failed to call getActivatedOperators: %v", err)
 		// Return true for network error flag, false for activation status
@@ -433,14 +431,14 @@ func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string, pr
 	}
 
 	// Fetch deposit amount
-	depositAmountResult, err := eth.CallSmartContract(rh.fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.CallSmartContract(ctx, rh.fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := eth.CallSmartContract(rh.fallbackEthClient, parsedABI, "s_activationThreshold", contractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(ctx, rh.fallbackEthClient, parsedABI, "s_activationThreshold", contractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -485,16 +483,16 @@ func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string, pr
 	return false, nil
 }
 
-func (rh *RegularNodeHandler) checkDepositAmount(client *utils.Client, eoaAddress string) (bool, error) {
+func (rh *RegularNodeHandler) checkDepositAmount(ctx context.Context, client *utils.Client, eoaAddress string) (bool, error) {
 	// Fetch deposit amount
-	depositAmountResult, err := eth.CallSmartContract(rh.fallbackEthClient, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.CallSmartContract(ctx, rh.fallbackEthClient, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := eth.CallSmartContract(rh.fallbackEthClient, client.ContractABI, "s_activationThreshold", client.ContractAddress)
+	activationThresholdResult, err := eth.CallSmartContract(ctx, rh.fallbackEthClient, client.ContractABI, "s_activationThreshold", client.ContractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -558,7 +556,7 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 
 	// Save commit data locally with v, r, s
 	commitData.Sign = req.Sign
-	if err := rh.regularNode.UpdateCommit(&commitData); err != nil {
+	if err := rh.regularNode.UpdateCommit(ctx, &commitData); err != nil {
 		log.Printf("Failed to save commit data locally: %v", err)
 		return
 	}
@@ -579,13 +577,13 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 
 		// Update SendToLeader flag to true after successful send
 		commitData.SendToLeader = true
-		if err := rh.regularNode.UpdateCommit(&commitData); err != nil {
+		if err := rh.regularNode.UpdateCommit(ctx, &commitData); err != nil {
 			log.Printf("Failed to update SendToLeader flag: %v", err)
 		}
 	}
 }
 
-func (rh *RegularNodeHandler) activateOnChain(abiFilePath string) error {
+func (rh *RegularNodeHandler) activateOnChain(ctx context.Context, abiFilePath string) error {
 	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
@@ -613,7 +611,7 @@ func (rh *RegularNodeHandler) activateOnChain(abiFilePath string) error {
 	}
 
 	_, _, err = eth.ExecuteTransaction(
-		context.Background(),
+		ctx,
 		clientUtils,
 		rh.fallbackEthClient,
 		"activate",

@@ -15,9 +15,9 @@ import (
 )
 
 // checkPreviousSecretReceived checks if the previous node's secret was received via broadcast
-func (n *RegularNode) checkPreviousSecretReceived(round, trialNum, previousNodeEOA string) bool {
+func (n *RegularNode) checkPreviousSecretReceived(ctx context.Context, round, trialNum, previousNodeEOA string) bool {
 	// Check if we have the peer commit data (from broadcast) for the previous node
-	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(round, trialNum, previousNodeEOA)
+	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(ctx, round, trialNum, previousNodeEOA)
 	if err != nil {
 		log.Printf("Failed to get peer commit data for previous node %s: %v", previousNodeEOA, err)
 		return false
@@ -48,7 +48,7 @@ func (n *RegularNode) checkPreviousSecretReceived(round, trialNum, previousNodeE
 }
 
 // HandleSecretValueRequest processes secret value requests from the leader node
-func (n *RegularNode) HandleSecretValueRequest(h host.Host, s network.Stream) {
+func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host, s network.Stream) {
 	defer s.Close()
 
 	if n.GetHalted() {
@@ -63,7 +63,7 @@ func (n *RegularNode) HandleSecretValueRequest(h host.Host, s network.Stream) {
 	}
 	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)
 	for {
-		roundData, err := n.revealOrderRepository.GetRevealOrder(req.Round, req.TrialNum)
+		roundData, err := n.revealOrderRepository.GetRevealOrder(ctx, req.Round, req.TrialNum)
 		if err != nil {
 			log.Printf("Failed to load reveal order with trail %s for round %s: %v", req.TrialNum, req.Round, err)
 		} else if roundData != nil {
@@ -86,7 +86,7 @@ func (n *RegularNode) HandleSecretValueRequest(h host.Host, s network.Stream) {
 		log.Printf("🔍 Checking if previous node's secret was received from EOA %s", previousNodeEOA)
 
 		// Check if we received the previous node's secret via broadcast
-		hasPreviousSecret := n.checkPreviousSecretReceived(req.Round, req.TrialNum, previousNodeEOA)
+		hasPreviousSecret := n.checkPreviousSecretReceived(ctx, req.Round, req.TrialNum, previousNodeEOA)
 		if !hasPreviousSecret {
 			log.Printf("❌ Previous node's secret from %s not yet received. Cannot send secret yet.", previousNodeEOA)
 			return
@@ -119,7 +119,7 @@ func (n *RegularNode) HandleSecretValueRequest(h host.Host, s network.Stream) {
 	log.Printf("Verified secret value request for round %s with trail %s from leader %s", req.Round, req.TrialNum, req.LeaderEoaAddress)
 
 	// Fetch the secret value for the specified round
-	commitData, err := n.regularCommitRepository.GetCommitByRound(req.Round, req.TrialNum)
+	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, req.Round, req.TrialNum)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s with trail %s: %v", req.Round, req.TrialNum, err)
 		return
@@ -142,13 +142,13 @@ func (n *RegularNode) HandleSecretValueRequest(h host.Host, s network.Stream) {
 		return
 	}
 
-	n.SendSecretValue(h, leaderPeerID, req.Round, req.TrialNum)
+	n.SendSecretValue(ctx, h, leaderPeerID, req.Round, req.TrialNum)
 }
 
 // SendSecretValue sends the secret value for a round to the leader node
-func (n *RegularNode) SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNum string, trialNum string) {
+func (n *RegularNode) SendSecretValue(ctx context.Context, h host.Host, leaderPeerID peer.ID, roundNum string, trialNum string) {
 	// Load the commit data for the specified round
-	commitData, err := n.regularCommitRepository.GetCommitByRound(roundNum, trialNum)
+	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, roundNum, trialNum)
 	if err != nil {
 		log.Printf("Failed to load commit data for round %s with trial %s: %v", roundNum, trialNum, err)
 		return
@@ -180,7 +180,7 @@ func (n *RegularNode) SendSecretValue(h host.Host, leaderPeerID peer.ID, roundNu
 	}
 
 	// Open a stream to the leader node
-	stream, err := h.NewStream(context.Background(), leaderPeerID, "/secretValue")
+	stream, err := h.NewStream(ctx, leaderPeerID, "/secretValue")
 	if err != nil {
 		log.Printf("Failed to create stream to leader node: %v", err)
 		return

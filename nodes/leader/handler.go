@@ -2,6 +2,7 @@ package leader_node
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"log"
@@ -74,7 +75,7 @@ func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 	}
 }
 
-func (lh *LeaderNodeHandler) Run() {
+func (lh *LeaderNodeHandler) Run(ctx context.Context) {
 	port := os.Getenv("LEADER_PORT")
 	if port == "" {
 		log.Fatal("LEADER_PORT is not set in environment variables.")
@@ -95,26 +96,30 @@ func (lh *LeaderNodeHandler) Run() {
 
 	defer h.Close()
 	lh.leaderNode.SetHost(h)
-	h.SetStreamHandler("/register", lh.handleRegistrationRequest)
-	h.SetStreamHandler("/cvs", lh.handleCommitRequest)
+	h.SetStreamHandler("/register", func(s network.Stream) {
+		lh.handleRegistrationRequest(ctx, s)
+	})
+	h.SetStreamHandler("/cvs", func(s network.Stream) {
+		lh.handleCommitRequest(ctx, s)
+	})
 	h.SetStreamHandler("/cos", func(s network.Stream) {
-		lh.handleCOSRequest(h, s)
+		lh.handleCOSRequest(ctx, h, s)
 	})
 	h.SetStreamHandler("/secretValue", func(s network.Stream) {
-		lh.leaderNode.AcceptSecretValue(h, s, lh.fallbackEthClient)
+		lh.leaderNode.AcceptSecretValue(ctx, h, s, lh.fallbackEthClient)
 	})
 	h.SetStreamHandler("/acknowledgment", func(s network.Stream) {
-		lh.handleAcknowledgment(s)
+		lh.handleAcknowledgment(ctx, s)
 	})
 
 	log.Printf("Leader node running on: %s", h.Addrs())
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
-	eth.UpdateActivatedOperators(lh.fallbackEthClient)
-	lh.leaderNode.UpdateCurrentRoundAndTrial()
-	go lh.leaderNode.CheckHaltedState()
-	go lh.leaderNode.MonitorCommits()
-	go lh.leaderNode.ReceiveCommit()
+	eth.UpdateActivatedOperators(ctx, lh.fallbackEthClient)
+	lh.leaderNode.UpdateCurrentRoundAndTrial(ctx)
+	go lh.leaderNode.CheckHaltedState(ctx)
+	go lh.leaderNode.MonitorCommits(ctx)
+	go lh.leaderNode.ReceiveCommit(ctx)
 	// leaderNode_helper.StartBroadcastCleanup()
 	// leaderNode_helper.StartLeaderCommitCleanup()
 	for {
@@ -128,17 +133,17 @@ func (lh *LeaderNodeHandler) Run() {
 	}
 }
 
-func (lh *LeaderNodeHandler) handleRegistrationRequest(s network.Stream) {
+func (lh *LeaderNodeHandler) handleRegistrationRequest(ctx context.Context, s network.Stream) {
 	defer s.Close()
 
-	if err := lh.leaderNode.RegisterNode(s, "contract/abi/Commit2RevealDRB.json"); err != nil {
+	if err := lh.leaderNode.RegisterNode(ctx, s, "contract/abi/Commit2RevealDRB.json"); err != nil {
 		log.Printf("Failed to handle registration request: %v", err)
 		return
 	}
 	log.Println("Node registration completed.")
 }
 
-func (lh *LeaderNodeHandler) handleCommitRequest(s network.Stream) {
+func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.Stream) {
 	defer s.Close()
 	if lh.leaderNode.GetHalted() {
 		log.Println("System is halted. Skipping handleCommitRequest.")
@@ -158,7 +163,7 @@ func (lh *LeaderNodeHandler) handleCommitRequest(s network.Stream) {
 		Signature:  req.Signature,
 	}
 
-	if !lh.VerifySignatureAndCheckActivation(commitVerificationRequest, "commit") {
+	if !lh.VerifySignatureAndCheckActivation(ctx, commitVerificationRequest, "commit") {
 		return
 	}
 
@@ -180,23 +185,23 @@ func (lh *LeaderNodeHandler) handleCommitRequest(s network.Stream) {
 	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
 
 	// Update database for commit data from regular node
-	if err := lh.leaderNode.AddLeaderCommit(commitData); err != nil {
+	if err := lh.leaderNode.AddLeaderCommit(ctx, commitData); err != nil {
 		log.Printf("Error saving commit data for round %s EOA %s: %v", round, commitData.EOAAddress, err)
 		return
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	activatedOps := eth.GetActivatedOperatorsCached()
-	lh.leaderNode.ReliableBroadCastCVS(round, req.TrialNum, eoaAddress, commitData.Cvs, activatedOps)
+	lh.leaderNode.ReliableBroadCastCVS(ctx, round, req.TrialNum, eoaAddress, commitData.Cvs, activatedOps)
 	// Check if all commits are ready after this update
 	if !lh.GetMerkleRootSubmitted() && lh.allCommitsReceivedUnlocked(uniqueKey) {
 		log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", round, req.TrialNum)
 		lh.commitMu.Unlock() // Unlock before calling GenerateMerkleRoot
-		lh.leaderNode.GenerateMerkleRoot(round, req.TrialNum)
+		lh.leaderNode.GenerateMerkleRoot(ctx, round, req.TrialNum)
 		lh.commitMu.Lock() // Re-lock if needed
 	}
 }
 
-func (lh *LeaderNodeHandler) handleCOSRequest(h host.Host, s network.Stream) {
+func (lh *LeaderNodeHandler) handleCOSRequest(ctx context.Context, h host.Host, s network.Stream) {
 	defer s.Close()
 	if lh.leaderNode.GetHalted() {
 		log.Println("System is halted. Skipping handleCOSRequest.")
@@ -268,7 +273,7 @@ func (lh *LeaderNodeHandler) handleCOSRequest(h host.Host, s network.Stream) {
 	log.Printf("COS data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, eoaAddress.Hex())
 
 	// Update database for leaderCommit's COS
-	leaderCommitDBData, err := lh.leaderNode.GetLeaderCommitByRoundAndEoaAddr(round, trial, eoaAddress.Hex())
+	leaderCommitDBData, err := lh.leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, round, trial, eoaAddress.Hex())
 	if err != nil {
 		log.Printf("Error loading leaderCommit data from database for round: %s, trail: %s, and eoaAddress: %s, error: %v", round, trial, eoaAddress.Hex(), err)
 		return
@@ -277,27 +282,27 @@ func (lh *LeaderNodeHandler) handleCOSRequest(h host.Host, s network.Stream) {
 	leaderCommitDBData.Cos = req.Cos
 	leaderCommitDBData.CosHex = hex.EncodeToString(req.Cos[:])
 
-	if err := lh.leaderNode.UpdateLeaderCommit(leaderCommitDBData); err != nil {
+	if err := lh.leaderNode.UpdateLeaderCommit(ctx, leaderCommitDBData); err != nil {
 		log.Printf("Error saving COS data for round %s with trail %s EOA %s: %v", round, trial, eoaAddress.Hex(), err)
 		return
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	activatedOps := eth.GetActivatedOperatorsCached()
-	lh.leaderNode.ReliableBroadCastCOS(round, trial, eoaAddress, commitData.Cos, activatedOps)
+	lh.leaderNode.ReliableBroadCastCOS(ctx, round, trial, eoaAddress, commitData.Cos, activatedOps)
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
 	if lh.allCosReceivedUnlocked(uniqueKey) {
 		log.Printf("All COS received for round %s with trail %s.", round, trial)
-		_, err := lh.leaderNode.DetermineRevealOrder(round, trial, activatedOps)
+		_, err := lh.leaderNode.DetermineRevealOrder(ctx, round, trial, activatedOps)
 		if err != nil {
 			log.Printf("Failed to determine reveal order for round %s with trail %s: %v", round, trial, err)
 			return
 		}
-		lh.leaderNode.StartSecretValueRequests(h, round, trial)
+		lh.leaderNode.StartSecretValueRequests(ctx, h, round, trial)
 	}
 }
 
-func (lh *LeaderNodeHandler) VerifySignatureAndCheckActivation(req utils.Request, reqType string) bool {
+func (lh *LeaderNodeHandler) VerifySignatureAndCheckActivation(ctx context.Context, req utils.Request, reqType string) bool {
 	verifyReq := utils.Verification{EOAAddress: req.EOAAddress, Signature: req.Signature}
 	if !utils.VerifySignature(verifyReq) {
 		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
@@ -306,7 +311,7 @@ func (lh *LeaderNodeHandler) VerifySignatureAndCheckActivation(req utils.Request
 
 	eoaAddress := common.HexToAddress(req.EOAAddress)
 
-	IsNetworkError, isEOAActivated := lh.isEOAActivatedForRound(eoaAddress)
+	IsNetworkError, isEOAActivated := lh.isEOAActivatedForRound(ctx, eoaAddress)
 	if IsNetworkError {
 		log.Printf("Network error. Skipping activation check.")
 		return false
@@ -359,9 +364,9 @@ func (lh *LeaderNodeHandler) allCosReceivedUnlocked(uniqueKey string) bool {
 	return true
 }
 
-func (lh *LeaderNodeHandler) UpdatedallCommitsReceivedUnlocked(fallbackEthClient *fallback_ethclient.FallbackRPCClient, uniqueKey string) map[string]bool {
+func (lh *LeaderNodeHandler) UpdatedallCommitsReceivedUnlocked(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, uniqueKey string) map[string]bool {
 	result := make(map[string]bool)
-	ops, _ := eth.GetActivatedOperators(fallbackEthClient)
+	ops, _ := eth.GetActivatedOperators(ctx, fallbackEthClient)
 
 	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists || len(roundCommits) == 0 {
@@ -391,8 +396,8 @@ func (lh *LeaderNodeHandler) updateInMemoryData(uniqueKey string, eoaAddress com
 	utils.SetCommittedNodeData(uniqueKey, eoaAddress, commitData)
 }
 
-func (lh *LeaderNodeHandler) isEOAActivatedForRound(eoaAddress common.Address) (bool, bool) {
-	activatedOperators, err := eth.GetActivatedOperators(lh.fallbackEthClient)
+func (lh *LeaderNodeHandler) isEOAActivatedForRound(ctx context.Context, eoaAddress common.Address) (bool, bool) {
+	activatedOperators, err := eth.GetActivatedOperators(ctx, lh.fallbackEthClient)
 	if err != nil {
 		log.Printf("Error fetching the activated operators %v", err)
 		// Return true for network error flag, false for activation status
@@ -410,7 +415,7 @@ func (lh *LeaderNodeHandler) isEOAActivatedForRound(eoaAddress common.Address) (
 	return false, false
 }
 
-func (lh *LeaderNodeHandler) handleAcknowledgment(s network.Stream) {
+func (lh *LeaderNodeHandler) handleAcknowledgment(ctx context.Context, s network.Stream) {
 	defer s.Close()
 	if lh.leaderNode.GetHalted() {
 		log.Println("System is halted. Skipping handleAcknowledgment.")
@@ -440,7 +445,7 @@ func (lh *LeaderNodeHandler) handleAcknowledgment(s network.Stream) {
 		Signature:  ack.Signature,
 	}
 
-	if !lh.VerifySignatureAndCheckActivation(commitVerificationRequest, "commit") {
+	if !lh.VerifySignatureAndCheckActivation(ctx, commitVerificationRequest, "commit") {
 		return
 	}
 
@@ -448,5 +453,5 @@ func (lh *LeaderNodeHandler) handleAcknowledgment(s network.Stream) {
 		ack.EOAAddress, ack.Type, ack.MessageID, ack.Status)
 
 	// Process the acknowledgment
-	lh.leaderNode.HandleAcknowledgment(ack)
+	lh.leaderNode.HandleAcknowledgment(ctx, ack)
 }

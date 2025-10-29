@@ -1,6 +1,7 @@
 package regular_node
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"math/big"
 	"sync"
@@ -110,20 +111,20 @@ func NewRegularNode(
 	}
 }
 
-func (n *RegularNode) GetCommitByRound(round, trialNum string) (*utils.CommitData, error) {
-	return n.regularCommitRepository.GetCommitByRound(round, trialNum)
+func (n *RegularNode) GetCommitByRound(ctx context.Context, round, trialNum string) (*utils.CommitData, error) {
+	return n.regularCommitRepository.GetCommitByRound(ctx, round, trialNum)
 }
 
-func (n *RegularNode) AddNodeInfo(nodeInfo *utils.NodeInfo) error {
-	return n.nodeInfoRepository.AddNodeInfo(nodeInfo)
+func (n *RegularNode) AddNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
+	return n.nodeInfoRepository.AddNodeInfo(ctx, nodeInfo)
 }
 
-func (n *RegularNode) AddCommit(commitData *utils.CommitData) error {
-	return n.regularCommitRepository.AddCommit(commitData)
+func (n *RegularNode) AddCommit(ctx context.Context, commitData *utils.CommitData) error {
+	return n.regularCommitRepository.AddCommit(ctx, commitData)
 }
 
-func (n *RegularNode) UpdateCommit(commitData *utils.CommitData) error {
-	return n.regularCommitRepository.UpdateCommit(commitData)
+func (n *RegularNode) UpdateCommit(ctx context.Context, commitData *utils.CommitData) error {
+	return n.regularCommitRepository.UpdateCommit(ctx, commitData)
 }
 
 func (n *RegularNode) CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
@@ -134,6 +135,6 @@ func (n *RegularNode) SetHost(h host.Host) {
 	n.p2pClient.SetHost(h)
 }
 
-func (n *RegularNode) ConnectToLeader(leaderIP, leaderPort, leaderPeerID string) (*peer.AddrInfo, error) {
-	return n.p2pClient.ConnectToPeer(leaderIP, leaderPort, leaderPeerID)
+func (n *RegularNode) ConnectToLeader(ctx context.Context, leaderIP, leaderPort, leaderPeerID string) (*peer.AddrInfo, error) {
+	return n.p2pClient.ConnectToPeer(ctx, leaderIP, leaderPort, leaderPeerID)
 }

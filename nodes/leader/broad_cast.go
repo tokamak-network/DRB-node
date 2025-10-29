@@ -70,7 +70,7 @@ func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
 // }
 
 // ReliableBroadCastSSync broadcasts secret values with acknowledgment tracking and waits for completion
-func (n *LeaderNode) ReliableBroadCastSSync(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte, activatedOps []common.Address) bool {
+func (n *LeaderNode) ReliableBroadCastSSync(ctx context.Context, h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte, activatedOps []common.Address) bool {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress, "secret")
 
 	tracker := &utils.BroadcastTracker{
@@ -91,7 +91,7 @@ func (n *LeaderNode) ReliableBroadCastSSync(h host.Host, roundNum string, trialN
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := n.broadcastTrackerRepository.AddBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return false
 	}
@@ -99,7 +99,7 @@ func (n *LeaderNode) ReliableBroadCastSSync(h host.Host, roundNum string, trialN
 	n.SetActiveBroadcast(messageID, tracker)
 
 	// 🔄 Perform synchronous broadcast (wait for completion)
-	completed := n.performReliableBroadcastSync(h, tracker, "secret", activatedOps)
+	completed := n.performReliableBroadcastSync(ctx, h, tracker, "secret", activatedOps)
 
 	// Clean up from memory
 	n.DeleteActiveBroadcast(messageID)
@@ -108,7 +108,7 @@ func (n *LeaderNode) ReliableBroadCastSSync(h host.Host, roundNum string, trialN
 }
 
 // ReliableBroadCastCOS broadcasts COS values with acknowledgment tracking
-func (n *LeaderNode) ReliableBroadCastCOS(roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte, activatedOps []common.Address) {
+func (n *LeaderNode) ReliableBroadCastCOS(ctx context.Context, roundNum string, trialNum string, eoaAddress common.Address, cos [32]byte, activatedOps []common.Address) {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cos")
 
 	tracker := &utils.BroadcastTracker{
@@ -129,7 +129,7 @@ func (n *LeaderNode) ReliableBroadCastCOS(roundNum string, trialNum string, eoaA
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := n.broadcastTrackerRepository.AddBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return
 	}
@@ -137,11 +137,11 @@ func (n *LeaderNode) ReliableBroadCastCOS(roundNum string, trialNum string, eoaA
 	n.SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
-	go n.performReliableBroadcast(n.p2pClient.GetHostInstance(), tracker, "cos", activatedOps)
+	go n.performReliableBroadcast(ctx, n.p2pClient.GetHostInstance(), tracker, "cos", activatedOps)
 }
 
 // ReliableBroadCastCVS broadcasts CVS values with acknowledgment tracking
-func (n *LeaderNode) ReliableBroadCastCVS(roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte, activatedOps []common.Address) {
+func (n *LeaderNode) ReliableBroadCastCVS(ctx context.Context, roundNum string, trialNum string, eoaAddress common.Address, cvs [32]byte, activatedOps []common.Address) {
 	messageID := generateMessageID(roundNum, trialNum, eoaAddress.Hex(), "cvs")
 
 	tracker := &utils.BroadcastTracker{
@@ -162,7 +162,7 @@ func (n *LeaderNode) ReliableBroadCastCVS(roundNum string, trialNum string, eoaA
 		tracker.Acknowledged[op.Hex()] = false
 	}
 
-	if err := n.broadcastTrackerRepository.AddBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker); err != nil {
 		log.Printf("Failed to save broadcast tracker: %v", err)
 		return
 	}
@@ -170,17 +170,17 @@ func (n *LeaderNode) ReliableBroadCastCVS(roundNum string, trialNum string, eoaA
 	n.SetActiveBroadcast(messageID, tracker)
 
 	// Start the broadcast process
-	go n.performReliableBroadcast(n.p2pClient.GetHostInstance(), tracker, "cvs", activatedOps)
+	go n.performReliableBroadcast(ctx, n.p2pClient.GetHostInstance(), tracker, "cvs", activatedOps)
 }
 
 // performReliableBroadcast handles the actual broadcasting with retry logic
-func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) {
+func (n *LeaderNode) performReliableBroadcast(ctx context.Context, h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) {
 	if n.GetHalted() {
 		n.DeleteActiveBroadcast(tracker.MessageID)
 		log.Println("System is halted. Skipping processCVS.")
 		return
 	}
-	nodeInfo := n.p2pClient.GetConnectedPeers()
+	nodeInfo := n.p2pClient.GetConnectedPeers(ctx)
 
 	for tracker.Attempts < tracker.MaxAttempts {
 		tracker.Attempts++
@@ -243,7 +243,7 @@ func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.Broadc
 			peerAddr, _ := multiaddr.NewMultiaddr(peerAddrStr)
 			h.Peerstore().AddAddr(peerID, peerAddr, peerstore.PermanentAddrTTL)
 
-			stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, streamProtocol)
+			stream, err := h.NewStream(ctx, nodeInfo[op.Hex()].PeerID, streamProtocol)
 			if err != nil {
 				log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
 				continue
@@ -259,7 +259,7 @@ func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.Broadc
 		}
 
 		// Update tracker
-		if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(tracker); err != nil {
+		if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(ctx, tracker); err != nil {
 			log.Printf("Failed to update broadcast tracker: %v", err)
 		}
 
@@ -298,7 +298,7 @@ func (n *LeaderNode) performReliableBroadcast(h host.Host, tracker *utils.Broadc
 }
 
 // performReliableBroadcastSync handles broadcasting synchronously and returns completion status
-func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) bool {
+func (n *LeaderNode) performReliableBroadcastSync(ctx context.Context, h host.Host, tracker *utils.BroadcastTracker, broadcastType string, activatedOps []common.Address) bool {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping broadcast.")
 		return false
@@ -312,7 +312,7 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 	}
 
 	// Get connected peer information
-	nodeInfo := n.p2pClient.GetConnectedPeers()
+	nodeInfo := n.p2pClient.GetConnectedPeers(ctx)
 
 	// Create message
 	message := utils.BroadcastMessage{
@@ -367,7 +367,7 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 			peerAddr, _ := multiaddr.NewMultiaddr(peerAddrStr)
 			h.Peerstore().AddAddr(peerID, peerAddr, peerstore.PermanentAddrTTL)
 
-			stream, err := h.NewStream(context.Background(), nodeInfo[op.Hex()].PeerID, streamProtocol)
+			stream, err := h.NewStream(ctx, nodeInfo[op.Hex()].PeerID, streamProtocol)
 			if err != nil {
 				log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
 				continue
@@ -383,7 +383,7 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 		}
 
 		// Update tracker
-		if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(tracker); err != nil {
+		if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(ctx, tracker); err != nil {
 			log.Printf("Failed to update broadcast tracker: %v", err)
 		}
 
@@ -425,7 +425,7 @@ func (n *LeaderNode) performReliableBroadcastSync(h host.Host, tracker *utils.Br
 }
 
 // HandleAcknowledgment processes acknowledgments from regular nodes
-func (n *LeaderNode) HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
+func (n *LeaderNode) HandleAcknowledgment(ctx context.Context, ack utils.AcknowledgmentMessage) {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping HandleAcknowledgment.")
 		return
@@ -463,7 +463,7 @@ func (n *LeaderNode) HandleAcknowledgment(ack utils.AcknowledgmentMessage) {
 	}
 
 	// Update tracker
-	if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(tracker); err != nil {
+	if err := n.broadcastTrackerRepository.UpdateBroadcastTracker(ctx, tracker); err != nil {
 		log.Printf("Failed to update broadcast tracker: %v", err)
 	}
 }

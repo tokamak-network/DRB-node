@@ -2,6 +2,7 @@ package leader_node
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"log"
@@ -59,7 +60,7 @@ func (n *LeaderNode) SetIndices(indices []*big.Int) {
 }
 
 // AcceptSecretValue processes and stores secret values sent by regular nodes.
-func (n *LeaderNode) AcceptSecretValue(h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
+func (n *LeaderNode) AcceptSecretValue(ctx context.Context, h host.Host, s network.Stream, fallbackEthClient *fallback_ethclient.FallbackRPCClient) {
 	defer s.Close()
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping AcceptSecretValue.")
@@ -104,7 +105,7 @@ func (n *LeaderNode) AcceptSecretValue(h host.Host, s network.Stream, fallbackEt
 
 	log.Printf("Secret value hash matches for round %s with trail %s EOA %s.", round, trial, eoaAddress.Hex())
 	// Fetch or initialize the leader commit data for the given round and EOA
-	leaderCommitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(round, trial, req.RegularEoaAddress)
+	leaderCommitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, round, trial, req.RegularEoaAddress)
 	if err != nil {
 		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", round, req.RegularEoaAddress)
 		leaderCommitData = &utils.LeaderCommitData{
@@ -126,7 +127,7 @@ func (n *LeaderNode) AcceptSecretValue(h host.Host, s network.Stream, fallbackEt
 	log.Printf("Received secret value for round %s with trail %s and EOA %s: byte=%x, hex=%s",
 		round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, leaderCommitData.SecretValueHex)
 
-	if err := n.leaderCommitRepository.UpdateLeaderCommit(leaderCommitData); err != nil {
+	if err := n.leaderCommitRepository.UpdateLeaderCommit(ctx, leaderCommitData); err != nil {
 		log.Printf("Failed to save updated commit data for %s in round %s with trail %s: %v", req.RegularEoaAddress, round, trial, err)
 		return
 	}
@@ -139,16 +140,16 @@ func (n *LeaderNode) AcceptSecretValue(h host.Host, s network.Stream, fallbackEt
 	// 🔄 Wait for broadcast to complete before proceeding to next node
 	log.Printf("🔄 Broadcasting secret from %s for round %s with trail %s...", req.RegularEoaAddress, round, trial)
 	activatedOps := eth.GetActivatedOperatorsCached()
-	broadcastCompleted := n.ReliableBroadCastSSync(h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, activatedOps)
+	broadcastCompleted := n.ReliableBroadCastSSync(ctx, h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, activatedOps)
 
 	if broadcastCompleted {
 		log.Printf("✅ Broadcast completed for %s. Proceeding to next node in reveal order.", req.RegularEoaAddress)
 		// Continue requesting secret values from remaining nodes in the reveal order
-		n.HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
+		n.HandleSecretValueResponse(ctx, h, fallbackEthClient, round, trial, req.RegularEoaAddress)
 	} else {
 		log.Printf("⚠️ Broadcast incomplete for %s. Proceeding anyway to next node.", req.RegularEoaAddress)
 		// Still continue even if broadcast incomplete (leader's decision)
-		n.HandleSecretValueResponse(h, fallbackEthClient, round, trial, req.RegularEoaAddress)
+		n.HandleSecretValueResponse(ctx, h, fallbackEthClient, round, trial, req.RegularEoaAddress)
 	}
 }
 

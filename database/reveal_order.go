@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -16,7 +17,7 @@ func NewRevealOrderRepository(db *pg.DB) *RevealOrderRepository {
 	return &RevealOrderRepository{db: db}
 }
 
-func (r *RevealOrderRepository) AddRevealOrder(order *utils.RevealOrderData) error {
+func (r *RevealOrderRepository) AddRevealOrder(ctx context.Context, order *utils.RevealOrderData) error {
 	// Validate required fields
 	if order.Round == "" {
 		return errors.New("round cannot be empty")
@@ -62,16 +63,16 @@ func (r *RevealOrderRepository) AddRevealOrder(order *utils.RevealOrderData) err
 
 	}
 	model := mapRevealOrderDataToScheme(order)
-	_, err := r.db.Model(&model).Insert()
+	_, err := r.db.Model(&model).Insert(ctx)
 	return err
 }
 
-func (r *RevealOrderRepository) GetRevealOrder(round, trialNum string) (*utils.RevealOrderData, error) {
+func (r *RevealOrderRepository) GetRevealOrder(ctx context.Context, round, trialNum string) (*utils.RevealOrderData, error) {
 	var model RevealOrderScheme
 	err := r.db.Model(&model).
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Limit(1).
-		Select()
+		Select(ctx)
 	if err != nil {
 		return nil, err
 	}
