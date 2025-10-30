@@ -150,7 +150,7 @@ func (n *LeaderNode) requestToSubmitS(ctx context.Context, round string, trialNu
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = eth.ExecuteTransaction(
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -179,7 +179,7 @@ func (n *LeaderNode) prepareArgumentsForRequestToSubmitS(ctx context.Context, ro
 	var notOnChainIndices []*big.Int
 	i := big.NewInt(0)
 	j := 0
-	length := big.NewInt(eth.GetActivatedOperatorsLength())
+	length := big.NewInt(eth.Service.GetActivatedOperatorsLength())
 
 	indices := n.GetIndices()
 	for i.Cmp(length) < 0 {
@@ -415,7 +415,7 @@ func (n *LeaderNode) callFailToSubmitS(ctx context.Context, round string, trialN
 	}
 
 	// Execute the transaction
-	_, _, err = eth.ExecuteTransaction(
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,

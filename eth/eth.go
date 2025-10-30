@@ -22,6 +22,10 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+// Service exposes a default implementation of IEthService so callers can depend on
+// an interface for easier testing and mocking: eth.Service.(method)
+var Service IEthService = NewDefaultEthService()
+
 var (
 	ErrTransactionFailed = errors.New("transaction failed")
 )

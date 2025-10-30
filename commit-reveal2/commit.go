@@ -26,7 +26,7 @@ func GenerateCommit(round string, operator string) ([32]byte, [32]byte, [32]byte
 
 	// Convert operator to Ethereum address
 	operatorAddress := common.HexToAddress(operator)
-	activatedOperators := eth.GetActivatedOperatorsCached()
+	activatedOperators := eth.Service.GetActivatedOperatorsCached()
 	operatorIndex := -1
 	for i, op := range activatedOperators {
 		if op.Hex() == operator {

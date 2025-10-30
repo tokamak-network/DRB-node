@@ -139,7 +139,7 @@ func (n *LeaderNode) AcceptSecretValue(ctx context.Context, h host.Host, s netwo
 
 	// 🔄 Wait for broadcast to complete before proceeding to next node
 	log.Printf("🔄 Broadcasting secret from %s for round %s with trail %s...", req.RegularEoaAddress, round, trial)
-	activatedOps := eth.GetActivatedOperatorsCached()
+	activatedOps := eth.Service.GetActivatedOperatorsCached()
 	broadcastCompleted := n.ReliableBroadCastSSync(ctx, h, round, trial, req.RegularEoaAddress, leaderCommitData.SecretValue, activatedOps)
 
 	if broadcastCompleted {
