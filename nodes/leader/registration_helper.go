@@ -18,7 +18,12 @@ func (n *LeaderNode) RegisterNode(ctx context.Context, s network.Stream, abiFile
 	if err := json.NewDecoder(s).Decode(&req); err != nil {
 		return fmt.Errorf("failed to decode registration request: %v", err)
 	}
+	remoteAddr := s.Conn().RemoteMultiaddr().String()
+	return n.registerNodeInternal(ctx, req, remoteAddr)
+}
 
+// registerNodeInternal contains the core registration logic to ease unit testing.
+func (n *LeaderNode) registerNodeInternal(ctx context.Context, req utils.RegistrationRequest, remoteAddr string) error {
 	verifyReq := utils.Verification{
 		EOAAddress: req.EOAAddress,
 		Signature:  req.Signature,
@@ -28,7 +33,9 @@ func (n *LeaderNode) RegisterNode(ctx context.Context, s network.Stream, abiFile
 	}
 
 	log.Printf("Verified registration for PeerID: %s", req.PeerID)
-	eth.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+	if n.fallbackEthClient != nil {
+		eth.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+	}
 	operators := eth.GetActivatedOperatorsCached()
 
 	// Check if the EOA is in the activated operators list
@@ -46,8 +53,7 @@ func (n *LeaderNode) RegisterNode(ctx context.Context, s network.Stream, abiFile
 	}
 
 	log.Printf("EOA %s is activated, proceeding with registration", req.EOAAddress)
-	// Get the remote IP and port
-	remoteAddr := s.Conn().RemoteMultiaddr().String()
+
 	parts := strings.Split(remoteAddr, "/")
 	if len(parts) < 5 {
 		return fmt.Errorf("invalid remote address format: %s", remoteAddr)
@@ -71,6 +77,5 @@ func (n *LeaderNode) RegisterNode(ctx context.Context, s network.Stream, abiFile
 	}
 
 	log.Printf("Successfully registered or updated EOA %s with NodeInfo: IP=%s, Port=%s, PeerID=%s.", req.EOAAddress, ip, port, req.PeerID)
-
 	return nil
 }
