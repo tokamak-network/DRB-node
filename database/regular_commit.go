@@ -18,24 +18,24 @@ func NewRegularCommitRepository(db *pg.DB) *RegularCommitRepository {
 
 func (r *RegularCommitRepository) AddCommit(ctx context.Context, commit *utils.CommitData) error {
 	model := mapCommitDataToScheme(commit)
-	_, err := r.db.Model(&model).Insert(ctx)
+	_, err := r.db.WithContext(ctx).Model(&model).Insert()
 	return err
 }
 
 func (r *RegularCommitRepository) UpdateCommit(ctx context.Context, commit *utils.CommitData) error {
 	model := mapCommitDataToScheme(commit)
-	_, err := r.db.Model(&model).
+	_, err := r.db.WithContext(ctx).Model(&model).
 		Where("round = ? AND trial_num = ?", model.Round, model.TrialNum).
-		Update(ctx)
+		Update()
 	return err
 }
 
 func (r *RegularCommitRepository) GetCommitByRound(ctx context.Context, round, trialNum string) (*utils.CommitData, error) {
 	var model CommitDataScheme
-	err := r.db.Model(&model).
+	err := r.db.WithContext(ctx).Model(&model).
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Limit(1).
-		Select(ctx)
+		Select()
 	if err != nil {
 		log.Printf("Failed to get commit info: %v", err)
 		return nil, err

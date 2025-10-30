@@ -10,7 +10,7 @@ import (
 )
 
 func TestRegularCommitRepository_AddGetUpdate(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewRegularCommitRepository(GetDB())
@@ -21,6 +21,7 @@ func TestRegularCommitRepository_AddGetUpdate(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	var cvs, cos, secretValue [32]byte
@@ -39,11 +40,11 @@ func TestRegularCommitRepository_AddGetUpdate(t *testing.T) {
 	}
 
 	// Add
-	err := repo.AddCommit(commitData)
+	err := repo.AddCommit(ctx, commitData)
 	assert.NoError(t, err)
 
 	// Get
-	fetched, err := repo.GetCommitByRound(round, trialNum)
+	fetched, err := repo.GetCommitByRound(ctx, round, trialNum)
 	assert.NoError(t, err)
 	assert.Equal(t, round, fetched.Round)
 	assert.Equal(t, trialNum, fetched.TrialNum)
@@ -51,17 +52,18 @@ func TestRegularCommitRepository_AddGetUpdate(t *testing.T) {
 
 	// Update
 	commitData.SendCosToLeader = true
-	err = repo.UpdateCommit(commitData)
+	err = repo.UpdateCommit(ctx, commitData)
 	assert.NoError(t, err)
 
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestRegularCommitRepository_AddWithEmptyFields(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewRegularCommitRepository(GetDB())
@@ -70,29 +72,29 @@ func TestRegularCommitRepository_AddWithEmptyFields(t *testing.T) {
 
 	// Empty round
 	emptyRound := &utils.CommitData{
-		Round:    "",
-		TrialNum: "trial1",
-		Cvs:      cvs,
-		Cos:      cvs,
+		Round:       "",
+		TrialNum:    "trial1",
+		Cvs:         cvs,
+		Cos:         cvs,
 		SecretValue: cvs,
 	}
-	err := repo.AddCommit(emptyRound)
+	err := repo.AddCommit(ctx, emptyRound)
 	assert.Error(t, err, "Should reject empty round")
 
 	// Empty trialNum
 	emptyTrial := &utils.CommitData{
-		Round:    "round1",
-		TrialNum: "",
-		Cvs:      cvs,
-		Cos:      cvs,
+		Round:       "round1",
+		TrialNum:    "",
+		Cvs:         cvs,
+		Cos:         cvs,
 		SecretValue: cvs,
 	}
-	err = repo.AddCommit(emptyTrial)
+	err = repo.AddCommit(ctx, emptyTrial)
 	assert.Error(t, err, "Should reject empty trialNum")
 }
 
 func TestRegularCommitRepository_DuplicateKey(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewRegularCommitRepository(GetDB())
@@ -103,44 +105,46 @@ func TestRegularCommitRepository_DuplicateKey(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	var cvs [32]byte
 	cvs[0] = 0x01
 
 	commitData := &utils.CommitData{
-		Round:    round,
-		TrialNum: trialNum,
-		Cvs:      cvs,
-		Cos:      cvs,
+		Round:       round,
+		TrialNum:    trialNum,
+		Cvs:         cvs,
+		Cos:         cvs,
 		SecretValue: cvs,
 	}
 
-	err := repo.AddCommit(commitData)
+	err := repo.AddCommit(ctx, commitData)
 	assert.NoError(t, err)
 
 	// Try duplicate
-	err = repo.AddCommit(commitData)
+	err = repo.AddCommit(ctx, commitData)
 	assert.Error(t, err, "Should reject duplicate composite key")
 
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestRegularCommitRepository_GetNonExistent(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewRegularCommitRepository(GetDB())
 
-	_, err := repo.GetCommitByRound("nonexistent", "nonexistent")
+	_, err := repo.GetCommitByRound(ctx, "nonexistent", "nonexistent")
 	assert.Error(t, err, "Should return error for non-existent")
 }
 
 func TestRegularCommitRepository_UpdateNonExistent(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewRegularCommitRepository(GetDB())
@@ -148,19 +152,19 @@ func TestRegularCommitRepository_UpdateNonExistent(t *testing.T) {
 	var cvs [32]byte
 
 	nonExistent := &utils.CommitData{
-		Round:    "nonexistent",
-		TrialNum: "nonexistent",
-		Cvs:      cvs,
-		Cos:      cvs,
+		Round:       "nonexistent",
+		TrialNum:    "nonexistent",
+		Cvs:         cvs,
+		Cos:         cvs,
 		SecretValue: cvs,
 	}
 
-	err := repo.UpdateCommit(nonExistent)
+	err := repo.UpdateCommit(ctx, nonExistent)
 	assert.NoError(t, err, "Update succeeds but updates 0 rows")
 }
 
 func TestRegularCommitRepository_WithZeroValueArrays(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewRegularCommitRepository(GetDB())
@@ -171,6 +175,7 @@ func TestRegularCommitRepository_WithZeroValueArrays(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	commitData := &utils.CommitData{
@@ -181,17 +186,18 @@ func TestRegularCommitRepository_WithZeroValueArrays(t *testing.T) {
 		SecretValue: [32]byte{},
 	}
 
-	err := repo.AddCommit(commitData)
+	err := repo.AddCommit(ctx, commitData)
 	assert.NoError(t, err, "Should allow zero-valued arrays")
 
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestRegularCommitRepository_BooleanFlags(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewRegularCommitRepository(GetDB())
@@ -202,6 +208,7 @@ func TestRegularCommitRepository_BooleanFlags(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	var cvs [32]byte
@@ -221,6 +228,7 @@ func TestRegularCommitRepository_BooleanFlags(t *testing.T) {
 		// Cleanup each iteration
 		GetDB().Model(&CommitDataScheme{}).
 			Where("round = ? AND trial_num = ?", round, trialNum).
+			Context(ctx).
 			Delete()
 
 		commitData := &utils.CommitData{
@@ -233,10 +241,10 @@ func TestRegularCommitRepository_BooleanFlags(t *testing.T) {
 			SendCosToLeader: tc.sendCosToLeader,
 		}
 
-		err := repo.AddCommit(commitData)
+		err := repo.AddCommit(ctx, commitData)
 		assert.NoError(t, err)
 
-		fetched, err := repo.GetCommitByRound(round, trialNum)
+		fetched, err := repo.GetCommitByRound(ctx, round, trialNum)
 		assert.NoError(t, err)
 		assert.Equal(t, tc.sendToLeader, fetched.SendToLeader)
 		assert.Equal(t, tc.sendCosToLeader, fetched.SendCosToLeader)
@@ -245,11 +253,12 @@ func TestRegularCommitRepository_BooleanFlags(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestRegularCommitRepository_PartialFieldUpdates(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewRegularCommitRepository(GetDB())
@@ -260,6 +269,7 @@ func TestRegularCommitRepository_PartialFieldUpdates(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	var cvs, cos, secretValue [32]byte
@@ -277,25 +287,25 @@ func TestRegularCommitRepository_PartialFieldUpdates(t *testing.T) {
 		SendCosToLeader: false,
 	}
 
-	err := repo.AddCommit(commitData)
+	err := repo.AddCommit(ctx, commitData)
 	assert.NoError(t, err)
 
 	// Update only SendToLeader flag
 	commitData.SendToLeader = true
-	err = repo.UpdateCommit(commitData)
+	err = repo.UpdateCommit(ctx, commitData)
 	assert.NoError(t, err)
 
-	fetched, err := repo.GetCommitByRound(round, trialNum)
+	fetched, err := repo.GetCommitByRound(ctx, round, trialNum)
 	assert.NoError(t, err)
 	assert.True(t, fetched.SendToLeader)
 	assert.False(t, fetched.SendCosToLeader)
 
 	// Update SendCosToLeader flag
 	commitData.SendCosToLeader = true
-	err = repo.UpdateCommit(commitData)
+	err = repo.UpdateCommit(ctx, commitData)
 	assert.NoError(t, err)
 
-	fetched, err = repo.GetCommitByRound(round, trialNum)
+	fetched, err = repo.GetCommitByRound(ctx, round, trialNum)
 	assert.NoError(t, err)
 	assert.True(t, fetched.SendToLeader)
 	assert.True(t, fetched.SendCosToLeader)
@@ -303,11 +313,12 @@ func TestRegularCommitRepository_PartialFieldUpdates(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestRegularCommitRepository_UpdateWithEmptySignatureFields(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewRegularCommitRepository(GetDB())
@@ -318,16 +329,17 @@ func TestRegularCommitRepository_UpdateWithEmptySignatureFields(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	var cvs [32]byte
 	cvs[0] = 0x01
 
 	commitData := &utils.CommitData{
-		Round:    round,
-		TrialNum: trialNum,
-		Cvs:      cvs,
-		Cos:      cvs,
+		Round:       round,
+		TrialNum:    trialNum,
+		Cvs:         cvs,
+		Cos:         cvs,
 		SecretValue: cvs,
 		Sign: utils.SignInfo{
 			R: "",
@@ -336,11 +348,12 @@ func TestRegularCommitRepository_UpdateWithEmptySignatureFields(t *testing.T) {
 		},
 	}
 
-	err := repo.AddCommit(commitData)
+	err := repo.AddCommit(ctx, commitData)
 	assert.NoError(t, err, "Should allow empty signature fields")
 
 	// Cleanup
 	GetDB().Model(&CommitDataScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }

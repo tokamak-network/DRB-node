@@ -22,7 +22,7 @@ func (r *NodeInfoRepository) AddNodeInfo(ctx context.Context, nodeInfo *utils.No
 		PeerID:     nodeInfo.PeerID,
 		EOAAddress: nodeInfo.EOAAddress,
 	}
-	_, err := r.db.Model(node).Insert(ctx)
+	_, err := r.db.WithContext(ctx).Model(node).Insert()
 	return err
 }
 
@@ -33,15 +33,15 @@ func (r *NodeInfoRepository) UpdateNodeInfo(ctx context.Context, nodeInfo *utils
 		PeerID:     nodeInfo.PeerID,
 		EOAAddress: nodeInfo.EOAAddress,
 	}
-	_, err := r.db.Model(node).
+	_, err := r.db.WithContext(ctx).Model(node).
 		Where("ip = ?", nodeInfo.IP).
-		Update(ctx)
+		Update()
 	return err
 }
 
 func (r *NodeInfoRepository) GetNodeInfos(ctx context.Context) ([]*utils.NodeInfo, error) {
 	var nodes []NodeInfoScheme
-	if err := r.db.Model(&nodes).Select(ctx); err != nil {
+	if err := r.db.WithContext(ctx).Model(&nodes).Select(); err != nil {
 		return nil, err
 	}
 	nodeInfos := make([]*utils.NodeInfo, 0, len(nodes))

@@ -12,7 +12,7 @@ import (
 )
 
 func TestLeaderCommitRepository_AddGetUpdate(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
@@ -24,6 +24,7 @@ func TestLeaderCommitRepository_AddGetUpdate(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Delete()
 
 	var cvs, cos, secretValue [32]byte
@@ -44,11 +45,11 @@ func TestLeaderCommitRepository_AddGetUpdate(t *testing.T) {
 	}
 
 	// Add
-	err := repo.AddLeaderCommit(commitData)
+	err := repo.AddLeaderCommit(ctx, commitData)
 	assert.NoError(t, err)
 
 	// Get
-	fetched, err := repo.GetLeaderCommitByRoundAndEoaAddr(round, trialNum, eoaAddr)
+	fetched, err := repo.GetLeaderCommitByRoundAndEoaAddr(ctx, round, trialNum, eoaAddr)
 	assert.NoError(t, err)
 	assert.Equal(t, round, fetched.Round)
 	assert.Equal(t, trialNum, fetched.TrialNum)
@@ -56,17 +57,18 @@ func TestLeaderCommitRepository_AddGetUpdate(t *testing.T) {
 
 	// Update
 	commitData.SubmitMerkleRootDone = true
-	err = repo.UpdateLeaderCommit(commitData)
+	err = repo.UpdateLeaderCommit(ctx, commitData)
 	assert.NoError(t, err)
 
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Delete()
 }
 
 func TestLeaderCommitRepository_AddWithEmptyFields(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
@@ -83,7 +85,7 @@ func TestLeaderCommitRepository_AddWithEmptyFields(t *testing.T) {
 		SecretValue: cvs,
 		CreatedAt:   time.Now().Unix(),
 	}
-	err := repo.AddLeaderCommit(emptyRound)
+	err := repo.AddLeaderCommit(ctx, emptyRound)
 	assert.Error(t, err, "Should reject empty round")
 
 	// Empty EOAAddress
@@ -96,12 +98,12 @@ func TestLeaderCommitRepository_AddWithEmptyFields(t *testing.T) {
 		SecretValue: cvs,
 		CreatedAt:   time.Now().Unix(),
 	}
-	err = repo.AddLeaderCommit(emptyEOA)
+	err = repo.AddLeaderCommit(ctx, emptyEOA)
 	assert.Error(t, err, "Should reject empty EOAAddress")
 }
 
 func TestLeaderCommitRepository_DuplicateKey(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
@@ -113,6 +115,7 @@ func TestLeaderCommitRepository_DuplicateKey(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Delete()
 
 	var cvs, cos, secretValue [32]byte
@@ -128,31 +131,32 @@ func TestLeaderCommitRepository_DuplicateKey(t *testing.T) {
 		CreatedAt:   time.Now().Unix(),
 	}
 
-	err := repo.AddLeaderCommit(commitData)
+	err := repo.AddLeaderCommit(ctx, commitData)
 	assert.NoError(t, err)
 
 	// Try duplicate
-	err = repo.AddLeaderCommit(commitData)
+	err = repo.AddLeaderCommit(ctx, commitData)
 	assert.Error(t, err, "Should reject duplicate composite key")
 
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Delete()
 }
 
 func TestLeaderCommitRepository_GetNonExistent(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
 
-	_, err := repo.GetLeaderCommitByRoundAndEoaAddr("nonexistent", "nonexistent", "0xnonexistent")
+	_, err := repo.GetLeaderCommitByRoundAndEoaAddr(ctx, "nonexistent", "nonexistent", "0xnonexistent")
 	assert.Error(t, err, "Should return error for non-existent")
 }
 
 func TestLeaderCommitRepository_UpdateNonExistent(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
@@ -169,12 +173,12 @@ func TestLeaderCommitRepository_UpdateNonExistent(t *testing.T) {
 		CreatedAt:   time.Now().Unix(),
 	}
 
-	err := repo.UpdateLeaderCommit(nonExistent)
+	err := repo.UpdateLeaderCommit(ctx, nonExistent)
 	assert.NoError(t, err, "Update succeeds but updates 0 rows")
 }
 
 func TestLeaderCommitRepository_HexAutoGeneration(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
@@ -186,6 +190,7 @@ func TestLeaderCommitRepository_HexAutoGeneration(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Delete()
 
 	var cvs, cos, secretValue [32]byte
@@ -203,13 +208,14 @@ func TestLeaderCommitRepository_HexAutoGeneration(t *testing.T) {
 		CreatedAt:   time.Now().Unix(),
 	}
 
-	err := repo.AddLeaderCommit(commitData)
+	err := repo.AddLeaderCommit(ctx, commitData)
 	assert.NoError(t, err)
 
 	// Verify hex auto-generation
 	var scheme LeaderCommitScheme
 	err = GetDB().Model(&scheme).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Select()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, scheme.CvsHex)
@@ -223,11 +229,12 @@ func TestLeaderCommitRepository_HexAutoGeneration(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Delete()
 }
 
 func TestLeaderCommitRepository_GetRoundsToProcess(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
@@ -238,6 +245,7 @@ func TestLeaderCommitRepository_GetRoundsToProcess(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	var cvs [32]byte
@@ -270,12 +278,12 @@ func TestLeaderCommitRepository_GetRoundsToProcess(t *testing.T) {
 	}
 
 	for _, commit := range commits {
-		err := repo.AddLeaderCommit(commit)
+		err := repo.AddLeaderCommit(ctx, commit)
 		assert.NoError(t, err)
 	}
 
 	// Get rounds to process
-	rounds, err := repo.GetRoundsToProcess()
+	rounds, err := repo.GetRoundsToProcess(ctx)
 	assert.NoError(t, err)
 
 	// Should find the commit ready to process
@@ -291,11 +299,12 @@ func TestLeaderCommitRepository_GetRoundsToProcess(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestLeaderCommitRepository_GetByRoundAndTrialNum(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
@@ -307,6 +316,7 @@ func TestLeaderCommitRepository_GetByRoundAndTrialNum(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	var cvs [32]byte
@@ -323,23 +333,24 @@ func TestLeaderCommitRepository_GetByRoundAndTrialNum(t *testing.T) {
 			SecretValue: cvs,
 			CreatedAt:   time.Now().Unix(),
 		}
-		err := repo.AddLeaderCommit(commit)
+		err := repo.AddLeaderCommit(ctx, commit)
 		assert.NoError(t, err)
 	}
 
 	// Get all
-	commits, err := repo.GetLeaderCommitsByRoundAndTrialNum(round, trialNum)
+	commits, err := repo.GetLeaderCommitsByRoundAndTrialNum(ctx, round, trialNum)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(commits), 3)
 
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestLeaderCommitRepository_UpdateRandomNumberGenerated(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
@@ -350,6 +361,7 @@ func TestLeaderCommitRepository_UpdateRandomNumberGenerated(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	var cvs [32]byte
@@ -366,27 +378,28 @@ func TestLeaderCommitRepository_UpdateRandomNumberGenerated(t *testing.T) {
 		CreatedAt:             time.Now().Unix(),
 	}
 
-	err := repo.AddLeaderCommit(commitData)
+	err := repo.AddLeaderCommit(ctx, commitData)
 	assert.NoError(t, err)
 
 	// Update random number flag
-	err = repo.UpdateLeaderCommitRandomNumberGenerated(round, trialNum)
+	err = repo.UpdateLeaderCommitRandomNumberGenerated(ctx, round, trialNum)
 	assert.NoError(t, err)
 
 	// Verify
-	fetched, err := repo.GetLeaderCommitByRoundAndEoaAddr(round, trialNum, "0xrandom")
+	fetched, err := repo.GetLeaderCommitByRoundAndEoaAddr(ctx, round, trialNum, "0xrandom")
 	assert.NoError(t, err)
 	assert.True(t, fetched.RandomNumberGenerated)
 
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 // Test error handling for GetLeaderCommitsByRoundAndTrialNum when database fails
 func TestLeaderCommitRepository_GetByRoundAndTrialNum_ErrorHandling(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
@@ -396,7 +409,7 @@ func TestLeaderCommitRepository_GetByRoundAndTrialNum_ErrorHandling(t *testing.T
 	assert.NoError(t, err, "Failed to drop table for test")
 
 	// Try to get commits - should get an error because table doesn't exist
-	_, err = repo.GetLeaderCommitsByRoundAndTrialNum("test_round", "test_trial")
+	_, err = repo.GetLeaderCommitsByRoundAndTrialNum(ctx, "test_round", "test_trial")
 	assert.Error(t, err, "Expected error when table is missing")
 
 	// Restore the schema
@@ -409,7 +422,7 @@ func TestLeaderCommitRepository_GetByRoundAndTrialNum_ErrorHandling(t *testing.T
 
 // Test error handling for GetRoundsToProcess when database fails
 func TestLeaderCommitRepository_GetRoundsToProcess_ErrorHandling(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewLeaderCommitRepository(GetDB())
@@ -419,7 +432,7 @@ func TestLeaderCommitRepository_GetRoundsToProcess_ErrorHandling(t *testing.T) {
 	assert.NoError(t, err, "Failed to drop table for test")
 
 	// Try to get rounds to process - should get an error because table doesn't exist
-	_, err = repo.GetRoundsToProcess()
+	_, err = repo.GetRoundsToProcess(ctx)
 	assert.Error(t, err, "Expected error when table is missing")
 
 	// Restore the schema

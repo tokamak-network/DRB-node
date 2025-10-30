@@ -63,16 +63,16 @@ func (r *RevealOrderRepository) AddRevealOrder(ctx context.Context, order *utils
 
 	}
 	model := mapRevealOrderDataToScheme(order)
-	_, err := r.db.Model(&model).Insert(ctx)
+	_, err := r.db.WithContext(ctx).Model(&model).Insert()
 	return err
 }
 
 func (r *RevealOrderRepository) GetRevealOrder(ctx context.Context, round, trialNum string) (*utils.RevealOrderData, error) {
 	var model RevealOrderScheme
-	err := r.db.Model(&model).
+	err := r.db.WithContext(ctx).Model(&model).
 		Where("round = ? AND trial_num = ?", round, trialNum).
 		Limit(1).
-		Select(ctx)
+		Select()
 	if err != nil {
 		return nil, err
 	}

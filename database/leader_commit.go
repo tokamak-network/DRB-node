@@ -32,16 +32,16 @@ func (r *LeaderCommitRepository) AddLeaderCommit(ctx context.Context, commitData
 		leaderCommit.SecretValueHex = hex.EncodeToString(leaderCommit.SecretValue)
 	}
 
-	_, err := r.db.Model(&leaderCommit).Insert(ctx)
+	_, err := r.db.WithContext(ctx).Model(&leaderCommit).Insert()
 	return err
 }
 
 func (r *LeaderCommitRepository) GetLeaderCommitByRoundAndEoaAddr(ctx context.Context, round, trialNum, eoaAddr string) (*utils.LeaderCommitData, error) {
 	var model LeaderCommitScheme
-	err := r.db.Model(&model).
+	err := r.db.WithContext(ctx).Model(&model).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
 		Limit(1).
-		Select(ctx)
+		Select()
 	if err != nil {
 		return nil, err
 	}
@@ -50,9 +50,9 @@ func (r *LeaderCommitRepository) GetLeaderCommitByRoundAndEoaAddr(ctx context.Co
 
 func (r *LeaderCommitRepository) GetLeaderCommitsByRoundAndTrialNum(ctx context.Context, round, trialNum string) ([]*utils.LeaderCommitData, error) {
 	var models []LeaderCommitScheme
-	if err := r.db.Model(&models).
+	if err := r.db.WithContext(ctx).Model(&models).
 		Where("round = ? AND trial_num = ?", round, trialNum).
-		Select(ctx); err != nil {
+		Select(); err != nil {
 		return nil, err
 	}
 	commits := make([]*utils.LeaderCommitData, 0, len(models))
@@ -64,9 +64,9 @@ func (r *LeaderCommitRepository) GetLeaderCommitsByRoundAndTrialNum(ctx context.
 
 func (r *LeaderCommitRepository) GetRoundsToProcess(ctx context.Context) ([]*utils.LeaderCommitData, error) {
 	var models []LeaderCommitScheme
-	if err := r.db.Model(&models).
+	if err := r.db.WithContext(ctx).Model(&models).
 		Where("random_number_generated = ? AND submit_merkle_root_done = ?", false, true).
-		Select(ctx); err != nil {
+		Select(); err != nil {
 		return nil, err
 	}
 	commits := make([]*utils.LeaderCommitData, 0, len(models))
@@ -80,18 +80,18 @@ func (r *LeaderCommitRepository) UpdateLeaderCommit(ctx context.Context, leaderC
 	model := mapLeaderCommitDataToScheme(leaderCommit)
 	model.CreatedAt = leaderCommit.CreatedAt
 
-	_, err := r.db.Model(&model).
+	_, err := r.db.WithContext(ctx).Model(&model).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", model.Round, model.TrialNum, model.EOAAddress).
-		Update(ctx)
+		Update()
 	return err
 }
 
 func (r *LeaderCommitRepository) UpdateLeaderCommitRandomNumberGenerated(ctx context.Context, round, trialNum string) error {
 	model := LeaderCommitScheme{RandomNumberGenerated: true}
-	_, err := r.db.Model(&model).
+	_, err := r.db.WithContext(ctx).Model(&model).
 		Column("random_number_generated").
 		Where("round = ? AND trial_num = ?", round, trialNum).
-		Update(ctx)
+		Update()
 	return err
 }
 

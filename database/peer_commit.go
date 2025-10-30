@@ -15,15 +15,15 @@ func NewPeerCommitRepository(db *pg.DB) *PeerCommitRepository {
 }
 
 func (r *PeerCommitRepository) AddPeerCommitData(ctx context.Context, peerData *PeerCommitDataScheme) error {
-	_, err := r.db.Model(peerData).Insert(ctx)
+	_, err := r.db.WithContext(ctx).Model(peerData).Insert()
 	return err
 }
 
 func (r *PeerCommitRepository) GetPeerCommitData(ctx context.Context, round, trialNum, eoaAddress string) (*PeerCommitDataScheme, error) {
 	var peerCommit PeerCommitDataScheme
-	err := r.db.Model(&peerCommit).
+	err := r.db.WithContext(ctx).Model(&peerCommit).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddress).
-		Select(ctx)
+		Select()
 	if err != nil {
 		return nil, err
 	}
@@ -31,8 +31,8 @@ func (r *PeerCommitRepository) GetPeerCommitData(ctx context.Context, round, tri
 }
 
 func (r *PeerCommitRepository) UpdatePeerCommitData(ctx context.Context, peerData *PeerCommitDataScheme) error {
-	_, err := r.db.Model(peerData).
+	_, err := r.db.WithContext(ctx).Model(peerData).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", peerData.Round, peerData.TrialNum, peerData.EOAAddress).
-		Update(ctx)
+		Update()
 	return err
 }

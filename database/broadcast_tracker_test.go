@@ -11,7 +11,7 @@ import (
 )
 
 func TestBroadcastTrackerRepository_CRUD(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewBroadcastTrackerRepository(GetDB())
@@ -22,6 +22,7 @@ func TestBroadcastTrackerRepository_CRUD(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	tracker := &utils.BroadcastTracker{
@@ -39,31 +40,32 @@ func TestBroadcastTrackerRepository_CRUD(t *testing.T) {
 	}
 
 	// Add
-	err := repo.AddBroadcastTracker(tracker)
+	err := repo.AddBroadcastTracker(ctx, tracker)
 	assert.NoError(t, err)
 
 	// Get
-	trackers, err := repo.GetBroadcastTrackers()
+	trackers, err := repo.GetBroadcastTrackers(ctx)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, trackers)
 
 	// Update
 	tracker.Attempts = 2
-	err = repo.UpdateBroadcastTracker(tracker)
+	err = repo.UpdateBroadcastTracker(ctx, tracker)
 	assert.NoError(t, err)
 
 	// Delete
-	err = repo.DeleteBroadcastTracker(tracker)
+	err = repo.DeleteBroadcastTracker(ctx, tracker)
 	assert.NoError(t, err)
 
 	// Cleanup
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestBroadcastTrackerRepository_AddWithEmptyFields(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewBroadcastTrackerRepository(GetDB())
@@ -76,7 +78,7 @@ func TestBroadcastTrackerRepository_AddWithEmptyFields(t *testing.T) {
 		Type:       "cvs",
 		MessageID:  "msg1",
 	}
-	err := repo.AddBroadcastTracker(emptyRound)
+	err := repo.AddBroadcastTracker(ctx, emptyRound)
 	assert.Error(t, err, "Should reject empty round")
 
 	// Empty type
@@ -87,7 +89,7 @@ func TestBroadcastTrackerRepository_AddWithEmptyFields(t *testing.T) {
 		Type:       "",
 		MessageID:  "msg1",
 	}
-	err = repo.AddBroadcastTracker(emptyType)
+	err = repo.AddBroadcastTracker(ctx, emptyType)
 	assert.Error(t, err, "Should reject empty type")
 
 	// Empty messageID
@@ -98,12 +100,12 @@ func TestBroadcastTrackerRepository_AddWithEmptyFields(t *testing.T) {
 		Type:       "cvs",
 		MessageID:  "",
 	}
-	err = repo.AddBroadcastTracker(emptyMsgID)
+	err = repo.AddBroadcastTracker(ctx, emptyMsgID)
 	assert.Error(t, err, "Should reject empty messageID")
 }
 
 func TestBroadcastTrackerRepository_UpdateNonExistent(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewBroadcastTrackerRepository(GetDB())
@@ -116,12 +118,12 @@ func TestBroadcastTrackerRepository_UpdateNonExistent(t *testing.T) {
 		MessageID:  "nonexistent",
 	}
 
-	err := repo.UpdateBroadcastTracker(tracker)
+	err := repo.UpdateBroadcastTracker(ctx, tracker)
 	assert.NoError(t, err, "Update succeeds but updates 0 rows")
 }
 
 func TestBroadcastTrackerRepository_DeleteNonExistent(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewBroadcastTrackerRepository(GetDB())
@@ -134,12 +136,12 @@ func TestBroadcastTrackerRepository_DeleteNonExistent(t *testing.T) {
 		MessageID:  "nonexistent",
 	}
 
-	err := repo.DeleteBroadcastTracker(tracker)
+	err := repo.DeleteBroadcastTracker(ctx, tracker)
 	assert.NoError(t, err, "Delete succeeds but deletes 0 rows")
 }
 
 func TestBroadcastTrackerRepository_JSONBMaps(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewBroadcastTrackerRepository(GetDB())
@@ -150,6 +152,7 @@ func TestBroadcastTrackerRepository_JSONBMaps(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	tracker := &utils.BroadcastTracker{
@@ -161,11 +164,11 @@ func TestBroadcastTrackerRepository_JSONBMaps(t *testing.T) {
 		Acknowledged: map[string]bool{"0xpeer1": true, "0xpeer2": false, "0xpeer3": true},
 	}
 
-	err := repo.AddBroadcastTracker(tracker)
+	err := repo.AddBroadcastTracker(ctx, tracker)
 	assert.NoError(t, err, "Should store JSONB maps")
 
 	// Verify can retrieve
-	trackers, err := repo.GetBroadcastTrackers()
+	trackers, err := repo.GetBroadcastTrackers(ctx)
 	assert.NoError(t, err)
 
 	found := false
@@ -183,11 +186,12 @@ func TestBroadcastTrackerRepository_JSONBMaps(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestBroadcastTrackerRepository_AttemptsAndTimeout(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewBroadcastTrackerRepository(GetDB())
@@ -198,6 +202,7 @@ func TestBroadcastTrackerRepository_AttemptsAndTimeout(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	nowUnix := time.Now().Unix()
@@ -214,28 +219,29 @@ func TestBroadcastTrackerRepository_AttemptsAndTimeout(t *testing.T) {
 		Timeout:     nowUnix + 120,
 	}
 
-	err := repo.AddBroadcastTracker(tracker)
+	err := repo.AddBroadcastTracker(ctx, tracker)
 	assert.NoError(t, err)
 
 	// Increment attempts
 	tracker.Attempts = 1
 	tracker.LastSent = nowUnix + 10
-	err = repo.UpdateBroadcastTracker(tracker)
+	err = repo.UpdateBroadcastTracker(ctx, tracker)
 	assert.NoError(t, err)
 
 	tracker.Attempts = 2
 	tracker.LastSent = nowUnix + 20
-	err = repo.UpdateBroadcastTracker(tracker)
+	err = repo.UpdateBroadcastTracker(ctx, tracker)
 	assert.NoError(t, err)
 
 	// Cleanup
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestBroadcastTrackerRepository_MultipleTrackers(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewBroadcastTrackerRepository(GetDB())
@@ -246,6 +252,7 @@ func TestBroadcastTrackerRepository_MultipleTrackers(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	trackers := []*utils.BroadcastTracker{
@@ -255,18 +262,19 @@ func TestBroadcastTrackerRepository_MultipleTrackers(t *testing.T) {
 	}
 
 	for _, tracker := range trackers {
-		err := repo.AddBroadcastTracker(tracker)
+		err := repo.AddBroadcastTracker(ctx, tracker)
 		assert.NoError(t, err)
 	}
 
 	// Cleanup
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 func TestBroadcastTrackerRepository_AddAll(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewBroadcastTrackerRepository(GetDB())
@@ -277,6 +285,7 @@ func TestBroadcastTrackerRepository_AddAll(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 
 	trackers := []*utils.BroadcastTracker{
@@ -284,17 +293,21 @@ func TestBroadcastTrackerRepository_AddAll(t *testing.T) {
 		{Round: round, TrialNum: trialNum, EOAAddress: "0xbatch2", Type: "cos", MessageID: "msg2"},
 	}
 
-	err := repo.AddAllBroadcastTrackers(trackers)
+	err := repo.AddAllBroadcastTrackers(ctx, trackers)
 	assert.NoError(t, err)
 
 	// Cleanup
 	GetDB().Model(&BroadcastTrackerScheme{}).
 		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
 		Delete()
 }
 
 // Test error handling for GetBroadcastTrackers when database fails
 func TestBroadcastTrackerRepository_GetBroadcastTrackers_ErrorHandling(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	repo := NewBroadcastTrackerRepository(GetDB())
 
 	// Drop the table to force an error
@@ -302,7 +315,7 @@ func TestBroadcastTrackerRepository_GetBroadcastTrackers_ErrorHandling(t *testin
 	assert.NoError(t, err, "Failed to drop table for test")
 
 	// Try to get trackers - should get an error because table doesn't exist
-	_, err = repo.GetBroadcastTrackers()
+	_, err = repo.GetBroadcastTrackers(ctx)		
 	assert.Error(t, err, "Expected error when table is missing")
 
 	// Restore the schema
@@ -315,6 +328,9 @@ func TestBroadcastTrackerRepository_GetBroadcastTrackers_ErrorHandling(t *testin
 
 // Test error handling for AddAllBroadcastTrackers when insert fails
 func TestBroadcastTrackerRepository_AddAllBroadcastTrackers_ErrorHandling(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
 	repo := NewBroadcastTrackerRepository(GetDB())
 
 	// Drop the table to force an error during batch insert
@@ -327,7 +343,7 @@ func TestBroadcastTrackerRepository_AddAllBroadcastTrackers_ErrorHandling(t *tes
 		{Round: "test", TrialNum: "test", EOAAddress: "0xtest2", Type: "cvs", MessageID: "msg2"},
 	}
 
-	err = repo.AddAllBroadcastTrackers(trackers)
+	err = repo.AddAllBroadcastTrackers(ctx, trackers)
 	assert.Error(t, err, "Expected error when table is missing")
 	assert.Contains(t, err.Error(), "failed to add broadcast tracker data", "Error should contain expected message")
 

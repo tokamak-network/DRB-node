@@ -32,36 +32,41 @@ func TestGetDB_Properties(t *testing.T) {
 }
 
 func TestInitSQLDB_AlreadyInitialized(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Since database is already initialized by TestMain,
 	// calling InitSQLDB again should work (once.Do won't execute again)
-	err := InitSQLDB(5433, "localhost", "postgres", "123", "testdb")
+	err := InitSQLDB(ctx, 5433, "localhost", "postgres", "123", "testdb")
 	assert.NoError(t, err, "Should succeed when database is already initialized")
 }
 
 func TestInitSQLDB_InvalidHost(t *testing.T) {
-	err := InitSQLDB(9999, "invalid-host-that-does-not-exist", "postgres", "123", "nonexistent")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := InitSQLDB(ctx, 9999, "invalid-host-that-does-not-exist", "postgres", "123", "nonexistent")
 	assert.Error(t, err, "Should fail with invalid host")
 }
 
 func TestInitSQLDB_InvalidPort(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Test with invalid port
-	err := InitSQLDB(1, "localhost", "postgres", "123", "testdb")
+	err := InitSQLDB(ctx, 1, "localhost", "postgres", "123", "testdb")
 	// Should fail to connect
 	assert.Error(t, err, "Should fail with invalid port")
 }
 
 func TestInitSQLDB_ValidParameters(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Test with valid parameters (same as test database)
-	err := InitSQLDB(5433, "localhost", "postgres", "123", "testdb")
+	err := InitSQLDB(ctx, 5433, "localhost", "postgres", "123", "testdb")
 	assert.NoError(t, err, "Should succeed with valid parameters")
 
 	// Verify we can get the database
 	db := GetDB()
 	assert.NotNil(t, db)
 
-	// Verify connection is alive
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
 	err = db.Ping(ctx)
 	assert.NoError(t, err)
 }
@@ -85,27 +90,34 @@ func TestGetDB_ConnectionPool(t *testing.T) {
 }
 
 func TestInitSQLDB_WithEmptyPassword(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Test initialization with empty password (should fail for our test DB)
-	err := InitSQLDB(5433, "localhost", "postgres", "", "testdb")
+	err := InitSQLDB(ctx,5433, "localhost", "postgres", "", "testdb")
 	// This will fail at connection level
 	assert.Error(t, err, "Should fail with empty password when password is required")
 }
 
 func TestInitSQLDB_WithWrongCredentials(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Test with wrong username
-	err := InitSQLDB(5433, "localhost", "wronguser", "wrongpass", "testdb")
+	err := InitSQLDB(ctx, 5433, "localhost", "wronguser", "wrongpass", "testdb")
 	assert.Error(t, err, "Should fail with wrong credentials")
 }
 
 func TestInitSQLDB_WithNonexistentDatabase(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Test with database that doesn't exist
-	err := InitSQLDB(5433, "localhost", "postgres", "123", "database_that_does_not_exist")
+	err := InitSQLDB(ctx, 5433, "localhost", "postgres", "123", "database_that_does_not_exist")
 	assert.Error(t, err, "Should fail when database doesn't exist")
 }
 
 func TestInitSQLDB_ConnectionString(t *testing.T) {
-
-	err := InitSQLDB(5433, "localhost", "postgres", "123", "testdb")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := InitSQLDB(ctx, 5433, "localhost", "postgres", "123", "testdb")
 	assert.NoError(t, err)
 
 	db := GetDB()
@@ -141,14 +153,18 @@ func TestGetDB_ConcurrentAccess(t *testing.T) {
 }
 
 func TestInitSQLDB_Timeout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Test with invalid port on localhost (fast failure)
-	err := InitSQLDB(9876, "localhost", "postgres", "123", "testdb")
+	err := InitSQLDB(ctx, 9876, "localhost", "postgres", "123", "testdb")
 	assert.Error(t, err, "Should fail when connecting to invalid port")
 }
 
 func TestGetDB_AfterSuccessfulInit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Ensure database is initialized
-	err := InitSQLDB(5433, "localhost", "postgres", "123", "testdb")
+	err := InitSQLDB(ctx,5433, "localhost", "postgres", "123", "testdb")
 	assert.NoError(t, err)
 
 	// Get database and perform operations
@@ -156,14 +172,14 @@ func TestGetDB_AfterSuccessfulInit(t *testing.T) {
 	assert.NotNil(t, db)
 
 	// Test that we can ping the database
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
 	err = db.Ping(ctx)
 	assert.NoError(t, err, "Should be able to ping database after init")
 }
 
 func TestInitSQLDB_ContextTimeout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Since we're already initialized, this tests the final ping
-	err := InitSQLDB(5433, "localhost", "postgres", "123", "testdb")
+	err := InitSQLDB(ctx,5433, "localhost", "postgres", "123", "testdb")
 	assert.NoError(t, err, "Should succeed with valid connection")
 }

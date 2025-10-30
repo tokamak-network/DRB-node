@@ -22,7 +22,7 @@ func (r *BatchRepository) DeleteRoundTrialDataForLeaderNode(ctx context.Context,
 		(*BroadcastTrackerScheme)(nil),
 	}
 	for _, table := range tables {
-		if _, err := r.db.Model(table).Where("round = ? AND trial_num = ?", round, trialNum).Delete(ctx); err != nil {
+		if _, err := r.db.WithContext(ctx).Model(table).Where("round = ? AND trial_num = ?", round, trialNum).Delete(); err != nil {
 			return fmt.Errorf("failed to delete from %T: %w", table, err)
 		}
 	}
@@ -37,7 +37,7 @@ func (r *BatchRepository) DeleteRoundTrialDataForRegularNode(ctx context.Context
 		(*BroadcastTrackerScheme)(nil),
 	}
 	for _, table := range tables {
-		if _, err := r.db.Model(table).Where("round = ? AND trial_num = ?", round, trialNum).Delete(ctx); err != nil {
+		if _, err := r.db.WithContext(ctx).Model(table).Where("round = ? AND trial_num = ?", round, trialNum).Delete(); err != nil {
 			return fmt.Errorf("failed to delete from %T: %w", table, err)
 		}
 	}
@@ -47,19 +47,19 @@ func (r *BatchRepository) DeleteRoundTrialDataForRegularNode(ctx context.Context
 // DeleteOldRoundDataForLeaderNode deletes all rows from all relevant tables in leader node except current round
 func (r *BatchRepository) DeleteOldRoundDataForLeaderNode(ctx context.Context, currentRound string) error {
 	// Delete from leader_commit_schemes
-	_, err := r.db.Model((*LeaderCommitScheme)(nil)).Where("round != ?", currentRound).Delete(ctx)
+	_, err := r.db.WithContext(ctx).Model((*LeaderCommitScheme)(nil)).Where("round != ?", currentRound).Delete()
 	if err != nil {
 		return fmt.Errorf("failed to delete from leader_commit_schemes: %w", err)
 	}
 
 	// Delete from reveal_order_schemes
-	_, err = r.db.Model((*RevealOrderScheme)(nil)).Where("round != ?", currentRound).Delete(ctx)
+	_, err = r.db.WithContext(ctx).Model((*RevealOrderScheme)(nil)).Where("round != ?", currentRound).Delete()
 	if err != nil {
 		return fmt.Errorf("failed to delete from reveal_order_schemes: %w", err)
 	}
 
 	// Delete from broadcast_tracker_schemes
-	_, err = r.db.Model((*BroadcastTrackerScheme)(nil)).Where("round != ?", currentRound).Delete(ctx)
+	_, err = r.db.WithContext(ctx).Model((*BroadcastTrackerScheme)(nil)).Where("round != ?", currentRound).Delete()
 	if err != nil {
 		return fmt.Errorf("failed to delete from broadcast_tracker_schemes: %w", err)
 	}
@@ -70,22 +70,22 @@ func (r *BatchRepository) DeleteOldRoundDataForLeaderNode(ctx context.Context, c
 // DeleteOldRoundDataForRegularNode deletes all rows from all relevant tables in regular node except current round
 func (r *BatchRepository) DeleteOldRoundDataForRegularNode(ctx context.Context, currentRound string) error {
 	// Delete from commit_data_schemes
-	_, err := r.db.Model((*CommitDataScheme)(nil)).Where("round != ?", currentRound).Delete(ctx)
+	_, err := r.db.WithContext(ctx).Model((*CommitDataScheme)(nil)).Where("round != ?", currentRound).Delete()
 	if err != nil {
 		return fmt.Errorf("failed to delete from commit_data_schemes: %w", err)
 	}
 	// Delete from reveal_order_schemes
-	_, err = r.db.Model((*RevealOrderScheme)(nil)).Where("round != ?", currentRound).Delete(ctx)
+	_, err = r.db.WithContext(ctx).Model((*RevealOrderScheme)(nil)).Where("round != ?", currentRound).Delete()
 	if err != nil {
 		return fmt.Errorf("failed to delete from reveal_order_schemes: %w", err)
 	}
 	// Delete from peer_commit_data_schemes
-	_, err = r.db.Model((*PeerCommitDataScheme)(nil)).Where("round != ?", currentRound).Delete(ctx)
+	_, err = r.db.WithContext(ctx).Model((*PeerCommitDataScheme)(nil)).Where("round != ?", currentRound).Delete()
 	if err != nil {
 		return fmt.Errorf("failed to delete from peer_commit_data_schemes: %w", err)
 	}
 	// Delete from broadcast_tracker_schemes
-	_, err = r.db.Model((*BroadcastTrackerScheme)(nil)).Where("round != ?", currentRound).Delete(ctx)
+	_, err = r.db.WithContext(ctx).Model((*BroadcastTrackerScheme)(nil)).Where("round != ?", currentRound).Delete()
 	if err != nil {
 		return fmt.Errorf("failed to delete from broadcast_tracker_schemes: %w", err)
 	}

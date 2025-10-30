@@ -12,13 +12,13 @@ import (
 )
 
 func TestNodeInfoRepository_AddUpdateGet(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewNodeInfoRepository(GetDB())
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "127.0.0.1").Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "127.0.0.1").Delete()
 
 	node := &utils.NodeInfo{
 		IP:         "127.0.0.1",
@@ -28,31 +28,31 @@ func TestNodeInfoRepository_AddUpdateGet(t *testing.T) {
 	}
 
 	// Add
-	err := repo.AddNodeInfo(node)
+	err := repo.AddNodeInfo(ctx, node)
 	assert.NoError(t, err)
 
 	// Get
-	nodes, err := repo.GetNodeInfos()
+	nodes, err := repo.GetNodeInfos(ctx)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodes)
 
 	// Update
 	node.Port = "9090"
-	err = repo.UpdateNodeInfo(node)
+	err = repo.UpdateNodeInfo(ctx, node)
 	assert.NoError(t, err)
 
 	// Verify update
 	var updated NodeInfoScheme
-	err = GetDB().Model(&updated).Where("ip = ?", "127.0.0.1").Select()
+	err = GetDB().WithContext(ctx).Model(&updated).Where("ip = ?", "127.0.0.1").Select()
 	assert.NoError(t, err)
 	assert.Equal(t, "9090", updated.Port)
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "127.0.0.1").Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "127.0.0.1").Delete()
 }
 
 func TestNodeInfoRepository_AddWithEmptyFields(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewNodeInfoRepository(GetDB())
@@ -64,7 +64,7 @@ func TestNodeInfoRepository_AddWithEmptyFields(t *testing.T) {
 		PeerID:     "peer123",
 		EOAAddress: "0xabc",
 	}
-	err := repo.AddNodeInfo(nodeEmptyIP)
+	err := repo.AddNodeInfo(ctx, nodeEmptyIP)
 	assert.Error(t, err, "Should reject empty IP")
 
 	// Empty Port
@@ -74,7 +74,7 @@ func TestNodeInfoRepository_AddWithEmptyFields(t *testing.T) {
 		PeerID:     "peer456",
 		EOAAddress: "0xdef",
 	}
-	err = repo.AddNodeInfo(nodeEmptyPort)
+	err = repo.AddNodeInfo(ctx, nodeEmptyPort)
 	assert.Error(t, err, "Should reject empty Port")
 
 	// Empty PeerID
@@ -84,7 +84,7 @@ func TestNodeInfoRepository_AddWithEmptyFields(t *testing.T) {
 		PeerID:     "",
 		EOAAddress: "0xghi",
 	}
-	err = repo.AddNodeInfo(nodeEmptyPeerID)
+	err = repo.AddNodeInfo(ctx, nodeEmptyPeerID)
 	assert.Error(t, err, "Should reject empty PeerID")
 
 	// Empty EOAAddress
@@ -94,18 +94,18 @@ func TestNodeInfoRepository_AddWithEmptyFields(t *testing.T) {
 		PeerID:     "peer789",
 		EOAAddress: "",
 	}
-	err = repo.AddNodeInfo(nodeEmptyEOA)
+	err = repo.AddNodeInfo(ctx, nodeEmptyEOA)
 	assert.Error(t, err, "Should reject empty EOAAddress")
 }
 
 func TestNodeInfoRepository_DuplicateIP(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewNodeInfoRepository(GetDB())
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.1").Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.1").Delete()
 
 	node1 := &utils.NodeInfo{
 		IP:         "10.0.0.1",
@@ -114,7 +114,7 @@ func TestNodeInfoRepository_DuplicateIP(t *testing.T) {
 		EOAAddress: "0xaaa",
 	}
 
-	err := repo.AddNodeInfo(node1)
+	err := repo.AddNodeInfo(ctx, node1)
 	assert.NoError(t, err)
 
 	// Try duplicate IP
@@ -125,24 +125,24 @@ func TestNodeInfoRepository_DuplicateIP(t *testing.T) {
 		EOAAddress: "0xbbb",
 	}
 
-	err = repo.AddNodeInfo(node2)
+	err = repo.AddNodeInfo(ctx, node2)
 	assert.Error(t, err, "Should reject duplicate IP")
 	if err != nil {
 		assert.Contains(t, err.Error(), "duplicate key")
 	}
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.1").Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.1").Delete()
 }
 
 func TestNodeInfoRepository_UpdateNonExistent(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewNodeInfoRepository(GetDB())
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "999.999.999.999").Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "999.999.999.999").Delete()
 
 	nonExistentNode := &utils.NodeInfo{
 		IP:         "999.999.999.999",
@@ -151,23 +151,23 @@ func TestNodeInfoRepository_UpdateNonExistent(t *testing.T) {
 		EOAAddress: "0xnonexistent",
 	}
 
-	err := repo.UpdateNodeInfo(nonExistentNode)
+	err := repo.UpdateNodeInfo(ctx, nonExistentNode)
 	assert.NoError(t, err, "Update succeeds but updates 0 rows")
 
 	// Verify not created
 	var fetched NodeInfoScheme
-	err = GetDB().Model(&fetched).Where("ip = ?", "999.999.999.999").Select()
+	err = GetDB().WithContext(ctx).Model(&fetched).Where("ip = ?", "999.999.999.999").Select()
 	assert.Error(t, err, "Should not exist")
 }
 
 func TestNodeInfoRepository_UpdateWithEmptyFields(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewNodeInfoRepository(GetDB())
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.2").Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.2").Delete()
 
 	// Add valid node
 	existingNode := &utils.NodeInfo{
@@ -176,32 +176,32 @@ func TestNodeInfoRepository_UpdateWithEmptyFields(t *testing.T) {
 		PeerID:     "peerC",
 		EOAAddress: "0xccc",
 	}
-	err := repo.AddNodeInfo(existingNode)
+	err := repo.AddNodeInfo(ctx, existingNode)
 	assert.NoError(t, err)
 
 	// Try update with empty Port
 	existingNode.Port = ""
-	err = repo.UpdateNodeInfo(existingNode)
+	err = repo.UpdateNodeInfo(ctx, existingNode)
 	assert.Error(t, err, "Should reject empty Port")
 
 	// Verify original data unchanged
 	var unchanged NodeInfoScheme
-	err = GetDB().Model(&unchanged).Where("ip = ?", "10.0.0.2").Select()
+	err = GetDB().WithContext(ctx).Model(&unchanged).Where("ip = ?", "10.0.0.2").Select()
 	assert.NoError(t, err)
 	assert.Equal(t, "8001", unchanged.Port)
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.2").Delete()
+	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.2").Context(ctx).Delete()
 }
 
 func TestNodeInfoRepository_SuccessfulUpdate(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewNodeInfoRepository(GetDB())
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.3").Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.3").Delete()
 
 	node := &utils.NodeInfo{
 		IP:         "10.0.0.3",
@@ -209,19 +209,19 @@ func TestNodeInfoRepository_SuccessfulUpdate(t *testing.T) {
 		PeerID:     "originalPeer",
 		EOAAddress: "0xoriginal",
 	}
-	err := repo.AddNodeInfo(node)
+	err := repo.AddNodeInfo(ctx, node)
 	assert.NoError(t, err)
 
 	// Update all fields
 	node.Port = "7001"
 	node.PeerID = "updatedPeer"
 	node.EOAAddress = "0xupdated"
-	err = repo.UpdateNodeInfo(node)
+	err = repo.UpdateNodeInfo(ctx, node)
 	assert.NoError(t, err)
 
 	// Verify all fields updated
 	var updated NodeInfoScheme
-	err = GetDB().Model(&updated).Where("ip = ?", "10.0.0.3").Select()
+	err = GetDB().WithContext(ctx).Model(&updated).Where("ip = ?", "10.0.0.3").Select()
 	assert.NoError(t, err)
 	assert.Equal(t, "10.0.0.3", updated.IP)
 	assert.Equal(t, "7001", updated.Port)
@@ -229,11 +229,11 @@ func TestNodeInfoRepository_SuccessfulUpdate(t *testing.T) {
 	assert.Equal(t, "0xupdated", updated.EOAAddress)
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.3").Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.3").Delete()
 }
 
 func TestNodeInfoRepository_GetMultipleNodes(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewNodeInfoRepository(GetDB())
@@ -242,7 +242,7 @@ func TestNodeInfoRepository_GetMultipleNodes(t *testing.T) {
 
 	// Cleanup
 	for _, ip := range testIPs {
-		GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", ip).Delete()
+		GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", ip).Delete()
 	}
 
 	// Add multiple nodes
@@ -253,12 +253,12 @@ func TestNodeInfoRepository_GetMultipleNodes(t *testing.T) {
 	}
 
 	for _, node := range testNodes {
-		err := repo.AddNodeInfo(node)
+		err := repo.AddNodeInfo(ctx, node)
 		assert.NoError(t, err)
 	}
 
 	// Get all
-	nodes, err := repo.GetNodeInfos()
+	nodes, err := repo.GetNodeInfos(ctx)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(nodes), 3)
 
@@ -277,12 +277,12 @@ func TestNodeInfoRepository_GetMultipleNodes(t *testing.T) {
 
 	// Cleanup
 	for _, ip := range testIPs {
-		GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", ip).Delete()
+		GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", ip).Delete()
 	}
 }
 
 func TestNodeInfoRepository_ConcurrentInserts(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	repo := NewNodeInfoRepository(GetDB())
@@ -290,7 +290,7 @@ func TestNodeInfoRepository_ConcurrentInserts(t *testing.T) {
 	testIP := "concurrent_test_192.168.50.50"
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", testIP).Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", testIP).Delete()
 
 	numGoroutines := 5
 	doneChan := make(chan error, numGoroutines)
@@ -303,7 +303,7 @@ func TestNodeInfoRepository_ConcurrentInserts(t *testing.T) {
 				PeerID:     fmt.Sprintf("peer%d", idx),
 				EOAAddress: fmt.Sprintf("0xabc%d", idx),
 			}
-			err := repo.AddNodeInfo(node)
+			err := repo.AddNodeInfo(ctx, node)
 			doneChan <- err
 		}(i)
 	}
@@ -326,17 +326,17 @@ func TestNodeInfoRepository_ConcurrentInserts(t *testing.T) {
 
 	// Verify only 1 row
 	var nodes []NodeInfoScheme
-	count, err := GetDB().Model(&nodes).Where("ip = ?", testIP).Count()
+	count, err := GetDB().WithContext(ctx).Model(&nodes).Where("ip = ?", testIP).Count()
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
 	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", testIP).Delete()
+	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", testIP).Delete(ctx)
 }
 
 // Test error handling for GetNodeInfos when database fails
 func TestNodeInfoRepository_GetNodeInfos_ErrorHandling(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewNodeInfoRepository(GetDB())
@@ -346,7 +346,7 @@ func TestNodeInfoRepository_GetNodeInfos_ErrorHandling(t *testing.T) {
 	assert.NoError(t, err, "Failed to drop table for test")
 
 	// Try to get node infos - should get an error because table doesn't exist
-	_, err = repo.GetNodeInfos()
+	_, err = repo.GetNodeInfos(ctx)
 	assert.Error(t, err, "Expected error when table is missing")
 
 	// Restore the schema

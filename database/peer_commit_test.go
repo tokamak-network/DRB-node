@@ -9,7 +9,7 @@ import (
 )
 
 func TestPeerCommitRepository_AddGetUpdate(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewPeerCommitRepository(GetDB())
@@ -21,6 +21,7 @@ func TestPeerCommitRepository_AddGetUpdate(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&PeerCommitDataScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Delete()
 
 	peerData := &PeerCommitDataScheme{
@@ -33,11 +34,11 @@ func TestPeerCommitRepository_AddGetUpdate(t *testing.T) {
 	}
 
 	// Add
-	err := repo.AddPeerCommitData(peerData)
+	err := repo.AddPeerCommitData(ctx, peerData)
 	assert.NoError(t, err)
 
 	// Get
-	fetched, err := repo.GetPeerCommitData(round, trialNum, eoaAddr)
+	fetched, err := repo.GetPeerCommitData(ctx, round, trialNum, eoaAddr)
 	assert.NoError(t, err)
 	assert.Equal(t, round, fetched.Round)
 	assert.Equal(t, trialNum, fetched.TrialNum)
@@ -45,17 +46,18 @@ func TestPeerCommitRepository_AddGetUpdate(t *testing.T) {
 
 	// Update
 	peerData.SecretValue = []byte{0xFF}
-	err = repo.UpdatePeerCommitData(peerData)
+	err = repo.UpdatePeerCommitData(ctx, peerData)
 	assert.NoError(t, err)
 
 	// Cleanup
 	GetDB().Model(&PeerCommitDataScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Delete()
 }
 
 func TestPeerCommitRepository_AddWithEmptyFields(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewPeerCommitRepository(GetDB())
@@ -67,7 +69,7 @@ func TestPeerCommitRepository_AddWithEmptyFields(t *testing.T) {
 		EOAAddress: "0xtest",
 		Cvs:        []byte{0x01},
 	}
-	err := repo.AddPeerCommitData(emptyRound)
+	err := repo.AddPeerCommitData(ctx, emptyRound)
 	assert.Error(t, err, "Should reject empty round")
 
 	// Empty trialNum
@@ -77,7 +79,7 @@ func TestPeerCommitRepository_AddWithEmptyFields(t *testing.T) {
 		EOAAddress: "0xtest",
 		Cvs:        []byte{0x01},
 	}
-	err = repo.AddPeerCommitData(emptyTrial)
+	err = repo.AddPeerCommitData(ctx, emptyTrial)
 	assert.Error(t, err, "Should reject empty trialNum")
 
 	// Empty EOAAddress
@@ -87,12 +89,12 @@ func TestPeerCommitRepository_AddWithEmptyFields(t *testing.T) {
 		EOAAddress: "",
 		Cvs:        []byte{0x01},
 	}
-	err = repo.AddPeerCommitData(emptyEOA)
+	err = repo.AddPeerCommitData(ctx, emptyEOA)
 	assert.Error(t, err, "Should reject empty EOAAddress")
 }
 
 func TestPeerCommitRepository_DuplicateKey(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewPeerCommitRepository(GetDB())
@@ -104,6 +106,7 @@ func TestPeerCommitRepository_DuplicateKey(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&PeerCommitDataScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Delete()
 
 	peerData := &PeerCommitDataScheme{
@@ -113,22 +116,23 @@ func TestPeerCommitRepository_DuplicateKey(t *testing.T) {
 		Cvs:        []byte{0x01},
 	}
 
-	err := repo.AddPeerCommitData(peerData)
+	err := repo.AddPeerCommitData(ctx, peerData)
 	assert.NoError(t, err)
 
 	// Try duplicate
-	err = repo.AddPeerCommitData(peerData)
+	err = repo.AddPeerCommitData(ctx, peerData)
 	assert.Error(t, err, "Should reject duplicate composite key")
 	assert.Contains(t, err.Error(), "duplicate key")
 
 	// Cleanup
 	GetDB().Model(&PeerCommitDataScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoaAddr).
+		Context(ctx).
 		Delete()
 }
 
 func TestPeerCommitRepository_NullableByteArrays(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewPeerCommitRepository(GetDB())
@@ -136,6 +140,7 @@ func TestPeerCommitRepository_NullableByteArrays(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&PeerCommitDataScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", "nil_round", "nil_trial", "0xnil").
+		Context(ctx).
 		Delete()
 
 	// Add with nil byte arrays
@@ -147,11 +152,11 @@ func TestPeerCommitRepository_NullableByteArrays(t *testing.T) {
 		Cos:         nil,
 		Cvs:         nil,
 	}
-	err := repo.AddPeerCommitData(nilData)
+	err := repo.AddPeerCommitData(ctx, nilData)
 	assert.NoError(t, err, "Should allow nil byte arrays")
 
 	// Verify
-	fetched, err := repo.GetPeerCommitData("nil_round", "nil_trial", "0xnil")
+	fetched, err := repo.GetPeerCommitData(ctx, "nil_round", "nil_trial", "0xnil")
 	assert.NoError(t, err)
 	assert.Nil(t, fetched.SecretValue)
 	assert.Nil(t, fetched.Cos)
@@ -160,24 +165,25 @@ func TestPeerCommitRepository_NullableByteArrays(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&PeerCommitDataScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", "nil_round", "nil_trial", "0xnil").
+		Context(ctx).
 		Delete()
 }
 
 func TestPeerCommitRepository_GetNonExistent(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewPeerCommitRepository(GetDB())
 
-	_, err := repo.GetPeerCommitData("nonexistent", "nonexistent", "0xnonexistent")
+	_, err := repo.GetPeerCommitData(ctx, "nonexistent", "nonexistent", "0xnonexistent")
 	assert.Error(t, err, "Should return error for non-existent")
 
-	_, err = repo.GetPeerCommitData("", "", "")
+	_, err = repo.GetPeerCommitData(ctx, "", "", "")
 	assert.Error(t, err, "Should return error for empty params")
 }
 
 func TestPeerCommitRepository_IncrementalUpdates(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewPeerCommitRepository(GetDB())
@@ -185,6 +191,7 @@ func TestPeerCommitRepository_IncrementalUpdates(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&PeerCommitDataScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", "update_test", "update_trial", "0xupdate").
+		Context(ctx).
 		Delete()
 
 	// Start with nil fields
@@ -196,15 +203,15 @@ func TestPeerCommitRepository_IncrementalUpdates(t *testing.T) {
 		Cos:         nil,
 		Cvs:         nil,
 	}
-	err := repo.AddPeerCommitData(peerData)
+	err := repo.AddPeerCommitData(ctx, peerData)
 	assert.NoError(t, err)
 
 	// Update only SecretValue
 	peerData.SecretValue = []byte{0x01, 0x02}
-	err = repo.UpdatePeerCommitData(peerData)
+	err = repo.UpdatePeerCommitData(ctx, peerData)
 	assert.NoError(t, err)
 
-	fetched, err := repo.GetPeerCommitData("update_test", "update_trial", "0xupdate")
+	fetched, err := repo.GetPeerCommitData(ctx, "update_test", "update_trial", "0xupdate")
 	assert.NoError(t, err)
 	assert.Equal(t, []byte{0x01, 0x02}, fetched.SecretValue)
 	assert.Nil(t, fetched.Cos)
@@ -212,10 +219,10 @@ func TestPeerCommitRepository_IncrementalUpdates(t *testing.T) {
 
 	// Update only Cos
 	peerData.Cos = []byte{0x03, 0x04}
-	err = repo.UpdatePeerCommitData(peerData)
+	err = repo.UpdatePeerCommitData(ctx, peerData)
 	assert.NoError(t, err)
 
-	fetched, err = repo.GetPeerCommitData("update_test", "update_trial", "0xupdate")
+	fetched, err = repo.GetPeerCommitData(ctx, "update_test", "update_trial", "0xupdate")
 	assert.NoError(t, err)
 	assert.Equal(t, []byte{0x01, 0x02}, fetched.SecretValue)
 	assert.Equal(t, []byte{0x03, 0x04}, fetched.Cos)
@@ -223,10 +230,10 @@ func TestPeerCommitRepository_IncrementalUpdates(t *testing.T) {
 
 	// Update only Cvs
 	peerData.Cvs = []byte{0x05, 0x06}
-	err = repo.UpdatePeerCommitData(peerData)
+	err = repo.UpdatePeerCommitData(ctx, peerData)
 	assert.NoError(t, err)
 
-	fetched, err = repo.GetPeerCommitData("update_test", "update_trial", "0xupdate")
+	fetched, err = repo.GetPeerCommitData(ctx, "update_test", "update_trial", "0xupdate")
 	assert.NoError(t, err)
 	assert.Equal(t, []byte{0x01, 0x02}, fetched.SecretValue)
 	assert.Equal(t, []byte{0x03, 0x04}, fetched.Cos)
@@ -235,11 +242,12 @@ func TestPeerCommitRepository_IncrementalUpdates(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&PeerCommitDataScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", "update_test", "update_trial", "0xupdate").
+		Context(ctx).
 		Delete()
 }
 
 func TestPeerCommitRepository_MultipleEOAs(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewPeerCommitRepository(GetDB())
@@ -252,6 +260,7 @@ func TestPeerCommitRepository_MultipleEOAs(t *testing.T) {
 	for _, eoa := range eoas {
 		GetDB().Model(&PeerCommitDataScheme{}).
 			Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoa).
+			Context(ctx).
 			Delete()
 	}
 
@@ -265,13 +274,13 @@ func TestPeerCommitRepository_MultipleEOAs(t *testing.T) {
 			Cos:         []byte{byte(i), 0x02},
 			Cvs:         []byte{byte(i), 0x03},
 		}
-		err := repo.AddPeerCommitData(data)
+		err := repo.AddPeerCommitData(ctx, data)
 		assert.NoError(t, err)
 	}
 
 	// Verify each EOA
 	for i, eoa := range eoas {
-		fetched, err := repo.GetPeerCommitData(round, trialNum, eoa)
+		fetched, err := repo.GetPeerCommitData(ctx, round, trialNum, eoa)
 		assert.NoError(t, err)
 		assert.Equal(t, []byte{byte(i), 0x01}, fetched.SecretValue)
 		assert.Equal(t, []byte{byte(i), 0x02}, fetched.Cos)
@@ -282,12 +291,13 @@ func TestPeerCommitRepository_MultipleEOAs(t *testing.T) {
 	for _, eoa := range eoas {
 		GetDB().Model(&PeerCommitDataScheme{}).
 			Where("round = ? AND trial_num = ? AND eoa_address = ?", round, trialNum, eoa).
+			Context(ctx).
 			Delete()
 	}
 }
 
 func TestPeerCommitRepository_UpdateNonExistent(t *testing.T) {
-	_, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	repo := NewPeerCommitRepository(GetDB())
@@ -295,6 +305,7 @@ func TestPeerCommitRepository_UpdateNonExistent(t *testing.T) {
 	// Cleanup
 	GetDB().Model(&PeerCommitDataScheme{}).
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", "ghost", "ghost", "0xghost").
+		Context(ctx).
 		Delete()
 
 	ghostData := &PeerCommitDataScheme{
@@ -303,10 +314,10 @@ func TestPeerCommitRepository_UpdateNonExistent(t *testing.T) {
 		EOAAddress:  "0xghost",
 		SecretValue: []byte{0xFF},
 	}
-	err := repo.UpdatePeerCommitData(ghostData)
+	err := repo.UpdatePeerCommitData(ctx, ghostData)
 	assert.NoError(t, err, "Update succeeds but updates 0 rows")
 
 	// Verify not created
-	_, err = repo.GetPeerCommitData("ghost", "ghost", "0xghost")
+	_, err = repo.GetPeerCommitData(ctx, "ghost", "ghost", "0xghost")
 	assert.Error(t, err, "Should not exist")
 }

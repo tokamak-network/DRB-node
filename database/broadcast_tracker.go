@@ -18,13 +18,13 @@ func NewBroadcastTrackerRepository(db *pg.DB) *BroadcastTrackerRepository {
 
 func (r *BroadcastTrackerRepository) AddBroadcastTracker(ctx context.Context, trackerData *utils.BroadcastTracker) error {
 	tracker := mapBroadcastTrackerToScheme(trackerData)
-	_, err := r.db.Model(&tracker).Insert(ctx)
+	_, err := r.db.WithContext(ctx).Model(&tracker).Insert()
 	return err
 }
 
 func (r *BroadcastTrackerRepository) GetBroadcastTrackers(ctx context.Context) ([]*utils.BroadcastTracker, error) {
 	var models []BroadcastTrackerScheme
-	if err := r.db.Model(&models).Select(ctx); err != nil {
+	if err := r.db.WithContext(ctx).Model(&models).Select(); err != nil {
 		return nil, err
 	}
 	trackers := make([]*utils.BroadcastTracker, 0, len(models))
@@ -36,10 +36,10 @@ func (r *BroadcastTrackerRepository) GetBroadcastTrackers(ctx context.Context) (
 
 func (r *BroadcastTrackerRepository) UpdateBroadcastTracker(ctx context.Context, tracker *utils.BroadcastTracker) error {
 	model := mapBroadcastTrackerToScheme(tracker)
-	_, err := r.db.Model(&model).
+	_, err := r.db.WithContext(ctx).Model(&model).
 		Where("round = ? AND trial_num = ? AND eoa_address = ? AND type = ? AND message_id = ?",
 			model.Round, model.TrialNum, model.EOAAddress, model.Type, model.MessageID).
-		Update(ctx)
+		Update()
 	return err
 }
 
@@ -56,10 +56,10 @@ func (r *BroadcastTrackerRepository) AddAllBroadcastTrackers(ctx context.Context
 
 func (r *BroadcastTrackerRepository) DeleteBroadcastTracker(ctx context.Context, tracker *utils.BroadcastTracker) error {
 	model := mapBroadcastTrackerToScheme(tracker)
-	_, err := r.db.Model(&model).
+	_, err := r.db.WithContext(ctx).Model(&model).
 		Where("round = ? AND trial_num = ? AND eoa_address = ? AND type = ? AND message_id = ?",
 			model.Round, model.TrialNum, model.EOAAddress, model.Type, model.MessageID).
-		Delete(ctx)
+		Delete()
 	return err
 }
 
