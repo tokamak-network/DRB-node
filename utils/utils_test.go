@@ -155,3 +155,25 @@ func TestVerifySignatureForRegularNode(t *testing.T) {
 		assert.False(t, result)
 	})
 }
+
+func TestSignDataAdditionalCoverage(t *testing.T) {
+	t.Run("additional success path coverage", func(t *testing.T) {
+		privateKey, err := crypto.GenerateKey()
+		require.NoError(t, err)
+
+		data := "test data for additional coverage"
+		signature := SignData(data, privateKey)
+		
+		assert.NotNil(t, signature)
+		assert.Greater(t, len(signature), 0)
+
+		// Verify the signature is valid
+		hash := crypto.Keccak256Hash([]byte(data))
+		pubKey, err := crypto.SigToPub(hash.Bytes(), signature)
+		require.NoError(t, err)
+		
+		expectedAddress := crypto.PubkeyToAddress(*pubKey)
+		actualAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+		assert.Equal(t, expectedAddress, actualAddress)
+	})
+}

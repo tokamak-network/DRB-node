@@ -335,3 +335,101 @@ func TestConvertByteArray(t *testing.T) {
 		})
 	}
 }
+
+func TestCommitDataNilHandlingAdditional(t *testing.T) {
+	t.Run("SetCommittedNodesRound with nil CommittedNodes", func(t *testing.T) {
+		// Reset global state to nil
+		CommittedNodesMu.Lock()
+		CommittedNodes = nil
+		CommittedNodesMu.Unlock()
+
+		uniqueKey := "test-nil-handling"
+		address := common.HexToAddress("0x1234567890123456789012345678901234567890")
+		
+		roundMap := map[common.Address]LeaderCommitData{
+			address: {
+				UniqueKey:  uniqueKey,
+				Round:      "1",
+				TrialNum:   "0",
+				EOAAddress: address.Hex(),
+			},
+		}
+
+		// This should handle the nil case
+		SetCommittedNodesRound(uniqueKey, roundMap)
+
+		// Verify it was set correctly
+		retrievedMap, exists := GetCommittedNodes(uniqueKey)
+		assert.True(t, exists)
+		assert.Len(t, retrievedMap, 1)
+		assert.Equal(t, roundMap[address], retrievedMap[address])
+	})
+
+	t.Run("SetCommittedNodeData with nil maps", func(t *testing.T) {
+		// Reset global state to nil
+		CommittedNodesMu.Lock()
+		CommittedNodes = nil
+		CommittedNodesMu.Unlock()
+
+		uniqueKey := "test-nil-node-data"
+		address := common.HexToAddress("0x2345678901234567890123456789012345678901")
+		
+		data := LeaderCommitData{
+			UniqueKey:  uniqueKey,
+			Round:      "2",
+			TrialNum:   "1",
+			EOAAddress: address.Hex(),
+		}
+
+		// This should handle the nil cases
+		SetCommittedNodeData(uniqueKey, address, data)
+
+		// Verify it was set correctly
+		retrievedData, exists := GetCommittedNodeData(uniqueKey, address)
+		assert.True(t, exists)
+		assert.Equal(t, data, retrievedData)
+	})
+
+	t.Run("SetCommittedNodeData with nil round map", func(t *testing.T) {
+		// Initialize CommittedNodes but not the specific round
+		CommittedNodesMu.Lock()
+		CommittedNodes = make(map[string]map[common.Address]LeaderCommitData)
+		CommittedNodesMu.Unlock()
+
+		uniqueKey := "test-nil-round-map"
+		address := common.HexToAddress("0x3456789012345678901234567890123456789012")
+		
+		data := LeaderCommitData{
+			UniqueKey:  uniqueKey,
+			Round:      "3",
+			TrialNum:   "2",
+			EOAAddress: address.Hex(),
+		}
+
+		// This should handle the nil round map case
+		SetCommittedNodeData(uniqueKey, address, data)
+
+		// Verify it was set correctly
+		retrievedData, exists := GetCommittedNodeData(uniqueKey, address)
+		assert.True(t, exists)
+		assert.Equal(t, data, retrievedData)
+	})
+
+	t.Run("EnsureCommittedNodesRoundExists with nil CommittedNodes", func(t *testing.T) {
+		// Reset global state to nil
+		CommittedNodesMu.Lock()
+		CommittedNodes = nil
+		CommittedNodesMu.Unlock()
+
+		uniqueKey := "test-ensure-nil"
+
+		// This should handle the nil case
+		EnsureCommittedNodesRoundExists(uniqueKey)
+
+		// Verify CommittedNodes was initialized
+		CommittedNodesMu.RLock()
+		assert.NotNil(t, CommittedNodes)
+		assert.NotNil(t, CommittedNodes[uniqueKey])
+		CommittedNodesMu.RUnlock()
+	})
+}

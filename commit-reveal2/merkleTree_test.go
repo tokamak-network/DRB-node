@@ -253,3 +253,69 @@ func TestCreateMerkleTree(t *testing.T) {
 		assert.Equal(t, expectedRoot, root)
 	})
 }
+
+func TestCreateMerkleTreeEdgeCases(t *testing.T) {
+	t.Run("leaves with all same values", func(t *testing.T) {
+		sameValue := make([]byte, 32)
+		sameValue[31] = 0x42
+		
+		leaves := [][]byte{
+			sameValue,
+			sameValue,
+			sameValue,
+			sameValue,
+		}
+		
+		root, err := CreateMerkleTree(leaves)
+		assert.NoError(t, err)
+		assert.Len(t, root, 32)
+		assert.NotEqual(t, make([]byte, 32), root)
+	})
+
+	t.Run("many leaves", func(t *testing.T) {
+		numLeaves := 16
+		leaves := make([][]byte, numLeaves)
+		
+		for i := 0; i < numLeaves; i++ {
+			leaf := make([]byte, 32)
+			leaf[31] = byte(i)
+			leaves[i] = leaf
+		}
+		
+		root, err := CreateMerkleTree(leaves)
+		assert.NoError(t, err)
+		assert.Len(t, root, 32)
+		assert.NotEqual(t, make([]byte, 32), root)
+	})
+
+	t.Run("leaves with nil bytes", func(t *testing.T) {
+		leaves := [][]byte{
+			nil,
+			{0x01},
+			nil,
+			{0x02},
+		}
+		
+		root, err := CreateMerkleTree(leaves)
+		assert.NoError(t, err)
+		assert.Len(t, root, 32)
+	})
+
+	t.Run("extremely long leaves", func(t *testing.T) {
+		longLeaf1 := make([]byte, 1000)
+		longLeaf2 := make([]byte, 500)
+		
+		for i := range longLeaf1 {
+			longLeaf1[i] = 0xAA
+		}
+		for i := range longLeaf2 {
+			longLeaf2[i] = 0xBB
+		}
+		
+		leaves := [][]byte{longLeaf1, longLeaf2}
+		
+		root, err := CreateMerkleTree(leaves)
+		assert.NoError(t, err)
+		assert.Len(t, root, 32)
+	})
+}

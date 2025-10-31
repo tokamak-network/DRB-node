@@ -1,6 +1,7 @@
 package commitreveal2
 
 import (
+	"bytes"
 	"encoding/hex"
 	"testing"
 
@@ -287,5 +288,117 @@ func TestDetermineOrder(t *testing.T) {
 			
 			assert.GreaterOrEqual(t, hex.EncodeToString(hash1), hex.EncodeToString(hash2))
 		}
+	})
+}
+
+func TestCalculateRVEdgeCases(t *testing.T) {
+	t.Run("very large number of COS values", func(t *testing.T) {
+		numValues := 100
+		cosValues := make([][]byte, numValues)
+		
+		for i := 0; i < numValues; i++ {
+			cos := make([]byte, 32)
+			cos[31] = byte(i % 256)
+			cosValues[i] = cos
+		}
+		
+		rv := calculateRV(cosValues)
+		assert.NotEqual(t, [32]byte{}, rv)
+		
+		rv2 := calculateRV(cosValues)
+		assert.Equal(t, rv, rv2)
+	})
+
+	t.Run("COS values with all same content", func(t *testing.T) {
+		sameCOS := make([]byte, 32)
+		sameCOS[15] = 0x42
+		sameCOS[31] = 0x24
+		
+		cosValues := [][]byte{
+			sameCOS,
+			sameCOS,
+			sameCOS,
+		}
+		
+		rv := calculateRV(cosValues)
+		
+		singleRV := calculateRV([][]byte{sameCOS})
+		assert.NotEqual(t, rv, singleRV)
+	})
+}
+
+func TestDetermineOrderEdgeCases(t *testing.T) {
+	t.Run("very close hash values", func(t *testing.T) {
+		rv := [32]byte{}
+		rv[0] = 0x01
+		
+		cvs1 := make([]byte, 32)
+		cvs1[31] = 0x01
+		
+		cvs2 := make([]byte, 32)
+		cvs2[31] = 0x02
+		
+		cvsValues := [][]byte{cvs1, cvs2}
+		order := determineOrder(rv, cvsValues)
+		
+		assert.Len(t, order, 2)
+		assert.Contains(t, order, 0)
+		assert.Contains(t, order, 1)
+		
+		order2 := determineOrder(rv, cvsValues)
+		assert.Equal(t, order, order2)
+	})
+
+	t.Run("maximum number of CVS values", func(t *testing.T) {
+		rv := [32]byte{}
+		rv[0] = 0xFF
+		
+		numValues := 256
+		cvsValues := make([][]byte, numValues)
+		
+		for i := 0; i < numValues; i++ {
+			cvs := make([]byte, 32)
+			cvs[30] = byte(i % 256)
+			cvs[31] = byte((i * 7) % 256)
+			cvsValues[i] = cvs
+		}
+		
+		order := determineOrder(rv, cvsValues)
+		assert.Len(t, order, numValues)
+		
+		found := make(map[int]bool)
+		for _, idx := range order {
+			found[idx] = true
+		}
+		assert.Len(t, found, numValues)
+		
+		for i := 0; i < len(order)-1; i++ {
+			hash1 := Keccak256(append(rv[:], cvsValues[order[i]]...))
+			hash2 := Keccak256(append(rv[:], cvsValues[order[i+1]]...))
+			
+			comparison := bytes.Compare(hash1, hash2)
+			assert.GreaterOrEqual(t, comparison, 0)
+		}
+	})
+
+	t.Run("RV with extreme values", func(t *testing.T) {
+		rv := [32]byte{}
+		for i := range rv {
+			rv[i] = 0xFF
+		}
+		
+		cvs1 := make([]byte, 32)
+		cvs2 := make([]byte, 32)
+		cvs2[31] = 0x01
+		
+		cvsValues := [][]byte{cvs1, cvs2}
+		order := determineOrder(rv, cvsValues)
+		
+		assert.Len(t, order, 2)
+		
+		rv = [32]byte{}
+		order2 := determineOrder(rv, cvsValues)
+		
+		assert.Len(t, order2, 2)
 	})
 }

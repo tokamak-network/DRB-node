@@ -282,3 +282,135 @@ func TestGenerateCommit(t *testing.T) {
 		assert.NotEqual(t, [32]byte{}, cvs2)
 	})
 }
+
+func TestKeccak256EdgeCases(t *testing.T) {
+	t.Run("large input", func(t *testing.T) {
+		largeInput := make([]byte, 10000)
+		for i := range largeInput {
+			largeInput[i] = byte(i % 256)
+		}
+		
+		result := Keccak256(largeInput)
+		assert.Len(t, result, 32)
+		assert.NotEqual(t, make([]byte, 32), result)
+	})
+
+	t.Run("single byte inputs", func(t *testing.T) {
+		result1 := Keccak256([]byte{0x00})
+		result2 := Keccak256([]byte{0x01})
+		result3 := Keccak256([]byte{0xFF})
+		
+		assert.NotEqual(t, result1, result2)
+		assert.NotEqual(t, result2, result3)
+		assert.NotEqual(t, result1, result3)
+	})
+}
+
+func TestAbiEncodeEdgeCases(t *testing.T) {
+	t.Run("mixed size elements", func(t *testing.T) {
+		elements := [][]byte{
+			{},
+			{0x01},
+			make([]byte, 16),
+			make([]byte, 32),
+		}
+		
+		result := abiEncode(elements...)
+		expectedLength := 4 * 32
+		assert.Len(t, result, expectedLength)
+		
+		for i := 0; i < 4; i++ {
+			segment := result[i*32 : (i+1)*32]
+			assert.Len(t, segment, 32)
+		}
+	})
+
+	t.Run("very large element", func(t *testing.T) {
+		largeElement := make([]byte, 64)
+		for i := range largeElement {
+			largeElement[i] = 0xFF
+		}
+		
+		result := abiEncode(largeElement)
+		assert.Len(t, result, 64)
+		
+		for _, b := range result {
+			assert.Equal(t, byte(0xFF), b)
+		}
+	})
+}
+
+func TestAbiEncodePackedEdgeCases(t *testing.T) {
+	t.Run("many small elements", func(t *testing.T) {
+		var elements [][]byte
+		for i := 0; i < 100; i++ {
+			elements = append(elements, []byte{byte(i)})
+		}
+		
+		result := abiEncodePacked(elements...)
+		assert.Len(t, result, 100)
+		
+		for i := 0; i < 100; i++ {
+			assert.Equal(t, byte(i), result[i])
+		}
+	})
+
+	t.Run("alternating empty and non-empty", func(t *testing.T) {
+		elements := [][]byte{
+			{}, 
+			{0x01},
+			{},
+			{0x02, 0x03},
+			{},
+			{0x04},
+		}
+		
+		result := abiEncodePacked(elements...)
+		expected := []byte{0x01, 0x02, 0x03, 0x04}
+		assert.Equal(t, expected, result)
+	})
+}
+
+func TestIntToBytesEdgeCases(t *testing.T) {
+	t.Run("very large positive number", func(t *testing.T) {
+		largeNum := new(big.Int)
+		largeNum.SetString("115792089237316195423570985008687907853269984665640564039457584007913129639935", 10)
+		
+		result := intToBytes(largeNum)
+		assert.Len(t, result, 32)
+		
+		expected := make([]byte, 32)
+		for i := range expected {
+			expected[i] = 0xFF
+		}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("number requiring full 32 bytes", func(t *testing.T) {
+		fullNum := new(big.Int)
+		fullNum.SetString("0x8000000000000000000000000000000000000000000000000000000000000000", 0)
+		
+		result := intToBytes(fullNum)
+		assert.Len(t, result, 32)
+		assert.Equal(t, byte(0x80), result[0])
+		
+		for i := 1; i < 32; i++ {
+			assert.Equal(t, byte(0x00), result[i])
+		}
+	})
+
+	t.Run("nil big.Int", func(t *testing.T) {
+		var nilInt *big.Int
+		
+		defer func() {
+			if r := recover(); r != nil {
+				t.Logf("Function panicked with nil input as expected: %v", r)
+			}
+		}()
+		
+		result := intToBytes(nilInt)
+		if result != nil {
+			assert.Len(t, result, 32)
+		}
+	})
+}
