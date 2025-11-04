@@ -13,6 +13,34 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+type RevealOrderService struct {
+	revealOrderRepository  database.IRevealOrderRepository
+	peerCommitRepository   database.IPeerCommitRepository
+	leaderCommitRepository database.ILeaderCommitRepository
+}
+
+func NewRevealOrderService(
+	revealOrderRepository database.IRevealOrderRepository,
+	peerCommitRepository database.IPeerCommitRepository,
+	leaderCommitRepository database.ILeaderCommitRepository,
+) *RevealOrderService {
+	return &RevealOrderService{
+		revealOrderRepository:  revealOrderRepository,
+		peerCommitRepository:   peerCommitRepository,
+		leaderCommitRepository: leaderCommitRepository,
+	}
+}
+
+// DetermineRevealOrder determines the reveal order for leader nodes
+func (s *RevealOrderService) DetermineRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
+	return DetermineRevealOrder(round, trialNum, activatedOps)
+}
+
+// DetermineRegularRevealOrder determines the reveal order for regular nodes
+func (s *RevealOrderService) DetermineRegularRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
+	return DetermineRegularRevealOrder(round, trialNum, activatedOps)
+}
+
 type RevealOrder struct {
 	OrderedNodes []string `json:"ordered_nodes"`
 	RevealOrder  []int    `json:"reveal_order"`

@@ -1,7 +1,6 @@
 package commitreveal2
 
 import (
-	"context"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -9,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/tokamak-network/DRB-node/database"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -86,32 +84,3 @@ func AbiEncodePacked(elements ...[]byte) []byte {
 	return abiEncodePacked(elements...)
 }
 
-// RevealOrderService handles reveal order operations
-type RevealOrderService struct {
-	revealOrderRepo         database.IRevealOrderRepository
-	peerCommitDataRepo      database.IPeerCommitRepository
-	leaderCommitRepo        database.ILeaderCommitRepository
-}
-
-// NewRevealOrderService creates a new RevealOrderService
-func NewRevealOrderService(
-	revealOrderRepo database.IRevealOrderRepository,
-	peerCommitDataRepo database.IPeerCommitRepository,
-	leaderCommitRepo database.ILeaderCommitRepository,
-) *RevealOrderService {
-	return &RevealOrderService{
-		revealOrderRepo:         revealOrderRepo,
-		peerCommitDataRepo:      peerCommitDataRepo,
-		leaderCommitRepo:        leaderCommitRepo,
-	}
-}
-
-// DetermineRevealOrder determines the reveal order for leader nodes
-func (s *RevealOrderService) DetermineRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
-	return DetermineRevealOrder(round, trialNum, activatedOps)
-}
-
-// DetermineRegularRevealOrder determines the reveal order for regular nodes
-func (s *RevealOrderService) DetermineRegularRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
-	return DetermineRegularRevealOrder(round, trialNum, activatedOps)
-}
