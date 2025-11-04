@@ -13,7 +13,7 @@ import (
 )
 
 // CreateStream establishes a stream to a regular node for a given protocol
-func CreateStream(ctx context.Context, h host.Host, nodeInfo NodeInfo, protocolStr string) (network.Stream, error) {
+func CreateStream(h host.Host, nodeInfo NodeInfo, protocolStr string) (network.Stream, error) {
 	// Format the peer address
 	peerAddr := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", nodeInfo.IP, nodeInfo.Port, nodeInfo.PeerID)
 	maddr, err := multiaddr.NewMultiaddr(peerAddr)
@@ -33,7 +33,7 @@ func CreateStream(ctx context.Context, h host.Host, nodeInfo NodeInfo, protocolS
 	protoID := protocol.ID(protocolStr)
 
 	// Open a stream to the peer using the specified protocol
-	stream, err := h.NewStream(ctx, peerInfo.ID, protoID)
+	stream, err := h.NewStream(context.Background(), peerInfo.ID, protoID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open stream: %v", err)
 	}

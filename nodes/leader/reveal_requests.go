@@ -276,7 +276,7 @@ func (n *LeaderNode) HandleSecretValueResponse(ctx context.Context, h host.Host,
 
 // sendToRegularNode sends a request to a specific regular node
 func sendToRegularNode(ctx context.Context, h host.Host, nodeInfo utils.NodeInfo, protocol string, data interface{}) error {
-	stream, err := utils.CreateStream(ctx, h, utils.NodeInfo{
+	stream, err := utils.CreateStream(h, utils.NodeInfo{
 		IP:     nodeInfo.IP,
 		Port:   nodeInfo.Port,
 		PeerID: nodeInfo.PeerID,

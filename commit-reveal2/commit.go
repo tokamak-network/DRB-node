@@ -1,6 +1,7 @@
 package commitreveal2
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -8,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/database"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -26,29 +27,15 @@ func GenerateCommit(round string, operator string) ([32]byte, [32]byte, [32]byte
 
 	// Convert operator to Ethereum address
 	operatorAddress := common.HexToAddress(operator)
-	activatedOperators := eth.Service.GetActivatedOperatorsCached()
-	operatorIndex := -1
-	for i, op := range activatedOperators {
-		if op.Hex() == operator {
-			operatorIndex = i
-			break
-		}
-	}
+
 	// Generate secret value using keccak256(abi.encodePacked(round, operator, timestamp))
-	secretValue := Keccak256(AbiEncodePacked(IntToBytes(roundInt), operatorAddress.Bytes(), IntToBytes(timestamp)))
+	secretValue := Keccak256(abiEncodePacked(intToBytes(roundInt), operatorAddress.Bytes(), intToBytes(timestamp)))
 
 	// Generate cos by hashing the secretValue using abi.encode
-	cos := Keccak256(AbiEncode(secretValue))
+	cos := Keccak256(abiEncode(secretValue))
 
-	// Ensure operator index is found
-	if operatorIndex == -1 {
-		return [32]byte{}, [32]byte{}, [32]byte{}, fmt.Errorf("operator %s not found in activated operators", operator)
-	}
-
-	// Convert operatorIndex to a single byte
-	opIndexByte := []byte{uint8(operatorIndex)}
-	// Generate cvs by hashing abi.encodePacked(cos, uint8(operatorIndex))
-	cvs := Keccak256(AbiEncodePacked(cos, opIndexByte))
+	// Generate cvs by hashing the cos using abi.encode
+	cvs := Keccak256(abiEncode(cos))
 
 	// Convert results into [32]byte format (Solidity's bytes32)
 	var secretValueBytes32, cosBytes32, cvsBytes32 [32]byte
@@ -72,7 +59,7 @@ func Keccak256(data []byte) []byte {
 }
 
 // abiEncode replicates Solidity's abi.encode behavior with 32-byte padding.
-func AbiEncode(elements ...[]byte) []byte {
+func abiEncode(elements ...[]byte) []byte {
 	var encoded []byte
 	for _, e := range elements {
 		encoded = append(encoded, common.LeftPadBytes(e, 32)...)
@@ -80,8 +67,8 @@ func AbiEncode(elements ...[]byte) []byte {
 	return encoded
 }
 
-// AbiEncodePacked replicates Solidity's abi.encodePacked behavior.
-func AbiEncodePacked(elements ...[]byte) []byte {
+// abiEncodePacked replicates Solidity's abi.encodePacked behavior.
+func abiEncodePacked(elements ...[]byte) []byte {
 	var packed []byte
 	for _, e := range elements {
 		packed = append(packed, e...)
@@ -90,6 +77,41 @@ func AbiEncodePacked(elements ...[]byte) []byte {
 }
 
 // intToBytes converts a *big.Int to its padded big-endian byte representation.
-func IntToBytes(n *big.Int) []byte {
+func intToBytes(n *big.Int) []byte {
 	return common.LeftPadBytes(n.Bytes(), 32)
+}
+
+// AbiEncodePacked is the public wrapper for abiEncodePacked
+func AbiEncodePacked(elements ...[]byte) []byte {
+	return abiEncodePacked(elements...)
+}
+
+// RevealOrderService handles reveal order operations
+type RevealOrderService struct {
+	revealOrderRepo         database.IRevealOrderRepository
+	peerCommitDataRepo      database.IPeerCommitRepository
+	leaderCommitRepo        database.ILeaderCommitRepository
+}
+
+// NewRevealOrderService creates a new RevealOrderService
+func NewRevealOrderService(
+	revealOrderRepo database.IRevealOrderRepository,
+	peerCommitDataRepo database.IPeerCommitRepository,
+	leaderCommitRepo database.ILeaderCommitRepository,
+) *RevealOrderService {
+	return &RevealOrderService{
+		revealOrderRepo:         revealOrderRepo,
+		peerCommitDataRepo:      peerCommitDataRepo,
+		leaderCommitRepo:        leaderCommitRepo,
+	}
+}
+
+// DetermineRevealOrder determines the reveal order for leader nodes
+func (s *RevealOrderService) DetermineRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
+	return DetermineRevealOrder(round, trialNum, activatedOps)
+}
+
+// DetermineRegularRevealOrder determines the reveal order for regular nodes
+func (s *RevealOrderService) DetermineRegularRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
+	return DetermineRegularRevealOrder(round, trialNum, activatedOps)
 }
