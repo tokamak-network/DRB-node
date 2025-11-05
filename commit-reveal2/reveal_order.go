@@ -13,6 +13,12 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+// IRevealOrderService defines the interface for reveal order operations
+type IRevealOrderService interface {
+	DetermineRevealOrder(ctx context.Context, roundNum string, trialNum string, activatedOps []common.Address) (bool, error)
+	DetermineRegularRevealOrder(ctx context.Context, roundNum string, trialNum string, activatedOps []common.Address) (bool, error)
+}
+
 type RevealOrderService struct {
 	revealOrderRepository  database.IRevealOrderRepository
 	peerCommitRepository   database.IPeerCommitRepository

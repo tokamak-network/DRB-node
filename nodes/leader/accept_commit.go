@@ -16,7 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
-	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/constants"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -286,7 +285,7 @@ func (n *LeaderNode) processSubmittedSecretRequest(ctx context.Context, round *b
 	}
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	intValue := int(index.Int64())
-	activatedOps := eth.Service.GetActivatedOperatorsCached()
+	activatedOps := n.ethService.GetActivatedOperatorsCached()
 	if intValue >= len(activatedOps) {
 		log.Printf("Index %d out of bounds for activated operators length %d", intValue, len(activatedOps))
 		return
@@ -343,7 +342,7 @@ func (n *LeaderNode) processRandomRequestNumber(ctx context.Context, blockTimest
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
 		// Update the activated operators
-		eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+		n.ethService.UpdateActivatedOperators(ctx, n.fallbackEthClient)
 		// Reset the indices for the new round
 		n.ResetIndicesForNewRound()
 		log.Printf("Reset Indices array for new round %s with trail %s", n.GetCurrentRound(), n.GetCurrentTrial())
@@ -406,7 +405,7 @@ func (n *LeaderNode) resuming(ctx context.Context) {
 	leaderEOA := crypto.PubkeyToAddress(privateKey.PublicKey)
 
 	// Check deposit amount
-	depositResult, err := eth.Service.CallSmartContract(ctx, n.fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, leaderEOA)
+	depositResult, err := n.ethService.CallSmartContract(ctx, n.fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, leaderEOA)
 	if err != nil {
 		log.Printf("Failed to call s_depositAmount: %v", err)
 		return
@@ -425,7 +424,7 @@ func (n *LeaderNode) resuming(ctx context.Context) {
 			PrivateKey:      privateKey,
 			ContractABI:     parsedABI,
 		}
-		_, _, err := eth.Service.ExecuteTransaction(
+		_, _, err := n.ethService.ExecuteTransaction(
 			ctx,
 			clientUtils,
 			n.fallbackEthClient,
@@ -441,7 +440,7 @@ func (n *LeaderNode) resuming(ctx context.Context) {
 
 	// Now poll getActivatedOperatorsLength and call resume when >=2
 	for {
-		opsLenResult, err := eth.Service.CallSmartContract(ctx, n.fallbackEthClient, parsedABI, "getActivatedOperatorsLength", contractAddress)
+		opsLenResult, err := n.ethService.CallSmartContract(ctx, n.fallbackEthClient, parsedABI, "getActivatedOperatorsLength", contractAddress)
 		if err != nil {
 			log.Printf("Failed to call getActivatedOperatorsLength: %v", err)
 			time.Sleep(5 * time.Second)
@@ -460,7 +459,7 @@ func (n *LeaderNode) resuming(ctx context.Context) {
 				PrivateKey:      privateKey,
 				ContractABI:     parsedABI,
 			}
-			_, _, err := eth.Service.ExecuteTransaction(
+			_, _, err := n.ethService.ExecuteTransaction(
 				ctx,
 				clientUtils,
 				n.fallbackEthClient,
@@ -486,7 +485,7 @@ func (n *LeaderNode) processCOS(ctx context.Context, round *big.Int, trialNum *b
 	}
 	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
 
-	activatedOps := eth.Service.GetActivatedOperatorsCached()
+	activatedOps := n.ethService.GetActivatedOperatorsCached()
 	if activatedOperatorIndex.Int64() >= int64(len(activatedOps)) {
 		log.Printf("Index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
 		return nil
@@ -561,7 +560,7 @@ func (n *LeaderNode) updateCOS(ctx context.Context, round string, trialNum strin
 	commitData.CosHex = cosHex
 	utils.SetCommittedNodeData(uniqueKey, eoa, commitData)
 
-	activatedOps := eth.Service.GetActivatedOperatorsCached()
+	activatedOps := n.ethService.GetActivatedOperatorsCached()
 
 	if n.AllCosReceivedUnlocked(uniqueKey) {
 		log.Printf("All COS received for round %s with trail %s.", round, trialNum)
@@ -582,7 +581,7 @@ func (n *LeaderNode) processCVS(ctx context.Context, round *big.Int, trialNum *b
 	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
 	roundStr := round.String()
 	trialNumStr := trialNum.String()
-	activatedOps := eth.Service.GetActivatedOperatorsCached()
+	activatedOps := n.ethService.GetActivatedOperatorsCached()
 	if activatedOperatorIndex.Int64() >= int64(len(activatedOps)) {
 		log.Printf("Index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
 		return nil
@@ -660,7 +659,7 @@ func (n *LeaderNode) updateCVS(round string, uniqueKey string, eoa common.Addres
 }
 
 func (n *LeaderNode) AllCosReceivedUnlocked(uniqueKey string) bool {
-	ops := eth.Service.GetActivatedOperatorsCached()
+	ops := n.ethService.GetActivatedOperatorsCached()
 	if len(ops) == 0 {
 		return false
 	}
@@ -680,7 +679,7 @@ func (n *LeaderNode) AllCosReceivedUnlocked(uniqueKey string) bool {
 }
 
 func (n *LeaderNode) AllCvsReceivedUnlocked(uniqueKey string) bool {
-	ops := eth.Service.GetActivatedOperatorsCached()
+	ops := n.ethService.GetActivatedOperatorsCached()
 	if len(ops) == 0 {
 		return false
 	}
@@ -806,7 +805,7 @@ func (n *LeaderNode) callFailToSubmitCo(ctx context.Context, round string, trial
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = eth.Service.ExecuteTransaction(
+	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -920,7 +919,7 @@ func (n *LeaderNode) callFailToSubmitCv(ctx context.Context, round string, trial
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = eth.Service.ExecuteTransaction(
+	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -989,7 +988,7 @@ func (n *LeaderNode) CheckHaltedState(ctx context.Context) {
 	contractAddress := common.HexToAddress(contractAddressStr)
 
 	// Check s_isInProcess storage variable
-	result, err := eth.Service.CallSmartContract(ctx, n.fallbackEthClient, parsedABI, "s_isInProcess", contractAddress)
+	result, err := n.ethService.CallSmartContract(ctx, n.fallbackEthClient, parsedABI, "s_isInProcess", contractAddress)
 	if err != nil {
 		log.Printf("Failed to call s_isInProcess: %v", err)
 		return
@@ -1079,7 +1078,7 @@ func (n *LeaderNode) callRequestToSubmitCv(ctx context.Context, round string, tr
 
 	// Implement the same logic as handleMissingCV from leaderNode.go
 	n.SetCvOnChain(uniqueKey, true)
-	activatedOperators := eth.Service.GetActivatedOperatorsCached()
+	activatedOperators := n.ethService.GetActivatedOperatorsCached()
 	i := big.NewInt(0)
 	for _, op := range activatedOperators {
 		for _, missingOp := range missingOperators {
@@ -1130,7 +1129,7 @@ func (n *LeaderNode) callRequestToSubmitCv(ctx context.Context, round string, tr
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = eth.Service.ExecuteTransaction(
+	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -1149,7 +1148,7 @@ func (n *LeaderNode) callRequestToSubmitCv(ctx context.Context, round string, tr
 // Helper function to get missing CVS operators
 func (n *LeaderNode) getMissingCvsOperators(uniqueKey string) []string {
 	var missingOperators []string
-	ops := eth.Service.GetActivatedOperatorsCached()
+	ops := n.ethService.GetActivatedOperatorsCached()
 
 	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists {
@@ -1199,7 +1198,7 @@ func (n *LeaderNode) GenerateMerkleRoot(ctx context.Context, roundNum string, tr
 
 	log.Printf("Generating Merkle root for round %s with trail %s...", roundNum, trialNum)
 
-	activatedOperatorsList := eth.Service.GetActivatedOperatorsCached()
+	activatedOperatorsList := n.ethService.GetActivatedOperatorsCached()
 
 	log.Printf("Activated operators for round %s with trail %s in order: %v", roundNum, trialNum, activatedOperatorsList)
 
@@ -1277,7 +1276,7 @@ func (n *LeaderNode) SubmitMerkleRoot(ctx context.Context, roundNum string, tria
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = eth.Service.ExecuteTransaction(
+	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -1390,7 +1389,7 @@ func (n *LeaderNode) callRequestToSubmitCoIfNeeded(ctx context.Context, roundNum
 	n.commitMu.Lock()
 	defer n.commitMu.Unlock()
 
-	ops := eth.Service.GetActivatedOperatorsCached()
+	ops := n.ethService.GetActivatedOperatorsCached()
 	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists {
 		log.Printf("No round data found for COS check in round %s with trail %s", roundNum, trialNum)
@@ -1491,7 +1490,7 @@ func (n *LeaderNode) requestToSubmitCo(ctx context.Context, roundNum string, tri
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = eth.Service.ExecuteTransaction(
+	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,

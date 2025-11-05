@@ -13,6 +13,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/database"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -29,8 +30,9 @@ type LeaderNode struct {
 	nodeInfoRepository         database.INodeInfoRepository
 
 	// External services
-	revealOrderService *commitreveal2.RevealOrderService
+	revealOrderService commitreveal2.IRevealOrderService // Interface for testability
 	p2pClient          *libp2putils.P2PClient
+	ethService         eth.IEthService // Injected eth service for testability
 
 	// Internal variables to manage leader node data on memory
 	commitMu sync.Mutex
@@ -112,7 +114,7 @@ type LeaderNode struct {
 
 func NewLeaderNode(
 	fallbackEthClient *fallback_ethclient.FallbackRPCClient,
-	revealOrderService *commitreveal2.RevealOrderService,
+	revealOrderService commitreveal2.IRevealOrderService,
 	p2pClient *libp2putils.P2PClient,
 	leaderCommitRepository database.ILeaderCommitRepository,
 	batchRepository *database.BatchRepository,
@@ -129,6 +131,7 @@ func NewLeaderNode(
 		reavealOrderRepository:     reavealOrderRepository,
 		nodeInfoRepository:         nodeInfoRepository,
 		p2pClient:                  libp2putils.NewP2PClient(nodeInfoRepository),
+		ethService:                 eth.Service, // Use default eth service
 		roundsData:                 make(map[string]RoundData),
 		activeBroadcasts:           make(map[string]*utils.BroadcastTracker),
 		cvOnChain:                  make(map[string]bool),
@@ -155,6 +158,10 @@ func (n *LeaderNode) UpdateLeaderCommit(ctx context.Context, commitData *utils.L
 
 func (n *LeaderNode) DetermineRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
 	return n.revealOrderService.DetermineRevealOrder(ctx, round, trialNum, activatedOps)
+}
+
+func (n *LeaderNode) DetermineRegularRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
+	return n.revealOrderService.DetermineRegularRevealOrder(ctx, round, trialNum, activatedOps)
 }
 
 func (n *LeaderNode) CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {

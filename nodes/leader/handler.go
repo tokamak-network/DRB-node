@@ -41,6 +41,7 @@ type LeaderNodeHandler struct {
 	merkleRootSubmitted int32 // 0 = false, 1 = true (atomic)
 	commitMu            sync.Mutex
 	leaderNode          *LeaderNode
+	ethService          eth.IEthService // Injected eth service for testability
 }
 
 func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient, db *pg.DB) *LeaderNodeHandler {
@@ -72,6 +73,7 @@ func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		leaderNode:          leaderNode,
 		merkleRootSubmitted: 0,
 		commitMu:            sync.Mutex{},
+		ethService:          eth.Service, // Use default eth service
 	}
 }
 
@@ -115,7 +117,7 @@ func (lh *LeaderNodeHandler) Run(ctx context.Context) {
 	log.Printf("Leader node running on: %s", h.Addrs())
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
-	eth.Service.UpdateActivatedOperators(ctx, lh.fallbackEthClient)
+	lh.ethService.UpdateActivatedOperators(ctx, lh.fallbackEthClient)
 	lh.leaderNode.UpdateCurrentRoundAndTrial(ctx)
 	go lh.leaderNode.CheckHaltedState(ctx)
 	go lh.leaderNode.MonitorCommits(ctx)
@@ -190,7 +192,7 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 		return
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	activatedOps := eth.Service.GetActivatedOperatorsCached()
+	activatedOps := lh.ethService.GetActivatedOperatorsCached()
 	lh.leaderNode.ReliableBroadCastCVS(ctx, round, req.TrialNum, eoaAddress, commitData.Cvs, activatedOps)
 	// Check if all commits are ready after this update
 	if !lh.GetMerkleRootSubmitted() && lh.allCommitsReceivedUnlocked(uniqueKey) {
@@ -238,7 +240,7 @@ func (lh *LeaderNodeHandler) handleCOSRequest(ctx context.Context, h host.Host, 
 		return
 	}
 
-	activatedOperators := eth.Service.GetActivatedOperatorsCached()
+	activatedOperators := lh.ethService.GetActivatedOperatorsCached()
 	operatorIndex := -1
 	for i, op := range activatedOperators {
 		if op.Hex() == req.EOAAddress {
@@ -287,7 +289,7 @@ func (lh *LeaderNodeHandler) handleCOSRequest(ctx context.Context, h host.Host, 
 		return
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	activatedOps := eth.Service.GetActivatedOperatorsCached()
+	activatedOps := lh.ethService.GetActivatedOperatorsCached()
 	lh.leaderNode.ReliableBroadCastCOS(ctx, round, trial, eoaAddress, commitData.Cos, activatedOps)
 
 	// Also, if all COS are received (if that matters), we determine reveal order as existing code:
@@ -326,7 +328,7 @@ func (lh *LeaderNodeHandler) VerifySignatureAndCheckActivation(ctx context.Conte
 // allCommitsReceivedUnlocked checks if all operators have CVS in-memory.
 // Called with commitMu locked.
 func (lh *LeaderNodeHandler) allCommitsReceivedUnlocked(uniqueKey string) bool {
-	ops := eth.Service.GetActivatedOperatorsCached()
+	ops := lh.ethService.GetActivatedOperatorsCached()
 	if len(ops) == 0 {
 		return false
 	}
@@ -345,7 +347,7 @@ func (lh *LeaderNodeHandler) allCommitsReceivedUnlocked(uniqueKey string) bool {
 	return true
 }
 func (lh *LeaderNodeHandler) allCosReceivedUnlocked(uniqueKey string) bool {
-	ops := eth.Service.GetActivatedOperatorsCached()
+	ops := lh.ethService.GetActivatedOperatorsCached()
 	if len(ops) == 0 {
 		return false
 	}
@@ -366,7 +368,7 @@ func (lh *LeaderNodeHandler) allCosReceivedUnlocked(uniqueKey string) bool {
 
 func (lh *LeaderNodeHandler) UpdatedallCommitsReceivedUnlocked(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, uniqueKey string) map[string]bool {
 	result := make(map[string]bool)
-	ops, _ := eth.Service.GetActivatedOperators(ctx, fallbackEthClient)
+	ops, _ := lh.ethService.GetActivatedOperators(ctx, fallbackEthClient)
 
 	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists || len(roundCommits) == 0 {
@@ -397,7 +399,7 @@ func (lh *LeaderNodeHandler) updateInMemoryData(uniqueKey string, eoaAddress com
 }
 
 func (lh *LeaderNodeHandler) isEOAActivatedForRound(ctx context.Context, eoaAddress common.Address) (bool, bool) {
-	activatedOperators, err := eth.Service.GetActivatedOperators(ctx, lh.fallbackEthClient)
+	activatedOperators, err := lh.ethService.GetActivatedOperators(ctx, lh.fallbackEthClient)
 	if err != nil {
 		log.Printf("Error fetching the activated operators %v", err)
 		// Return true for network error flag, false for activation status
