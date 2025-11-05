@@ -79,6 +79,40 @@ func TestAbiEncode(t *testing.T) {
 			},
 			expected: "0000000000000000000000000000000000000000000000000000000000000000",
 		},
+		{
+			name: "element larger than 32 bytes",
+			elements: [][]byte{
+				make([]byte, 48), // 48 bytes, all zeros
+			},
+			expected: "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+		},
+		{
+			name: "multiple elements with >32 bytes",
+			elements: [][]byte{
+				{0x01, 0x02}, // Small element
+				make([]byte, 40), // 40 bytes, all zeros
+				{0xFF}, // Single byte
+			},
+			expected: "00000000000000000000000000000000000000000000000000000000000001020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ff", // Actual behavior
+		},
+		{
+			name: "nil element",
+			elements: [][]byte{
+				nil,
+			},
+			expected: "0000000000000000000000000000000000000000000000000000000000000000",
+		},
+		{
+			name: "mixed nil and normal elements",
+			elements: [][]byte{
+				{0x01, 0x02, 0x03},
+				nil,
+				{0xFF, 0xFE},
+			},
+			expected: "0000000000000000000000000000000000000000000000000000000000010203" + // First element
+				"0000000000000000000000000000000000000000000000000000000000000000" + // nil element
+				"000000000000000000000000000000000000000000000000000000000000fffe", // Last element
+		},
 	}
 
 	for _, tt := range tests {
@@ -88,6 +122,100 @@ func TestAbiEncode(t *testing.T) {
 			assert.Equal(t, tt.expected, resultHex)
 		})
 	}
+
+	// Additional test for complex scenarios with large elements and nil handling
+	t.Run("complex large elements and nil behavior verification", func(t *testing.T) {
+		// Test with very large elements and nil inputs
+		largeElement1 := make([]byte, 64) // 64 bytes
+		for i := range largeElement1 {
+			largeElement1[i] = byte(i % 256)
+		}
+		
+		largeElement2 := make([]byte, 100) // 100 bytes
+		for i := range largeElement2 {
+			largeElement2[i] = 0xFF // All 0xFF
+		}
+		
+		elements := [][]byte{
+			{0x12, 0x34}, // Small element
+			nil,          // nil element
+			largeElement1, // 64-byte element
+			{},           // Empty element
+			largeElement2, // 100-byte element
+			nil,          // Another nil
+			{0xAB, 0xCD, 0xEF}, // Final element
+		}
+		
+		result := AbiEncode(elements...)
+		
+		// Verify total length: each element gets padded to 32 bytes minimum, but large elements keep their size
+		// Element sizes: 32 + 32 + 64 + 32 + 100 + 32 + 32 = 324 bytes
+		expectedLength := 32 + 32 + 64 + 32 + 100 + 32 + 32
+		assert.Equal(t, expectedLength, len(result))
+		
+		// Verify specific parts
+		offset := 0
+		
+		// Check first element (small, padded to 32 bytes)
+		expected1 := make([]byte, 32)
+		expected1[30] = 0x12
+		expected1[31] = 0x34
+		assert.Equal(t, expected1, result[offset:offset+32])
+		offset += 32
+		
+		// Check nil element (should be 32 zeros)
+		expectedNil := make([]byte, 32)
+		assert.Equal(t, expectedNil, result[offset:offset+32])
+		offset += 32
+		
+		// Check large element 1 (64 bytes, preserved as-is)
+		assert.Equal(t, largeElement1, result[offset:offset+64])
+		assert.Equal(t, byte(0), result[offset]) // First byte should be 0
+		assert.Equal(t, byte(63), result[offset+63]) // Last byte should be 63
+		offset += 64
+		
+		// Check empty element (should be 32 zeros)
+		expectedEmpty := make([]byte, 32)
+		assert.Equal(t, expectedEmpty, result[offset:offset+32])
+		offset += 32
+		
+		// Check large element 2 (100 bytes, all 0xFF)
+		assert.Equal(t, largeElement2, result[offset:offset+100])
+		assert.Equal(t, byte(0xFF), result[offset]) // First byte should be 0xFF
+		assert.Equal(t, byte(0xFF), result[offset+99]) // Last byte should be 0xFF
+		offset += 100
+		
+		// Check another nil element (should be 32 zeros)
+		expectedNil2 := make([]byte, 32)
+		assert.Equal(t, expectedNil2, result[offset:offset+32])
+		offset += 32
+		
+		// Check final element (3 bytes, padded to 32)
+		expectedFinal := make([]byte, 32)
+		expectedFinal[29] = 0xAB
+		expectedFinal[30] = 0xCD
+		expectedFinal[31] = 0xEF
+		assert.Equal(t, expectedFinal, result[offset:offset+32])
+		
+		// Verify deterministic behavior
+		result2 := AbiEncode(elements...)
+		assert.Equal(t, result, result2)
+		
+		// Test edge case: only nil elements
+		nilOnly := [][]byte{nil, nil, nil}
+		nilResult := AbiEncode(nilOnly...)
+		expectedNilOnly := make([]byte, 96) // 3 * 32 bytes of zeros
+		assert.Equal(t, expectedNilOnly, nilResult)
+		
+		// Test edge case: single very large element
+		veryLarge := make([]byte, 500)
+		for i := range veryLarge {
+			veryLarge[i] = byte(i % 256)
+		}
+		largeResult := AbiEncode(veryLarge)
+		assert.Equal(t, 500, len(largeResult))
+		assert.Equal(t, veryLarge, largeResult)
+	})
 }
 
 func TestAbiEncodePacked(t *testing.T) {
