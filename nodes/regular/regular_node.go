@@ -19,7 +19,7 @@ import (
 )
 
 type RegularNode struct {
-	fallbackEthClient *fallback_ethclient.FallbackRPCClient
+	fallbackEthClient fallback_ethclient.IFallbackEthClient
 
 	// Repositories for managing regular node data on database
 	peerCommitDataRepository database.IPeerCommitRepository
@@ -85,7 +85,7 @@ type RegularNode struct {
 }
 
 func NewRegularNode(
-	fallbackEthClient *fallback_ethclient.FallbackRPCClient,
+	fallbackEthClient fallback_ethclient.IFallbackEthClient,
 	revealOrderService *commitreveal2.RevealOrderService,
 	p2pClient *libp2putils.P2PClient,
 	peerCommitDataRepository *database.PeerCommitRepository,

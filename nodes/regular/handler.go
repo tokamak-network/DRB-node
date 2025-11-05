@@ -34,11 +34,11 @@ var (
 )
 
 type RegularNodeHandler struct {
-	fallbackEthClient *fallback_ethclient.FallbackRPCClient
+	fallbackEthClient fallback_ethclient.IFallbackEthClient
 	regularNode       *RegularNode
 }
 
-func NewRegularNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient, db *pg.DB) *RegularNodeHandler {
+func NewRegularNodeHandler(fallbackEthClient fallback_ethclient.IFallbackEthClient, db *pg.DB) *RegularNodeHandler {
 	peerCommitDataRepository := database.NewPeerCommitRepository(db)
 	revealOrderRepository := database.NewRevealOrderRepository(db)
 	regularCommitRepository := database.NewRegularCommitRepository(db)
@@ -182,8 +182,6 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 			depositCalledInThisRun = true
 		} else {
 			log.Println("Node is not activated. Checking deposit amount...")
-			// Check and ensure deposit is sufficient (only if not already called this run)
-			// This ensures deposit is called only once per program run
 			if !depositCalledInThisRun {
 				depositSufficient, err := rh.checkDepositAmount(ctx, clientUtils, eoaAddress)
 				if err != nil {
@@ -366,7 +364,7 @@ func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, 
 // isEOAActivated checks if the current regular node's EOA address is in the activated operators list for the round
 func isEOAActivated(eoaAddress string) bool {
 
-	activatedOps := eth.GetActivatedOperatorsCached()
+	activatedOps := eth.Service.GetActivatedOperatorsCached()
 	for _, operator := range activatedOps {
 		// Compare operatorAddr with eoaAddr
 		if operator.Hex() == eoaAddress {
@@ -377,7 +375,7 @@ func isEOAActivated(eoaAddress string) bool {
 }
 
 func (rh *RegularNodeHandler) checkActivationStatus(ctx context.Context, client *utils.Client, eoaAddress string) (bool, bool) {
-	activatedOperatorsResult, err := eth.CallSmartContract(ctx, rh.fallbackEthClient, client.ContractABI, "getActivatedOperators", client.ContractAddress)
+	activatedOperatorsResult, err := eth.Service.CallSmartContract(ctx, rh.fallbackEthClient, client.ContractABI, "getActivatedOperators", client.ContractAddress)
 	if err != nil {
 		log.Printf("Failed to call getActivatedOperators: %v", err)
 		// Return true for network error flag, false for activation status
@@ -431,14 +429,14 @@ func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string, pr
 	}
 
 	// Fetch deposit amount
-	depositAmountResult, err := eth.CallSmartContract(ctx, rh.fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.Service.CallSmartContract(ctx, rh.fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := eth.CallSmartContract(ctx, rh.fallbackEthClient, parsedABI, "s_activationThreshold", contractAddress)
+	activationThresholdResult, err := eth.Service.CallSmartContract(ctx, rh.fallbackEthClient, parsedABI, "s_activationThreshold", contractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -461,7 +459,7 @@ func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string, pr
 		}
 
 		// Create and send deposit transaction
-		_, _, err = eth.ExecuteTransaction(
+		_, _, err = eth.Service.ExecuteTransaction(
 			ctx,
 			&utils.Client{
 				ContractAddress: contractAddress,
@@ -485,14 +483,14 @@ func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string, pr
 
 func (rh *RegularNodeHandler) checkDepositAmount(ctx context.Context, client *utils.Client, eoaAddress string) (bool, error) {
 	// Fetch deposit amount
-	depositAmountResult, err := eth.CallSmartContract(ctx, rh.fallbackEthClient, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
+	depositAmountResult, err := eth.Service.CallSmartContract(ctx, rh.fallbackEthClient, client.ContractABI, "s_depositAmount", client.ContractAddress, common.HexToAddress(eoaAddress))
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_depositAmount: %v", err)
 	}
 	depositAmount := depositAmountResult.(*big.Int)
 
 	// Fetch activation threshold
-	activationThresholdResult, err := eth.CallSmartContract(ctx, rh.fallbackEthClient, client.ContractABI, "s_activationThreshold", client.ContractAddress)
+	activationThresholdResult, err := eth.Service.CallSmartContract(ctx, rh.fallbackEthClient, client.ContractABI, "s_activationThreshold", client.ContractAddress)
 	if err != nil {
 		return false, fmt.Errorf("failed to call s_activationThreshold: %v", err)
 	}
@@ -610,7 +608,7 @@ func (rh *RegularNodeHandler) activateOnChain(ctx context.Context, abiFilePath s
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = eth.ExecuteTransaction(
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		rh.fallbackEthClient,

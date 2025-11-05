@@ -291,8 +291,6 @@ func TestSetIndicesEmpty(t *testing.T) {
 	assert.Equal(t, 0, len(node.indices), "Should have 0 indices")
 }
 
-// TESTS FOR GetOrCreateLeaderCommitData
-
 // TestGetOrCreateLeaderCommitDataExisting tests getting existing commit data
 func TestGetOrCreateLeaderCommitDataExisting(t *testing.T) {
 	node := createTestNodeForSecretHandler()
@@ -351,8 +349,6 @@ func TestGetOrCreateLeaderCommitDataCreate(t *testing.T) {
 	// Cleanup
 	delete(utils.CommittedNodes, uniqueKey)
 }
-
-// TESTS FOR AcceptSecretValue
 
 // TestAcceptSecretValueWhenHalted tests that the function returns early when halted
 func TestAcceptSecretValueWhenHalted(t *testing.T) {

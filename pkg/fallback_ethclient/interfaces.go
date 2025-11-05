@@ -10,6 +10,7 @@ import (
 )
 
 type IFallbackEthClient interface {
+	BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error)
 	BlockTimestamp(ctx context.Context, blockNumber *big.Int) (uint64, error)
 	SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error)
 	ChainID(ctx context.Context) (*big.Int, error)

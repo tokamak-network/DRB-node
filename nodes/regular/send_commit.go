@@ -356,7 +356,7 @@ func (n *RegularNode) processSecretRequest(ctx context.Context, round, trialNum,
 		log.Printf("Attempting to determine reveal order for regular node...")
 
 		// get activated operators
-		activatedOps := eth.GetActivatedOperatorsCached()
+		activatedOps := eth.Service.GetActivatedOperatorsCached()
 		// Try to determine reveal order for regular node
 		success, err := n.revealOrderService.DetermineRegularRevealOrder(ctx, round.String(), trialNum.String(), activatedOps)
 		if err != nil || !success {
@@ -432,7 +432,7 @@ func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = eth.ExecuteTransaction(
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -478,7 +478,7 @@ func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimes
 	// Store the current round and trialNum from Status event
 	n.SetCurrentTrialNum(trialNum.String())
 
-	eth.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+	eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient)
 	n.SetCurrentRound(round.String())
 
 	if state.Cmp(big.NewInt(1)) == 0 {
@@ -545,7 +545,7 @@ func (n *RegularNode) CleanupRoundDataByUniqueKey(uniqueKey string) {
 
 func (n *RegularNode) AllCosReceivedUnlocked(ctx context.Context, round string, trialNum string) {
 	for {
-		activatedOps := eth.GetActivatedOperatorsCached()
+		activatedOps := eth.Service.GetActivatedOperatorsCached()
 		if n.GetHalted() {
 			log.Println("System is halted. Skipping AllCosReceivedUnlocked.")
 			return
@@ -594,7 +594,7 @@ func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, 
 	n.SetCvRequestIndices(indices)
 
 	// Convert eth.ActivatedOperators to []string for compatibility
-	activatedOps := eth.GetActivatedOperatorsCached()
+	activatedOps := eth.Service.GetActivatedOperatorsCached()
 	activatedOpsStr := make([]string, len(activatedOps))
 	for i, addr := range activatedOps {
 		activatedOpsStr[i] = addr.Hex()
@@ -632,7 +632,7 @@ func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, 
 		return err
 	}
 
-	_, _, err = eth.ExecuteTransaction(
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -664,7 +664,7 @@ func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, Tri
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 
 	// Convert eth.ActivatedOperators to []string for compatibility
-	activatedOps := eth.GetActivatedOperatorsCached()
+	activatedOps := eth.Service.GetActivatedOperatorsCached()
 	activatedOpsStr := make([]string, len(activatedOps))
 	for i, addr := range activatedOps {
 		activatedOpsStr[i] = addr.Hex()
@@ -704,7 +704,7 @@ func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, Tri
 		return err
 	}
 
-	_, _, err = eth.ExecuteTransaction(
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -870,7 +870,7 @@ func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx context.Co
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = eth.ExecuteTransaction(
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -963,7 +963,7 @@ func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(ctx context.Context
 		ContractABI:     parsedABI,
 	}
 
-	_, _, err = eth.ExecuteTransaction(
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -1011,7 +1011,7 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 
 	offChainSubmissionPeriod := big.NewInt(80)
 	offChainSubmissionPeriodPerOperator := big.NewInt(20)
-	activatedOperatorsLength := new(big.Int).SetInt64(eth.GetActivatedOperatorsLength())
+	activatedOperatorsLength := new(big.Int).SetInt64(eth.Service.GetActivatedOperatorsLength())
 	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
 
 	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod
@@ -1080,7 +1080,7 @@ func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(ctx context.Conte
 	}
 
 	// Execute the transaction
-	_, _, err = eth.ExecuteTransaction(
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
