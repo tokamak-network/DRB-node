@@ -125,6 +125,23 @@ func TestAbiEncodePacked(t *testing.T) {
 			},
 			expected: "fffefd" + "0000000000000000000000000000000000000000000000000000000000000000",
 		},
+		{
+			name: "mixed-size elements (empty + >32 bytes)",
+			elements: [][]byte{
+				{},                    // Empty element
+				{0x01, 0x02},         // Small element
+				make([]byte, 48),     // Large element (48 bytes, all zeros)
+				{0xAA},               // Single byte
+				{},                    // Another empty element
+				make([]byte, 64),     // Very large element (64 bytes, all zeros)
+				{0xBB, 0xCC, 0xDD},   // Small element with values
+			},
+			expected: "0102" + 
+				"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + // 48 bytes = 96 hex chars
+				"aa" +
+				"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" + // 64 bytes = 128 hex chars
+				"bbccdd",
+		},
 	}
 
 	for _, tt := range tests {
@@ -134,6 +151,77 @@ func TestAbiEncodePacked(t *testing.T) {
 			assert.Equal(t, tt.expected, resultHex)
 		})
 	}
+
+	// Additional test for complex mixed-size scenarios
+	t.Run("complex mixed-size behavior verification", func(t *testing.T) {
+		// Create elements with varying sizes including empty and very large
+		element1 := []byte{} // Empty
+		element2 := []byte{0x12, 0x34, 0x56, 0x78} // 4 bytes
+		element3 := make([]byte, 80) // 80 bytes of zeros
+		element3[79] = 0xFF // Set last byte to 0xFF for identification
+		element4 := []byte{} // Another empty
+		element5 := []byte{0xAB} // Single byte
+		element6 := make([]byte, 100) // 100 bytes
+		// Fill element6 with a pattern
+		for i := range element6 {
+			element6[i] = byte(i % 256)
+		}
+		element7 := []byte{0xDE, 0xAD, 0xBE, 0xEF} // Final 4 bytes
+		
+		elements := [][]byte{element1, element2, element3, element4, element5, element6, element7}
+		result := AbiEncodePacked(elements...)
+		
+		// Verify total length: 0 + 4 + 80 + 0 + 1 + 100 + 4 = 189 bytes
+		expectedLength := 0 + 4 + 80 + 0 + 1 + 100 + 4
+		assert.Equal(t, expectedLength, len(result))
+		
+		// Verify the concatenation is correct by checking specific parts
+		offset := 0
+		
+		// element1 is empty, so nothing to check
+		
+		// Check element2 (4 bytes: 0x12, 0x34, 0x56, 0x78)
+		assert.Equal(t, []byte{0x12, 0x34, 0x56, 0x78}, result[offset:offset+4])
+		offset += 4
+		
+		// Check element3 (80 bytes, last byte should be 0xFF)
+		assert.Equal(t, byte(0x00), result[offset]) // First byte should be 0
+		assert.Equal(t, byte(0xFF), result[offset+79]) // Last byte should be 0xFF
+		offset += 80
+		
+		// element4 is empty, so nothing to check
+		
+		// Check element5 (1 byte: 0xAB)
+		assert.Equal(t, byte(0xAB), result[offset])
+		offset += 1
+		
+		// Check element6 (100 bytes with pattern)
+		assert.Equal(t, byte(0), result[offset]) // First byte should be 0
+		assert.Equal(t, byte(99), result[offset+99]) // Last byte should be 99
+		assert.Equal(t, byte(50), result[offset+50]) // Middle byte should be 50
+		offset += 100
+		
+		// Check element7 (4 bytes: 0xDE, 0xAD, 0xBE, 0xEF)
+		assert.Equal(t, []byte{0xDE, 0xAD, 0xBE, 0xEF}, result[offset:offset+4])
+		
+		// Verify deterministic behavior
+		result2 := AbiEncodePacked(elements...)
+		assert.Equal(t, result, result2)
+		
+		// Test edge case: all empty elements
+		allEmpty := [][]byte{{}, {}, {}}
+		emptyResult := AbiEncodePacked(allEmpty...)
+		assert.Equal(t, 0, len(emptyResult))
+		
+		// Test edge case: single very large element
+		largeElement := make([]byte, 1000)
+		for i := range largeElement {
+			largeElement[i] = byte(i % 256)
+		}
+		largeResult := AbiEncodePacked(largeElement)
+		assert.Equal(t, 1000, len(largeResult))
+		assert.Equal(t, largeElement, largeResult)
+	})
 }
 
 func TestIntToBytes(t *testing.T) {
