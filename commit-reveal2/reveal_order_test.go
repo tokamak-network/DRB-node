@@ -98,6 +98,55 @@ func TestCalculateRV(t *testing.T) {
 		assert.Equal(t, rv1, rv2)
 		assert.Equal(t, rv2, rv3)
 	})
+
+	t.Run("single COS value with less than 32 bytes", func(t *testing.T) {
+		// Create a COS value with only 16 bytes
+		cos1 := make([]byte, 16)
+		cos1[15] = 0x01
+		
+		cosValues := [][]byte{cos1}
+		rv := service.calculateRV(cosValues)
+		
+		// RV should be hash of the 16-byte COS value
+		expected := Keccak256(cos1)
+		var expectedRV [32]byte
+		copy(expectedRV[:], expected)
+		
+		assert.Equal(t, expectedRV, rv)
+		assert.NotEqual(t, [32]byte{}, rv) // Should not be zero
+	})
+
+	t.Run("unequal COS lengths", func(t *testing.T) {
+		// Create COS values with different lengths
+		cos1 := make([]byte, 16) // 16 bytes
+		cos1[15] = 0x01
+
+		cos2 := make([]byte, 32) // 32 bytes
+		cos2[31] = 0x02
+
+		cos3 := make([]byte, 8) // 8 bytes
+		cos3[7] = 0x03
+		
+		cosValues := [][]byte{cos1, cos2, cos3}
+		rv := service.calculateRV(cosValues)
+		
+		// RV should be hash of concatenated COS values regardless of their individual lengths
+		var concatenated []byte
+		concatenated = append(concatenated, cos1...)
+		concatenated = append(concatenated, cos2...)
+		concatenated = append(concatenated, cos3...)
+		
+		expected := Keccak256(concatenated)
+		var expectedRV [32]byte
+		copy(expectedRV[:], expected)
+		
+		assert.Equal(t, expectedRV, rv)
+		assert.NotEqual(t, [32]byte{}, rv) // Should not be zero
+		
+		// Verify deterministic behavior with same unequal lengths
+		rv2 := service.calculateRV(cosValues)
+		assert.Equal(t, rv, rv2)
+	})
 }
 
 func TestDetermineOrder(t *testing.T) {
