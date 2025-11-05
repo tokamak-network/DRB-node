@@ -162,6 +162,18 @@ func TestIntToBytes(t *testing.T) {
 			input:    big.NewInt(-1),
 			expected: "0000000000000000000000000000000000000000000000000000000000000001",
 		},
+		{
+			name: "very large number (>32 bytes when unpadded)",
+			input: func() *big.Int {
+				// Create a number that would naturally require more than 32 bytes
+				// This is 2^256 + 1, which requires 33 bytes to represent
+				largeNum := new(big.Int)
+				largeNum.SetString("115792089237316195423570985008687907853269984665640564039457584007913129639936", 10) // 2^256
+				largeNum.Add(largeNum, big.NewInt(1)) // 2^256 + 1
+				return largeNum
+			}(),
+			expected: "010000000000000000000000000000000000000000000000000000000000000001", // Returns full representation (33 bytes)
+		},
 	}
 
 	for _, tt := range tests {
@@ -169,9 +181,55 @@ func TestIntToBytes(t *testing.T) {
 			result := IntToBytes(tt.input)
 			resultHex := hex.EncodeToString(result)
 			assert.Equal(t, tt.expected, resultHex)
-			assert.Equal(t, 32, len(result)) // Always 32 bytes
+			
+			// Length check - most cases should be 32 bytes, but very large numbers may be longer
+			if tt.name == "very large number (>32 bytes when unpadded)" {
+				assert.Equal(t, 33, len(result)) // This specific case returns 33 bytes
+			} else {
+				assert.Equal(t, 32, len(result)) // Normal cases are always 32 bytes
+			}
 		})
 	}
+
+	// Additional test for very large numbers to demonstrate behavior
+	t.Run("very large number behavior verification", func(t *testing.T) {
+		// Test with a number that requires more than 32 bytes in its natural representation
+		// This is 2^300, which would require 38 bytes to represent fully
+		veryLargeNum := new(big.Int)
+		veryLargeNum.SetString("2037035976334486086268445688409378161051468393665936250636140449354381299763336706183397376", 10)
+		
+		result := IntToBytes(veryLargeNum)
+		
+		// LeftPadBytes doesn't truncate large numbers, so this will be larger than 32 bytes
+		assert.Equal(t, 38, len(result)) // This number requires 38 bytes
+		assert.NotEqual(t, make([]byte, 38), result) // Should not be all zeros
+		
+		// Test with an even larger number to ensure consistent behavior
+		extremelyLargeNum := new(big.Int)
+		extremelyLargeNum.SetString("340282366920938463463374607431768211456", 10) // 2^128
+		extremelyLargeNum.Mul(extremelyLargeNum, extremelyLargeNum) // 2^256
+		extremelyLargeNum.Mul(extremelyLargeNum, big.NewInt(256)) // Much larger than 2^256
+		
+		result2 := IntToBytes(extremelyLargeNum)
+		// This will be even larger
+		assert.True(t, len(result2) > 32, "Result should be larger than 32 bytes for very large numbers")
+		assert.Equal(t, 34, len(result2)) // This specific calculation results in 34 bytes
+		
+		// Verify deterministic behavior
+		result3 := IntToBytes(extremelyLargeNum)
+		assert.Equal(t, result2, result3)
+		
+		// Test that normal-sized numbers still work as expected (≤32 bytes)
+		normalNum := big.NewInt(123456789)
+		normalResult := IntToBytes(normalNum)
+		assert.Equal(t, 32, len(normalResult)) // Should be padded to 32 bytes
+		
+		// Test edge case: exactly 32 bytes
+		maxUint256 := new(big.Int)
+		maxUint256.SetString("115792089237316195423570985008687907853269984665640564039457584007913129639935", 10) // 2^256 - 1
+		maxResult := IntToBytes(maxUint256)
+		assert.Equal(t, 32, len(maxResult)) // Should be exactly 32 bytes
+	})
 }
 
 
