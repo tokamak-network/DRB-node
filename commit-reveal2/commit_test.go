@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -578,5 +579,158 @@ func TestIntToBytesEdgeCases(t *testing.T) {
 		if result != nil {
 			assert.Len(t, result, 32)
 		}
+	})
+}
+
+// TestGenerateCommitComponents tests the cryptographic components of GenerateCommit
+func TestGenerateCommitComponents(t *testing.T) {
+	// Test data
+	round := "1"
+	operator := "0x1234567890123456789012345678901234567890"
+	timestamp := big.NewInt(1234567890)
+	
+	t.Run("secret value generation", func(t *testing.T) {
+		roundInt := new(big.Int)
+		roundInt.SetString(round, 10)
+		operatorAddress := common.HexToAddress(operator)
+		
+		secretValue := Keccak256(AbiEncodePacked(IntToBytes(roundInt), operatorAddress.Bytes(), IntToBytes(timestamp)))
+		
+		// Verify secret value is 32 bytes
+		assert.Len(t, secretValue, 32)
+		
+		// Verify it's deterministic - same inputs produce same output
+		secretValue2 := Keccak256(AbiEncodePacked(IntToBytes(roundInt), operatorAddress.Bytes(), IntToBytes(timestamp)))
+		assert.Equal(t, secretValue, secretValue2)
+		
+		// Verify different inputs produce different output
+		differentTimestamp := big.NewInt(1234567891)
+		differentSecret := Keccak256(AbiEncodePacked(IntToBytes(roundInt), operatorAddress.Bytes(), IntToBytes(differentTimestamp)))
+		assert.NotEqual(t, secretValue, differentSecret)
+	})
+	
+	t.Run("cos generation", func(t *testing.T) {
+		secretValue := make([]byte, 32)
+		copy(secretValue, []byte("test-secret-value-123456789012"))
+		
+		cos := Keccak256(AbiEncode(secretValue))
+		
+		// Verify cos is 32 bytes
+		assert.Len(t, cos, 32)
+		
+		// Verify deterministic behavior
+		cos2 := Keccak256(AbiEncode(secretValue))
+		assert.Equal(t, cos, cos2)
+		
+		// Verify different secret produces different cos
+		differentSecret := make([]byte, 32)
+		copy(differentSecret, []byte("different-secret-value-1234567"))
+		differentCos := Keccak256(AbiEncode(differentSecret))
+		assert.NotEqual(t, cos, differentCos)
+	})
+	
+	t.Run("cvs generation", func(t *testing.T) {
+		cos := make([]byte, 32)
+		copy(cos, []byte("test-cos-value-123456789012345"))
+		operatorIndex := uint8(5)
+		
+		cvs := Keccak256(AbiEncodePacked(cos, []byte{operatorIndex}))
+		
+		// Verify cvs is 32 bytes
+		assert.Len(t, cvs, 32)
+		
+		// Verify deterministic behavior
+		cvs2 := Keccak256(AbiEncodePacked(cos, []byte{operatorIndex}))
+		assert.Equal(t, cvs, cvs2)
+		
+		// Verify different operator index produces different cvs
+		differentCvs := Keccak256(AbiEncodePacked(cos, []byte{operatorIndex + 1}))
+		assert.NotEqual(t, cvs, differentCvs)
+	})
+	
+	t.Run("round parsing", func(t *testing.T) {
+		validRounds := []string{"1", "42", "1000", "999999999"}
+		
+		for _, r := range validRounds {
+			roundInt := new(big.Int)
+			_, ok := roundInt.SetString(r, 10)
+			assert.True(t, ok, "Should parse valid round: %s", r)
+			assert.True(t, roundInt.Cmp(big.NewInt(0)) >= 0, "Round should be non-negative: %s", r)
+		}
+		
+		invalidRounds := []string{"", "abc", "1.5", "0x123"}
+		
+		for _, r := range invalidRounds {
+			roundInt := new(big.Int)
+			_, ok := roundInt.SetString(r, 10)
+			assert.False(t, ok, "Should not parse invalid round: %s", r)
+		}
+		
+		// Test negative numbers separately since they parse successfully but should be rejected logically
+		t.Run("negative numbers", func(t *testing.T) {
+			negativeRounds := []string{"-1", "-42", "-999"}
+			
+			for _, r := range negativeRounds {
+				roundInt := new(big.Int)
+				_, ok := roundInt.SetString(r, 10)
+				assert.True(t, ok, "Should parse negative number: %s", r)
+				assert.True(t, roundInt.Cmp(big.NewInt(0)) < 0, "Negative round should be less than zero: %s", r)
+			}
+		})
+	})
+	
+	t.Run("operator address parsing", func(t *testing.T) {
+		validAddresses := []string{
+			"0x1234567890123456789012345678901234567890",
+			"0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+			"0x0000000000000000000000000000000000000000",
+		}
+		
+		for _, addr := range validAddresses {
+			operatorAddress := common.HexToAddress(addr)
+			assert.Equal(t, 20, len(operatorAddress.Bytes()), "Address should be 20 bytes")
+			
+			// Check that the address is valid by comparing the input with the parsed hex
+			expectedBytes := common.FromHex(addr)
+			assert.Equal(t, expectedBytes, operatorAddress.Bytes(), "Address bytes should match input")
+			
+			// Verify that the address is not zero (for non-zero inputs)
+			if addr != "0x0000000000000000000000000000000000000000" {
+				assert.NotEqual(t, common.Address{}, operatorAddress, "Address should not be zero")
+			}
+		}
+	})
+	
+	t.Run("complete flow consistency", func(t *testing.T) {
+		// Test that all components work together consistently
+		roundInt := new(big.Int)
+		roundInt.SetString("42", 10)
+		operatorAddress := common.HexToAddress("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd")
+		testTimestamp := big.NewInt(1700000000)
+		operatorIndex := uint8(3)
+		
+		// Generate components
+		secretValue := Keccak256(AbiEncodePacked(IntToBytes(roundInt), operatorAddress.Bytes(), IntToBytes(testTimestamp)))
+		cos := Keccak256(AbiEncode(secretValue))
+		cvs := Keccak256(AbiEncodePacked(cos, []byte{operatorIndex}))
+		
+		// Verify all are different
+		assert.NotEqual(t, secretValue, cos)
+		assert.NotEqual(t, cos, cvs)
+		assert.NotEqual(t, secretValue, cvs)
+		
+		// Verify all are 32 bytes
+		assert.Len(t, secretValue, 32)
+		assert.Len(t, cos, 32)
+		assert.Len(t, cvs, 32)
+		
+		// Test reproducibility
+		secretValue2 := Keccak256(AbiEncodePacked(IntToBytes(roundInt), operatorAddress.Bytes(), IntToBytes(testTimestamp)))
+		cos2 := Keccak256(AbiEncode(secretValue2))
+		cvs2 := Keccak256(AbiEncodePacked(cos2, []byte{operatorIndex}))
+		
+		assert.Equal(t, secretValue, secretValue2)
+		assert.Equal(t, cos, cos2)
+		assert.Equal(t, cvs, cvs2)
 	})
 }
