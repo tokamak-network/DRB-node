@@ -347,6 +347,106 @@ func TestDetermineOrder(t *testing.T) {
 			assert.GreaterOrEqual(t, hex.EncodeToString(hash1), hex.EncodeToString(hash2))
 		}
 	})
+
+	t.Run("CVS length mismatch", func(t *testing.T) {
+		rv := [32]byte{}
+		rv[31] = 0x42
+		
+		// Create CVS values with different lengths
+		cvs1 := make([]byte, 16) // 16 bytes
+		cvs1[15] = 0x01
+
+		cvs2 := make([]byte, 32) // 32 bytes
+		cvs2[31] = 0x02
+
+		cvs3 := make([]byte, 8) // 8 bytes
+		cvs3[7] = 0x03
+		
+		cvsValues := [][]byte{cvs1, cvs2, cvs3}
+		order := service.determineOrder(rv, cvsValues)
+		
+		assert.Len(t, order, 3)
+		assert.Contains(t, order, 0)
+		assert.Contains(t, order, 1)
+		assert.Contains(t, order, 2)
+		
+		// Verify that the order is correct by checking hash values
+		hashes := make([][]byte, 3)
+		for i, cvs := range cvsValues {
+			hashes[i] = Keccak256(append(rv[:], cvs...))
+		}
+		
+		// Check that the hashes are in descending order according to the order array
+		for i := 0; i < len(order)-1; i++ {
+			hash1 := hashes[order[i]]
+			hash2 := hashes[order[i+1]]
+			
+			assert.GreaterOrEqual(t, hex.EncodeToString(hash1), hex.EncodeToString(hash2))
+		}
+		
+		// Verify deterministic behavior
+		order2 := service.determineOrder(rv, cvsValues)
+		assert.Equal(t, order, order2)
+	})
+
+	t.Run("large CVS values (>32 bytes)", func(t *testing.T) {
+		rv := [32]byte{}
+		rv[15] = 0x12
+		rv[31] = 0x34
+		
+		// Create CVS values larger than 32 bytes
+		cvs1 := make([]byte, 64) // 64 bytes
+		cvs1[63] = 0x01
+
+		cvs2 := make([]byte, 48) // 48 bytes
+		cvs2[47] = 0x02
+
+		cvs3 := make([]byte, 100) // 100 bytes
+		cvs3[99] = 0x03
+		
+		cvsValues := [][]byte{cvs1, cvs2, cvs3}
+		order := service.determineOrder(rv, cvsValues)
+		
+		assert.Len(t, order, 3)
+		assert.Contains(t, order, 0)
+		assert.Contains(t, order, 1)
+		assert.Contains(t, order, 2)
+		
+		// Verify that large CVS values are handled correctly
+		hashes := make([][]byte, 3)
+		for i, cvs := range cvsValues {
+			// The function should hash rv||cvs regardless of cvs length
+			hashes[i] = Keccak256(append(rv[:], cvs...))
+		}
+		
+		// Check ordering is correct
+		for i := 0; i < len(order)-1; i++ {
+			hash1 := hashes[order[i]]
+			hash2 := hashes[order[i+1]]
+			
+			assert.GreaterOrEqual(t, hex.EncodeToString(hash1), hex.EncodeToString(hash2))
+		}
+		
+		// Test mixed sizes: small, normal, and large CVS values
+		mixedCvs1 := make([]byte, 8)   // Small
+		mixedCvs1[7] = 0x10
+		mixedCvs2 := make([]byte, 32)  // Normal
+		mixedCvs2[31] = 0x20
+		mixedCvs3 := make([]byte, 80)  // Large
+		mixedCvs3[79] = 0x30
+		
+		mixedCvsValues := [][]byte{mixedCvs1, mixedCvs2, mixedCvs3}
+		mixedOrder := service.determineOrder(rv, mixedCvsValues)
+		
+		assert.Len(t, mixedOrder, 3)
+		assert.Contains(t, mixedOrder, 0)
+		assert.Contains(t, mixedOrder, 1)
+		assert.Contains(t, mixedOrder, 2)
+		
+		// Verify deterministic behavior with mixed sizes
+		mixedOrder2 := service.determineOrder(rv, mixedCvsValues)
+		assert.Equal(t, mixedOrder, mixedOrder2)
+	})
 }
 
 func TestCalculateRVEdgeCases(t *testing.T) {
