@@ -13,6 +13,12 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
+// IRevealOrderService defines the interface for reveal order operations
+type IRevealOrderService interface {
+	DetermineRevealOrder(ctx context.Context, roundNum string, trialNum string, activatedOps []common.Address) (bool, error)
+	DetermineRegularRevealOrder(ctx context.Context, roundNum string, trialNum string, activatedOps []common.Address) (bool, error)
+}
+
 type RevealOrderService struct {
 	revealOrderRepository  database.IRevealOrderRepository
 	peerCommitRepository   database.IPeerCommitRepository
@@ -31,16 +37,6 @@ func NewRevealOrderService(
 	}
 }
 
-// DetermineRevealOrder determines the reveal order for leader nodes
-func (s *RevealOrderService) DetermineRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
-	return DetermineRevealOrder(round, trialNum, activatedOps)
-}
-
-// DetermineRegularRevealOrder determines the reveal order for regular nodes
-func (s *RevealOrderService) DetermineRegularRevealOrder(ctx context.Context, round, trialNum string, activatedOps []common.Address) (bool, error) {
-	return DetermineRegularRevealOrder(round, trialNum, activatedOps)
-}
-
 type RevealOrder struct {
 	OrderedNodes []string `json:"ordered_nodes"`
 	RevealOrder  []int    `json:"reveal_order"`
@@ -48,7 +44,7 @@ type RevealOrder struct {
 }
 
 // calculateRV hashes all COS values into a single RV value
-func calculateRV(cosValues [][]byte) [32]byte {
+func (s *RevealOrderService) calculateRV(cosValues [][]byte) [32]byte {
 	var concatenated []byte
 	for _, cos := range cosValues {
 		concatenated = append(concatenated, cos...)
@@ -61,7 +57,7 @@ func calculateRV(cosValues [][]byte) [32]byte {
 }
 
 // determineOrder calculates the reveal order by comparing COS values with RV
-func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
+func (s *RevealOrderService) determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	type revealOrderEntry struct {
 		index int
 		value [32]byte // Use hash as value
@@ -88,10 +84,8 @@ func determineOrder(rv [32]byte, cvsValues [][]byte) []int {
 	return order
 }
 
-func DetermineRevealOrder(roundNum string, trialNum string, activatedOps []common.Address) (bool, error) {
-	ctx := context.Background()
-	revealOrderRepo := database.NewRevealOrderRepository(database.GetDB())
-	_, err := revealOrderRepo.GetRevealOrder(ctx, roundNum, trialNum)
+func (s *RevealOrderService) DetermineRevealOrder(ctx context.Context, roundNum string, trialNum string, activatedOps []common.Address) (bool, error) {
+	_, err := s.revealOrderRepository.GetRevealOrder(ctx, roundNum, trialNum)
 	if err == nil {
 		log.Printf("Reveal order already exists for round %s with trail %s. Skipping calculation.", roundNum, trialNum)
 		return true, nil
@@ -110,8 +104,7 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOps []commo
 	for _, eoaAddress := range activatedOps {
 		eoaAddressStr := eoaAddress.Hex()
 
-		leaderCommitRepo := database.NewLeaderCommitRepository(database.GetDB())
-		commitData, err := leaderCommitRepo.GetLeaderCommitByRoundAndEoaAddr(ctx, roundNum, trialNum, eoaAddressStr)
+		commitData, err := s.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, roundNum, trialNum, eoaAddressStr)
 		if err != nil {
 			log.Printf("Failed to load leader commit for operator %s in round %s with trail %s: %v", eoaAddressStr, roundNum, trialNum, err)
 			return false, fmt.Errorf("failed to load leader commit for operator %s in round %s with trail %s", eoaAddressStr, roundNum, trialNum)
@@ -128,8 +121,8 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOps []commo
 	}
 
 	// Calculate the RV and determine the reveal order
-	rv := calculateRV(cosValues)
-	revealOrder := determineOrder(rv, cvsValues)
+	rv := s.calculateRV(cosValues)
+	revealOrder := s.determineOrder(rv, cvsValues)
 
 	// Reorder addresses based on reveal order
 	orderedAddresses := make([]string, len(addresses))
@@ -146,7 +139,7 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOps []commo
 		RV:           hex.EncodeToString(rv[:]),
 	}
 
-	err = revealOrderRepo.AddRevealOrder(ctx, &revealOrderData)
+	err = s.revealOrderRepository.AddRevealOrder(ctx, &revealOrderData)
 	if err != nil {
 		log.Printf("Failed to save reveal order for round %s with trail %s: %v", roundNum, trialNum, err)
 		return false, fmt.Errorf("failed to save reveal order for round %s with trail %s", roundNum, trialNum)
@@ -156,10 +149,8 @@ func DetermineRevealOrder(roundNum string, trialNum string, activatedOps []commo
 	return true, nil
 }
 
-func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOps []common.Address) (bool, error) {
-	ctx := context.Background()
-	revealOrderRepo := database.NewRevealOrderRepository(database.GetDB())
-	_, err := revealOrderRepo.GetRevealOrder(ctx, roundNum, trialNum)
+func (s *RevealOrderService) DetermineRegularRevealOrder(ctx context.Context, roundNum string, trialNum string, activatedOps []common.Address) (bool, error) {
+	_, err := s.revealOrderRepository.GetRevealOrder(ctx, roundNum, trialNum)
 	if err == nil {
 		log.Printf("Reveal order already exists for round %s with trial %s. Skipping calculation.", roundNum, trialNum)
 		return true, nil
@@ -178,8 +169,7 @@ func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOps 
 	for _, eoaAddress := range activatedOps {
 		eoaAddressStr := eoaAddress.Hex()
 
-		peerCommitRepo := database.NewPeerCommitRepository(database.GetDB())
-		commitData, err := peerCommitRepo.GetPeerCommitData(ctx, roundNum, trialNum, eoaAddressStr)
+		commitData, err := s.peerCommitRepository.GetPeerCommitData(ctx, roundNum, trialNum, eoaAddressStr)
 		if err != nil {
 			log.Printf("Failed to load leader commit for operator %s in round %s: %v", eoaAddressStr, roundNum, err)
 			return false, fmt.Errorf("failed to load leader commit for operator %s", eoaAddressStr)
@@ -196,8 +186,8 @@ func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOps 
 	}
 
 	// Calculate the RV and determine the reveal order
-	rv := calculateRV(cosValues)
-	revealOrder := determineOrder(rv, cvsValues)
+	rv := s.calculateRV(cosValues)
+	revealOrder := s.determineOrder(rv, cvsValues)
 
 	// Reorder addresses based on reveal order
 	orderedAddresses := make([]string, len(addresses))
@@ -214,7 +204,7 @@ func DetermineRegularRevealOrder(roundNum string, trialNum string, activatedOps 
 		RV:           hex.EncodeToString(rv[:]),
 	}
 
-	err = revealOrderRepo.AddRevealOrder(ctx, &revealOrderData)
+	err = s.revealOrderRepository.AddRevealOrder(ctx, &revealOrderData)
 	if err != nil {
 		log.Printf("Failed to save reveal order for round %s: %v", roundNum, err)
 		return false, fmt.Errorf("failed to save reveal order for round %s", roundNum)

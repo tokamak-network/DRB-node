@@ -8,10 +8,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// Helper function to create a service instance for testing
+func createTestRevealOrderService() *RevealOrderService {
+	return &RevealOrderService{}
+}
+
 func TestCalculateRV(t *testing.T) {
+	service := createTestRevealOrderService()
+	
 	t.Run("empty input", func(t *testing.T) {
 		cosValues := [][]byte{}
-		rv := calculateRV(cosValues)
+		rv := service.calculateRV(cosValues)
 		
 		// RV should be hash of empty concatenation
 		expected := Keccak256([]byte{})
@@ -26,7 +33,7 @@ func TestCalculateRV(t *testing.T) {
 		cos1[31] = 0x01
 		
 		cosValues := [][]byte{cos1}
-		rv := calculateRV(cosValues)
+		rv := service.calculateRV(cosValues)
 		
 		// RV should be hash of the single COS value
 		expected := Keccak256(cos1)
@@ -47,7 +54,7 @@ func TestCalculateRV(t *testing.T) {
 		cos3[31] = 0x03
 		
 		cosValues := [][]byte{cos1, cos2, cos3}
-		rv := calculateRV(cosValues)
+		rv := service.calculateRV(cosValues)
 		
 		// RV should be hash of concatenated COS values
 		var concatenated []byte
@@ -69,8 +76,8 @@ func TestCalculateRV(t *testing.T) {
 		cos2 := make([]byte, 32)
 		cos2[31] = 0x02
 		
-		rv1 := calculateRV([][]byte{cos1, cos2})
-		rv2 := calculateRV([][]byte{cos2, cos1})
+		rv1 := service.calculateRV([][]byte{cos1, cos2})
+		rv2 := service.calculateRV([][]byte{cos2, cos1})
 		
 		assert.NotEqual(t, rv1, rv2)
 	})
@@ -84,9 +91,9 @@ func TestCalculateRV(t *testing.T) {
 		
 		cosValues := [][]byte{cos1, cos2}
 		
-		rv1 := calculateRV(cosValues)
-		rv2 := calculateRV(cosValues)
-		rv3 := calculateRV(cosValues)
+		rv1 := service.calculateRV(cosValues)
+		rv2 := service.calculateRV(cosValues)
+		rv3 := service.calculateRV(cosValues)
 		
 		assert.Equal(t, rv1, rv2)
 		assert.Equal(t, rv2, rv3)
@@ -94,11 +101,13 @@ func TestCalculateRV(t *testing.T) {
 }
 
 func TestDetermineOrder(t *testing.T) {
+	service := createTestRevealOrderService()
+	
 	t.Run("empty CVS values", func(t *testing.T) {
 		rv := [32]byte{}
 		cvsValues := [][]byte{}
 		
-		order := determineOrder(rv, cvsValues)
+		order := service.determineOrder(rv, cvsValues)
 		assert.Empty(t, order)
 	})
 
@@ -110,7 +119,7 @@ func TestDetermineOrder(t *testing.T) {
 		cvs1[31] = 0x01
 		
 		cvsValues := [][]byte{cvs1}
-		order := determineOrder(rv, cvsValues)
+		order := service.determineOrder(rv, cvsValues)
 		
 		assert.Equal(t, []int{0}, order)
 	})
@@ -126,7 +135,7 @@ func TestDetermineOrder(t *testing.T) {
 		cvs2[31] = 0x02
 		
 		cvsValues := [][]byte{cvs1, cvs2}
-		order := determineOrder(rv, cvsValues)
+		order := service.determineOrder(rv, cvsValues)
 		
 		assert.Len(t, order, 2)
 		assert.Contains(t, order, 0)
@@ -160,7 +169,7 @@ func TestDetermineOrder(t *testing.T) {
 		cvs3[31] = 0x03
 		
 		cvsValues := [][]byte{cvs1, cvs2, cvs3}
-		order := determineOrder(rv, cvsValues)
+		order := service.determineOrder(rv, cvsValues)
 		
 		assert.Len(t, order, 3)
 		assert.Contains(t, order, 0)
@@ -195,9 +204,9 @@ func TestDetermineOrder(t *testing.T) {
 		
 		cvsValues := [][]byte{cvs1, cvs2}
 		
-		order1 := determineOrder(rv, cvsValues)
-		order2 := determineOrder(rv, cvsValues)
-		order3 := determineOrder(rv, cvsValues)
+		order1 := service.determineOrder(rv, cvsValues)
+		order2 := service.determineOrder(rv, cvsValues)
+		order3 := service.determineOrder(rv, cvsValues)
 		
 		assert.Equal(t, order1, order2)
 		assert.Equal(t, order2, order3)
@@ -218,8 +227,8 @@ func TestDetermineOrder(t *testing.T) {
 		
 		cvsValues := [][]byte{cvs1, cvs2}
 		
-		order1 := determineOrder(rv1, cvsValues)
-		order2 := determineOrder(rv2, cvsValues)
+		order1 := service.determineOrder(rv1, cvsValues)
+		order2 := service.determineOrder(rv2, cvsValues)
 		
 		// Different RV values might produce different orders
 		// We just check that both orders are valid (contain all indices)
@@ -242,7 +251,7 @@ func TestDetermineOrder(t *testing.T) {
 		cvs2[31] = 0x01 // Same as cvs1
 		
 		cvsValues := [][]byte{cvs1, cvs2}
-		order := determineOrder(rv, cvsValues)
+		order := service.determineOrder(rv, cvsValues)
 		
 		assert.Len(t, order, 2)
 		assert.Contains(t, order, 0)
@@ -267,7 +276,7 @@ func TestDetermineOrder(t *testing.T) {
 			cvsValues[i] = cvs
 		}
 		
-		order := determineOrder(rv, cvsValues)
+		order := service.determineOrder(rv, cvsValues)
 		
 		assert.Len(t, order, numValues)
 		
@@ -292,6 +301,8 @@ func TestDetermineOrder(t *testing.T) {
 }
 
 func TestCalculateRVEdgeCases(t *testing.T) {
+	service := createTestRevealOrderService()
+	
 	t.Run("very large number of COS values", func(t *testing.T) {
 		numValues := 100
 		cosValues := make([][]byte, numValues)
@@ -302,10 +313,10 @@ func TestCalculateRVEdgeCases(t *testing.T) {
 			cosValues[i] = cos
 		}
 		
-		rv := calculateRV(cosValues)
+		rv := service.calculateRV(cosValues)
 		assert.NotEqual(t, [32]byte{}, rv)
 		
-		rv2 := calculateRV(cosValues)
+		rv2 := service.calculateRV(cosValues)
 		assert.Equal(t, rv, rv2)
 	})
 
@@ -320,14 +331,16 @@ func TestCalculateRVEdgeCases(t *testing.T) {
 			sameCOS,
 		}
 		
-		rv := calculateRV(cosValues)
+		rv := service.calculateRV(cosValues)
 		
-		singleRV := calculateRV([][]byte{sameCOS})
+		singleRV := service.calculateRV([][]byte{sameCOS})
 		assert.NotEqual(t, rv, singleRV)
 	})
 }
 
 func TestDetermineOrderEdgeCases(t *testing.T) {
+	service := createTestRevealOrderService()
+	
 	t.Run("very close hash values", func(t *testing.T) {
 		rv := [32]byte{}
 		rv[0] = 0x01
@@ -339,13 +352,13 @@ func TestDetermineOrderEdgeCases(t *testing.T) {
 		cvs2[31] = 0x02
 		
 		cvsValues := [][]byte{cvs1, cvs2}
-		order := determineOrder(rv, cvsValues)
+		order := service.determineOrder(rv, cvsValues)
 		
 		assert.Len(t, order, 2)
 		assert.Contains(t, order, 0)
 		assert.Contains(t, order, 1)
 		
-		order2 := determineOrder(rv, cvsValues)
+		order2 := service.determineOrder(rv, cvsValues)
 		assert.Equal(t, order, order2)
 	})
 
@@ -363,7 +376,7 @@ func TestDetermineOrderEdgeCases(t *testing.T) {
 			cvsValues[i] = cvs
 		}
 		
-		order := determineOrder(rv, cvsValues)
+		order := service.determineOrder(rv, cvsValues)
 		assert.Len(t, order, numValues)
 		
 		found := make(map[int]bool)
@@ -392,12 +405,12 @@ func TestDetermineOrderEdgeCases(t *testing.T) {
 		cvs2[31] = 0x01
 		
 		cvsValues := [][]byte{cvs1, cvs2}
-		order := determineOrder(rv, cvsValues)
+		order := service.determineOrder(rv, cvsValues)
 		
 		assert.Len(t, order, 2)
 		
 		rv = [32]byte{}
-		order2 := determineOrder(rv, cvsValues)
+		order2 := service.determineOrder(rv, cvsValues)
 		
 		assert.Len(t, order2, 2)
 	})

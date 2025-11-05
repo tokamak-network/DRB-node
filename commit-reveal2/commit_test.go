@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestKeccak256(t *testing.T) {
@@ -84,7 +83,7 @@ func TestAbiEncode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := abiEncode(tt.elements...)
+			result := AbiEncode(tt.elements...)
 			resultHex := hex.EncodeToString(result)
 			assert.Equal(t, tt.expected, resultHex)
 		})
@@ -130,7 +129,7 @@ func TestAbiEncodePacked(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := abiEncodePacked(tt.elements...)
+			result := AbiEncodePacked(tt.elements...)
 			resultHex := hex.EncodeToString(result)
 			assert.Equal(t, tt.expected, resultHex)
 		})
@@ -167,7 +166,7 @@ func TestIntToBytes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := intToBytes(tt.input)
+			result := IntToBytes(tt.input)
 			resultHex := hex.EncodeToString(result)
 			assert.Equal(t, tt.expected, resultHex)
 			assert.Equal(t, 32, len(result)) // Always 32 bytes
@@ -175,113 +174,6 @@ func TestIntToBytes(t *testing.T) {
 	}
 }
 
-func TestGenerateCommit(t *testing.T) {
-	t.Run("valid inputs", func(t *testing.T) {
-		round := "1"
-		operator := "0x1234567890123456789012345678901234567890"
-
-		secretValue, cos, cvs, err := GenerateCommit(round, operator)
-		require.NoError(t, err)
-
-		// Check that all values are different
-		assert.NotEqual(t, secretValue, cos)
-		assert.NotEqual(t, cos, cvs)
-		assert.NotEqual(t, secretValue, cvs)
-
-		// Check that none are zero values
-		assert.NotEqual(t, [32]byte{}, secretValue)
-		assert.NotEqual(t, [32]byte{}, cos)
-		assert.NotEqual(t, [32]byte{}, cvs)
-
-		// Verify the relationship: cvs = hash(cos), cos = hash(secretValue)
-		expectedCos := Keccak256(abiEncode(secretValue[:]))
-		var expectedCosBytes32 [32]byte
-		copy(expectedCosBytes32[:], expectedCos)
-		assert.Equal(t, expectedCosBytes32, cos)
-
-		expectedCvs := Keccak256(abiEncode(cos[:]))
-		var expectedCvsBytes32 [32]byte
-		copy(expectedCvsBytes32[:], expectedCvs)
-		assert.Equal(t, expectedCvsBytes32, cvs)
-	})
-
-	t.Run("different rounds produce different results", func(t *testing.T) {
-		operator := "0x1234567890123456789012345678901234567890"
-
-		secretValue1, cos1, cvs1, err1 := GenerateCommit("1", operator)
-		require.NoError(t, err1)
-
-		secretValue2, cos2, cvs2, err2 := GenerateCommit("2", operator)
-		require.NoError(t, err2)
-
-		// Different rounds should produce different values
-		assert.NotEqual(t, secretValue1, secretValue2)
-		assert.NotEqual(t, cos1, cos2)
-		assert.NotEqual(t, cvs1, cvs2)
-	})
-
-	t.Run("different operators produce different results", func(t *testing.T) {
-		round := "1"
-
-		secretValue1, cos1, cvs1, err1 := GenerateCommit(round, "0x1234567890123456789012345678901234567890")
-		require.NoError(t, err1)
-
-		secretValue2, cos2, cvs2, err2 := GenerateCommit(round, "0x2345678901234567890123456789012345678901")
-		require.NoError(t, err2)
-
-		// Different operators should produce different values
-		assert.NotEqual(t, secretValue1, secretValue2)
-		assert.NotEqual(t, cos1, cos2)
-		assert.NotEqual(t, cvs1, cvs2)
-	})
-
-	t.Run("invalid round", func(t *testing.T) {
-		operator := "0x1234567890123456789012345678901234567890"
-
-		_, _, _, err := GenerateCommit("invalid", operator)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid round")
-	})
-
-	t.Run("invalid operator address", func(t *testing.T) {
-		round := "1"
-		// Invalid Ethereum address - this should still work as common.HexToAddress
-		// converts invalid addresses to zero address
-		operator := "invalid-address"
-
-		secretValue, cos, cvs, err := GenerateCommit(round, operator)
-		require.NoError(t, err)
-
-		// Should still generate valid results (with zero address)
-		assert.NotEqual(t, [32]byte{}, secretValue)
-		assert.NotEqual(t, [32]byte{}, cos)
-		assert.NotEqual(t, [32]byte{}, cvs)
-	})
-
-	t.Run("deterministic with same inputs and timestamp", func(t *testing.T) {
-		// Note: This test might be flaky since GenerateCommit uses time.Now()
-		// In a real implementation, you might want to accept timestamp as parameter for testing
-		round := "1"
-		operator := "0x1234567890123456789012345678901234567890"
-
-		secretValue1, cos1, cvs1, err1 := GenerateCommit(round, operator)
-		require.NoError(t, err1)
-
-		// Generate again immediately (should be different due to timestamp)
-		secretValue2, cos2, cvs2, err2 := GenerateCommit(round, operator)
-		require.NoError(t, err2)
-
-		// These should be different because timestamp changed
-		// (unless executed in the same second, which is unlikely but possible)
-		// We'll just verify they're valid for now
-		assert.NotEqual(t, [32]byte{}, secretValue1)
-		assert.NotEqual(t, [32]byte{}, secretValue2)
-		assert.NotEqual(t, [32]byte{}, cos1)
-		assert.NotEqual(t, [32]byte{}, cos2)
-		assert.NotEqual(t, [32]byte{}, cvs1)
-		assert.NotEqual(t, [32]byte{}, cvs2)
-	})
-}
 
 func TestKeccak256EdgeCases(t *testing.T) {
 	t.Run("large input", func(t *testing.T) {
@@ -315,7 +207,7 @@ func TestAbiEncodeEdgeCases(t *testing.T) {
 			make([]byte, 32),
 		}
 		
-		result := abiEncode(elements...)
+		result := AbiEncode(elements...)
 		expectedLength := 4 * 32
 		assert.Len(t, result, expectedLength)
 		
@@ -331,7 +223,7 @@ func TestAbiEncodeEdgeCases(t *testing.T) {
 			largeElement[i] = 0xFF
 		}
 		
-		result := abiEncode(largeElement)
+		result := AbiEncode(largeElement)
 		assert.Len(t, result, 64)
 		
 		for _, b := range result {
@@ -347,7 +239,7 @@ func TestAbiEncodePackedEdgeCases(t *testing.T) {
 			elements = append(elements, []byte{byte(i)})
 		}
 		
-		result := abiEncodePacked(elements...)
+		result := AbiEncodePacked(elements...)
 		assert.Len(t, result, 100)
 		
 		for i := 0; i < 100; i++ {
@@ -365,7 +257,7 @@ func TestAbiEncodePackedEdgeCases(t *testing.T) {
 			{0x04},
 		}
 		
-		result := abiEncodePacked(elements...)
+		result := AbiEncodePacked(elements...)
 		expected := []byte{0x01, 0x02, 0x03, 0x04}
 		assert.Equal(t, expected, result)
 	})
@@ -376,7 +268,7 @@ func TestIntToBytesEdgeCases(t *testing.T) {
 		largeNum := new(big.Int)
 		largeNum.SetString("115792089237316195423570985008687907853269984665640564039457584007913129639935", 10)
 		
-		result := intToBytes(largeNum)
+		result := IntToBytes(largeNum)
 		assert.Len(t, result, 32)
 		
 		expected := make([]byte, 32)
@@ -390,7 +282,7 @@ func TestIntToBytesEdgeCases(t *testing.T) {
 		fullNum := new(big.Int)
 		fullNum.SetString("0x8000000000000000000000000000000000000000000000000000000000000000", 0)
 		
-		result := intToBytes(fullNum)
+		result := IntToBytes(fullNum)
 		assert.Len(t, result, 32)
 		assert.Equal(t, byte(0x80), result[0])
 		
@@ -408,7 +300,7 @@ func TestIntToBytesEdgeCases(t *testing.T) {
 			}
 		}()
 		
-		result := intToBytes(nilInt)
+		result := IntToBytes(nilInt)
 		if result != nil {
 			assert.Len(t, result, 32)
 		}

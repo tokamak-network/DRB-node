@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"testing"
 
 	"github.com/libp2p/go-libp2p"
@@ -44,7 +45,7 @@ func TestCreateStream(t *testing.T) {
 			PeerID: "invalid-peer-id",
 		}
 
-		stream, err := CreateStream(host1, invalidNodeInfo, "/test/1.0.0")
+		stream, err := CreateStream(context.Background(), host1, invalidNodeInfo, "/test/1.0.0")
 		assert.Error(t, err)
 		assert.Nil(t, stream)
 		assert.Contains(t, err.Error(), "failed to parse multiaddr")
@@ -57,7 +58,7 @@ func TestCreateStream(t *testing.T) {
 			PeerID: "invalid-peer-id-format",
 		}
 
-		stream, err := CreateStream(host1, invalidNodeInfo, "/test/1.0.0")
+		stream, err := CreateStream(context.Background(), host1, invalidNodeInfo, "/test/1.0.0")
 		assert.Error(t, err)
 		assert.Nil(t, stream)
 		assert.Contains(t, err.Error(), "failed to parse multiaddr")
@@ -71,7 +72,7 @@ func TestCreateStream(t *testing.T) {
 			PeerID: "12D3KooWTest1234567890123456789012345678901234567890",
 		}
 
-		stream, err := CreateStream(host1, nonExistentNodeInfo, "/test/1.0.0")
+		stream, err := CreateStream(context.Background(), host1, nonExistentNodeInfo, "/test/1.0.0")
 		assert.Error(t, err)
 		assert.Nil(t, stream)
 		assert.Contains(t, err.Error(), "failed to parse multiaddr")
@@ -104,7 +105,7 @@ func TestCreateStream(t *testing.T) {
 
 		// Note: This test might fail due to timing or network issues
 		// In a real scenario, you'd need proper host discovery and connection setup
-		stream, err := CreateStream(host1, nodeInfo, string(protocolID))
+		stream, err := CreateStream(context.Background(), host1, nodeInfo, string(protocolID))
 		
 		// We expect this to fail in the test environment due to address resolution
 		// but we're testing that the function handles the parameters correctly
@@ -193,7 +194,7 @@ func TestCreateStreamInputValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stream, err := CreateStream(host, tt.nodeInfo, tt.protocol)
+			stream, err := CreateStream(context.Background(), host, tt.nodeInfo, tt.protocol)
 			
 			if tt.expectError {
 				assert.Error(t, err)
