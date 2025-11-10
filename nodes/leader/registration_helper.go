@@ -71,7 +71,7 @@ func (n *LeaderNode) registerNodeInternal(ctx context.Context, req utils.Registr
 	}
 
 	// Save updated nodes
-	err := n.nodeInfoRepository.AddNodeInfo(ctx, &nodeInfo)
+	err := n.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, &nodeInfo)
 	if err != nil {
 		return fmt.Errorf("failed to save registered nodes: %v", err)
 	}

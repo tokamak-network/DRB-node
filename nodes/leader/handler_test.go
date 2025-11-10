@@ -30,6 +30,7 @@ import (
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
+	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -51,6 +52,9 @@ type LeaderHandlerTestSuite struct {
 
 // SetupSuite runs once before all tests in the suite
 func (suite *LeaderHandlerTestSuite) SetupSuite() {
+	// Initialize logger
+	logger.InitLogger()
+
 	const (
 		postgresHost     = "localhost"
 		postgresUser     = "postgres"

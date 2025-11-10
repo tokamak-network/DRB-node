@@ -13,7 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-pg/pg/v10"
 	_ "github.com/lib/pq"
@@ -21,13 +23,104 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/utils"
 )
+
+// MockFallbackEthClient is a mock for the fallback eth client
+type MockFallbackEthClient struct {
+	mock.Mock
+}
+
+func (m *MockFallbackEthClient) BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
+	args := m.Called(ctx, account, blockNumber)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) NetworkID(ctx context.Context) (*big.Int, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) BlockTimestamp(ctx context.Context, blockNumber *big.Int) (uint64, error) {
+	args := m.Called(ctx, blockNumber)
+	return args.Get(0).(uint64), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error) {
+	args := m.Called(ctx, q, ch)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(ethereum.Subscription), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) ChainID(ctx context.Context) (*big.Int, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
+	args := m.Called(ctx, msg)
+	return args.Get(0).(uint64), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) SendTransaction(ctx context.Context, tx *types.Transaction) error {
+	args := m.Called(ctx, tx)
+	return args.Error(0)
+}
+
+func (m *MockFallbackEthClient) TransactionReceipt(ctx context.Context, signedTx *types.Transaction) (*types.Receipt, error) {
+	args := m.Called(ctx, signedTx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.Receipt), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
+	args := m.Called(ctx, account)
+	return args.Get(0).(uint64), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) CallContract(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+	args := m.Called(ctx, msg, blockNumber)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]byte), args.Error(1)
+}
 
 type RevealRequestsTestSuite struct {
 	suite.Suite
@@ -47,6 +140,9 @@ type RevealRequestsTestSuite struct {
 
 // SetupSuite runs once before all tests in the suite
 func (suite *RevealRequestsTestSuite) SetupSuite() {
+	// Initialize logger
+	logger.InitLogger()
+
 	const (
 		postgresHost     = "localhost"
 		postgresUser     = "postgres"
@@ -113,7 +209,19 @@ func (suite *RevealRequestsTestSuite) SetupTest() {
 		suite.leaderCommitRepo,
 	)
 
+	// Create mock fallback eth client
+	mockFallbackClient := new(MockFallbackEthClient)
+	mockFallbackClient.On("NetworkID", mock.Anything).Return(big.NewInt(1), nil).Maybe()
+	mockFallbackClient.On("PendingNonceAt", mock.Anything, mock.Anything).Return(uint64(0), nil).Maybe()
+	mockFallbackClient.On("ChainID", mock.Anything).Return(big.NewInt(1), nil).Maybe()
+	mockFallbackClient.On("EstimateGas", mock.Anything, mock.Anything).Return(uint64(21000), nil).Maybe()
+	mockFallbackClient.On("SuggestGasPrice", mock.Anything).Return(big.NewInt(1000000000), nil).Maybe()
+	mockFallbackClient.On("SuggestGasTipCap", mock.Anything).Return(big.NewInt(1000000000), nil).Maybe()
+	mockFallbackClient.On("SendTransaction", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockFallbackClient.On("TransactionReceipt", mock.Anything, mock.Anything).Return(&types.Receipt{}, nil).Maybe()
+
 	suite.leaderNode = &LeaderNode{
+		fallbackEthClient:          mockFallbackClient,
 		leaderCommitRepository:     suite.leaderCommitRepo,
 		batchRepository:            suite.batchRepo,
 		broadcastTrackerRepository: suite.broadcastTrackerRepo,
@@ -127,6 +235,7 @@ func (suite *RevealRequestsTestSuite) SetupTest() {
 		secretsOnChain:             make(map[string]bool),
 		revealRequestStatus:        make(map[string][]string),
 		indices:                    make([]*big.Int, 0),
+		ethService:                 eth.Service,
 	}
 
 	// Create a test libp2p host
@@ -203,6 +312,11 @@ func (suite *RevealRequestsTestSuite) TestStartSecretValueRequests_Success() {
 	testTrial := "1"
 	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
 
+	// Cleanup first to avoid conflicts with IP or PeerID
+	suite.db.Model((*database.NodeInfoScheme)(nil)).
+		Where("peer_id = ? OR ip = ?", suite.host.ID().String(), "127.0.0.1").
+		Delete()
+
 	// Create node info
 	nodeInfo := &utils.NodeInfo{
 		EOAAddress: suite.testEOA,
@@ -210,7 +324,7 @@ func (suite *RevealRequestsTestSuite) TestStartSecretValueRequests_Success() {
 		IP:         "127.0.0.1",
 		Port:       "9000",
 	}
-	err := suite.nodeInfoRepo.AddNodeInfo(context.Background(), nodeInfo)
+	err := suite.nodeInfoRepo.AddAndUpdateNodeInfo(context.Background(), nodeInfo)
 	require.NoError(suite.T(), err)
 
 	defer suite.db.Model((*database.NodeInfoScheme)(nil)).
@@ -297,7 +411,7 @@ func (suite *RevealRequestsTestSuite) TestHandleSecretValueResponse_AllProcessed
 		IP:         "127.0.0.3",
 		Port:       "9007",
 	}
-	err = suite.nodeInfoRepo.AddNodeInfo(context.Background(), nodeInfo)
+	err = suite.nodeInfoRepo.AddAndUpdateNodeInfo(context.Background(), nodeInfo)
 	require.NoError(suite.T(), err)
 
 	defer suite.db.Model((*database.NodeInfoScheme)(nil)).
@@ -778,23 +892,32 @@ func (suite *RevealRequestsTestSuite) TestHandleSecretValueResponse_NextNode() {
 		Where("eoa_address IN (?)", pg.In([]string{node1, node2})).
 		Delete()
 
-	// Create node infos with unique IPs
+	// Create additional hosts for unique PeerIDs
+	host1, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(suite.T(), err)
+	defer host1.Close()
+
+	host2, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(suite.T(), err)
+	defer host2.Close()
+
+	// Create node infos with unique IPs and PeerIDs
 	nodeInfo1 := &utils.NodeInfo{
 		EOAAddress: node1,
-		PeerID:     suite.host.ID().String(),
+		PeerID:     host1.ID().String(),
 		IP:         "127.0.0.1",
 		Port:       "9001",
 	}
-	err := suite.nodeInfoRepo.AddNodeInfo(context.Background(), nodeInfo1)
+	err = suite.nodeInfoRepo.AddAndUpdateNodeInfo(context.Background(), nodeInfo1)
 	require.NoError(suite.T(), err)
 
 	nodeInfo2 := &utils.NodeInfo{
 		EOAAddress: node2,
-		PeerID:     suite.host.ID().String(),
+		PeerID:     host2.ID().String(),
 		IP:         "127.0.0.2",
 		Port:       "9002",
 	}
-	err = suite.nodeInfoRepo.AddNodeInfo(context.Background(), nodeInfo2)
+	err = suite.nodeInfoRepo.AddAndUpdateNodeInfo(context.Background(), nodeInfo2)
 	require.NoError(suite.T(), err)
 
 	defer suite.db.Model((*database.NodeInfoScheme)(nil)).
@@ -1154,7 +1277,7 @@ func (suite *RevealRequestsTestSuite) TestHandleSecretValueResponse_NodeInfoNotF
 		IP:         "127.0.0.10",
 		Port:       "9010",
 	}
-	err = suite.nodeInfoRepo.AddNodeInfo(context.Background(), nodeInfo1)
+	err = suite.nodeInfoRepo.AddAndUpdateNodeInfo(context.Background(), nodeInfo1)
 	require.NoError(suite.T(), err)
 
 	suite.leaderNode.HandleSecretValueResponse(context.Background(), suite.host, nil, testRound, testTrial, node1)
@@ -1314,23 +1437,32 @@ func (suite *RevealRequestsTestSuite) TestStartSecretValueRequests_MultipleNodes
 		Where("eoa_address IN (?)", pg.In([]string{node1, node2})).
 		Delete()
 
-	// Create both node infos
+	// Create additional hosts for unique PeerIDs
+	host1, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(suite.T(), err)
+	defer host1.Close()
+
+	host2, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(suite.T(), err)
+	defer host2.Close()
+
+	// Create both node infos with unique PeerIDs
 	nodeInfo1 := &utils.NodeInfo{
 		EOAAddress: node1,
-		PeerID:     suite.host.ID().String(),
+		PeerID:     host1.ID().String(),
 		IP:         "127.0.0.20",
 		Port:       "9020",
 	}
-	err := suite.nodeInfoRepo.AddNodeInfo(context.Background(), nodeInfo1)
+	err = suite.nodeInfoRepo.AddAndUpdateNodeInfo(context.Background(), nodeInfo1)
 	require.NoError(suite.T(), err)
 
 	nodeInfo2 := &utils.NodeInfo{
 		EOAAddress: node2,
-		PeerID:     suite.host.ID().String(),
+		PeerID:     host2.ID().String(),
 		IP:         "127.0.0.21",
 		Port:       "9021",
 	}
-	err = suite.nodeInfoRepo.AddNodeInfo(context.Background(), nodeInfo2)
+	err = suite.nodeInfoRepo.AddAndUpdateNodeInfo(context.Background(), nodeInfo2)
 	require.NoError(suite.T(), err)
 
 	// Create reveal order with node1 first
@@ -2360,7 +2492,7 @@ func (suite *RevealRequestsTestSuite) TestStartSecretValueRequests_AllPathsCover
 		IP:         "127.0.0.63",
 		Port:       "9063",
 	}
-	err := suite.nodeInfoRepo.AddNodeInfo(context.Background(), nodeInfo)
+	err := suite.nodeInfoRepo.AddAndUpdateNodeInfo(context.Background(), nodeInfo)
 	require.NoError(suite.T(), err)
 
 	// Create reveal order

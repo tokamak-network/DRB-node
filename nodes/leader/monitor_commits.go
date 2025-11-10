@@ -59,7 +59,7 @@ func (n *LeaderNode) checkRoundsForCompletion(ctx context.Context) {
 	}
 
 	// Copy the activated operators from eth package
-	operatorAddresses := eth.GetActivatedOperatorsCached()
+	operatorAddresses := eth.Service.GetActivatedOperatorsCached()
 	if len(operatorAddresses) < 2 {
 		return
 	}
@@ -143,7 +143,7 @@ func (n *LeaderNode) checkRoundsForCompletion(ctx context.Context) {
 // Fetch activated operators for a specific round
 func (n *LeaderNode) FetchActivatedOperators(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, round string) ([]string, error) {
 	var result []string
-	activatedOperators, err := eth.GetActivatedOperators(ctx, fallbackEthClient)
+	activatedOperators, err := eth.Service.GetActivatedOperators(ctx, fallbackEthClient)
 	if err != nil {
 		log.Printf("Error fetching the activated operators %v", err)
 		return result, err
@@ -214,7 +214,7 @@ func (n *LeaderNode) LoadNodeData(ctx context.Context, round string, trialNum st
 // Updated function to use utils.LeaderCommitData
 func sortLeaderCommitsByActivatedOperators(leaderCommits []*utils.LeaderCommitData) []*utils.LeaderCommitData {
 	// Create a map for quick lookup of activated operators order
-	activatedOperatorsOrder := eth.GetActivatedOperatorsCached()
+	activatedOperatorsOrder := eth.Service.GetActivatedOperatorsCached()
 
 	log.Printf("Activated operators order: %v", activatedOperatorsOrder)
 
@@ -305,7 +305,7 @@ func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round 
 	packedRevealOrder := packRevealOrder(order)
 	packedVs := packVsValues(vs)
 
-	tx, _, err := eth.ExecuteTransaction(
+	tx, _, err := eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,
@@ -378,7 +378,7 @@ func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(ctx context.Co
 	order := roundRevealData.RevealOrder
 	packedRevealOrder := packRevealOrder(order)
 	packedVs := packVsValues(vsArray)
-	tx, _, err := eth.ExecuteTransaction(
+	tx, _, err := eth.Service.ExecuteTransaction(
 		ctx,
 		clientUtils,
 		n.fallbackEthClient,

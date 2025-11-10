@@ -117,7 +117,7 @@ func (m *MockNodeInfoRepo) GetNodeInfos(ctx context.Context) ([]*utils.NodeInfo,
 	return args.Get(0).([]*utils.NodeInfo), args.Error(1)
 }
 
-func (m *MockNodeInfoRepo) AddNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
+func (m *MockNodeInfoRepo) AddAndUpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
 	args := m.Called(ctx, nodeInfo)
 	return args.Error(0)
 }

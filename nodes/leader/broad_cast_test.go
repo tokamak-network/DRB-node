@@ -27,7 +27,6 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-// Mock types for testing
 type MockBroadcastTrackerRepository struct {
 	mock.Mock
 }
@@ -65,7 +64,7 @@ func (m *MockNodeInfoRepository) GetNodeInfos(ctx context.Context) ([]*utils.Nod
 	return args.Get(0).([]*utils.NodeInfo), args.Error(1)
 }
 
-func (m *MockNodeInfoRepository) AddNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
+func (m *MockNodeInfoRepository) AddAndUpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
 	return nil
 }
 func (m *MockNodeInfoRepository) DeleteNodeInfo(eoaAddress string) error { return nil }

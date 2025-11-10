@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -24,7 +25,7 @@ type mockNodeInfoRepo struct {
 	addErr    error
 }
 
-func (m *mockNodeInfoRepo) AddNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
+func (m *mockNodeInfoRepo) AddAndUpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
 	m.addCalled++
 	m.addArg = nodeInfo
 	return m.addErr
@@ -33,6 +34,8 @@ func (m *mockNodeInfoRepo) AddNodeInfo(ctx context.Context, nodeInfo *utils.Node
 func (m *mockNodeInfoRepo) GetNodeInfos(ctx context.Context) ([]*utils.NodeInfo, error) {
 	return nil, nil
 }
+
+func (m *mockNodeInfoRepo) DeleteNodeInfoByEOA(ctx context.Context, eoa string) error { return nil }
 
 // Suite
 type RegistrationHelperSuite struct {
@@ -43,6 +46,9 @@ type RegistrationHelperSuite struct {
 }
 
 func (s *RegistrationHelperSuite) SetupTest() {
+	// Initialize logger
+	logger.InitLogger()
+
 	s.repo = &mockNodeInfoRepo{}
 	s.ln = &LeaderNode{nodeInfoRepository: s.repo}
 	s.ctx = context.Background()
