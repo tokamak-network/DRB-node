@@ -116,7 +116,7 @@ func (n *RegularNode) GetCommitByRound(ctx context.Context, round, trialNum stri
 }
 
 func (n *RegularNode) AddNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
-	return n.nodeInfoRepository.AddNodeInfo(ctx, nodeInfo)
+	return n.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo)
 }
 
 func (n *RegularNode) AddCommit(ctx context.Context, commitData *utils.CommitData) error {

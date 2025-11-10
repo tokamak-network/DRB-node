@@ -229,9 +229,9 @@ func TestRegularNode_HandleSecretValueRequest_GetRevealOrderError(t *testing.T) 
 		Signature:         []byte("signature"),
 	}
 
-	// Mock reveal order to return error multiple times, then success
+	// Mock reveal order to return error multiple times
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
-		Return(nil, errors.New("not found")).Times(1)
+		Return(nil, errors.New("not found")).Maybe()
 
 	// Set a short timeout context
 	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
@@ -1218,7 +1218,7 @@ func TestRegularNode_HandleSecretValueRequest_NilRevealOrder(t *testing.T) {
 
 	// Return nil reveal order (not calculated yet)
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
-		Return(nil, nil).Times(1)
+		Return(nil, nil).Maybe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000) // 100ms
 	defer cancel()

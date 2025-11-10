@@ -44,7 +44,7 @@ func (m *MockNodeInfoRepoForNode) GetNodeInfos(ctx context.Context) ([]*utils.No
 	return args.Get(0).([]*utils.NodeInfo), args.Error(1)
 }
 
-func (m *MockNodeInfoRepoForNode) AddNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
+func (m *MockNodeInfoRepoForNode) AddAndUpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
 	args := m.Called(ctx, nodeInfo)
 	return args.Error(0)
 }
@@ -194,7 +194,7 @@ func TestRegularNode_AddNodeInfo(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		regularNode, mockNodeInfoRepo, _ := setupRegularNodeWithMocks()
 
-		mockNodeInfoRepo.On("AddNodeInfo", ctx, nodeInfo).Return(nil)
+		mockNodeInfoRepo.On("AddAndUpdateNodeInfo", ctx, nodeInfo).Return(nil)
 
 		err := regularNode.AddNodeInfo(ctx, nodeInfo)
 
@@ -206,7 +206,7 @@ func TestRegularNode_AddNodeInfo(t *testing.T) {
 		regularNode, mockNodeInfoRepo, _ := setupRegularNodeWithMocks()
 
 		expectedError := assert.AnError
-		mockNodeInfoRepo.On("AddNodeInfo", ctx, nodeInfo).Return(expectedError)
+		mockNodeInfoRepo.On("AddAndUpdateNodeInfo", ctx, nodeInfo).Return(expectedError)
 
 		err := regularNode.AddNodeInfo(ctx, nodeInfo)
 

@@ -322,7 +322,6 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 		time.Sleep(10 * time.Second)
 	}
 }
-
 func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	// Create commit request structure with signed COS and round data
 	req := utils.CosRequest{

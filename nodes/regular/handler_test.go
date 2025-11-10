@@ -100,6 +100,100 @@ const testABIContent = `{
             "outputs": [],
             "stateMutability": "nonpayable",
             "type": "function"
+        },
+        {
+            "anonymous": false,
+            "inputs": [
+                {"indexed": false, "name": "round", "type": "uint256"},
+                {"indexed": false, "name": "trialNum", "type": "uint256"},
+                {"indexed": false, "name": "packedIndicesAscendingFromLSB", "type": "uint256"}
+            ],
+            "name": "RequestedToSubmitCv",
+            "type": "event"
+        },
+        {
+            "anonymous": false,
+            "inputs": [
+                {"indexed": false, "name": "round", "type": "uint256"},
+                {"indexed": false, "name": "trialNum", "type": "uint256"},
+                {"indexed": false, "name": "cv", "type": "bytes32"},
+                {"indexed": false, "name": "index", "type": "uint256"}
+            ],
+            "name": "CvSubmitted",
+            "type": "event"
+        },
+        {
+            "anonymous": false,
+            "inputs": [
+                {"indexed": false, "name": "curRound", "type": "uint256"},
+                {"indexed": false, "name": "curTrialNum", "type": "uint256"},
+                {"indexed": false, "name": "curState", "type": "uint256"}
+            ],
+            "name": "Status",
+            "type": "event"
+        },
+        {
+            "anonymous": false,
+            "inputs": [
+                {"indexed": false, "name": "round", "type": "uint256"},
+                {"indexed": false, "name": "trialNum", "type": "uint256"},
+                {"indexed": false, "name": "merkleRoot", "type": "bytes32"}
+            ],
+            "name": "MerkleRootSubmitted",
+            "type": "event"
+        },
+        {
+            "anonymous": false,
+            "inputs": [
+                {"indexed": false, "name": "round", "type": "uint256"},
+                {"indexed": false, "name": "trialNum", "type": "uint256"},
+                {"indexed": false, "name": "indicesLength", "type": "uint256"},
+                {"indexed": false, "name": "packedIndices", "type": "uint256"}
+            ],
+            "name": "RequestedToSubmitCo",
+            "type": "event"
+        },
+        {
+            "anonymous": false,
+            "inputs": [
+                {"indexed": false, "name": "round", "type": "uint256"},
+                {"indexed": false, "name": "trialNum", "type": "uint256"},
+                {"indexed": false, "name": "indexK", "type": "uint256"}
+            ],
+            "name": "RequestedToSubmitSFromIndexK",
+            "type": "event"
+        },
+        {
+            "anonymous": false,
+            "inputs": [
+                {"indexed": false, "name": "round", "type": "uint256"},
+                {"indexed": false, "name": "trialNum", "type": "uint256"},
+                {"indexed": false, "name": "s", "type": "bytes32"},
+                {"indexed": false, "name": "index", "type": "uint256"}
+            ],
+            "name": "SSubmitted",
+            "type": "event"
+        },
+        {
+            "inputs": [],
+            "name": "failToRequestSubmitCvOrSubmitMerkleRoot",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "failToSubmitMerkleRootAfterDispute",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+        },
+        {
+            "inputs": [],
+            "name": "failToRequestSorGenerateRandomNumber",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
         }
     ]
 }`
@@ -521,7 +615,7 @@ type MockNodeInfoRepository struct {
 	mock.Mock
 }
 
-func (m *MockNodeInfoRepository) AddNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
+func (m *MockNodeInfoRepository) AddAndUpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
 	args := m.Called(ctx, nodeInfo)
 	return args.Error(0)
 }
@@ -544,11 +638,6 @@ func (m *MockNodeInfoRepository) GetNodeInfoByEOA(ctx context.Context, eoaAddres
 
 func (m *MockNodeInfoRepository) DeleteNodeInfoByEOA(ctx context.Context, eoaAddress string) error {
 	args := m.Called(ctx, eoaAddress)
-	return args.Error(0)
-}
-
-func (m *MockNodeInfoRepository) UpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
-	args := m.Called(ctx, nodeInfo)
 	return args.Error(0)
 }
 
@@ -1531,7 +1620,7 @@ func TestRegularNodeHandler_AddNodeInfo_Success(t *testing.T) {
 		EOAAddress: "0x1234567890123456789012345678901234567890",
 	}
 
-	mockRepo.On("AddNodeInfo", mock.Anything, nodeInfo).Return(nil)
+	mockRepo.On("AddAndUpdateNodeInfo", mock.Anything, nodeInfo).Return(nil)
 
 	err := handler.regularNode.AddNodeInfo(context.Background(), nodeInfo)
 
@@ -1550,7 +1639,7 @@ func TestRegularNodeHandler_AddNodeInfo_Error(t *testing.T) {
 		EOAAddress: "0x1234567890123456789012345678901234567890",
 	}
 
-	mockRepo.On("AddNodeInfo", mock.Anything, nodeInfo).Return(errors.New("database error"))
+	mockRepo.On("AddAndUpdateNodeInfo", mock.Anything, nodeInfo).Return(errors.New("database error"))
 
 	err := handler.regularNode.AddNodeInfo(context.Background(), nodeInfo)
 
