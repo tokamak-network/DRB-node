@@ -168,6 +168,15 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 		PrivateKey:      privateKey,
 		ContractABI:     parsedABI,
 	}
+	// Check if the node is activated
+	IsNetworkError, isActivated := rh.checkActivationStatus(ctx, clientUtils, eoaAddress)
+	if IsNetworkError {
+		log.Println("Network error. Skipping activation check.")
+		time.Sleep(30 * time.Second)
+	}
+	if isActivated {
+		rh.sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
+	}
 	for {
 		// Check activation status
 		IsNetworkError, isActivated := rh.checkActivationStatus(ctx, clientUtils, eoaAddress)
