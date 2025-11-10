@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -16,6 +17,10 @@ func NewNodeInfoRepository(db *pg.DB) *NodeInfoRepository {
 }
 
 func (r *NodeInfoRepository) AddAndUpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
+	if nodeInfo == nil {
+		return fmt.Errorf("nodeInfo cannot be nil")
+	}
+	
 	node := &NodeInfoScheme{
 		IP:         nodeInfo.IP,
 		Port:       nodeInfo.Port,

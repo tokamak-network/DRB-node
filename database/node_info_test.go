@@ -259,3 +259,312 @@ func TestNodeInfoRepository_GetNodeInfos_ErrorHandling(t *testing.T) {
 	MigrationsDown(sqlDB)
 	MigrationsUp(sqlDB)
 }
+
+// TestAddAndUpdateNodeInfo_InsertNewNode tests successful insertion of a new node
+func TestAddAndUpdateNodeInfo_InsertNewNode(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA := "0xTestInsertNewNode123"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+
+	node := &utils.NodeInfo{
+		IP:         "192.168.1.100",
+		Port:       "8080",
+		PeerID:     "peer_insert_test",
+		EOAAddress: testEOA,
+	}
+
+	// Insert new node
+	err := repo.AddAndUpdateNodeInfo(ctx, node)
+	assert.NoError(t, err, "Should successfully insert new node")
+
+	// Verify insertion
+	var inserted NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&inserted).
+		Where("eoa_address = ?", testEOA).
+		Select()
+	assert.NoError(t, err)
+	assert.Equal(t, node.IP, inserted.IP)
+	assert.Equal(t, node.Port, inserted.Port)
+	assert.Equal(t, node.PeerID, inserted.PeerID)
+	assert.Equal(t, node.EOAAddress, inserted.EOAAddress)
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+}
+
+// TestAddAndUpdateNodeInfo_UpdateExistingNode tests updating an existing node by EOA address
+func TestAddAndUpdateNodeInfo_UpdateExistingNode(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA := "0xTestUpdateExistingNode456"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+
+	// Insert initial node
+	initialNode := &utils.NodeInfo{
+		IP:         "192.168.1.200",
+		Port:       "9000",
+		PeerID:     "peer_initial",
+		EOAAddress: testEOA,
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, initialNode)
+	assert.NoError(t, err)
+
+	// Update with new values (same EOA, different IP/Port/PeerID)
+	updatedNode := &utils.NodeInfo{
+		IP:         "192.168.1.201",
+		Port:       "9001",
+		PeerID:     "peer_updated",
+		EOAAddress: testEOA, // Same EOA
+	}
+	err = repo.AddAndUpdateNodeInfo(ctx, updatedNode)
+	assert.NoError(t, err, "Should successfully update existing node")
+
+	// Verify update
+	var result NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&result).
+		Where("eoa_address = ?", testEOA).
+		Select()
+	assert.NoError(t, err)
+	assert.Equal(t, updatedNode.IP, result.IP, "IP should be updated")
+	assert.Equal(t, updatedNode.Port, result.Port, "Port should be updated")
+	assert.Equal(t, updatedNode.PeerID, result.PeerID, "PeerID should be updated")
+	assert.Equal(t, updatedNode.EOAAddress, result.EOAAddress, "EOA should remain same")
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+}
+
+// TestAddAndUpdateNodeInfo_NilNodeInfo tests error handling with nil input
+func TestAddAndUpdateNodeInfo_NilNodeInfo(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+
+	// Test with nil nodeInfo
+	err := repo.AddAndUpdateNodeInfo(ctx, nil)
+	assert.Error(t, err, "Should return error for nil nodeInfo")
+}
+
+// TestAddAndUpdateNodeInfo_MultipleUpdatesSameEOA tests multiple updates to same EOA
+func TestAddAndUpdateNodeInfo_MultipleUpdatesSameEOA(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA := "0xTestMultipleUpdates999"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+
+	// First insert
+	node1 := &utils.NodeInfo{
+		IP:         "10.0.0.1",
+		Port:       "5000",
+		PeerID:     "peer_v1",
+		EOAAddress: testEOA,
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, node1)
+	assert.NoError(t, err)
+
+	// Second update
+	node2 := &utils.NodeInfo{
+		IP:         "10.0.0.2",
+		Port:       "5001",
+		PeerID:     "peer_v2",
+		EOAAddress: testEOA,
+	}
+	err = repo.AddAndUpdateNodeInfo(ctx, node2)
+	assert.NoError(t, err)
+
+	// Third update
+	node3 := &utils.NodeInfo{
+		IP:         "10.0.0.3",
+		Port:       "5002",
+		PeerID:     "peer_v3",
+		EOAAddress: testEOA,
+	}
+	err = repo.AddAndUpdateNodeInfo(ctx, node3)
+	assert.NoError(t, err)
+
+	// Verify final state
+	var result NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&result).
+		Where("eoa_address = ?", testEOA).
+		Select()
+	assert.NoError(t, err)
+	assert.Equal(t, node3.IP, result.IP)
+	assert.Equal(t, node3.Port, result.Port)
+	assert.Equal(t, node3.PeerID, result.PeerID)
+
+	// Verify only one row exists
+	count, err := GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+		Where("eoa_address = ?", testEOA).
+		Count()
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count, "Should have only one row per EOA")
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+}
+
+// TestAddAndUpdateNodeInfo_UpdatePartialFields tests updating only some fields
+func TestAddAndUpdateNodeInfo_UpdatePartialFields(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA := "0xTestPartialUpdate111"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+
+	// Initial insert
+	initialNode := &utils.NodeInfo{
+		IP:         "172.16.0.1",
+		Port:       "3000",
+		PeerID:     "peer_partial_initial",
+		EOAAddress: testEOA,
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, initialNode)
+	assert.NoError(t, err)
+
+	// Update with only IP changed
+	updatedNode := &utils.NodeInfo{
+		IP:         "172.16.0.2",           // Only IP changed
+		Port:       "3000",                 // Same
+		PeerID:     "peer_partial_initial", // Same
+		EOAAddress: testEOA,                // Same
+	}
+	err = repo.AddAndUpdateNodeInfo(ctx, updatedNode)
+	assert.NoError(t, err)
+
+	// Verify all fields are updated (even if only IP changed in input)
+	var result NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&result).
+		Where("eoa_address = ?", testEOA).
+		Select()
+	assert.NoError(t, err)
+	assert.Equal(t, updatedNode.IP, result.IP)
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+}
+
+// TestAddAndUpdateNodeInfo_ConcurrentUpdatesSameEOA tests concurrent updates to same EOA
+func TestAddAndUpdateNodeInfo_ConcurrentUpdatesSameEOA(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA := "0xTestConcurrentEOA222"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+
+	// Initial insert
+	initialNode := &utils.NodeInfo{
+		IP:         "192.168.50.1",
+		Port:       "4000",
+		PeerID:     "peer_concurrent_init",
+		EOAAddress: testEOA,
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, initialNode)
+	assert.NoError(t, err)
+
+	// Concurrent updates
+	numGoroutines := 10
+	doneChan := make(chan error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(idx int) {
+			node := &utils.NodeInfo{
+				IP:         fmt.Sprintf("192.168.50.%d", idx+10),
+				Port:       fmt.Sprintf("4%03d", idx),
+				PeerID:     fmt.Sprintf("peer_concurrent_%d", idx),
+				EOAAddress: testEOA, // Same EOA
+			}
+			err := repo.AddAndUpdateNodeInfo(ctx, node)
+			doneChan <- err
+		}(i)
+	}
+
+	// Collect results
+	successCount := 0
+	for i := 0; i < numGoroutines; i++ {
+		err := <-doneChan
+		if err == nil {
+			successCount++
+		}
+	}
+
+	// All should succeed (upsert handles conflicts)
+	assert.Equal(t, numGoroutines, successCount, "All concurrent updates should succeed")
+
+	// Verify only one row exists
+	count, err := GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+		Where("eoa_address = ?", testEOA).
+		Count()
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count, "Should have only one row per EOA")
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+}
+
+// TestAddAndUpdateNodeInfo_UpdateAfterDelete tests updating after a node was deleted
+func TestAddAndUpdateNodeInfo_UpdateAfterDelete(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA := "0xTestAfterDelete444"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+
+	// Insert
+	node1 := &utils.NodeInfo{
+		IP:         "192.168.100.1",
+		Port:       "6000",
+		PeerID:     "peer_before_delete",
+		EOAAddress: testEOA,
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, node1)
+	assert.NoError(t, err)
+
+	// Delete
+	err = repo.DeleteNodeInfoByEOA(ctx, testEOA)
+	assert.NoError(t, err)
+
+	// Insert again (should work as new insert)
+	node2 := &utils.NodeInfo{
+		IP:         "192.168.100.2",
+		Port:       "6001",
+		PeerID:     "peer_after_delete",
+		EOAAddress: testEOA,
+	}
+	err = repo.AddAndUpdateNodeInfo(ctx, node2)
+	assert.NoError(t, err, "Should successfully insert after delete")
+
+	// Verify new insertion
+	var result NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&result).
+		Where("eoa_address = ?", testEOA).
+		Select()
+	assert.NoError(t, err)
+	assert.Equal(t, node2.IP, result.IP)
+	assert.Equal(t, node2.Port, result.Port)
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+}
