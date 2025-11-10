@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/constants"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -80,6 +81,7 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 		RequestedToSubmitCvSig := parsedABI.Events["RequestedToSubmitCv"].ID
 		MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
 		RequestedToSubmitSFromIndexKSig := parsedABI.Events["RequestedToSubmitSFromIndexK"].ID
+		DeactivatedSig := parsedABI.Events["DeActivated"].ID
 
 		reconnect := false
 		for {
@@ -268,12 +270,37 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 					}
 
 					n.processSubmittedSecretRequest(ctx, eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
+
+				case DeactivatedSig:
+					eventData := struct {
+						Operator common.Address
+					}{}
+					err := parsedABI.UnpackIntoInterface(&eventData, "DeActivated", vLog.Data)
+					if err != nil {
+						log.Printf("Failed to decode DeActivated event log: %v", err)
+						continue
+					}
+					n.processDeactivated(ctx, eventData.Operator)
 				}
 			}
 			if reconnect {
 				log.Printf("Reconnection triggered, breaking out of event loop to restart subscription...")
 				break // break inner for loop to reconnect
 			}
+		}
+	}
+}
+
+func (n *LeaderNode) processDeactivated(ctx context.Context, operator common.Address) {
+	fmt.Printf("Deactivated Event:\n Operator %v\n", operator)
+	eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+
+	// Delete node info for deactivated operator
+	if n.nodeInfoRepository != nil {
+		if err := n.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, operator.Hex()); err != nil {
+			log.Printf("Failed to delete node info for operator %s: %v", operator.Hex(), err)
+		} else {
+			log.Printf("Deleted node info for deactivated operator %s", operator.Hex())
 		}
 	}
 }

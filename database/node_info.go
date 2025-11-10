@@ -15,27 +15,20 @@ func NewNodeInfoRepository(db *pg.DB) *NodeInfoRepository {
 	return &NodeInfoRepository{db: db}
 }
 
-func (r *NodeInfoRepository) AddNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
+func (r *NodeInfoRepository) AddAndUpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
 	node := &NodeInfoScheme{
 		IP:         nodeInfo.IP,
 		Port:       nodeInfo.Port,
 		PeerID:     nodeInfo.PeerID,
 		EOAAddress: nodeInfo.EOAAddress,
 	}
-	_, err := r.db.WithContext(ctx).Model(node).Insert()
-	return err
-}
-
-func (r *NodeInfoRepository) UpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
-	node := &NodeInfoScheme{
-		IP:         nodeInfo.IP,
-		Port:       nodeInfo.Port,
-		PeerID:     nodeInfo.PeerID,
-		EOAAddress: nodeInfo.EOAAddress,
-	}
+	// UPSERT based on eoa_address
 	_, err := r.db.WithContext(ctx).Model(node).
-		Where("ip = ?", nodeInfo.IP).
-		Update()
+		OnConflict("(eoa_address) DO UPDATE").
+		Set("peer_id = EXCLUDED.peer_id").
+		Set("ip = EXCLUDED.ip").
+		Set("port = EXCLUDED.port").
+		Insert()
 	return err
 }
 
@@ -49,6 +42,13 @@ func (r *NodeInfoRepository) GetNodeInfos(ctx context.Context) ([]*utils.NodeInf
 		nodeInfos = append(nodeInfos, mapNodeInfoSchemeToNodeInfo(n))
 	}
 	return nodeInfos, nil
+}
+
+func (r *NodeInfoRepository) DeleteNodeInfoByEOA(ctx context.Context, eoaAddress string) error {
+	_, err := r.db.WithContext(ctx).Model(&NodeInfoScheme{}).
+		Where("eoa_address = ?", eoaAddress).
+		ForceDelete()
+	return err
 }
 
 // Helper function for mapping

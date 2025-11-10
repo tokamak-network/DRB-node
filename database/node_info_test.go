@@ -28,7 +28,7 @@ func TestNodeInfoRepository_AddUpdateGet(t *testing.T) {
 	}
 
 	// Add
-	err := repo.AddNodeInfo(ctx, node)
+	err := repo.AddAndUpdateNodeInfo(ctx, node)
 	assert.NoError(t, err)
 
 	// Get
@@ -36,14 +36,14 @@ func TestNodeInfoRepository_AddUpdateGet(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, nodes)
 
-	// Update
+	// Update using UPSERT
 	node.Port = "9090"
-	err = repo.UpdateNodeInfo(ctx, node)
+	err = repo.AddAndUpdateNodeInfo(ctx, node)
 	assert.NoError(t, err)
 
 	// Verify update
 	var updated NodeInfoScheme
-	err = GetDB().WithContext(ctx).Model(&updated).Where("ip = ?", "127.0.0.1").Select()
+	err = GetDB().WithContext(ctx).Model(&updated).Where("eoa_address = ?", "0xabc123").Select()
 	assert.NoError(t, err)
 	assert.Equal(t, "9090", updated.Port)
 
@@ -64,7 +64,7 @@ func TestNodeInfoRepository_AddWithEmptyFields(t *testing.T) {
 		PeerID:     "peer123",
 		EOAAddress: "0xabc",
 	}
-	err := repo.AddNodeInfo(ctx, nodeEmptyIP)
+	err := repo.AddAndUpdateNodeInfo(ctx, nodeEmptyIP)
 	assert.Error(t, err, "Should reject empty IP")
 
 	// Empty Port
@@ -74,7 +74,7 @@ func TestNodeInfoRepository_AddWithEmptyFields(t *testing.T) {
 		PeerID:     "peer456",
 		EOAAddress: "0xdef",
 	}
-	err = repo.AddNodeInfo(ctx, nodeEmptyPort)
+	err = repo.AddAndUpdateNodeInfo(ctx, nodeEmptyPort)
 	assert.Error(t, err, "Should reject empty Port")
 
 	// Empty PeerID
@@ -84,7 +84,7 @@ func TestNodeInfoRepository_AddWithEmptyFields(t *testing.T) {
 		PeerID:     "",
 		EOAAddress: "0xghi",
 	}
-	err = repo.AddNodeInfo(ctx, nodeEmptyPeerID)
+	err = repo.AddAndUpdateNodeInfo(ctx, nodeEmptyPeerID)
 	assert.Error(t, err, "Should reject empty PeerID")
 
 	// Empty EOAAddress
@@ -94,7 +94,7 @@ func TestNodeInfoRepository_AddWithEmptyFields(t *testing.T) {
 		PeerID:     "peer789",
 		EOAAddress: "",
 	}
-	err = repo.AddNodeInfo(ctx, nodeEmptyEOA)
+	err = repo.AddAndUpdateNodeInfo(ctx, nodeEmptyEOA)
 	assert.Error(t, err, "Should reject empty EOAAddress")
 }
 
@@ -114,7 +114,7 @@ func TestNodeInfoRepository_DuplicateIP(t *testing.T) {
 		EOAAddress: "0xaaa",
 	}
 
-	err := repo.AddNodeInfo(ctx, node1)
+	err := repo.AddAndUpdateNodeInfo(ctx, node1)
 	assert.NoError(t, err)
 
 	// Try duplicate IP
@@ -125,7 +125,7 @@ func TestNodeInfoRepository_DuplicateIP(t *testing.T) {
 		EOAAddress: "0xbbb",
 	}
 
-	err = repo.AddNodeInfo(ctx, node2)
+	err = repo.AddAndUpdateNodeInfo(ctx, node2)
 	assert.Error(t, err, "Should reject duplicate IP")
 	if err != nil {
 		assert.Contains(t, err.Error(), "duplicate key")
@@ -133,103 +133,6 @@ func TestNodeInfoRepository_DuplicateIP(t *testing.T) {
 
 	// Cleanup
 	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.1").Delete()
-}
-
-func TestNodeInfoRepository_UpdateNonExistent(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	repo := NewNodeInfoRepository(GetDB())
-
-	// Cleanup
-	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "999.999.999.999").Delete()
-
-	nonExistentNode := &utils.NodeInfo{
-		IP:         "999.999.999.999",
-		Port:       "8080",
-		PeerID:     "nonexistent",
-		EOAAddress: "0xnonexistent",
-	}
-
-	err := repo.UpdateNodeInfo(ctx, nonExistentNode)
-	assert.NoError(t, err, "Update succeeds but updates 0 rows")
-
-	// Verify not created
-	var fetched NodeInfoScheme
-	err = GetDB().WithContext(ctx).Model(&fetched).Where("ip = ?", "999.999.999.999").Select()
-	assert.Error(t, err, "Should not exist")
-}
-
-func TestNodeInfoRepository_UpdateWithEmptyFields(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	repo := NewNodeInfoRepository(GetDB())
-
-	// Cleanup
-	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.2").Delete()
-
-	// Add valid node
-	existingNode := &utils.NodeInfo{
-		IP:         "10.0.0.2",
-		Port:       "8001",
-		PeerID:     "peerC",
-		EOAAddress: "0xccc",
-	}
-	err := repo.AddNodeInfo(ctx, existingNode)
-	assert.NoError(t, err)
-
-	// Try update with empty Port
-	existingNode.Port = ""
-	err = repo.UpdateNodeInfo(ctx, existingNode)
-	assert.Error(t, err, "Should reject empty Port")
-
-	// Verify original data unchanged
-	var unchanged NodeInfoScheme
-	err = GetDB().WithContext(ctx).Model(&unchanged).Where("ip = ?", "10.0.0.2").Select()
-	assert.NoError(t, err)
-	assert.Equal(t, "8001", unchanged.Port)
-
-	// Cleanup
-	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.2").Context(ctx).Delete()
-}
-
-func TestNodeInfoRepository_SuccessfulUpdate(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	repo := NewNodeInfoRepository(GetDB())
-
-	// Cleanup
-	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.3").Delete()
-
-	node := &utils.NodeInfo{
-		IP:         "10.0.0.3",
-		Port:       "7000",
-		PeerID:     "originalPeer",
-		EOAAddress: "0xoriginal",
-	}
-	err := repo.AddNodeInfo(ctx, node)
-	assert.NoError(t, err)
-
-	// Update all fields
-	node.Port = "7001"
-	node.PeerID = "updatedPeer"
-	node.EOAAddress = "0xupdated"
-	err = repo.UpdateNodeInfo(ctx, node)
-	assert.NoError(t, err)
-
-	// Verify all fields updated
-	var updated NodeInfoScheme
-	err = GetDB().WithContext(ctx).Model(&updated).Where("ip = ?", "10.0.0.3").Select()
-	assert.NoError(t, err)
-	assert.Equal(t, "10.0.0.3", updated.IP)
-	assert.Equal(t, "7001", updated.Port)
-	assert.Equal(t, "updatedPeer", updated.PeerID)
-	assert.Equal(t, "0xupdated", updated.EOAAddress)
-
-	// Cleanup
-	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.3").Delete()
 }
 
 func TestNodeInfoRepository_GetMultipleNodes(t *testing.T) {
@@ -253,7 +156,7 @@ func TestNodeInfoRepository_GetMultipleNodes(t *testing.T) {
 	}
 
 	for _, node := range testNodes {
-		err := repo.AddNodeInfo(ctx, node)
+		err := repo.AddAndUpdateNodeInfo(ctx, node)
 		assert.NoError(t, err)
 	}
 
@@ -303,7 +206,7 @@ func TestNodeInfoRepository_ConcurrentInserts(t *testing.T) {
 				PeerID:     fmt.Sprintf("peer%d", idx),
 				EOAAddress: fmt.Sprintf("0xabc%d", idx),
 			}
-			err := repo.AddNodeInfo(ctx, node)
+			err := repo.AddAndUpdateNodeInfo(ctx, node)
 			doneChan <- err
 		}(i)
 	}
