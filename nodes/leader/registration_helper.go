@@ -34,9 +34,9 @@ func (n *LeaderNode) registerNodeInternal(ctx context.Context, req utils.Registr
 
 	log.Printf("Verified registration for PeerID: %s", req.PeerID)
 	if n.fallbackEthClient != nil {
-		eth.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+		eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient)
 	}
-	operators := eth.GetActivatedOperatorsCached()
+	operators := eth.Service.GetActivatedOperatorsCached()
 
 	// Check if the EOA is in the activated operators list
 	isActivated := false

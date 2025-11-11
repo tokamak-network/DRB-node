@@ -1,13 +1,59 @@
 package leader_node
 
 import (
+	"context"
+	"errors"
 	"math/big"
 	"testing"
 
 	"github.com/eapache/queue"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
+	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
+
+// MockFallbackEthClientForAtomicState is a mock implementation of the fallback eth client
+type MockFallbackEthClientForAtomicState struct {
+	fallback_ethclient.IFallbackEthClient
+}
+
+// MockEthServiceForAtomicState is a mock implementation of the eth service interface
+type MockEthServiceForAtomicState struct {
+	eth.IEthService
+	currentRound      *big.Int
+	trialNum          *big.Int
+	shouldError       bool
+	errorOnRoundFetch bool
+	errorOnTrialFetch bool
+}
+
+// UpdateCurrentRoundFromContract mocks the contract round fetch
+func (m *MockEthServiceForAtomicState) UpdateCurrentRoundFromContract(ctx context.Context, client fallback_ethclient.IFallbackEthClient) (*big.Int, error) {
+	if m.shouldError && m.errorOnRoundFetch {
+		return nil, errors.New("failed to fetch current round")
+	}
+	return m.currentRound, nil
+}
+
+// GetTrialNumFromContract mocks the contract trial number fetch
+func (m *MockEthServiceForAtomicState) GetTrialNumFromContract(ctx context.Context, client fallback_ethclient.IFallbackEthClient, round *big.Int) (*big.Int, error) {
+	if m.shouldError && m.errorOnTrialFetch {
+		return nil, errors.New("failed to fetch trial number")
+	}
+	return m.trialNum, nil
+}
+
+// GetActivatedOperatorsCached mocks the activated operators cache
+func (m *MockEthServiceForAtomicState) GetActivatedOperatorsCached() []common.Address {
+	return []common.Address{}
+}
+
+// GetActivatedOperatorsLength mocks the length of activated operators
+func (m *MockEthServiceForAtomicState) GetActivatedOperatorsLength() int64 {
+	return 0
+}
 
 // createTestLeaderNode creates a minimal LeaderNode for testing
 func createTestLeaderNode() *LeaderNode {
@@ -678,4 +724,148 @@ func TestSetGetLastSubmitSTimestamp(t *testing.T) {
 	node.SetLastSubmitSTimestamp(updatedTimestamp)
 	timestamp = node.GetLastSubmitSTimestamp()
 	assert.Equal(t, updatedTimestamp, timestamp, "Timestamp should be updated")
+}
+
+// TestUpdateCurrentRoundAndTrial_Success tests successful update of current round and trial
+func TestUpdateCurrentRoundAndTrial_Success(t *testing.T) {
+	ctx := context.Background()
+	node := createTestLeaderNode()
+
+	// Create a mock eth service
+	mockEthService := &MockEthServiceForAtomicState{
+		currentRound: big.NewInt(100),
+		trialNum:     big.NewInt(5),
+		shouldError:  false,
+	}
+
+	// Replace the global eth.Service with mock
+	originalService := eth.Service
+	eth.Service = mockEthService
+	defer func() { eth.Service = originalService }()
+
+	// Create a mock fallback client
+	mockClient := &MockFallbackEthClientForAtomicState{}
+	node.fallbackEthClient = mockClient
+
+	// Execute the function
+	err := node.UpdateCurrentRoundAndTrial(ctx)
+
+	// Assertions
+	assert.NoError(t, err, "Should not return error on success")
+	assert.Equal(t, "100", node.GetCurrentRound(), "Current round should be updated to 100")
+	assert.Equal(t, "5", node.GetCurrentTrial(), "Current trial should be updated to 5")
+}
+
+// TestUpdateCurrentRoundAndTrial_ErrorFetchingRound tests error when fetching current round fails
+func TestUpdateCurrentRoundAndTrial_ErrorFetchingRound(t *testing.T) {
+	ctx := context.Background()
+	node := createTestLeaderNode()
+
+	// Create a mock eth service that returns error on UpdateCurrentRoundFromContract
+	mockEthService := &MockEthServiceForAtomicState{
+		shouldError:       true,
+		errorOnRoundFetch: true,
+	}
+
+	// Replace the global eth.Service with mock
+	originalService := eth.Service
+	eth.Service = mockEthService
+	defer func() { eth.Service = originalService }()
+
+	// Create a mock fallback client
+	mockClient := &MockFallbackEthClientForAtomicState{}
+	node.fallbackEthClient = mockClient
+
+	// Set initial values
+	node.SetCurrentRound("50")
+	node.SetCurrentTrial("3")
+
+	// Execute the function
+	err := node.UpdateCurrentRoundAndTrial(ctx)
+
+	// Assertions
+	assert.Error(t, err, "Should return error when fetching round fails")
+	assert.Contains(t, err.Error(), "failed to fetch current round", "Error message should indicate round fetch failure")
+	// Current values should remain unchanged
+	assert.Equal(t, "50", node.GetCurrentRound(), "Current round should not be updated on error")
+	assert.Equal(t, "3", node.GetCurrentTrial(), "Current trial should not be updated on error")
+}
+
+// TestUpdateCurrentRoundAndTrial_ErrorFetchingTrial tests error when fetching trial number fails
+func TestUpdateCurrentRoundAndTrial_ErrorFetchingTrial(t *testing.T) {
+	ctx := context.Background()
+	node := createTestLeaderNode()
+
+	// Create a mock eth service that returns error on GetTrialNumFromContract
+	mockEthService := &MockEthServiceForAtomicState{
+		currentRound:      big.NewInt(200),
+		shouldError:       true,
+		errorOnTrialFetch: true,
+	}
+
+	// Replace the global eth.Service with mock
+	originalService := eth.Service
+	eth.Service = mockEthService
+	defer func() { eth.Service = originalService }()
+
+	// Create a mock fallback client
+	mockClient := &MockFallbackEthClientForAtomicState{}
+	node.fallbackEthClient = mockClient
+
+	// Set initial values
+	node.SetCurrentRound("50")
+	node.SetCurrentTrial("3")
+
+	// Execute the function
+	err := node.UpdateCurrentRoundAndTrial(ctx)
+
+	// Assertions
+	assert.Error(t, err, "Should return error when fetching trial fails")
+	assert.Contains(t, err.Error(), "failed to fetch trial number", "Error message should indicate trial fetch failure")
+	// Current values should remain unchanged
+	assert.Equal(t, "50", node.GetCurrentRound(), "Current round should not be updated on error")
+	assert.Equal(t, "3", node.GetCurrentTrial(), "Current trial should not be updated on error")
+}
+
+// TestUpdateCurrentRoundAndTrial_MultipleUpdates tests multiple consecutive updates
+func TestUpdateCurrentRoundAndTrial_MultipleUpdates(t *testing.T) {
+	ctx := context.Background()
+	node := createTestLeaderNode()
+
+	// Create a mock fallback client
+	mockClient := &MockFallbackEthClientForAtomicState{}
+	node.fallbackEthClient = mockClient
+
+	// Replace the global eth.Service with mock
+	originalService := eth.Service
+	defer func() { eth.Service = originalService }()
+
+	testCases := []struct {
+		round    *big.Int
+		trial    *big.Int
+		expected struct {
+			round string
+			trial string
+		}
+	}{
+		{big.NewInt(1), big.NewInt(1), struct{ round, trial string }{"1", "1"}},
+		{big.NewInt(2), big.NewInt(1), struct{ round, trial string }{"2", "1"}},
+		{big.NewInt(2), big.NewInt(2), struct{ round, trial string }{"2", "2"}},
+		{big.NewInt(100), big.NewInt(10), struct{ round, trial string }{"100", "10"}},
+	}
+
+	for _, tc := range testCases {
+		mockEthService := &MockEthServiceForAtomicState{
+			currentRound: tc.round,
+			trialNum:     tc.trial,
+			shouldError:  false,
+		}
+		eth.Service = mockEthService
+
+		err := node.UpdateCurrentRoundAndTrial(ctx)
+
+		assert.NoError(t, err, "Should not return error for round %s trial %s", tc.expected.round, tc.expected.trial)
+		assert.Equal(t, tc.expected.round, node.GetCurrentRound(), "Current round should be %s", tc.expected.round)
+		assert.Equal(t, tc.expected.trial, node.GetCurrentTrial(), "Current trial should be %s", tc.expected.trial)
+	}
 }

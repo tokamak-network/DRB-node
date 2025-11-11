@@ -53,7 +53,7 @@ func (s *RegistrationHelperSuite) SetupTest() {
 	s.ln = &LeaderNode{nodeInfoRepository: s.repo}
 	s.ctx = context.Background()
 	// reset activated operators cache before each test
-	eth.SetActivatedOperatorsCached(nil)
+	eth.Service.SetActivatedOperatorsCached(nil)
 }
 
 func (s *RegistrationHelperSuite) Test_RegisterNode_Success() {
@@ -63,7 +63,7 @@ func (s *RegistrationHelperSuite) Test_RegisterNode_Success() {
 	sig := utils.SignData(addr, pk)
 
 	// mark as activated
-	eth.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
+	eth.Service.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
 
 	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "peer-1"}
 	err := s.ln.registerNodeInternal(s.ctx, req, "/ip4/10.0.0.1/tcp/7000")
@@ -87,7 +87,7 @@ func (s *RegistrationHelperSuite) Test_RegisterNode_InvalidSignature() {
 	addr := ethcrypto.PubkeyToAddress(pk.PublicKey).Hex()
 	// invalid signature: random bytes
 	sig := []byte("invalid")
-	eth.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
+	eth.Service.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
 	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "p"}
 	err := s.ln.registerNodeInternal(s.ctx, req, "/ip4/1.2.3.4/tcp/1234")
 	s.Error(err)
@@ -109,7 +109,7 @@ func (s *RegistrationHelperSuite) Test_RegisterNode_InvalidRemoteAddr() {
 	pk, _ := ethcrypto.GenerateKey()
 	addr := ethcrypto.PubkeyToAddress(pk.PublicKey).Hex()
 	sig := utils.SignData(addr, pk)
-	eth.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
+	eth.Service.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
 
 	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "p"}
 	// invalid multiaddr (too short path parts)
@@ -129,7 +129,7 @@ func (s *RegistrationHelperSuite) Test_RegisterNode_Function_Success() {
 	addr := ethcrypto.PubkeyToAddress(pk.PublicKey).Hex()
 	sig := utils.SignData(addr, pk)
 
-	eth.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
+	eth.Service.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
 	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "peer-X"}
 	payload, _ := json.Marshal(req)
 

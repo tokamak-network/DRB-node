@@ -38,9 +38,9 @@ type IBroadcastTrackerRepository interface {
 }
 
 type INodeInfoRepository interface {
-    AddAndUpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error
-    GetNodeInfos(ctx context.Context) ([]*utils.NodeInfo, error)
-    DeleteNodeInfoByEOA(ctx context.Context, eoaAddress string) error
+	AddAndUpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error
+	GetNodeInfos(ctx context.Context) ([]*utils.NodeInfo, error)
+	DeleteNodeInfoByEOA(ctx context.Context, eoaAddress string) error
 }
 
 type IRegularCommitRepository interface {
