@@ -248,6 +248,7 @@ func (n *LeaderNode) performReliableBroadcast(ctx context.Context, h host.Host, 
 				log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
 				continue
 			}
+			defer stream.Close()
 
 			if err := json.NewEncoder(stream).Encode(message); err != nil {
 				log.Printf("Failed to send %s to regular node %s: %v", broadcastType, op.Hex(), err)
@@ -255,7 +256,6 @@ func (n *LeaderNode) performReliableBroadcast(ctx context.Context, h host.Host, 
 				log.Printf("%s sent to regular node %s for round %s with trail %s (attempt %d)",
 					broadcastType, op.Hex(), tracker.Round, tracker.TrialNum, tracker.Attempts)
 			}
-			stream.Close()
 		}
 
 		// Update tracker
@@ -372,14 +372,14 @@ func (n *LeaderNode) performReliableBroadcastSync(ctx context.Context, h host.Ho
 				log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
 				continue
 			}
-
+            defer stream.Close()
+			
 			if err := json.NewEncoder(stream).Encode(message); err != nil {
 				log.Printf("Failed to send %s to regular node %s: %v", broadcastType, op.Hex(), err)
 			} else {
 				log.Printf("%s sent to regular node %s for round %s with trail %s (attempt %d)",
 					broadcastType, op.Hex(), tracker.Round, tracker.TrialNum, tracker.Attempts)
 			}
-			stream.Close()
 		}
 
 		// Update tracker

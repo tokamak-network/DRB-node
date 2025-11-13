@@ -348,15 +348,15 @@ func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, 
 	req.Signature = signedRequest
 
 	// Send the commit to leader
-	s, err := h.NewStream(ctx, leaderID, "/cos")
+	stream, err := h.NewStream(ctx, leaderID, "/cos")
 	if err != nil {
 		log.Printf("Failed to create stream to leader: %v", err)
 		return
 	}
-	defer s.Close()
+	defer stream.Close()
 
 	// Encode and send the commit request
-	if err := json.NewEncoder(s).Encode(req); err != nil {
+	if err := json.NewEncoder(stream).Encode(req); err != nil {
 		log.Printf("Failed to send COS commit to leader: %v", err)
 	} else {
 		log.Printf("COS commit sent to leader for round %s", commitData.Round)
@@ -408,15 +408,15 @@ func (rh *RegularNodeHandler) sendRegistrationRequestToLeader(ctx context.Contex
 		PeerID:     h.ID().String(),
 	}
 
-	s, err := h.NewStream(ctx, leaderID, "/register")
+	stream, err := h.NewStream(ctx, leaderID, "/register")
 	if err != nil {
 		log.Printf("Failed to create stream to leader: %v", err)
 		h.Peerstore().AddAddrs(leaderID, h.Peerstore().Addrs(leaderID), peerstore.PermanentAddrTTL)
 		return
 	}
-	defer s.Close()
+	defer stream.Close()
 
-	if err := json.NewEncoder(s).Encode(req); err != nil {
+	if err := json.NewEncoder(stream).Encode(req); err != nil {
 		log.Printf("Failed to send registration request: %v", err)
 	} else {
 		log.Println("Registration request sent to leader.")
@@ -568,15 +568,15 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 	}
 
 	// Send the commit to the leader
-	send, err := h.NewStream(ctx, leaderID, "/cvs")
+	stream, err := h.NewStream(ctx, leaderID, "/cvs")
 	if err != nil {
 		log.Printf("Failed to create stream to leader: %v", err)
 		return
 	}
-	defer send.Close()
+	defer stream.Close()
 
 	// Encode and send the commit request
-	if err := json.NewEncoder(send).Encode(req); err != nil {
+	if err := json.NewEncoder(stream).Encode(req); err != nil {
 		log.Printf("Failed to send commit to leader for round %s: %v", req.Round, err)
 	} else {
 		log.Printf("Commit successfully sent to leader for round %s", req.Round)
