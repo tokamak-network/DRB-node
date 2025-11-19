@@ -1,12 +1,22 @@
 package commitreveal2
 
 import (
+	"context"
 	"encoding/hex"
+	"errors"
 	"math/big"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/tokamak-network/DRB-node/database"
+	"github.com/tokamak-network/DRB-node/eth"
+	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 func TestKeccak256(t *testing.T) {
@@ -733,4 +743,612 @@ func TestGenerateCommitComponents(t *testing.T) {
 		assert.Equal(t, cos, cos2)
 		assert.Equal(t, cvs, cvs2)
 	})
+}
+
+// TestGenerateCommitIntegration tests the actual GenerateCommit function
+// by mocking the eth.Service dependency
+func TestGenerateCommitIntegration(t *testing.T) {
+	// Store original service to restore after tests
+	originalService := eth.Service
+	defer func() {
+		eth.Service = originalService
+	}()
+
+	// Create mock service for testing
+	mockService := &MockEthServiceForGenerateCommit{
+		activatedOperators: []common.Address{
+			common.HexToAddress("0x1234567890123456789012345678901234567890"),
+			common.HexToAddress("0x2345678901234567890123456789012345678901"),
+			common.HexToAddress("0x3456789012345678901234567890123456789012"),
+		},
+	}
+
+	// Replace the global service with our mock
+	eth.Service = mockService
+
+	t.Run("valid operator generates commit successfully", func(t *testing.T) {
+		round := "1"
+		operator := "0x1234567890123456789012345678901234567890"
+
+		secretValue, cos, cvs, err := GenerateCommit(round, operator)
+		assert.NoError(t, err)
+
+		// Verify all values are different and non-zero
+		assert.NotEqual(t, [32]byte{}, secretValue)
+		assert.NotEqual(t, [32]byte{}, cos)
+		assert.NotEqual(t, [32]byte{}, cvs)
+		assert.NotEqual(t, secretValue, cos)
+		assert.NotEqual(t, cos, cvs)
+		assert.NotEqual(t, secretValue, cvs)
+
+		// Verify the length of returned values
+		assert.Len(t, secretValue, 32)
+		assert.Len(t, cos, 32)
+		assert.Len(t, cvs, 32)
+	})
+
+	t.Run("operator not in activated list returns error", func(t *testing.T) {
+		round := "1"
+		operator := "0x9999999999999999999999999999999999999999" // Not in mock list
+
+		_, _, _, err := GenerateCommit(round, operator)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not found in activated operators")
+	})
+
+	t.Run("invalid round returns error", func(t *testing.T) {
+		round := "invalid-round"
+		operator := "0x1234567890123456789012345678901234567890"
+
+		_, _, _, err := GenerateCommit(round, operator)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid round")
+	})
+
+	t.Run("empty operator list returns error", func(t *testing.T) {
+		// Create mock with empty operator list
+		emptyMockService := &MockEthServiceForGenerateCommit{
+			activatedOperators: []common.Address{},
+		}
+		eth.Service = emptyMockService
+
+		round := "1"
+		operator := "0x1234567890123456789012345678901234567890"
+
+		_, _, _, err := GenerateCommit(round, operator)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not found in activated operators")
+	})
+
+	t.Run("different operator indices produce different CVS values", func(t *testing.T) {
+		operators := []common.Address{
+			common.HexToAddress("0x1111111111111111111111111111111111111111"),
+			common.HexToAddress("0x2222222222222222222222222222222222222222"),
+			common.HexToAddress("0x3333333333333333333333333333333333333333"),
+		}
+		indexMockService := &MockEthServiceForGenerateCommit{activatedOperators: operators}
+		eth.Service = indexMockService
+
+		round := "1"
+
+		// Test each operator to ensure different CVS values (since operator index affects CVS)
+		var results [][32]byte
+		for i, op := range operators {
+			secretValue, cos, cvs, err := GenerateCommit(round, op.Hex())
+			assert.NoError(t, err, "Should succeed for operator at index %d", i)
+
+			// Store results for comparison
+			results = append(results, cvs)
+
+			// Verify individual results are valid
+			assert.NotEqual(t, [32]byte{}, secretValue)
+			assert.NotEqual(t, [32]byte{}, cos)
+			assert.NotEqual(t, [32]byte{}, cvs)
+		}
+
+		// Verify that different operator indices produce different CVS values
+		assert.NotEqual(t, results[0], results[1], "Different operators should produce different CVS")
+		assert.NotEqual(t, results[1], results[2], "Different operators should produce different CVS")
+		assert.NotEqual(t, results[0], results[2], "Different operators should produce different CVS")
+	})
+
+	t.Run("different rounds produce different values", func(t *testing.T) {
+		// Reset mock service for this test
+		eth.Service = mockService
+		operator := "0x1234567890123456789012345678901234567890"
+
+		// Generate commits for different rounds
+		secretValue1, cos1, cvs1, err1 := GenerateCommit("1", operator)
+		assert.NoError(t, err1)
+
+		secretValue2, cos2, cvs2, err2 := GenerateCommit("2", operator)
+		assert.NoError(t, err2)
+
+		// Different rounds should produce different values
+		assert.NotEqual(t, secretValue1, secretValue2)
+		assert.NotEqual(t, cos1, cos2)
+		assert.NotEqual(t, cvs1, cvs2)
+	})
+
+	t.Run("large round numbers work correctly", func(t *testing.T) {
+		// Reset mock service for this test
+		eth.Service = mockService
+		round := "999999999999999999999"
+		operator := "0x1234567890123456789012345678901234567890"
+
+		secretValue, cos, cvs, err := GenerateCommit(round, operator)
+		assert.NoError(t, err)
+
+		// Verify all values are valid
+		assert.NotEqual(t, [32]byte{}, secretValue)
+		assert.NotEqual(t, [32]byte{}, cos)
+		assert.NotEqual(t, [32]byte{}, cvs)
+	})
+
+	t.Run("edge case - zero round", func(t *testing.T) {
+		// Reset mock service for this test
+		eth.Service = mockService
+		round := "0"
+		operator := "0x1234567890123456789012345678901234567890"
+
+		secretValue, cos, cvs, err := GenerateCommit(round, operator)
+		assert.NoError(t, err)
+
+		// Verify all values are valid
+		assert.NotEqual(t, [32]byte{}, secretValue)
+		assert.NotEqual(t, [32]byte{}, cos)
+		assert.NotEqual(t, [32]byte{}, cvs)
+	})
+
+	t.Run("operator address must match exactly", func(t *testing.T) {
+		// Reset mock service for this test
+		eth.Service = mockService
+		round := "1"
+		
+		// Test with exact case-sensitive match (this should work)
+		operatorExact := "0x1234567890123456789012345678901234567890"
+		secretValue1, cos1, cvs1, err1 := GenerateCommit(round, operatorExact)
+		assert.NoError(t, err1)
+
+		// Test with different case (this should fail because Go's address comparison is case-sensitive)
+		operatorDifferentCase := "0X1234567890123456789012345678901234567890"
+		_, _, _, err2 := GenerateCommit(round, operatorDifferentCase)
+		assert.Error(t, err2)
+		assert.Contains(t, err2.Error(), "not found in activated operators")
+
+		// Verify the successful case produced valid results
+		assert.NotEqual(t, [32]byte{}, secretValue1)
+		assert.NotEqual(t, [32]byte{}, cos1)
+		assert.NotEqual(t, [32]byte{}, cvs1)
+	})
+}
+
+// MockEthServiceForGenerateCommit implements the minimal interface needed by GenerateCommit
+type MockEthServiceForGenerateCommit struct {
+	activatedOperators []common.Address
+}
+
+// GetActivatedOperatorsCached returns the mock list of activated operators
+func (m *MockEthServiceForGenerateCommit) GetActivatedOperatorsCached() []common.Address {
+	return m.activatedOperators
+}
+
+// We only need to implement GetActivatedOperatorsCached for GenerateCommit testing
+// The other methods can be left unimplemented since GenerateCommit doesn't use them
+func (m *MockEthServiceForGenerateCommit) GetActivatedOperatorsLength() int64 { return 0 }
+func (m *MockEthServiceForGenerateCommit) SetActivatedOperatorsCached(operators []common.Address) {}
+func (m *MockEthServiceForGenerateCommit) GetActivatedOperatorsUnsafe() []common.Address { return nil }
+func (m *MockEthServiceForGenerateCommit) GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) ([]common.Address, error) { return nil, nil }
+func (m *MockEthServiceForGenerateCommit) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {}
+func (m *MockEthServiceForGenerateCommit) CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) { return nil, nil }
+func (m *MockEthServiceForGenerateCommit) ExecuteTransaction(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) { return nil, nil, nil }
+func (m *MockEthServiceForGenerateCommit) UpdateCurrentRoundFromContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) (*big.Int, error) { return nil, nil }
+func (m *MockEthServiceForGenerateCommit) GetTrialNumFromContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, round *big.Int) (*big.Int, error) { return nil, nil }
+
+// TestNewRevealOrderService tests the NewRevealOrderService constructor
+func TestNewRevealOrderService(t *testing.T) {
+	mockRevealOrderRepo := &MockRevealOrderRepository{}
+	mockPeerCommitRepo := &MockPeerCommitRepository{}
+	mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+	service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+	assert.NotNil(t, service)
+	assert.Equal(t, mockRevealOrderRepo, service.revealOrderRepository)
+	assert.Equal(t, mockPeerCommitRepo, service.peerCommitRepository)
+	assert.Equal(t, mockLeaderCommitRepo, service.leaderCommitRepository)
+}
+
+// TestDetermineRevealOrder tests the DetermineRevealOrder function with various scenarios
+func TestDetermineRevealOrder(t *testing.T) {
+	ctx := context.Background()
+	roundNum := "1"
+	trialNum := "1"
+	
+	t.Run("reveal order already exists", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		existingOrder := &utils.RevealOrderData{
+			UniqueKey: "1-1",
+			Round: "1",
+			TrialNum: "1",
+		}
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(existingOrder, nil)
+
+		activatedOps := []common.Address{common.HexToAddress("0x1234567890123456789012345678901234567890")}
+		result, err := service.DetermineRevealOrder(ctx, roundNum, trialNum, activatedOps)
+
+		assert.NoError(t, err)
+		assert.True(t, result)
+		mockRevealOrderRepo.AssertExpectations(t)
+	})
+
+	t.Run("no activated operators", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+
+		activatedOps := []common.Address{}
+		result, err := service.DetermineRevealOrder(ctx, roundNum, trialNum, activatedOps)
+
+		assert.Error(t, err)
+		assert.False(t, result)
+		assert.Contains(t, err.Error(), "no activated operators found")
+		mockRevealOrderRepo.AssertExpectations(t)
+	})
+
+	t.Run("failed to load leader commit", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		
+		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
+		activatedOps := []common.Address{operator}
+		
+		mockLeaderCommitRepo.On("GetLeaderCommitByRoundAndEoaAddr", ctx, roundNum, trialNum, operator.Hex()).Return(nil, errors.New("commit not found"))
+
+		result, err := service.DetermineRevealOrder(ctx, roundNum, trialNum, activatedOps)
+
+		assert.Error(t, err)
+		assert.False(t, result)
+		assert.Contains(t, err.Error(), "failed to load leader commit")
+		mockRevealOrderRepo.AssertExpectations(t)
+		mockLeaderCommitRepo.AssertExpectations(t)
+	})
+
+	t.Run("missing leader commit (zero cos)", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		
+		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
+		activatedOps := []common.Address{operator}
+		
+		commitData := &utils.LeaderCommitData{
+			Cos: [32]byte{}, // Zero bytes indicate missing commit
+		}
+		mockLeaderCommitRepo.On("GetLeaderCommitByRoundAndEoaAddr", ctx, roundNum, trialNum, operator.Hex()).Return(commitData, nil)
+
+		result, err := service.DetermineRevealOrder(ctx, roundNum, trialNum, activatedOps)
+
+		assert.Error(t, err)
+		assert.False(t, result)
+		assert.Contains(t, err.Error(), "missing leader commit")
+		mockRevealOrderRepo.AssertExpectations(t)
+		mockLeaderCommitRepo.AssertExpectations(t)
+	})
+
+	t.Run("failed to save reveal order", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		
+		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
+		activatedOps := []common.Address{operator}
+		
+		commitData := &utils.LeaderCommitData{
+			Cos: [32]byte{1, 2, 3}, // Non-zero cos
+			Cvs: [32]byte{4, 5, 6},
+		}
+		mockLeaderCommitRepo.On("GetLeaderCommitByRoundAndEoaAddr", ctx, roundNum, trialNum, operator.Hex()).Return(commitData, nil)
+		mockRevealOrderRepo.On("AddRevealOrder", ctx, mock.AnythingOfType("*utils.RevealOrderData")).Return(errors.New("save failed"))
+
+		result, err := service.DetermineRevealOrder(ctx, roundNum, trialNum, activatedOps)
+
+		assert.Error(t, err)
+		assert.False(t, result)
+		assert.Contains(t, err.Error(), "failed to save reveal order")
+		mockRevealOrderRepo.AssertExpectations(t)
+		mockLeaderCommitRepo.AssertExpectations(t)
+	})
+
+	t.Run("successful reveal order determination", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		
+		operators := []common.Address{
+			common.HexToAddress("0x1234567890123456789012345678901234567890"),
+			common.HexToAddress("0x2345678901234567890123456789012345678901"),
+		}
+		
+		commitData1 := &utils.LeaderCommitData{
+			Cos: [32]byte{1, 2, 3},
+			Cvs: [32]byte{4, 5, 6},
+		}
+		commitData2 := &utils.LeaderCommitData{
+			Cos: [32]byte{7, 8, 9},
+			Cvs: [32]byte{10, 11, 12},
+		}
+		
+		mockLeaderCommitRepo.On("GetLeaderCommitByRoundAndEoaAddr", ctx, roundNum, trialNum, operators[0].Hex()).Return(commitData1, nil)
+		mockLeaderCommitRepo.On("GetLeaderCommitByRoundAndEoaAddr", ctx, roundNum, trialNum, operators[1].Hex()).Return(commitData2, nil)
+		mockRevealOrderRepo.On("AddRevealOrder", ctx, mock.AnythingOfType("*utils.RevealOrderData")).Return(nil)
+
+		result, err := service.DetermineRevealOrder(ctx, roundNum, trialNum, operators)
+
+		assert.NoError(t, err)
+		assert.True(t, result)
+		mockRevealOrderRepo.AssertExpectations(t)
+		mockLeaderCommitRepo.AssertExpectations(t)
+	})
+}
+
+// TestDetermineRegularRevealOrder tests the DetermineRegularRevealOrder function
+func TestDetermineRegularRevealOrder(t *testing.T) {
+	ctx := context.Background()
+	roundNum := "1"
+	trialNum := "1"
+	
+	t.Run("reveal order already exists", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		existingOrder := &utils.RevealOrderData{
+			UniqueKey: "1-1",
+			Round: "1",
+			TrialNum: "1",
+		}
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(existingOrder, nil)
+
+		activatedOps := []common.Address{common.HexToAddress("0x1234567890123456789012345678901234567890")}
+		result, err := service.DetermineRegularRevealOrder(ctx, roundNum, trialNum, activatedOps)
+
+		assert.NoError(t, err)
+		assert.True(t, result)
+		mockRevealOrderRepo.AssertExpectations(t)
+	})
+
+	t.Run("no activated operators", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+
+		activatedOps := []common.Address{}
+		result, err := service.DetermineRegularRevealOrder(ctx, roundNum, trialNum, activatedOps)
+
+		assert.Error(t, err)
+		assert.False(t, result)
+		assert.Contains(t, err.Error(), "no activated operators found")
+		mockRevealOrderRepo.AssertExpectations(t)
+	})
+
+	t.Run("failed to load peer commit", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		
+		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
+		activatedOps := []common.Address{operator}
+		
+		mockPeerCommitRepo.On("GetPeerCommitData", ctx, roundNum, trialNum, operator.Hex()).Return(nil, errors.New("commit not found"))
+
+		result, err := service.DetermineRegularRevealOrder(ctx, roundNum, trialNum, activatedOps)
+
+		assert.Error(t, err)
+		assert.False(t, result)
+		assert.Contains(t, err.Error(), "failed to load leader commit")
+		mockRevealOrderRepo.AssertExpectations(t)
+		mockPeerCommitRepo.AssertExpectations(t)
+	})
+
+	t.Run("missing peer commit (zero cos)", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		
+		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
+		activatedOps := []common.Address{operator}
+		
+		commitData := &database.PeerCommitDataScheme{
+			Cos: []byte{}, // Empty bytes indicate missing commit
+		}
+		mockPeerCommitRepo.On("GetPeerCommitData", ctx, roundNum, trialNum, operator.Hex()).Return(commitData, nil)
+
+		result, err := service.DetermineRegularRevealOrder(ctx, roundNum, trialNum, activatedOps)
+
+		assert.Error(t, err)
+		assert.False(t, result)
+		assert.Contains(t, err.Error(), "missing leader commit")
+		mockRevealOrderRepo.AssertExpectations(t)
+		mockPeerCommitRepo.AssertExpectations(t)
+	})
+
+	t.Run("failed to save reveal order", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		
+		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
+		activatedOps := []common.Address{operator}
+		
+		commitData := &database.PeerCommitDataScheme{
+			Cos: []byte{1, 2, 3}, // Non-zero cos
+			Cvs: []byte{4, 5, 6},
+		}
+		mockPeerCommitRepo.On("GetPeerCommitData", ctx, roundNum, trialNum, operator.Hex()).Return(commitData, nil)
+		mockRevealOrderRepo.On("AddRevealOrder", ctx, mock.AnythingOfType("*utils.RevealOrderData")).Return(errors.New("save failed"))
+
+		result, err := service.DetermineRegularRevealOrder(ctx, roundNum, trialNum, activatedOps)
+
+		assert.Error(t, err)
+		assert.False(t, result)
+		assert.Contains(t, err.Error(), "failed to save reveal order")
+		mockRevealOrderRepo.AssertExpectations(t)
+		mockPeerCommitRepo.AssertExpectations(t)
+	})
+
+	t.Run("successful regular reveal order determination", func(t *testing.T) {
+		mockRevealOrderRepo := &MockRevealOrderRepository{}
+		mockPeerCommitRepo := &MockPeerCommitRepository{}
+		mockLeaderCommitRepo := &MockLeaderCommitRepository{}
+
+		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
+
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		
+		operators := []common.Address{
+			common.HexToAddress("0x1234567890123456789012345678901234567890"),
+			common.HexToAddress("0x2345678901234567890123456789012345678901"),
+		}
+		
+		commitData1 := &database.PeerCommitDataScheme{
+			Cos: []byte{1, 2, 3},
+			Cvs: []byte{4, 5, 6},
+		}
+		commitData2 := &database.PeerCommitDataScheme{
+			Cos: []byte{7, 8, 9},
+			Cvs: []byte{10, 11, 12},
+		}
+		
+		mockPeerCommitRepo.On("GetPeerCommitData", ctx, roundNum, trialNum, operators[0].Hex()).Return(commitData1, nil)
+		mockPeerCommitRepo.On("GetPeerCommitData", ctx, roundNum, trialNum, operators[1].Hex()).Return(commitData2, nil)
+		mockRevealOrderRepo.On("AddRevealOrder", ctx, mock.AnythingOfType("*utils.RevealOrderData")).Return(nil)
+
+		result, err := service.DetermineRegularRevealOrder(ctx, roundNum, trialNum, operators)
+
+		assert.NoError(t, err)
+		assert.True(t, result)
+		mockRevealOrderRepo.AssertExpectations(t)
+		mockPeerCommitRepo.AssertExpectations(t)
+	})
+}
+
+// Mock implementations for testing
+
+type MockRevealOrderRepository struct {
+	mock.Mock
+}
+
+func (m *MockRevealOrderRepository) GetRevealOrder(ctx context.Context, round, trialNum string) (*utils.RevealOrderData, error) {
+	args := m.Called(ctx, round, trialNum)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*utils.RevealOrderData), args.Error(1)
+}
+
+func (m *MockRevealOrderRepository) AddRevealOrder(ctx context.Context, order *utils.RevealOrderData) error {
+	args := m.Called(ctx, order)
+	return args.Error(0)
+}
+
+type MockPeerCommitRepository struct {
+	mock.Mock
+}
+
+func (m *MockPeerCommitRepository) GetPeerCommitData(ctx context.Context, round, trialNum, eoaAddress string) (*database.PeerCommitDataScheme, error) {
+	args := m.Called(ctx, round, trialNum, eoaAddress)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*database.PeerCommitDataScheme), args.Error(1)
+}
+
+func (m *MockPeerCommitRepository) AddPeerCommitData(ctx context.Context, commitData *database.PeerCommitDataScheme) error {
+	args := m.Called(ctx, commitData)
+	return args.Error(0)
+}
+
+func (m *MockPeerCommitRepository) UpdatePeerCommitData(ctx context.Context, commitData *database.PeerCommitDataScheme) error {
+	args := m.Called(ctx, commitData)
+	return args.Error(0)
+}
+
+type MockLeaderCommitRepository struct {
+	mock.Mock
+}
+
+func (m *MockLeaderCommitRepository) GetLeaderCommitByRoundAndEoaAddr(ctx context.Context, round, trialNum, eoaAddress string) (*utils.LeaderCommitData, error) {
+	args := m.Called(ctx, round, trialNum, eoaAddress)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*utils.LeaderCommitData), args.Error(1)
+}
+
+func (m *MockLeaderCommitRepository) UpdateLeaderCommit(ctx context.Context, commitData *utils.LeaderCommitData) error {
+	args := m.Called(ctx, commitData)
+	return args.Error(0)
+}
+
+func (m *MockLeaderCommitRepository) AddLeaderCommit(ctx context.Context, commitData *utils.LeaderCommitData) error {
+	args := m.Called(ctx, commitData)
+	return args.Error(0)
+}
+
+func (m *MockLeaderCommitRepository) GetLeaderCommitsByRoundAndTrialNum(ctx context.Context, round, trialNum string) ([]*utils.LeaderCommitData, error) {
+	args := m.Called(ctx, round, trialNum)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*utils.LeaderCommitData), args.Error(1)
+}
+
+func (m *MockLeaderCommitRepository) UpdateLeaderCommitRandomNumberGenerated(ctx context.Context, round, trialNum string) error {
+	args := m.Called(ctx, round, trialNum)
+	return args.Error(0)
 }
