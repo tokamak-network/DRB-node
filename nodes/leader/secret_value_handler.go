@@ -107,13 +107,8 @@ func (n *LeaderNode) AcceptSecretValue(ctx context.Context, h host.Host, s netwo
 	// Fetch or initialize the leader commit data for the given round and EOA
 	leaderCommitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, round, trial, req.RegularEoaAddress)
 	if err != nil {
-		log.Printf("Commit data not found, initializing new entry for round %s and EOA %s", round, req.RegularEoaAddress)
-		leaderCommitData = &utils.LeaderCommitData{
-			Round:      round,
-			TrialNum:   trial,
-			EOAAddress: req.RegularEoaAddress,
-			CreatedAt:  time.Now().Unix(),
-		}
+		log.Printf("Commit data not found  for round %s with trail %s EOA %s.", round, trial, eoaAddress.Hex())
+		return
 	}
 	var secretValueArray [32]byte
 	copy(secretValueArray[:], req.SecretValue[:]) // Convert req.SecretValue to [32]byte

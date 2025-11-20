@@ -105,7 +105,7 @@ func ExecuteTransaction(
 		log.Errorf("Failed to fetch network ID: %v", err)
 		return nil, nil, fmt.Errorf("failed to fetch network ID: %v", err)
 	}
-
+	
 	auth, err := bind.NewKeyedTransactorWithChainID(client.PrivateKey, chainID)
 	if err != nil {
 		log.Errorf("Failed to create authorized transactor: %v", err)
@@ -127,9 +127,10 @@ func ExecuteTransaction(
 	}
 
 	callMsg := ethereum.CallMsg{
-		From: auth.From,
-		To:   &client.ContractAddress,
-		Data: packedData,
+		From:  auth.From,
+		To:    &client.ContractAddress,
+		Data:  packedData,
+		Value: amount,
 	}
 
 	var estimateGas uint64
@@ -173,9 +174,10 @@ func sendWithRetry(
 
 	// Estimate gas limit
 	callMsg := ethereum.CallMsg{
-		From: auth.From,
-		To:   &toAddr,
-		Data: data,
+		From:  auth.From,
+		To:    &toAddr,
+		Data:  data,
+		Value: amount,
 	}
 
 	bumpFactor := 1.2 // Increase gas price by 20% each retry time
@@ -194,7 +196,27 @@ func sendWithRetry(
 		return nil, nil, fmt.Errorf("failed to suggest gas price: %v", err)
 	}
 
+	minBaseFee := big.NewInt(1000000000)     // 1 gwei
+	minPriorityFee := big.NewInt(1000000000) // 1 gwei
+
+	if baseFee.Cmp(minBaseFee) < 0 {
+		baseFee = minBaseFee
+	}
+	if priorityFee.Cmp(minPriorityFee) < 0 {
+		priorityFee = minPriorityFee
+	}
+
 	maxFeePerGas := new(big.Int).Add(baseFee, priorityFee)
+
+	maxAllowedGasPrice := big.NewInt(100000000000) // 100 gwei
+	if maxFeePerGas.Cmp(maxAllowedGasPrice) > 0 {
+		log.Printf("Warning: maxFeePerGas %s exceeds max allowed %s, capping to max allowed", maxFeePerGas.String(), maxAllowedGasPrice.String())
+		maxFeePerGas = maxAllowedGasPrice
+		if priorityFee.Cmp(maxAllowedGasPrice) > 0 {
+			priorityFee = big.NewInt(1000000000) // 1 gwei
+			maxFeePerGas = new(big.Int).Add(baseFee, priorityFee)
+		}
+	}
 
 	for retryCount < maxRetries {
 		nonce, err := client.PendingNonceAt(ctx, auth.From)
@@ -208,7 +230,17 @@ func sendWithRetry(
 		}
 
 		log.Printf("Estimated gas: %d", gasLimit)
-		gasLimit = gasLimit * constants.Chains[chainID.Uint64()].EstimatedGasFactorPercent / 100
+
+		// Get gas factor for chain, default to 150% if chain not found
+		chainInfo, exists := constants.Chains[chainID.Uint64()]
+		gasFactor := uint64(150) // Default 150% if chain not found
+		if exists {
+			gasFactor = chainInfo.EstimatedGasFactorPercent
+		} else {
+			log.Printf("Chain ID %d not found in constants, using default gas factor 150%%", chainID.Uint64())
+		}
+
+		gasLimit = gasLimit * gasFactor / 100
 		log.Printf("Estimated gas after multiplying by factor: %d", gasLimit)
 
 		// Start with base fee + tip
@@ -240,9 +272,12 @@ func sendWithRetry(
 			return nil, nil, fmt.Errorf("failed to send tx: %v", err)
 		}
 
-		log.Printf("Sent tx %s with maxFee %s wei", signedTx.Hash().Hex(), maxFeePerGas.String())
+		log.Printf("Sent tx %s with maxFee %s wei, value: %s wei", signedTx.Hash().Hex(), maxFeePerGas.String(), amount.String())
 
-		blockTime := constants.Chains[chainID.Uint64()].BlockTime
+		blockTime := 1 * time.Second // Default 1 second for Geth dev mode
+		if chainInfo, exists := constants.Chains[chainID.Uint64()]; exists {
+			blockTime = chainInfo.BlockTime
+		}
 
 		timeout := blockTime * 5 // wait for 5 blocks
 
@@ -300,7 +335,8 @@ func waitForTransactionSuccess(ctx context.Context, client fallback_ethclient.IF
 			if receipt.Status == types.ReceiptStatusSuccessful {
 				return receipt, nil
 			} else if receipt.Status == types.ReceiptStatusFailed {
-				return receipt, ErrTransactionFailed
+				log.Printf("Transaction %s failed (reverted). Gas used: %d", tx.Hash().Hex(), receipt.GasUsed)
+				return receipt, fmt.Errorf("%w: transaction %s reverted (gas used: %d)", ErrTransactionFailed, tx.Hash().Hex(), receipt.GasUsed)
 			}
 
 			// This should not happen, but handle it gracefully

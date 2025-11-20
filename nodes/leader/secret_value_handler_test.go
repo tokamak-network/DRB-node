@@ -1198,9 +1198,7 @@ func TestAcceptSecretValueBroadcastPreparation(t *testing.T) {
 	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
 
-	// Note: This test documents the expected behavior
-	// Actual execution requires full environment setup
-	assert.Equal(t, [32]byte{}, savedSecretValue, "Secret value not yet saved (test documents expected flow)")
+	assert.Equal(t, [32]byte{}, savedSecretValue, "Secret value not yet saved")
 
 	// Cleanup
 	delete(utils.CommittedNodes, uniqueKey)
@@ -1326,14 +1324,12 @@ func TestAcceptSecretValueStopsWhenUpdateFails(t *testing.T) {
 	mockStream.AssertCalled(t, "Close")
 	mockCommitRepo.AssertExpectations(t)
 
-	// Broadcast tracker should NOT have been called since update failed
 	mockBroadcastRepo.AssertNotCalled(t, "AddBroadcastTracker", mock.Anything, mock.Anything)
 
 	// Cleanup
 	delete(utils.CommittedNodes, uniqueKey)
 }
 
-// TestSecretValueBroadcastLogging tests that proper logging occurs during broadcast flow
 func TestSecretValueBroadcastLogging(t *testing.T) {
 	node := createTestNodeForSecretHandler()
 	mockCommitRepo := new(MockLeaderCommitRepository)
@@ -1403,10 +1399,7 @@ func TestSecretValueBroadcastLogging(t *testing.T) {
 	delete(utils.CommittedNodes, uniqueKey)
 }
 
-// TestBroadcastCompletedBranch tests the if branch when broadcast succeeds (line 145-148)
 func TestBroadcastCompletedBranch(t *testing.T) {
-	// This test verifies the broadcast completed path without modifying global eth.Service
-	// We test by verifying that HandleSecretValueResponse is called after successful broadcast
 
 	node := createTestNodeForSecretHandler()
 	mockCommitRepo := new(MockLeaderCommitRepository)
@@ -1464,12 +1457,9 @@ func TestBroadcastCompletedBranch(t *testing.T) {
 	mockCommitRepo.On("UpdateLeaderCommit", mock.Anything, mock.AnythingOfType("*utils.LeaderCommitData")).
 		Return(nil)
 
-	// Mock broadcast to fail - this tests the database save and state update
-	// but skips the actual broadcast to avoid eth.Service conflicts
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.AnythingOfType("*utils.BroadcastTracker")).
 		Return(errors.New("skip broadcast")).Maybe()
 
-	// Mock HandleSecretValueResponse - it should still be called
 	handleSecretValueResponseCalled := false
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, "600", "8").
 		Return(&utils.RevealOrderData{OrderedNodes: []string{}}, nil).Run(func(args mock.Arguments) {
@@ -1488,10 +1478,8 @@ func TestBroadcastCompletedBranch(t *testing.T) {
 	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
 
-	// Execute - will go through either broadcast completed or incomplete path
 	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
 
-	// Verify HandleSecretValueResponse was called (testing lines 148 or 152)
 	assert.True(t, handleSecretValueResponseCalled, "HandleSecretValueResponse should be called after broadcast attempt")
 
 	// Verify mocks
@@ -1503,9 +1491,7 @@ func TestBroadcastCompletedBranch(t *testing.T) {
 	delete(utils.CommittedNodes, uniqueKey)
 }
 
-// TestBroadcastIncompleteBranch tests the else branch when broadcast fails (line 149-152)
 func TestBroadcastIncompleteBranch(t *testing.T) {
-	// This test explicitly makes broadcast fail to test the else branch
 
 	node := createTestNodeForSecretHandler()
 	mockCommitRepo := new(MockLeaderCommitRepository)
@@ -1562,13 +1548,9 @@ func TestBroadcastIncompleteBranch(t *testing.T) {
 		Return(existingCommit, nil)
 	mockCommitRepo.On("UpdateLeaderCommit", mock.Anything, mock.AnythingOfType("*utils.LeaderCommitData")).
 		Return(nil)
-
-	// Force broadcast to fail by making AddBroadcastTracker return error
-	// This guarantees we test the else branch (line 149-152)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.AnythingOfType("*utils.BroadcastTracker")).
 		Return(errors.New("broadcast failed - testing else branch"))
 
-	// Mock HandleSecretValueResponse - should STILL be called even when broadcast fails (line 152)
 	handleSecretValueResponseCalled := false
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, "700", "9").
 		Return(&utils.RevealOrderData{OrderedNodes: []string{}}, nil).Run(func(args mock.Arguments) {
@@ -1586,11 +1568,8 @@ func TestBroadcastIncompleteBranch(t *testing.T) {
 	mockStream := new(MockStream)
 	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
-
-	// Execute - should take the "broadcast incomplete" path (line 149-152)
 	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
 
-	// Verify HandleSecretValueResponse was called from incomplete branch (line 152)
 	assert.True(t, handleSecretValueResponseCalled, "HandleSecretValueResponse should be called even when broadcast fails (line 152)")
 
 	// Verify mocks

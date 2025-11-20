@@ -266,6 +266,11 @@ func (n *RegularNode) DeleteSubmittedCvIndices(uniqueKey string) {
 	delete(n.submittedCvIndices, uniqueKey)
 }
 
+// DeleteCosReceived deletes cosRecevied entry for uniqueKey
+func (n *RegularNode) DeleteCosReceived(uniqueKey string) {
+	n.cosRecevied.Delete(uniqueKey)
+}
+
 // ============================================================================
 // MUTEX-PROTECTED STRUCT VARIABLES
 // ============================================================================

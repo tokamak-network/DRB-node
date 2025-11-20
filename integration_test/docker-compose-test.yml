@@ -1,0 +1,234 @@
+version: "3.8"
+
+services:
+  # PostgreSQL for leader node
+  leaderpostgres:
+    image: postgres:14.13
+    container_name: test-leaderpostgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: drb_leader
+    ports:
+      - "15432:5432"
+    volumes:
+      - test-leaderpostgres-data:/var/lib/postgresql/data
+    networks:
+      - test-net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # PostgreSQL for regular node 1
+  regular1postgres:
+    image: postgres:14.13
+    container_name: test-regular1postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: drb_regular1
+    ports:
+      - "15433:5432"
+    volumes:
+      - test-regular1postgres-data:/var/lib/postgresql/data
+    networks:
+      - test-net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # PostgreSQL for regular node 2
+  regular2postgres:
+    image: postgres:14.13
+    container_name: test-regular2postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: drb_regular2
+    ports:
+      - "15434:5432"
+    volumes:
+      - test-regular2postgres-data:/var/lib/postgresql/data
+    networks:
+      - test-net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # PostgreSQL for regular node 3
+  regular3postgres:
+    image: postgres:14.13
+    container_name: test-regular3postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: drb_regular3
+    ports:
+      - "15435:5432"
+    volumes:
+      - test-regular3postgres-data:/var/lib/postgresql/data
+    networks:
+      - test-net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Leader Node
+  leadernode:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: test-leadernode
+    depends_on:
+      leaderpostgres:
+        condition: service_healthy
+    environment:
+      NODE_TYPE: leader
+      LEADER_PORT: 61280
+      ETH_RPC_URLS: ${ETH_RPC_URLS}
+      CONTRACT_ADDRESS: ${CONTRACT_ADDRESS}
+      CHAIN_ID: 1337
+      LEADER_PRIVATE_KEY: ${LEADER_PRIVATE_KEY}
+      EOA_PRIVATE_KEY: ${LEADER_PRIVATE_KEY}
+      LEADER_EOA: ${LEADER_EOA}
+      POSTGRES_HOST: leaderpostgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_NAME: drb_leader
+    ports:
+      - "61280:61280"
+    networks:
+      - test-net
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 61280 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    restart: on-failure
+
+  # Regular Node 1
+  regularnode1:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: test-regularnode1
+    depends_on:
+      regular1postgres:
+        condition: service_healthy
+      leadernode:
+        condition: service_healthy
+    environment:
+      NODE_TYPE: regular
+      LEADER_IP: leadernode
+      LEADER_PORT: 61280
+      LEADER_PEER_ID: ${LEADER_PEER_ID}
+      PORT: 61281
+      ETH_RPC_URLS: ${ETH_RPC_URLS}
+      CONTRACT_ADDRESS: ${CONTRACT_ADDRESS}
+      CHAIN_ID: 1337
+      LEADER_EOA: ${LEADER_EOA}
+      POSTGRES_HOST: regular1postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_NAME: drb_regular1
+      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}
+      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}
+      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}
+      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}
+    ports:
+      - "61281:61281"
+    networks:
+      - test-net
+    restart: on-failure
+
+  # Regular Node 2
+  regularnode2:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: test-regularnode2
+    depends_on:
+      regular2postgres:
+        condition: service_healthy
+      leadernode:
+        condition: service_healthy
+    environment:
+      NODE_TYPE: regular
+      LEADER_IP: leadernode
+      LEADER_PORT: 61280
+      LEADER_PEER_ID: ${LEADER_PEER_ID}
+      PORT: 61282
+      ETH_RPC_URLS: ${ETH_RPC_URLS}
+      CONTRACT_ADDRESS: ${CONTRACT_ADDRESS}
+      CHAIN_ID: 1337
+      LEADER_EOA: ${LEADER_EOA}
+      POSTGRES_HOST: regular2postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_NAME: drb_regular2
+      EOA_PRIVATE_KEY: ${REGULAR2_PRIVATE_KEY}
+      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}
+      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}
+    ports:
+      - "61282:61282"
+    networks:
+      - test-net
+    restart: on-failure
+
+  # Regular Node 3
+  regularnode3:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: test-regularnode3
+    depends_on:
+      regular3postgres:
+        condition: service_healthy
+      leadernode:
+        condition: service_healthy
+    environment:
+      NODE_TYPE: regular
+      LEADER_IP: leadernode
+      LEADER_PORT: 61280
+      LEADER_PEER_ID: ${LEADER_PEER_ID}
+      PORT: 61283
+      ETH_RPC_URLS: ${ETH_RPC_URLS}
+      CONTRACT_ADDRESS: ${CONTRACT_ADDRESS}
+      CHAIN_ID: 1337
+      LEADER_EOA: ${LEADER_EOA}
+      POSTGRES_HOST: regular3postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_NAME: drb_regular3
+      EOA_PRIVATE_KEY: ${REGULAR3_PRIVATE_KEY}
+      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}
+      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}
+    ports:
+      - "61283:61283"
+    networks:
+      - test-net
+    restart: on-failure
+
+volumes:
+  test-leaderpostgres-data:
+  test-regular1postgres-data:
+  test-regular2postgres-data:
+  test-regular3postgres-data:
+
+networks:
+  test-net:
+    driver: bridge
+

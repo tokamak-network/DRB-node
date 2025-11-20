@@ -147,6 +147,12 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 
 // SendSecretValue sends the secret value for a round to the leader node
 func (n *RegularNode) SendSecretValue(ctx context.Context, h host.Host, leaderPeerID peer.ID, roundNum string, trialNum string) {
+	// Check if mocking is enabled - skip P2P send, will submit on-chain
+	if os.Getenv("MOCK_SEND_SECRET_TO_LEADER") == "true" {
+		log.Printf("MOCK MODE: Skipping P2P send secret to leader for round %s. Secret will be submitted on-chain when RequestedToSubmitSFromIndexK event is received.", roundNum)
+		return
+	}
+
 	// Load the commit data for the specified round
 	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, roundNum, trialNum)
 	if err != nil {

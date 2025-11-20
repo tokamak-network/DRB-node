@@ -1461,7 +1461,6 @@ func (n *LeaderNode) CleanupRoundDataByUniqueKey(uniqueKey string) {
 	utils.DeleteCommittedNodes(uniqueKey)
 
 	// Clean up other maps that use uniqueKey
-	n.DeleteActiveBroadcasts(uniqueKey)
 	n.DeleteCvOnChain(uniqueKey)
 	n.DeleteRevealRequestStatus(uniqueKey)
 	n.DeleteRoundSecrets(uniqueKey)

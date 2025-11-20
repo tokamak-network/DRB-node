@@ -71,8 +71,13 @@ func (n *LeaderNode) registerNodeInternal(ctx context.Context, req utils.Registr
 	}
 
 	// Save updated nodes
+	log.Printf("Attempting to register node: EOA=%s, IP=%s, Port=%s, PeerID=%s",
+		req.EOAAddress, ip, port, req.PeerID)
+
 	err := n.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, &nodeInfo)
 	if err != nil {
+		log.Printf("Registration failed for EOA %s: %v", req.EOAAddress, err)
+		log.Printf("Registration details: IP=%s, Port=%s, PeerID=%s", ip, port, req.PeerID)
 		return fmt.Errorf("failed to save registered nodes: %v", err)
 	}
 

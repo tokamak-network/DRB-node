@@ -332,6 +332,16 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 	}
 }
 func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
+	// Check if mocking is enabled - skip P2P send, will submit on-chain
+	if os.Getenv("MOCK_SEND_COS_TO_LEADER") == "true" {
+		log.Printf("MOCK MODE: Skipping P2P send COS to leader for round %s. COS will be submitted on-chain when RequestedToSubmitCo event is received.", commitData.Round)
+		commitData.SendCosToLeader = true
+		if err := rh.regularNode.UpdateCommit(ctx, &commitData); err != nil {
+			log.Printf("Failed to update SendCosToLeader flag: %v", err)
+		}
+		return
+	}
+
 	// Create commit request structure with signed COS and round data
 	req := utils.CosRequest{
 		UniqueKey:  commitData.UniqueKey,
@@ -564,6 +574,16 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 	commitData.Sign = req.Sign
 	if err := rh.regularNode.UpdateCommit(ctx, &commitData); err != nil {
 		log.Printf("Failed to save commit data locally: %v", err)
+		return
+	}
+
+	// Check if mocking is enabled - skip P2P send, will submit on-chain
+	if os.Getenv("MOCK_SEND_COMMIT_TO_LEADER") == "true" {
+		log.Printf("MOCK MODE: Skipping P2P send to leader for round %s. Commit will be submitted on-chain.", req.Round)
+		commitData.SendToLeader = false
+		if err := rh.regularNode.UpdateCommit(ctx, &commitData); err != nil {
+			log.Printf("Failed to update SendToLeader flag: %v", err)
+		}
 		return
 	}
 

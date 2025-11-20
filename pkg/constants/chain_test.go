@@ -95,7 +95,7 @@ func TestChains_MapSize(t *testing.T) {
 // TestChains_BlockTimePositive verifies that all block times are positive
 func TestChains_BlockTimePositive(t *testing.T) {
 	for chainID, networkInfo := range Chains {
-		assert.Greater(t, networkInfo.BlockTime, time.Duration(0), 
+		assert.Greater(t, networkInfo.BlockTime, time.Duration(0),
 			"Block time for chain %d (%s) should be positive", chainID, networkInfo.Name)
 	}
 }
@@ -103,7 +103,7 @@ func TestChains_BlockTimePositive(t *testing.T) {
 // TestChains_EstimatedGasFactorPositive verifies that all gas factors are positive
 func TestChains_EstimatedGasFactorPositive(t *testing.T) {
 	for chainID, networkInfo := range Chains {
-		assert.Greater(t, networkInfo.EstimatedGasFactorPercent, uint64(0), 
+		assert.Greater(t, networkInfo.EstimatedGasFactorPercent, uint64(0),
 			"Estimated gas factor for chain %d (%s) should be positive", chainID, networkInfo.Name)
 	}
 }
@@ -115,10 +115,10 @@ func TestChains_EstimatedGasFactorReasonable(t *testing.T) {
 
 	for chainID, networkInfo := range Chains {
 		assert.GreaterOrEqual(t, networkInfo.EstimatedGasFactorPercent, minFactor,
-			"Estimated gas factor for chain %d (%s) should be at least %d%%", 
+			"Estimated gas factor for chain %d (%s) should be at least %d%%",
 			chainID, networkInfo.Name, minFactor)
 		assert.LessOrEqual(t, networkInfo.EstimatedGasFactorPercent, maxFactor,
-			"Estimated gas factor for chain %d (%s) should be at most %d%%", 
+			"Estimated gas factor for chain %d (%s) should be at most %d%%",
 			chainID, networkInfo.Name, maxFactor)
 	}
 }
@@ -126,7 +126,7 @@ func TestChains_EstimatedGasFactorReasonable(t *testing.T) {
 // TestChains_NameNotEmpty verifies that all chain names are not empty
 func TestChains_NameNotEmpty(t *testing.T) {
 	for chainID, networkInfo := range Chains {
-		assert.NotEmpty(t, networkInfo.Name, 
+		assert.NotEmpty(t, networkInfo.Name,
 			"Name for chain %d should not be empty", chainID)
 	}
 }
@@ -218,7 +218,7 @@ func TestChains_AccessPattern(t *testing.T) {
 	// Test safe access pattern with exists check
 	chainID := uint64(1)
 	networkInfo, exists := Chains[chainID]
-	
+
 	if exists {
 		assert.NotEmpty(t, networkInfo.Name)
 		assert.Greater(t, networkInfo.BlockTime, time.Duration(0))
@@ -230,4 +230,3 @@ func TestChains_AccessPattern(t *testing.T) {
 	_, exists = Chains[nonExistentChainID]
 	assert.False(t, exists, "Non-existent chain should return false for exists")
 }
-

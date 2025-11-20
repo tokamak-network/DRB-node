@@ -835,8 +835,6 @@ func (n *RegularNode) ResetMonitoringState(round string, trialNum string) {
 
 	// Reset monitoring state variables
 	n.ClearCvRequestIndices()
-	// Note: submittedCvIndices will be cleaned up by the cleanup queue system
-
 	log.Printf("Reset monitoring state")
 }
 

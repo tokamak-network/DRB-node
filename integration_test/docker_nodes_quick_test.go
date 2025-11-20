@@ -1,0 +1,2249 @@
+package integration_test
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"math/big"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tokamak-network/DRB-node/integration_test/setup"
+)
+
+// Global test environment - set up once for all tests
+var (
+	testEnv *setup.TestEnvironment
+	testCtx context.Context
+)
+
+type testLogger struct{}
+
+func (tl *testLogger) Log(args ...interface{}) {
+	fmt.Println(args...)
+}
+
+func (tl *testLogger) Logf(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
+}
+
+// TestMain runs once before all tests to set up the shared test environment
+func TestMain(m *testing.M) {
+	flag.Parse()
+
+	if testing.Short() {
+		os.Exit(m.Run())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	testCtx = ctx
+
+	fmt.Println(" Setting up test environment ")
+
+	// Create a simple logger for setup
+	logger := &testLogger{}
+
+	t := &mockTestingT{logger: logger}
+
+	var err error
+	testEnv, err = setup.SetupTestEnvironment(ctx, t)
+	if err != nil {
+		fmt.Printf(" Failed to setup test environment: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println(" Test environment setup complete!")
+
+	// Run all tests
+	code := m.Run()
+
+	// Cleanup after all tests complete
+	if testEnv != nil {
+		if testEnv.CleanupFunc != nil {
+			testEnv.CleanupFunc()
+		}
+		if testEnv.Geth != nil {
+			testEnv.Geth.Cleanup()
+		}
+	}
+
+	fmt.Println("Cleaning up test environment...")
+	os.Exit(code)
+}
+
+// mockTestingT implements setup.Logger interface for use in TestMain
+type mockTestingT struct {
+	logger *testLogger
+}
+
+func (m *mockTestingT) Log(args ...interface{}) {
+	m.logger.Log(args...)
+}
+
+func (m *mockTestingT) Logf(format string, args ...interface{}) {
+	m.logger.Logf(format, args...)
+}
+
+func TestRandomNumberGeneration(t *testing.T) {
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 1: Random Number Generation Test")
+	t.Log("STEP 5: Requesting random number...")
+
+	currentRoundInput, _ := geth.ContractABI.Pack("s_currentRound")
+	currentRoundResult, _ := geth.Client.CallContract(testCtx, ethereum.CallMsg{
+		To:   &geth.ContractAddress,
+		Data: currentRoundInput,
+	}, nil)
+	var currentRoundBefore *big.Int
+	if currentRoundResult != nil {
+		geth.ContractABI.UnpackIntoInterface(&currentRoundBefore, "s_currentRound", currentRoundResult)
+	}
+	t.Logf(" Contract state before request: currentRound=%s", currentRoundBefore.String())
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf(" Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	// Check request info exists and print details
+	requestInfoInput, _ := geth.ContractABI.Pack("s_requestInfo", round)
+	requestInfoResult, err := geth.Client.CallContract(testCtx, ethereum.CallMsg{
+		To:   &geth.ContractAddress,
+		Data: requestInfoInput,
+	}, nil)
+	require.NoError(t, err, "Request info should exist for the round")
+	require.NotNil(t, requestInfoResult, "Request info should not be empty")
+
+	// Unpack and print s_requestInfo details
+	var contractRequestInfo struct {
+		Consumer         common.Address
+		CallbackGasLimit uint32
+		StartTime        *big.Int
+		Cost             *big.Int
+	}
+	if err := geth.ContractABI.UnpackIntoInterface(&contractRequestInfo, "s_requestInfo", requestInfoResult); err == nil {
+		t.Logf(" s_requestInfo for round %s:", round.String())
+		t.Logf("   Consumer: %s", contractRequestInfo.Consumer.Hex())
+		t.Logf("   CallbackGasLimit: %d", contractRequestInfo.CallbackGasLimit)
+		t.Logf("   StartTime: %s", contractRequestInfo.StartTime.String())
+		t.Logf("   Cost: %s wei (%s ETH)", contractRequestInfo.Cost.String(),
+			new(big.Float).Quo(new(big.Float).SetInt(contractRequestInfo.Cost), big.NewFloat(1e18)).String())
+	} else {
+		t.Logf("Could not unpack s_requestInfo: %v", err)
+	}
+	t.Logf("Verified request exists for round %s", round.String())
+
+	t.Log("\nSTEP 6: Waiting for random number to be generated...")
+
+	maxFulfillmentRetries := 7
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf(" Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check contract state periodically
+			currentRoundInput, _ := geth.ContractABI.Pack("s_currentRound")
+			currentRoundResult, _ := geth.Client.CallContract(testCtx, ethereum.CallMsg{
+				To:   &geth.ContractAddress,
+				Data: currentRoundInput,
+			}, nil)
+			var currentRound *big.Int
+			if currentRoundResult != nil {
+				geth.ContractABI.UnpackIntoInterface(&currentRound, "s_currentRound", currentRoundResult)
+				t.Logf(" Contract currentRound: %s (requested round: %s)", currentRound.String(), round.String())
+			}
+
+			// Check isInProcess
+			isInProcessInput, _ := geth.ContractABI.Pack("s_isInProcess")
+			isInProcessResult, _ := geth.Client.CallContract(testCtx, ethereum.CallMsg{
+				To:   &geth.ContractAddress,
+				Data: isInProcessInput,
+			}, nil)
+			if isInProcessResult != nil {
+				var isInProcess *big.Int
+				if err := geth.ContractABI.UnpackIntoInterface(&isInProcess, "s_isInProcess", isInProcessResult); err == nil {
+					status := "UNKNOWN"
+					if isInProcess.Cmp(big.NewInt(1)) == 0 {
+						status = "IN_PROGRESS"
+					} else if isInProcess.Cmp(big.NewInt(2)) == 0 {
+						status = "COMPLETED"
+					} else if isInProcess.Cmp(big.NewInt(3)) == 0 {
+						status = "HALTED"
+					}
+					t.Logf("Contract state: s_isInProcess = %s (%s)", isInProcess.String(), status)
+				}
+			}
+
+			// Check consumer contract state for debugging
+			detailInfoInput, _ := geth.ConsumerABI.Pack("getDetailInfo", round)
+			detailInfoResult, _ := geth.Client.CallContract(testCtx, ethereum.CallMsg{
+				To:   &geth.ConsumerAddress,
+				Data: detailInfoInput,
+			}, nil)
+			if detailInfoResult != nil {
+				var detailInfo struct {
+					Requester          common.Address
+					RequestFee         *big.Int
+					RequestBlockNumber *big.Int
+					FulfillBlockNumber *big.Int
+					RandomNumber       *big.Int
+					IsRefunded         bool
+				}
+				if err := geth.ConsumerABI.UnpackIntoInterface(&detailInfo, "getDetailInfo", detailInfoResult); err == nil {
+					t.Logf("Consumer contract state for round %s:", round.String())
+					t.Logf("FulfillBlockNumber: %s", detailInfo.FulfillBlockNumber.String())
+					t.Logf("RandomNumber: %s", detailInfo.RandomNumber.String())
+					t.Logf("IsRefunded: %v", detailInfo.IsRefunded)
+				}
+			}
+
+			t.Log("Checking leader node logs...")
+			showLogs(t, "test-leadernode", 30)
+
+			t.Log("Checking regular node logs...")
+			showLogs(t, "test-regularnode1", 30)
+			showLogs(t, "test-regularnode2", 30)
+			showLogs(t, "test-regularnode3", 30)
+
+			time.Sleep(15 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+
+	t.Log("\n Final Leader Node Logs:")
+	showLogs(t, "test-leadernode", 50)
+
+	t.Log("\nWaiting for consumer contract callback to be processed...")
+	time.Sleep(5 * time.Second)
+
+	maxFinalRetries := 5
+	var consumerFulfilled bool
+	var consumerRandomNumber *big.Int
+	for i := 0; i < maxFinalRetries; i++ {
+		consumerFulfilled, consumerRandomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && consumerFulfilled {
+			t.Logf(" Consumer contract confirmed fulfillment after %d retries", i+1)
+			// Use the random number from consumer contract
+			randomNumber = consumerRandomNumber
+			break
+		}
+		if i < maxFinalRetries-1 {
+			t.Logf("⏳ Waiting for consumer contract fulfillment (retry %d/%d)...", i+1, maxFinalRetries)
+			time.Sleep(3 * time.Second)
+		}
+	}
+
+	// Verify in consumer contract
+	requestInfo, err := getConsumerRequestInfo(testCtx, geth, round)
+	require.NoError(t, err, "Failed to get consumer request info")
+	require.NotNil(t, requestInfo, "Request info should not be nil")
+
+	t.Logf(" Consumer contract state:")
+	t.Logf("   RequestId: %s", requestInfo["requestId"].(*big.Int).String())
+	t.Logf("   FulfillBlockNumber: %s", requestInfo["fulfillBlockNumber"].(*big.Int).String())
+	t.Logf("   RandomNumber: %s", requestInfo["randomNumber"].(*big.Int).String())
+
+	assert.Equal(t, round.String(), requestInfo["requestId"].(*big.Int).String(), "Request ID should match round")
+
+	// Check if fulfillment data exists in consumer contract
+	fulfillBlockNum := requestInfo["fulfillBlockNumber"].(*big.Int)
+	consumerRandNum := requestInfo["randomNumber"].(*big.Int)
+
+	if fulfillBlockNum.Cmp(big.NewInt(0)) == 0 || consumerRandNum.Cmp(big.NewInt(0)) == 0 {
+		t.Logf("   DRB contract random number: %s", randomNumber.String())
+		t.Logf("   Consumer contract random number: %s", consumerRandNum.String())
+	}
+
+	assert.True(t, fulfillBlockNum.Cmp(big.NewInt(0)) > 0, "Fulfill block number should be set in consumer contract")
+	assert.True(t, consumerRandNum.Cmp(big.NewInt(0)) > 0, "Random number should be set in consumer contract")
+
+	// Only check exact match if consumer contract has the data
+	if consumerRandNum.Cmp(big.NewInt(0)) > 0 {
+		assert.Equal(t, randomNumber.String(), consumerRandNum.String(), "Random number in consumer contract should match")
+	}
+
+	t.Log("Test Case 1 Complete!")
+}
+
+func TestRegularNodeOnChainCommit(t *testing.T) {
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 2: Regular Node On-Chain Commit Test")
+	t.Log("STEP 1: Stopping regularNode1...")
+
+	// Stop regularNode1
+	stopCmd := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput, err := stopCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput))
+	}
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating regularNode1 environment to enable mock mode...")
+
+	// Get integration test directory (same logic as setup package)
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	// Update the .env.docker-test file to add MOCK_SEND_COMMIT_TO_LEADER for regularNode1
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
+		err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+		require.NoError(t, err, "Failed to write env file")
+	}
+
+	// Update docker-compose to add the environment variable
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+
+		replacement := strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+			1)
+
+		err = os.WriteFile(dockerComposeFile, []byte(replacement), 0644)
+		require.NoError(t, err, "Failed to write docker-compose file")
+	}
+
+	t.Log("STEP 3: Restarting regularNode1 with mock mode enabled...")
+
+	// Restart regularNode1 with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regularNode1")
+	}
+
+	// Wait for regularNode1 to be ready
+	time.Sleep(10 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated (regularNode1 will submit on-chain)...")
+
+	maxFulfillmentRetries := 10
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check regularNode1 logs to verify it's submitting on-chain
+			t.Log("Checking regularNode1 logs for on-chain submission...")
+			showLogs(t, "test-regularnode1", 20)
+
+			time.Sleep(15 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 2 Complete! RegularNode1 successfully submitted commit on-chain.")
+}
+
+func TestRegularNodeOnChainCos(t *testing.T) {
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 3: Regular Node On-Chain COS Test")
+	t.Log("STEP 1: Stopping regularNode1...")
+
+	// Stop regularNode1
+	stopCmd := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput, err := stopCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput))
+	}
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating regularNode1 environment to enable COS mock mode...")
+
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+	// Update env
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
+		err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+		require.NoError(t, err, "Failed to write env file")
+	}
+
+	// Update docker-compose
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COS_TO_LEADER") {
+		// Check if MOCK_SEND_COMMIT_TO_LEADER already exists, if so add after it
+		if strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+			replacement := strings.Replace(dockerComposeStr,
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				1)
+			err = os.WriteFile(dockerComposeFile, []byte(replacement), 0644)
+			require.NoError(t, err, "Failed to write docker-compose file")
+		} else {
+			replacement := strings.Replace(dockerComposeStr,
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				1)
+			err = os.WriteFile(dockerComposeFile, []byte(replacement), 0644)
+			require.NoError(t, err, "Failed to write docker-compose file")
+		}
+	}
+
+	t.Log("STEP 3: Restarting regularNode1 with COS mock mode enabled...")
+
+	// Restart regularNode1 with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regularNode1")
+	}
+
+	// Wait for regularNode1 to be ready
+	time.Sleep(10 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated (regularNode1 will submit COS on-chain)...")
+
+	maxFulfillmentRetries := 20
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check leader logs to see if it's requesting COS on-chain
+			t.Log("Checking leader node logs for RequestedToSubmitCo event...")
+			showLogs(t, "test-leadernode", 30)
+
+			// Check regularNode1 logs to verify it's receiving RequestedToSubmitCo and submitting COS on-chain
+			t.Log("Checking regularNode1 logs for on-chain COS submission...")
+			showLogs(t, "test-regularnode1", 20)
+
+			// Wait longer to accommodate leader's monitoring period
+			time.Sleep(20 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 3 Complete! RegularNode1 successfully submitted COS on-chain.")
+}
+
+func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 4: Regular Node On-Chain CVS and COS Test")
+	t.Log("STEP 1: Stopping regularNode1...")
+
+	// Stop regularNode1
+	stopCmd := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput, err := stopCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput))
+	}
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating regularNode1 environment to enable CVS and COS mock mode...")
+
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
+	}
+	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
+	}
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
+
+	// Update docker-compose to add both environment variables
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+
+	// Check if we need to add MOCK_SEND_COMMIT_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		replacement := strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+	}
+
+	// Check if we need to add MOCK_SEND_COS_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COS_TO_LEADER") {
+		// Add after MOCK_SEND_COMMIT_TO_LEADER if it exists, otherwise after EOA_PRIVATE_KEY
+		if strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+			replacement := strings.Replace(dockerComposeStr,
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		} else {
+			replacement := strings.Replace(dockerComposeStr,
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		}
+	}
+
+	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
+	require.NoError(t, err, "Failed to write docker-compose file")
+
+	t.Log("STEP 3: Restarting regularNode1 with CVS and COS mock mode enabled...")
+
+	// Restart regularNode1 with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regularNode1")
+	}
+
+	// Wait for regularNode1 to be ready
+	time.Sleep(10 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated (regularNode1 will submit both CVS and COS on-chain)...")
+
+	maxFulfillmentRetries := 20
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check leader logs to see if it's requesting CVS and COS on-chain
+			t.Log("Checking leader node logs for RequestedToSubmitCv and RequestedToSubmitCo events...")
+			showLogs(t, "test-leadernode", 30)
+
+			// Check regularNode1 logs to verify it's submitting both CVS and COS on-chain
+			t.Log("Checking regularNode1 logs for on-chain CVS and COS submission...")
+			showLogs(t, "test-regularnode1", 20)
+
+			time.Sleep(20 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 4 Complete! RegularNode1 successfully submitted both CVS and COS on-chain.")
+}
+
+func TestRegularNodeOnChainSecret(t *testing.T) {
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 5: Regular Node On-Chain Secret Test")
+	t.Log("STEP 1: Stopping regularNode1...")
+
+	// Stop regularNode1
+	stopCmd := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput, err := stopCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput))
+	}
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating regularNode1 environment to enable secret mock mode...")
+
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	// Update env file to add MOCK_SEND_SECRET_TO_LEADER
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
+		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
+	}
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
+
+	// Update docker-compose to add the environment variable
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+
+	// Check if we need to add MOCK_SEND_SECRET_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_SECRET_TO_LEADER") {
+		// Try to add after existing mock variables if they exist
+		if strings.Contains(dockerComposeStr, "MOCK_SEND_COS_TO_LEADER") {
+			replacement := strings.Replace(dockerComposeStr,
+				"      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				"      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		} else if strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+			replacement := strings.Replace(dockerComposeStr,
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		} else {
+			replacement := strings.Replace(dockerComposeStr,
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		}
+	}
+
+	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
+	require.NoError(t, err, "Failed to write docker-compose file")
+
+	t.Log("STEP 3: Restarting regularNode1 with secret mock mode enabled...")
+
+	// Restart regularNode1 with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regularNode1")
+	}
+
+	// Wait for regularNode1 to be ready
+	time.Sleep(10 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated (regularNode1 will submit secret on-chain)...")
+
+	maxFulfillmentRetries := 20
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check leader logs to see if it's requesting secret on-chain
+			t.Log("Checking leader node logs for RequestedToSubmitSFromIndexK event...")
+			showLogs(t, "test-leadernode", 30)
+
+			// Check regularNode1 logs to verify it's receiving RequestedToSubmitSFromIndexK and submitting secret on-chain
+			t.Log("Checking regularNode1 logs for on-chain secret submission...")
+			showLogs(t, "test-regularnode1", 20)
+
+			time.Sleep(20 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 5 Complete! RegularNode1 successfully submitted secret on-chain.")
+}
+
+func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 6: Regular Node On-Chain CVS, COS, and Secret Test")
+	t.Log("STEP 1: Stopping regularNode1...")
+
+	// Stop regularNode1
+	stopCmd := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput, err := stopCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput))
+	}
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating regularNode1 environment to enable CVS, COS, and Secret mock mode...")
+
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	// Update env file to add all three mock environment variables
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
+	}
+	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
+	}
+	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
+		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
+	}
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
+
+	// Update docker-compose to add all three environment variables
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+
+	// Check if we need to add MOCK_SEND_COMMIT_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		replacement := strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+	}
+
+	// Check if we need to add MOCK_SEND_COS_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COS_TO_LEADER") {
+		if strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+			replacement := strings.Replace(dockerComposeStr,
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		} else {
+			replacement := strings.Replace(dockerComposeStr,
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		}
+	}
+
+	// Check if we need to add MOCK_SEND_SECRET_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_SECRET_TO_LEADER") {
+		// Add after the last mock variable that exists
+		if strings.Contains(dockerComposeStr, "MOCK_SEND_COS_TO_LEADER") {
+			replacement := strings.Replace(dockerComposeStr,
+				"      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				"      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		} else if strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+			replacement := strings.Replace(dockerComposeStr,
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		} else {
+			replacement := strings.Replace(dockerComposeStr,
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		}
+	}
+
+	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
+	require.NoError(t, err, "Failed to write docker-compose file")
+
+	t.Log("STEP 3: Restarting regularNode1 with CVS, COS, and Secret mock mode enabled...")
+
+	// Restart regularNode1 with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regularNode1")
+	}
+
+	// Wait for regularNode1 to be ready
+	time.Sleep(10 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated (regularNode1 will submit CVS, COS, and Secret on-chain)...")
+
+	maxFulfillmentRetries := 20
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check leader logs to see if it's requesting CVS, COS, and Secret on-chain
+			t.Log("Checking leader node logs for RequestedToSubmitCv, RequestedToSubmitCo, and RequestedToSubmitSFromIndexK events...")
+			showLogs(t, "test-leadernode", 30)
+
+			// Check regularNode1 logs to verify it's submitting CVS, COS, and Secret on-chain
+			t.Log("Checking regularNode1 logs for on-chain CVS, COS, and Secret submission...")
+			showLogs(t, "test-regularnode1", 20)
+
+			time.Sleep(20 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 6 Complete! RegularNode1 successfully submitted CVS, COS, and Secret on-chain.")
+}
+
+func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 7: Regular Node On-Chain CVS and Secret Test")
+	t.Log("STEP 1: Stopping regularNode1...")
+
+	// Stop regularNode1
+	stopCmd := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput, err := stopCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput))
+	}
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating regularNode1 environment to enable CVS and Secret mock mode...")
+
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	// Update env file to add MOCK_SEND_COMMIT_TO_LEADER and MOCK_SEND_SECRET_TO_LEADER
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
+	}
+	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
+		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
+	}
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
+
+	// Update docker-compose to add both environment variables
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+
+	// Check if we need to add MOCK_SEND_COMMIT_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		replacement := strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+	}
+
+	// Check if we need to add MOCK_SEND_SECRET_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_SECRET_TO_LEADER") {
+		// Add after MOCK_SEND_COMMIT_TO_LEADER if it exists, otherwise after EOA_PRIVATE_KEY
+		if strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+			replacement := strings.Replace(dockerComposeStr,
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		} else {
+			replacement := strings.Replace(dockerComposeStr,
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		}
+	}
+
+	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
+	require.NoError(t, err, "Failed to write docker-compose file")
+
+	t.Log("STEP 3: Restarting regularNode1 with CVS and Secret mock mode enabled...")
+
+	// Restart regularNode1 with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regularNode1")
+	}
+
+	// Wait for regularNode1 to be ready
+	time.Sleep(10 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated (regularNode1 will submit CVS and Secret on-chain, COS via P2P)...")
+
+	maxFulfillmentRetries := 20
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check leader logs to see if it's requesting CVS and Secret on-chain
+			t.Log("Checking leader node logs for RequestedToSubmitCv and RequestedToSubmitSFromIndexK events...")
+			showLogs(t, "test-leadernode", 30)
+
+			// Check regularNode1 logs to verify it's submitting CVS and Secret on-chain
+			t.Log("Checking regularNode1 logs for on-chain CVS and Secret submission...")
+			showLogs(t, "test-regularnode1", 20)
+
+			time.Sleep(20 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 7 Complete! RegularNode1 successfully submitted CVS and Secret on-chain (COS was sent via P2P).")
+}
+
+func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 8: Regular Node On-Chain COS and Secret Test")
+	t.Log("STEP 1: Stopping regularNode1...")
+
+	// Stop regularNode1
+	stopCmd := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput, err := stopCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput))
+	}
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating regularNode1 environment to enable COS and Secret mock mode...")
+
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	// Update env file to add MOCK_SEND_COS_TO_LEADER and MOCK_SEND_SECRET_TO_LEADER
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
+	}
+	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
+		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
+	}
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
+
+	// Update docker-compose to add both environment variables
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+
+	// Check if we need to add MOCK_SEND_COS_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COS_TO_LEADER") {
+		replacement := strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+	}
+
+	// Check if we need to add MOCK_SEND_SECRET_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_SECRET_TO_LEADER") {
+		// Add after MOCK_SEND_COS_TO_LEADER if it exists, otherwise after EOA_PRIVATE_KEY
+		if strings.Contains(dockerComposeStr, "MOCK_SEND_COS_TO_LEADER") {
+			replacement := strings.Replace(dockerComposeStr,
+				"      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				"      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		} else {
+			replacement := strings.Replace(dockerComposeStr,
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		}
+	}
+
+	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
+	require.NoError(t, err, "Failed to write docker-compose file")
+
+	t.Log("STEP 3: Restarting regularNode1 with COS and Secret mock mode enabled...")
+
+	// Restart regularNode1 with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regularNode1")
+	}
+
+	// Wait for regularNode1 to be ready
+	time.Sleep(10 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated (regularNode1 will submit COS and Secret on-chain, CVS via P2P)...")
+
+	maxFulfillmentRetries := 20
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check leader logs to see if it's requesting COS and Secret on-chain
+			t.Log("Checking leader node logs for RequestedToSubmitCo and RequestedToSubmitSFromIndexK events...")
+			showLogs(t, "test-leadernode", 30)
+
+			// Check regularNode1 logs to verify it's submitting COS and Secret on-chain
+			t.Log("Checking regularNode1 logs for on-chain COS and Secret submission...")
+			showLogs(t, "test-regularnode1", 20)
+
+			time.Sleep(20 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 8 Complete! RegularNode1 successfully submitted COS and Secret on-chain (CVS was sent via P2P).")
+}
+
+func TestAllRegularNodesOnChainCvs(t *testing.T) {
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 10: All Regular Nodes On-Chain Commit Test")
+	t.Log("STEP 1: Stopping all regular nodes...")
+
+	// Stop all regular nodes
+	stopCmd1 := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput1, err := stopCmd1.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput1))
+	}
+
+	stopCmd2 := exec.Command("docker", "stop", "test-regularnode2")
+	stopOutput2, err := stopCmd2.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput2))
+	}
+
+	stopCmd3 := exec.Command("docker", "stop", "test-regularnode3")
+	stopOutput3, err := stopCmd3.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput3))
+	}
+
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating all regular nodes environment to enable mock mode...")
+
+	// Get integration test directory (same logic as setup package)
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	// Update the .env.docker-test file to add MOCK_SEND_COMMIT_TO_LEADER
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
+		err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+		require.NoError(t, err, "Failed to write env file")
+	}
+
+	// Update docker-compose to add the environment variable for all regular nodes
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+
+	// Add MOCK_SEND_COMMIT_TO_LEADER for regularNode1 if not present
+	if !strings.Contains(dockerComposeStr, "      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}") {
+		// Add for regularNode1
+		replacement := strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+
+		// Add for regularNode2
+		replacement = strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR2_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR2_PRIVATE_KEY}\n      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+
+		// Add for regularNode3
+		replacement = strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR3_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR3_PRIVATE_KEY}\n      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+
+		err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
+		require.NoError(t, err, "Failed to write docker-compose file")
+	}
+
+	t.Log("STEP 3: Restarting all regular nodes with mock mode enabled...")
+
+	// Restart all regular nodes with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1", "regularnode2", "regularnode3")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regular nodes")
+	}
+
+	// Wait for all regular nodes to be ready
+	time.Sleep(10 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated (all regular nodes will submit on-chain)...")
+
+	maxFulfillmentRetries := 20
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check all regular nodes logs to verify they're submitting on-chain
+
+			t.Log("Checking leader node logs for RequestedToSubmitCv event and missing CVS detection...")
+			showLogs(t, "test-leadernode", 40)
+
+			t.Log("Checking regularNode1 logs for on-chain submission...")
+			showLogs(t, "test-regularnode1", 20)
+			t.Log("Checking regularNode2 logs for on-chain submission...")
+			showLogs(t, "test-regularnode2", 20)
+			t.Log("Checking regularNode3 logs for on-chain submission...")
+			showLogs(t, "test-regularnode3", 20)
+
+			time.Sleep(20 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 10 Complete! All regular nodes successfully submitted commit on-chain.")
+}
+
+func TestAllRegularNodesOnChainCos(t *testing.T) {
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 11: All Regular Nodes On-Chain COS Test")
+	t.Log("STEP 1: Stopping all regular nodes...")
+
+	// Stop all regular nodes
+	stopCmd1 := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput1, err := stopCmd1.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput1))
+	}
+
+	stopCmd2 := exec.Command("docker", "stop", "test-regularnode2")
+	stopOutput2, err := stopCmd2.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput2))
+	}
+
+	stopCmd3 := exec.Command("docker", "stop", "test-regularnode3")
+	stopOutput3, err := stopCmd3.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput3))
+	}
+
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating all regular nodes environment to enable COS mock mode...")
+
+	// Get integration test directory (same logic as setup package)
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	// Update the .env.docker-test file to add MOCK_SEND_COS_TO_LEADER
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
+		err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+		require.NoError(t, err, "Failed to write env file")
+	}
+
+	// Update docker-compose to add the environment variable for all regular nodes
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+
+	// Add MOCK_SEND_COS_TO_LEADER for regularNode1 if not present
+	if !strings.Contains(dockerComposeStr, "      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}") {
+		// Add for regularNode1
+		replacement := strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+
+		// Add for regularNode2
+		replacement = strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR2_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR2_PRIVATE_KEY}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+
+		// Add for regularNode3
+		replacement = strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR3_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR3_PRIVATE_KEY}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+
+		err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
+		require.NoError(t, err, "Failed to write docker-compose file")
+	}
+
+	t.Log("STEP 3: Restarting all regular nodes with COS mock mode enabled...")
+
+	// Restart all regular nodes with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1", "regularnode2", "regularnode3")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regular nodes")
+	}
+
+	// Wait for all regular nodes to be ready
+	time.Sleep(10 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated (all regular nodes will submit COS on-chain)...")
+	t.Log("NOTE: Leader waits ~51 seconds before checking for missing COS, then emits RequestedToSubmitCo event")
+
+	maxFulfillmentRetries := 20
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check all regular nodes logs to verify they're submitting on-chain
+
+			t.Log("Checking leader node logs for RequestedToSubmitCo event and missing COS detection...")
+			showLogs(t, "test-leadernode", 40)
+
+			t.Log("Checking regularNode1 logs for on-chain COS submission...")
+			showLogs(t, "test-regularnode1", 20)
+			t.Log("Checking regularNode2 logs for on-chain COS submission...")
+			showLogs(t, "test-regularnode2", 20)
+			t.Log("Checking regularNode3 logs for on-chain COS submission...")
+			showLogs(t, "test-regularnode3", 20)
+
+			time.Sleep(20 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 11 Complete! All regular nodes successfully submitted COS on-chain.")
+}
+
+func TestAllRegularNodesOnChainSecret(t *testing.T) {
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 12: All Regular Nodes On-Chain Secret Test")
+	t.Log("STEP 1: Stopping all regular nodes...")
+
+	// Stop all regular nodes
+	stopCmd1 := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput1, err := stopCmd1.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput1))
+	}
+
+	stopCmd2 := exec.Command("docker", "stop", "test-regularnode2")
+	stopOutput2, err := stopCmd2.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput2))
+	}
+
+	stopCmd3 := exec.Command("docker", "stop", "test-regularnode3")
+	stopOutput3, err := stopCmd3.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput3))
+	}
+
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating all regular nodes environment to enable Secret mock mode...")
+
+	// Get integration test directory (same logic as setup package)
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	// Update the .env.docker-test file to add MOCK_SEND_SECRET_TO_LEADER
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
+		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
+		err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+		require.NoError(t, err, "Failed to write env file")
+	}
+
+	// Update docker-compose to add the environment variable for all regular nodes
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+
+	// Add MOCK_SEND_SECRET_TO_LEADER for regularNode1 if not present
+	if !strings.Contains(dockerComposeStr, "      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}") {
+		// Add for regularNode1
+		replacement := strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+
+		// Add for regularNode2
+		replacement = strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR2_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR2_PRIVATE_KEY}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+
+		// Add for regularNode3
+		replacement = strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR3_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR3_PRIVATE_KEY}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+
+		err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
+		require.NoError(t, err, "Failed to write docker-compose file")
+	}
+
+	t.Log("STEP 3: Restarting all regular nodes with Secret mock mode enabled...")
+
+	// Restart all regular nodes with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1", "regularnode2", "regularnode3")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regular nodes")
+	}
+
+	// Wait for all regular nodes to be ready
+	time.Sleep(10 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated (all regular nodes will submit Secret on-chain)...")
+	t.Log("NOTE: Leader waits ~51 seconds before checking for missing Secret, then emits RequestedToSubmitSFromIndexK event")
+
+	maxFulfillmentRetries := 20
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check all regular nodes logs to verify they're submitting on-chain
+
+			t.Log("Checking leader node logs for RequestedToSubmitSFromIndexK event and missing Secret detection...")
+			showLogs(t, "test-leadernode", 40)
+
+			t.Log("Checking regularNode1 logs for on-chain Secret submission...")
+			showLogs(t, "test-regularnode1", 20)
+			t.Log("Checking regularNode2 logs for on-chain Secret submission...")
+			showLogs(t, "test-regularnode2", 20)
+			t.Log("Checking regularNode3 logs for on-chain Secret submission...")
+			showLogs(t, "test-regularnode3", 20)
+
+			time.Sleep(20 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 12 Complete! All regular nodes successfully submitted Secret on-chain.")
+}
+
+func showLogs(t *testing.T, container string, lines int) {
+	cmd := exec.Command("docker", "logs", "--tail", fmt.Sprintf("%d", lines), container)
+	output, _ := cmd.CombinedOutput()
+
+	logLines := strings.Split(string(output), "\n")
+	for _, line := range logLines {
+		if line != "" {
+			t.Logf("    %s", line)
+		}
+	}
+}
+
+// requestRandomNumberFromConsumer requests a random number from the consumer contract
+func requestRandomNumberFromConsumer(ctx context.Context, env *setup.GethTestEnv) (*big.Int, error) {
+	callbackGasLimit := uint32(85000)
+
+	// Estimate price using current gas price
+	gasPrice, err := env.Client.SuggestGasPrice(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to suggest gas price: %w", err)
+	}
+
+	// Ensure minimum gas price
+	minGasPrice := big.NewInt(1000000000) // 1 gwei
+	if gasPrice.Cmp(minGasPrice) < 0 {
+		gasPrice = minGasPrice
+	}
+
+	// Estimate request price
+	estimateInput, err := env.ContractABI.Pack("estimateRequestPrice", callbackGasLimit, gasPrice)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack estimateRequestPrice: %w", err)
+	}
+
+	estimateResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+		To:   &env.ContractAddress,
+		Data: estimateInput,
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call estimateRequestPrice: %w", err)
+	}
+
+	var estimatedPrice *big.Int
+	if err := env.ContractABI.UnpackIntoInterface(&estimatedPrice, "estimateRequestPrice", estimateResult); err != nil {
+		return nil, fmt.Errorf("failed to unpack estimateRequestPrice: %w", err)
+	}
+
+	// Add 10% buffer to estimated price
+	buffer := new(big.Int).Mul(estimatedPrice, big.NewInt(110))
+	estimatedPrice = new(big.Int).Div(buffer, big.NewInt(100))
+
+	// Request from consumer
+	consumerInput, err := env.ConsumerABI.Pack("requestRandomNumber")
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack requestRandomNumber: %w", err)
+	}
+
+	auth := env.RegularAccounts[0].Auth
+	auth.Value = estimatedPrice
+	auth.GasLimit = 1000000
+	auth.GasPrice = gasPrice
+
+	nonce, err := env.Client.PendingNonceAt(ctx, auth.From)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nonce: %w", err)
+	}
+
+	tx := types.NewTransaction(nonce, env.ConsumerAddress, estimatedPrice, auth.GasLimit, auth.GasPrice, consumerInput)
+
+	signedTx, err := auth.Signer(auth.From, tx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign transaction: %w", err)
+	}
+
+	if err := env.Client.SendTransaction(ctx, signedTx); err != nil {
+		return nil, fmt.Errorf("failed to send transaction: %w", err)
+	}
+
+	txHash := signedTx.Hash()
+	if err := env.WaitForTransaction(ctx, &txHash); err != nil {
+		return nil, fmt.Errorf("failed to wait for transaction: %w", err)
+	}
+
+	auth.Value = nil
+
+	// Wait a bit for the transaction to be processed
+	time.Sleep(2 * time.Second)
+
+	input, err := env.ContractABI.Pack("s_requestCount")
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack s_requestCount: %w", err)
+	}
+
+	result, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+		To:   &env.ContractAddress,
+		Data: input,
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call s_requestCount: %w", err)
+	}
+
+	var requestCount *big.Int
+	if err := env.ContractABI.UnpackIntoInterface(&requestCount, "s_requestCount", result); err != nil {
+		return nil, fmt.Errorf("failed to unpack s_requestCount: %w", err)
+	}
+	round := new(big.Int).Sub(requestCount, big.NewInt(1))
+	// Also verify the request exists by checking s_requestInfo
+	requestInfoInput, err := env.ContractABI.Pack("s_requestInfo", round)
+	if err == nil {
+		requestInfoResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+			To:   &env.ContractAddress,
+			Data: requestInfoInput,
+		}, nil)
+		if err == nil {
+			_ = requestInfoResult // Just verify it doesn't error
+		}
+	}
+
+	return round, nil
+}
+
+// checkRandomNumberFulfilled checks if a random number has been fulfilled for a given round
+func checkRandomNumberFulfilled(ctx context.Context, env *setup.GethTestEnv, round *big.Int) (bool, *big.Int, error) {
+	detailInfoInput, err := env.ConsumerABI.Pack("getDetailInfo", round)
+	if err == nil {
+		detailInfoResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+			To:   &env.ConsumerAddress,
+			Data: detailInfoInput,
+		}, nil)
+		if err == nil && detailInfoResult != nil {
+			// Unpack: (requester, requestFee, requestBlockNumber, fulfillBlockNumber, randomNumber, isRefunded)
+			var detailInfo struct {
+				Requester          common.Address
+				RequestFee         *big.Int
+				RequestBlockNumber *big.Int
+				FulfillBlockNumber *big.Int
+				RandomNumber       *big.Int
+				IsRefunded         bool
+			}
+			if err := env.ConsumerABI.UnpackIntoInterface(&detailInfo, "getDetailInfo", detailInfoResult); err == nil {
+				if detailInfo.FulfillBlockNumber.Cmp(big.NewInt(0)) > 0 && detailInfo.RandomNumber.Cmp(big.NewInt(0)) > 0 {
+					return true, detailInfo.RandomNumber, nil
+				}
+				// Request exists but not fulfilled yet
+				return false, nil, nil
+			}
+		}
+	}
+
+	// Fallback: Use s_requestIdToIndexPlusOne to get the index directly
+	indexInput, err := env.ConsumerABI.Pack("s_requestIdToIndexPlusOne", round)
+	if err == nil {
+		indexResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+			To:   &env.ConsumerAddress,
+			Data: indexInput,
+		}, nil)
+		if err == nil && indexResult != nil {
+			var indexPlusOne *big.Int
+			if err := env.ConsumerABI.UnpackIntoInterface(&indexPlusOne, "s_requestIdToIndexPlusOne", indexResult); err == nil {
+				// Index is 1-based, so if it's 0, the request doesn't exist
+				if indexPlusOne.Cmp(big.NewInt(0)) > 0 {
+					// Use the index to get mainInfo (index is already 1-based)
+					mainInfoInput, err := env.ConsumerABI.Pack("s_mainInfos", indexPlusOne)
+					if err == nil {
+						mainInfoResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+							To:   &env.ConsumerAddress,
+							Data: mainInfoInput,
+						}, nil)
+						if err == nil && mainInfoResult != nil {
+							// Unpack MainInfo struct: (requestId, requester, fulfillBlockNumber, randomNumber, isRefunded, requestFee)
+							var mainInfo struct {
+								RequestId          *big.Int
+								Requester          common.Address
+								FulfillBlockNumber *big.Int
+								RandomNumber       *big.Int
+								IsRefunded         bool
+								RequestFee         *big.Int
+							}
+							if err := env.ConsumerABI.UnpackIntoInterface(&mainInfo, "s_mainInfos", mainInfoResult); err == nil {
+								if mainInfo.RequestId.Cmp(round) == 0 {
+									if mainInfo.FulfillBlockNumber.Cmp(big.NewInt(0)) > 0 && mainInfo.RandomNumber.Cmp(big.NewInt(0)) > 0 {
+										return true, mainInfo.RandomNumber, nil
+									}
+									// Request exists but not fulfilled yet
+									return false, nil, nil
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Final fallback: iterate through all requests (original method)
+	requestCountInput, err := env.ConsumerABI.Pack("s_requestCount")
+	if err != nil {
+		return false, nil, err
+	}
+
+	requestCountResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+		To:   &env.ConsumerAddress,
+		Data: requestCountInput,
+	}, nil)
+	if err != nil {
+		return false, nil, err
+	}
+
+	var requestCount *big.Int
+	if err := env.ConsumerABI.UnpackIntoInterface(&requestCount, "s_requestCount", requestCountResult); err != nil {
+		return false, nil, err
+	}
+
+	// Check each request index (1-based)
+	for i := big.NewInt(1); i.Cmp(requestCount) <= 0; i.Add(i, big.NewInt(1)) {
+		mainInfoInput, err := env.ConsumerABI.Pack("s_mainInfos", i)
+		if err != nil {
+			continue
+		}
+
+		mainInfoResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+			To:   &env.ConsumerAddress,
+			Data: mainInfoInput,
+		}, nil)
+		if err != nil {
+			continue
+		}
+
+		var mainInfo struct {
+			RequestId          *big.Int
+			Requester          common.Address
+			FulfillBlockNumber *big.Int
+			RandomNumber       *big.Int
+			IsRefunded         bool
+			RequestFee         *big.Int
+		}
+
+		if err := env.ConsumerABI.UnpackIntoInterface(&mainInfo, "s_mainInfos", mainInfoResult); err != nil {
+			continue
+		}
+
+		// Check if this request matches our round and is fulfilled
+		if mainInfo.RequestId.Cmp(round) == 0 {
+			if mainInfo.FulfillBlockNumber.Cmp(big.NewInt(0)) > 0 && mainInfo.RandomNumber.Cmp(big.NewInt(0)) > 0 {
+				return true, mainInfo.RandomNumber, nil
+			}
+			return false, nil, nil
+		}
+	}
+
+	return false, nil, nil
+}
+
+func getConsumerRequestInfo(ctx context.Context, env *setup.GethTestEnv, round *big.Int) (map[string]interface{}, error) {
+	// First, try to use getDetailInfo which is more direct
+	detailInfoInput, err := env.ConsumerABI.Pack("getDetailInfo", round)
+	if err == nil {
+		detailInfoResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+			To:   &env.ConsumerAddress,
+			Data: detailInfoInput,
+		}, nil)
+		if err == nil && detailInfoResult != nil {
+			// Unpack: (requester, requestFee, requestBlockNumber, fulfillBlockNumber, randomNumber, isRefunded)
+			var detailInfo struct {
+				Requester          common.Address
+				RequestFee         *big.Int
+				RequestBlockNumber *big.Int
+				FulfillBlockNumber *big.Int
+				RandomNumber       *big.Int
+				IsRefunded         bool
+			}
+			if err := env.ConsumerABI.UnpackIntoInterface(&detailInfo, "getDetailInfo", detailInfoResult); err == nil {
+				// Check if request exists (requestBlockNumber > 0 means request was made)
+				if detailInfo.RequestBlockNumber.Cmp(big.NewInt(0)) > 0 {
+					return map[string]interface{}{
+						"requestId":          round,
+						"requester":          detailInfo.Requester,
+						"fulfillBlockNumber": detailInfo.FulfillBlockNumber,
+						"randomNumber":       detailInfo.RandomNumber,
+						"isRefunded":         detailInfo.IsRefunded,
+						"requestFee":         detailInfo.RequestFee,
+					}, nil
+				}
+			}
+		}
+	}
+
+	// Fallback: Use s_requestIdToIndexPlusOne to get the index directly
+	indexInput, err := env.ConsumerABI.Pack("s_requestIdToIndexPlusOne", round)
+	if err == nil {
+		indexResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+			To:   &env.ConsumerAddress,
+			Data: indexInput,
+		}, nil)
+		if err == nil && indexResult != nil {
+			var indexPlusOne *big.Int
+			if err := env.ConsumerABI.UnpackIntoInterface(&indexPlusOne, "s_requestIdToIndexPlusOne", indexResult); err == nil {
+				if indexPlusOne.Cmp(big.NewInt(0)) > 0 {
+					// Use the index to get mainInfo (index is already 1-based)
+					mainInfoInput, err := env.ConsumerABI.Pack("s_mainInfos", indexPlusOne)
+					if err == nil {
+						mainInfoResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+							To:   &env.ConsumerAddress,
+							Data: mainInfoInput,
+						}, nil)
+						if err == nil && mainInfoResult != nil {
+							// Unpack MainInfo struct: (requestId, requester, fulfillBlockNumber, randomNumber, isRefunded, requestFee)
+							var mainInfo struct {
+								RequestId          *big.Int
+								Requester          common.Address
+								FulfillBlockNumber *big.Int
+								RandomNumber       *big.Int
+								IsRefunded         bool
+								RequestFee         *big.Int
+							}
+							if err := env.ConsumerABI.UnpackIntoInterface(&mainInfo, "s_mainInfos", mainInfoResult); err == nil {
+								if mainInfo.RequestId.Cmp(round) == 0 {
+									return map[string]interface{}{
+										"requestId":          mainInfo.RequestId,
+										"requester":          mainInfo.Requester,
+										"fulfillBlockNumber": mainInfo.FulfillBlockNumber,
+										"randomNumber":       mainInfo.RandomNumber,
+										"isRefunded":         mainInfo.IsRefunded,
+										"requestFee":         mainInfo.RequestFee,
+									}, nil
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Final fallback: iterate through all requests (original method)
+	requestCountInput, err := env.ConsumerABI.Pack("s_requestCount")
+	if err != nil {
+		return nil, err
+	}
+
+	requestCountResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+		To:   &env.ConsumerAddress,
+		Data: requestCountInput,
+	}, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var requestCount *big.Int
+	if err := env.ConsumerABI.UnpackIntoInterface(&requestCount, "s_requestCount", requestCountResult); err != nil {
+		return nil, err
+	}
+
+	// Find the request that matches our round
+	for i := big.NewInt(1); i.Cmp(requestCount) <= 0; i.Add(i, big.NewInt(1)) {
+		mainInfoInput, err := env.ConsumerABI.Pack("s_mainInfos", i)
+		if err != nil {
+			continue
+		}
+
+		mainInfoResult, err := env.Client.CallContract(ctx, ethereum.CallMsg{
+			To:   &env.ConsumerAddress,
+			Data: mainInfoInput,
+		}, nil)
+		if err != nil {
+			continue
+		}
+
+		var mainInfo struct {
+			RequestId          *big.Int
+			Requester          common.Address
+			FulfillBlockNumber *big.Int
+			RandomNumber       *big.Int
+			IsRefunded         bool
+			RequestFee         *big.Int
+		}
+
+		if err := env.ConsumerABI.UnpackIntoInterface(&mainInfo, "s_mainInfos", mainInfoResult); err != nil {
+			continue
+		}
+
+		if mainInfo.RequestId.Cmp(round) == 0 {
+			return map[string]interface{}{
+				"requestId":          mainInfo.RequestId,
+				"requester":          mainInfo.Requester,
+				"fulfillBlockNumber": mainInfo.FulfillBlockNumber,
+				"randomNumber":       mainInfo.RandomNumber,
+				"isRefunded":         mainInfo.IsRefunded,
+				"requestFee":         mainInfo.RequestFee,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("request not found for round %s", round.String())
+}
