@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/constants"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -52,7 +52,7 @@ func (n *LeaderNode) ReceiveCommit(ctx context.Context) {
 }
 
 func (n *LeaderNode) receiveCommit(ctx context.Context) {
-	contractAddress := os.Getenv("CONTRACT_ADDRESS")
+	contractAddress := appconfig.Get().ContractAddress
 	contractAddr := common.HexToAddress(contractAddress)
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
@@ -415,13 +415,13 @@ func (n *LeaderNode) resuming(ctx context.Context) {
 		log.Printf("Failed to load contract ABI: %v", err)
 		return
 	}
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
 	contractAddress := common.HexToAddress(contractAddressStr)
 
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
@@ -803,7 +803,7 @@ func (n *LeaderNode) stopFailToSubmitCoMonitoring() {
 
 // Add function to call failToSubmitCo on chain
 func (n *LeaderNode) callFailToSubmitCo(ctx context.Context, round string, trialNum string) {
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -815,7 +815,7 @@ func (n *LeaderNode) callFailToSubmitCo(ctx context.Context, round string, trial
 		return
 	}
 
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
@@ -917,7 +917,7 @@ func (n *LeaderNode) stopFailToSubmitCvMonitoring() {
 
 // Add function to call failToSubmitCv on chain
 func (n *LeaderNode) callFailToSubmitCv(ctx context.Context, round string, trialNum string) {
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -929,7 +929,7 @@ func (n *LeaderNode) callFailToSubmitCv(ctx context.Context, round string, trial
 		return
 	}
 
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
@@ -1007,7 +1007,7 @@ func (n *LeaderNode) CheckHaltedState(ctx context.Context) {
 		return
 	}
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Printf("CONTRACT_ADDRESS is not set in environment variables.")
 		return
@@ -1127,7 +1127,7 @@ func (n *LeaderNode) callRequestToSubmitCv(ctx context.Context, round string, tr
 
 	packedIndices := PackIndices(indices)
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -1139,7 +1139,7 @@ func (n *LeaderNode) callRequestToSubmitCv(ctx context.Context, round string, tr
 		return
 	}
 
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
@@ -1274,7 +1274,7 @@ func (n *LeaderNode) SubmitMerkleRoot(ctx context.Context, roundNum string, tria
 	var merkleRootBytes32 [32]byte
 	copy(merkleRootBytes32[:], merkleRoot)
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -1286,7 +1286,7 @@ func (n *LeaderNode) SubmitMerkleRoot(ctx context.Context, roundNum string, tria
 		return
 	}
 
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
@@ -1487,7 +1487,7 @@ type CvAndSigRS struct {
 func (n *LeaderNode) requestToSubmitCo(ctx context.Context, roundNum string, trialNum string, missingIndices []*big.Int) {
 	cvNotOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices := n.prepareArgumentsForRequestToSubmitCo(ctx, roundNum, trialNum, missingIndices)
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -1499,7 +1499,7 @@ func (n *LeaderNode) requestToSubmitCo(ctx context.Context, roundNum string, tri
 		return
 	}
 
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}

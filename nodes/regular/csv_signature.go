@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 )
 
 // GenerateCvsSignature generates the EIP-712 signature components (v, r, s) for a given round, trialNum and CVS value.
@@ -23,12 +23,14 @@ func (n *RegularNode) GenerateCvsSignature(round *big.Int, trialNum *big.Int, cv
 	name := "Commit Reveal2"
 	version := "1"
 
+	envCfg := appconfig.Get()
+
 	// Fetch contract address and chain ID dynamically from the .env file
-	contractAddressEnv := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressEnv := envCfg.ContractAddress
 	if contractAddressEnv == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
-	chainIDEnv := os.Getenv("CHAIN_ID")
+	chainIDEnv := envCfg.ChainID
 	if chainIDEnv == "" {
 		log.Fatal("CHAIN_ID is not set in environment variables.")
 	}
@@ -42,7 +44,7 @@ func (n *RegularNode) GenerateCvsSignature(round *big.Int, trialNum *big.Int, cv
 	}
 
 	// Load the private key
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := envCfg.EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}

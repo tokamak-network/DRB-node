@@ -3091,10 +3091,10 @@ func (suite *RegularHandlerTestSuite) TestRegularHandler_NodeInfoOperations() {
 	testEOA := "0xTestNodeInfo123"
 
 	// Cleanup
-	suite.db.Model((*utils.NodeInfo)(nil)).
+	suite.db.Model((*database.NodeInfoScheme)(nil)).
 		Where("eoa_address = ?", testEOA).
 		Delete()
-	defer suite.db.Model((*utils.NodeInfo)(nil)).
+	defer suite.db.Model((*database.NodeInfoScheme)(nil)).
 		Where("eoa_address = ?", testEOA).
 		Delete()
 

@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"log"
-	"os"
-	"strings"
 
-	"github.com/joho/godotenv"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/logger"
 	leader_node "github.com/tokamak-network/DRB-node/nodes/leader"
@@ -15,14 +13,12 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
-	}
-
 	ctx := context.Background()
 
 	logger.InitLogger()
 	defer logger.CloseLogger()
+
+	envCfg := appconfig.Get()
 
 	// Initialise DB
 	// Load configuration
@@ -33,16 +29,13 @@ func main() {
 		log.Fatalf("Error initializing sql db: %v", err)
 	}
 
-	nodeType := os.Getenv("NODE_TYPE") // Expecting 'leader' or 'regular'
-
 	// Initialize the fallback ethclient
-	rpcUrls := strings.Split(os.Getenv("ETH_RPC_URLS"), ",")
-	fallbackEthClient, err := fallback_ethclient.NewFallbackRPCClient(rpcUrls)
+	fallbackEthClient, err := fallback_ethclient.NewFallbackRPCClient(envCfg.EthRPCURLs)
 	if err != nil {
 		log.Fatal("Failed to init the fallback ethclient", "err", err)
 	}
 
-	switch nodeType {
+	switch envCfg.NodeType {
 	case "leader":
 		db := database.GetDB()
 		leaderNodeHandler := leader_node.NewLeaderNodeHandler(fallbackEthClient, db)

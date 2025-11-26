@@ -1,11 +1,7 @@
 package database
 
 import (
-	"log"
-	"os"
-	"strconv"
-
-	"github.com/joho/godotenv"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 )
 
 // Config holds the application configuration
@@ -21,44 +17,17 @@ type Config struct {
 
 // LoadConfig loads configuration from environment variables
 func LoadConfig() *Config {
-	// Load .env file if it exists
-	err := godotenv.Load()
-	if err != nil {
-		log.Println(err)
-	}
+	env := appconfig.Get()
+	dbConfig := env.Database
 
 	config := &Config{
-		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
-		PostgresPort:     getEnvInt("POSTGRES_PORT", 5432),
-		PostgresUser:     getEnv("POSTGRES_USER", "postgres"),
-		PostgresPassword: getEnv("POSTGRES_PASSWORD", ""),
-		PostgresName:     getEnv("POSTGRES_NAME", "postgres"),
-		PostgresSSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
+		PostgresHost:     dbConfig.PostgresHost,
+		PostgresPort:     dbConfig.PostgresPort,
+		PostgresUser:     dbConfig.PostgresUser,
+		PostgresPassword: dbConfig.PostgresPassword,
+		PostgresName:     dbConfig.PostgresName,
+		PostgresSSLMode:  dbConfig.PostgresSSLMode,
 	}
 
 	return config
-}
-
-// getEnv gets an environment variable or returns a default value
-func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
-}
-
-// getEnvInt gets an environment variable as an integer or returns a default value
-func getEnvInt(key string, defaultValue int) int {
-	valueStr := os.Getenv(key)
-	if valueStr == "" {
-		return defaultValue
-	}
-
-	value, err := strconv.Atoi(valueStr)
-	if err != nil {
-		return defaultValue
-	}
-
-	return value
 }

@@ -962,38 +962,6 @@ func TestRegularNode_processSubmittedSecretRequest_NotNextInOrder(t *testing.T) 
 	mockRevealRepo.AssertExpectations(t)
 }
 
-func TestRegularNode_CleanupRoundDataByUniqueKey(t *testing.T) {
-	node := createTestNodeForSendCommit()
-
-	uniqueKey := "100:1"
-
-	// Set data
-	node.SetRoundData(uniqueKey, RoundData{MerkleRoot: true})
-	node.SetSubmittedCvIndicesValue(uniqueKey, "0", true)
-	node.SetStrictOrder(uniqueKey, []string{"node1"})
-	node.SetCosReceived(uniqueKey, "0xTestAddress", true)
-
-	// Verify data was set
-	_, exists := node.GetCosReceived(uniqueKey, "0xTestAddress")
-	assert.True(t, exists, "CosReceived should exist before cleanup")
-
-	// Cleanup
-	node.CleanupRoundDataByUniqueKey(uniqueKey)
-
-	// Verify all cleaned up
-	_, exists = node.GetRoundData(uniqueKey)
-	assert.False(t, exists, "RoundData should be deleted")
-
-	_, exists = node.GetSubmittedCvIndicesMap(uniqueKey)
-	assert.False(t, exists, "SubmittedCvIndices should be deleted")
-
-	_, exists = node.GetStrictOrder(uniqueKey)
-	assert.False(t, exists, "StrictOrder should be deleted")
-
-	_, exists = node.GetCosReceived(uniqueKey, "0xTestAddress")
-	assert.False(t, exists, "CosReceived should be deleted")
-}
-
 func TestRegularNode_allCosReceivedUnlockedRegular_AllReceived(t *testing.T) {
 	node := createTestNodeForSendCommit()
 

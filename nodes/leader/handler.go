@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
@@ -78,12 +78,14 @@ func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 }
 
 func (lh *LeaderNodeHandler) Run(ctx context.Context) {
-	port := os.Getenv("LEADER_PORT")
+	envCfg := appconfig.Get()
+
+	port := envCfg.LeaderPort
 	if port == "" {
 		log.Fatal("LEADER_PORT is not set in environment variables.")
 	}
 
-	nodeType := os.Getenv("NODE_TYPE")
+	nodeType := envCfg.NodeType
 	if nodeType == "" {
 		log.Fatal("NODE_TYPE is not set in environment variables.")
 	}

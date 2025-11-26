@@ -1,0 +1,171 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+
+	"github.com/joho/godotenv"
+)
+
+// EnvConfig captures the environment variables required by the node services.
+type EnvConfig struct {
+	// General node configuration
+	NodeType string
+	Port     string
+
+	// Leader connection details for regular nodes
+	LeaderIP     string
+	LeaderPort   string
+	LeaderPeerID string
+
+	// Ethereum interaction configuration
+	ContractAddress  string
+	ChainID          string
+	EOAPrivateKey    string
+	LeaderPrivateKey string
+	LeaderEOA        string
+
+	// Flags for test/mocked flows
+	MockSendSecretToLeader bool
+	MockSendCosToLeader    bool
+	MockSendCommitToLeader bool
+
+	// External RPC endpoints and credentials
+	RPCURLs    []string
+	EthRPCURLs []string
+	PrivateKey string
+
+	// Database configuration
+	Database DatabaseConfig
+}
+
+// DatabaseConfig stores Postgres connection settings.
+type DatabaseConfig struct {
+	PostgresHost     string
+	PostgresPort     int
+	PostgresUser     string
+	PostgresPassword string
+	PostgresName     string
+	PostgresSSLMode  string
+}
+
+var (
+	envConfig     *EnvConfig
+	loadOnce      sync.Once
+	configMu      sync.RWMutex
+	runningInTest bool
+)
+
+func init() {
+	base := filepath.Base(os.Args[0])
+	runningInTest = strings.HasSuffix(base, ".test")
+}
+
+// Get returns the process-wide EnvConfig, loading it from the environment the first time.
+// When running under "go test" we always reload to respect per-test overrides.
+func Get() *EnvConfig {
+	if runningInTest {
+		return loadEnv()
+	}
+
+	loadOnce.Do(func() {
+		cfg := loadEnv()
+		configMu.Lock()
+		defer configMu.Unlock()
+		envConfig = cfg
+	})
+
+	configMu.RLock()
+	defer configMu.RUnlock()
+	return envConfig
+}
+
+// Reload forces the config to be reloaded from the environment.
+// This is primarily useful for integration tests.
+func Reload() *EnvConfig {
+	cfg := loadEnv()
+	configMu.Lock()
+	defer configMu.Unlock()
+	envConfig = cfg
+	return envConfig
+}
+
+func loadEnv() *EnvConfig {
+	_ = godotenv.Load()
+
+	return &EnvConfig{
+		NodeType:               os.Getenv("NODE_TYPE"),
+		Port:                   os.Getenv("PORT"),
+		LeaderIP:               os.Getenv("LEADER_IP"),
+		LeaderPort:             os.Getenv("LEADER_PORT"),
+		LeaderPeerID:           os.Getenv("LEADER_PEER_ID"),
+		ContractAddress:        os.Getenv("CONTRACT_ADDRESS"),
+		ChainID:                os.Getenv("CHAIN_ID"),
+		EOAPrivateKey:          os.Getenv("EOA_PRIVATE_KEY"),
+		LeaderPrivateKey:       os.Getenv("LEADER_PRIVATE_KEY"),
+		LeaderEOA:              os.Getenv("LEADER_EOA"),
+		MockSendSecretToLeader: parseBool(os.Getenv("MOCK_SEND_SECRET_TO_LEADER")),
+		MockSendCosToLeader:    parseBool(os.Getenv("MOCK_SEND_COS_TO_LEADER")),
+		MockSendCommitToLeader: parseBool(os.Getenv("MOCK_SEND_COMMIT_TO_LEADER")),
+		RPCURLs:                splitAndTrim(os.Getenv("RPC_URLS")),
+		EthRPCURLs:             splitAndTrim(os.Getenv("ETH_RPC_URLS")),
+		PrivateKey:             os.Getenv("PRIVATE_KEY"),
+		Database: DatabaseConfig{
+			PostgresHost:     getEnvOrDefault("POSTGRES_HOST", "localhost"),
+			PostgresPort:     getEnvAsInt("POSTGRES_PORT", 5432),
+			PostgresUser:     getEnvOrDefault("POSTGRES_USER", "postgres"),
+			PostgresPassword: getEnvOrDefault("POSTGRES_PASSWORD", ""),
+			PostgresName:     getEnvOrDefault("POSTGRES_NAME", "postgres"),
+			PostgresSSLMode:  getEnvOrDefault("POSTGRES_SSLMODE", "disable"),
+		},
+	}
+}
+
+func parseBool(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "1", "yes", "y":
+		return true
+	default:
+		return false
+	}
+}
+
+func splitAndTrim(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	results := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			results = append(results, trimmed)
+		}
+	}
+	return results
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
+
+func getEnvAsInt(key string, defaultValue int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+	return parsed
+}

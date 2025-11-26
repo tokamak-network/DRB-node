@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/logger"
@@ -1589,7 +1590,7 @@ func (n *LeaderNode) sendSecretValueRequestToNodeTestable(
 	timerDuration time.Duration, // Configurable timer duration for testing
 ) {
 	// Load private key from environment variable
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Println("LEADER_PRIVATE_KEY is not set in environment variables.")
 		return
@@ -1879,7 +1880,7 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_MissingPrivateK
 	ctx := context.Background()
 
 	// Save original LEADER_PRIVATE_KEY
-	originalKey := os.Getenv("LEADER_PRIVATE_KEY")
+	originalKey := appconfig.Get().LeaderPrivateKey
 	defer os.Setenv("LEADER_PRIVATE_KEY", originalKey)
 
 	// Unset LEADER_PRIVATE_KEY
@@ -1937,7 +1938,7 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_InvalidPrivateK
 	ctx := context.Background()
 
 	// Save original LEADER_PRIVATE_KEY
-	originalKey := os.Getenv("LEADER_PRIVATE_KEY")
+	originalKey := appconfig.Get().LeaderPrivateKey
 	defer os.Setenv("LEADER_PRIVATE_KEY", originalKey)
 
 	// Set invalid private key

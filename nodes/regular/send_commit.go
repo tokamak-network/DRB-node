@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"strings"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -50,7 +50,7 @@ func (n *RegularNode) MonitorCommitRequest(ctx context.Context) {
 }
 
 func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
-	contractAddress := os.Getenv("CONTRACT_ADDRESS")
+	contractAddress := appconfig.Get().ContractAddress
 	contractAddr := common.HexToAddress(contractAddress)
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
@@ -406,7 +406,7 @@ func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string
 
 	fmt.Printf("Extracted secret_value as bytes32: %x\n", secretValueBytes)
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -417,7 +417,7 @@ func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string
 		log.Fatalf("Failed to load contract ABI: %v", err)
 	}
 
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
@@ -579,7 +579,7 @@ func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, 
 		return nil
 	}
 	fmt.Printf("Round %v, TrialNum %v, packedIndices %v\n", round, trialNum, packedIndices)
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}
@@ -611,7 +611,7 @@ func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, 
 
 	fmt.Printf("Processing RequestedToSubmitCv event for Round: %v\n", round.String())
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -653,7 +653,7 @@ func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, Tri
 		return nil
 	}
 	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}
@@ -682,7 +682,7 @@ func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, Tri
 
 	fmt.Printf("Processing RequestedToSubmitCo event for Round: %v\n", Round.String())
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -840,7 +840,7 @@ func (n *RegularNode) ResetMonitoringState(round string, trialNum string) {
 
 // callFailToRequestSubmitCVOrSubmitMerkleRoot calls the contract function to fail the leader
 func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx context.Context, round string, trialNum string) {
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}
@@ -850,7 +850,7 @@ func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx context.Co
 		return
 	}
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -933,7 +933,7 @@ func (n *RegularNode) StopFailToSubmitMerkleRootAfterDisputeMonitoring(round str
 
 // callFailToSubmitMerkleRootAfterDispute calls the contract function to fail the leader for not submitting merkle root
 func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(ctx context.Context, round string, trialNum string) {
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}
@@ -943,7 +943,7 @@ func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(ctx context.Context
 		return
 	}
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -1049,7 +1049,7 @@ func (n *RegularNode) StopRequestToSubmitSOrGenerateRandomNumberMonitoring(round
 func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(ctx context.Context, round string, trialNum string) {
 	log.Printf("Calling failToRequestSOrGenerateRandomNumber for round %s with trial %s", round, trialNum)
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -1061,7 +1061,7 @@ func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(ctx context.Conte
 		return
 	}
 
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in environment variables.")
 	}

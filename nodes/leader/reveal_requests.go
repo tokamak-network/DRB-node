@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -57,7 +57,7 @@ func (n *LeaderNode) StartSecretValueRequests(ctx context.Context, h host.Host, 
 
 func (n *LeaderNode) sendSecretValueRequestToNode(ctx context.Context, h host.Host, round string, trialNum string, uniqueKey string, regularEoa string, nodeInfo *utils.NodeInfo, order int) {
 	// Load private key from environment variable
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
@@ -121,7 +121,7 @@ func (n *LeaderNode) requestToSubmitS(ctx context.Context, round string, trialNu
 	n.SetSecretRequestSentForWhichRound(n.GetCurrentRound())
 	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := n.prepareArgumentsForRequestToSubmitS(ctx, round, trialNum)
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -133,7 +133,7 @@ func (n *LeaderNode) requestToSubmitS(ctx context.Context, round string, trialNu
 		return
 	}
 
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
@@ -386,7 +386,7 @@ func (n *LeaderNode) UpdateLastSubmitSTimestamp(ctx context.Context, newTimestam
 func (n *LeaderNode) callFailToSubmitS(ctx context.Context, round string, trialNum string) {
 	log.Printf("Calling failToSubmitS for round %s with trial %s", round, trialNum)
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -398,7 +398,7 @@ func (n *LeaderNode) callFailToSubmitS(ctx context.Context, round string, trialN
 		return
 	}
 
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}

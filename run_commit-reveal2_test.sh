@@ -14,7 +14,7 @@ echo "Database is ready!"
 
 # Run commit-reveal2 tests
 echo "Running commit-reveal2 tests..."
-go test -v ./commitreveal2/...
+go test -v ./commit-reveal2/...
 
 # Cleanup
 echo "Cleaning up..."

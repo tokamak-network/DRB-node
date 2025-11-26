@@ -2,11 +2,10 @@
 
 -- Create node_info schema
 CREATE TABLE IF NOT EXISTS node_info_schemes (
-    id SERIAL PRIMARY KEY,
     ip TEXT NOT NULL UNIQUE,
     port TEXT NOT NULL,
     peer_id TEXT NOT NULL UNIQUE,
-    eoa_address TEXT NOT NULL UNIQUE
+    eoa_address TEXT NOT NULL PRIMARY KEY
 );
 
 -- Create leader_commits schema

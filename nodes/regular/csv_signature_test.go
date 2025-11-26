@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 )
 
 func TestRegularNode_intToBytes(t *testing.T) {
@@ -224,7 +225,7 @@ func TestRegularNode_GenerateCvsSignature_MissingContractAddress(t *testing.T) {
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 
-	contractAddr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddr := appconfig.Get().ContractAddress
 	assert.Empty(t, contractAddr, "CONTRACT_ADDRESS should not be set")
 }
 
@@ -239,7 +240,7 @@ func TestRegularNode_GenerateCvsSignature_MissingChainID(t *testing.T) {
 	}()
 
 	// Check that CHAIN_ID is required
-	chainID := os.Getenv("CHAIN_ID")
+	chainID := appconfig.Get().ChainID
 	assert.Empty(t, chainID, "CHAIN_ID should not be set")
 }
 
@@ -278,7 +279,7 @@ func TestRegularNode_GenerateCvsSignature_MissingPrivateKey(t *testing.T) {
 	}()
 
 	// Check that EOA_PRIVATE_KEY is required
-	privateKey := os.Getenv("EOA_PRIVATE_KEY")
+	privateKey := appconfig.Get().EOAPrivateKey
 	assert.Empty(t, privateKey, "EOA_PRIVATE_KEY should not be set")
 }
 

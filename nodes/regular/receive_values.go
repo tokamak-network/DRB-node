@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"os"
 	"sync"
 
 	"github.com/go-pg/pg/v10"
@@ -12,6 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -56,7 +56,7 @@ func (n *RegularNode) HandleCvs(ctx context.Context, h host.Host, s network.Stre
 		return
 	}
 
-	leaderEOA := os.Getenv("LEADER_EOA")
+	leaderEOA := appconfig.Get().LeaderEOA
 	if leaderEOA == "" {
 		log.Println("LEADER_EOA is not set in the environment variables")
 		return
@@ -122,7 +122,7 @@ func (n *RegularNode) HandleCvs(ctx context.Context, h host.Host, s network.Stre
 	}
 
 	// Get leader peer ID from environment or connection
-	leaderPeerIDStr := os.Getenv("LEADER_PEER_ID")
+	leaderPeerIDStr := appconfig.Get().LeaderPeerID
 	if leaderPeerIDStr == "" {
 		log.Printf("LEADER_PEER_ID not set, cannot send acknowledgment")
 		return
@@ -152,7 +152,7 @@ func (n *RegularNode) HandleCos(ctx context.Context, h host.Host, s network.Stre
 		return
 	}
 
-	leaderEOA := os.Getenv("LEADER_EOA")
+	leaderEOA := appconfig.Get().LeaderEOA
 	if leaderEOA == "" {
 		log.Println("LEADER_EOA is not set in the environment variables")
 		return
@@ -222,7 +222,7 @@ func (n *RegularNode) HandleCos(ctx context.Context, h host.Host, s network.Stre
 	}
 
 	// Get leader peer ID from environment or connection
-	leaderPeerIDStr := os.Getenv("LEADER_PEER_ID")
+	leaderPeerIDStr := appconfig.Get().LeaderPeerID
 	if leaderPeerIDStr == "" {
 		log.Printf("LEADER_PEER_ID not set, cannot send acknowledgment")
 		return
@@ -252,7 +252,7 @@ func (n *RegularNode) HandleSecret(ctx context.Context, h host.Host, s network.S
 		return
 	}
 
-	leaderEOA := os.Getenv("LEADER_EOA")
+	leaderEOA := appconfig.Get().LeaderEOA
 	if leaderEOA == "" {
 		log.Println("LEADER_EOA is not set in the environment variables")
 		return
@@ -318,7 +318,7 @@ func (n *RegularNode) HandleSecret(ctx context.Context, h host.Host, s network.S
 	}
 
 	// Get leader peer ID from environment or connection
-	leaderPeerIDStr := os.Getenv("LEADER_PEER_ID")
+	leaderPeerIDStr := appconfig.Get().LeaderPeerID
 	if leaderPeerIDStr == "" {
 		log.Printf("LEADER_PEER_ID not set, cannot send acknowledgment")
 		return

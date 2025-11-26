@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -18,6 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
@@ -65,12 +65,14 @@ func NewRegularNodeHandler(fallbackEthClient fallback_ethclient.IFallbackEthClie
 
 // RunRegularNode handles the behavior for a regular node
 func (rh *RegularNodeHandler) Run(ctx context.Context) {
-	port := os.Getenv("PORT")
+	envCfg := appconfig.Get()
+
+	port := envCfg.Port
 	if port == "" {
 		log.Fatal("PORT not set in environment variables.")
 	}
 
-	nodeType := os.Getenv("NODE_TYPE")
+	nodeType := envCfg.NodeType
 	if nodeType == "" {
 		log.Fatal("NODE_TYPE is not set in environment variables.")
 	}
@@ -100,22 +102,22 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 	go rh.regularNode.MonitorCommitRequest(ctx)
 
 	// Get leader's multiaddress
-	leaderIP := os.Getenv("LEADER_IP")
+	leaderIP := envCfg.LeaderIP
 	if leaderIP == "" {
 		log.Fatal("LEADER_IP is not set in environment variables.")
 	}
 
-	leaderPort := os.Getenv("LEADER_PORT")
+	leaderPort := envCfg.LeaderPort
 	if leaderPort == "" {
 		log.Fatal("LEADER_PORT is not set in environment variables.")
 	}
 
-	leaderPeerID := os.Getenv("LEADER_PEER_ID")
+	leaderPeerID := envCfg.LeaderPeerID
 	if leaderPeerID == "" {
 		log.Fatal("LEADER_PEER_ID is not set in environment variables.")
 	}
 
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := envCfg.EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}
@@ -152,7 +154,7 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 		log.Fatalf("Error connecting to leader: %v", err)
 	}
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := envCfg.ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -333,7 +335,7 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 }
 func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	// Check if mocking is enabled - skip P2P send, will submit on-chain
-	if os.Getenv("MOCK_SEND_COS_TO_LEADER") == "true" {
+	if appconfig.Get().MockSendCosToLeader {
 		log.Printf("MOCK MODE: Skipping P2P send COS to leader for round %s. COS will be submitted on-chain when RequestedToSubmitCo event is received.", commitData.Round)
 		commitData.SendCosToLeader = true
 		if err := rh.regularNode.UpdateCommit(ctx, &commitData); err != nil {
@@ -434,7 +436,7 @@ func (rh *RegularNodeHandler) sendRegistrationRequestToLeader(ctx context.Contex
 }
 
 func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -535,7 +537,7 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 		EOAAddress: eoaAddress,
 	}
 
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}
@@ -578,7 +580,7 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 	}
 
 	// Check if mocking is enabled - skip P2P send, will submit on-chain
-	if os.Getenv("MOCK_SEND_COMMIT_TO_LEADER") == "true" {
+	if appconfig.Get().MockSendCommitToLeader {
 		log.Printf("MOCK MODE: Skipping P2P send to leader for round %s. Commit will be submitted on-chain.", req.Round)
 		commitData.SendToLeader = false
 		if err := rh.regularNode.UpdateCommit(ctx, &commitData); err != nil {
@@ -610,7 +612,7 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 }
 
 func (rh *RegularNodeHandler) activateOnChain(ctx context.Context, abiFilePath string) error {
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -621,7 +623,7 @@ func (rh *RegularNodeHandler) activateOnChain(ctx context.Context, abiFilePath s
 		return fmt.Errorf("failed to load contract ABI: %v", err)
 	}
 
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in environment variables.")
 	}

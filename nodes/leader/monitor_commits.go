@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -246,7 +246,7 @@ func sortLeaderCommitsByActivatedOperators(leaderCommits []*utils.LeaderCommitDa
 func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumber...")
 
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
@@ -255,7 +255,7 @@ func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round 
 		return fmt.Errorf("failed to load leader private key: %v", err)
 	}
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -326,7 +326,7 @@ func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round 
 func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(ctx context.Context, round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumberTransactionSomeCvOnChain...")
 
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
 	}
@@ -335,7 +335,7 @@ func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(ctx context.Co
 		return fmt.Errorf("failed to load leader private key: %v", err)
 	}
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}

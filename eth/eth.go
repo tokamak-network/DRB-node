@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"os"
 	"sync"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/sirupsen/logrus"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/pkg/constants"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
@@ -105,7 +105,7 @@ func ExecuteTransaction(
 		log.Errorf("Failed to fetch network ID: %v", err)
 		return nil, nil, fmt.Errorf("failed to fetch network ID: %v", err)
 	}
-	
+
 	auth, err := bind.NewKeyedTransactorWithChainID(client.PrivateKey, chainID)
 	if err != nil {
 		log.Errorf("Failed to create authorized transactor: %v", err)
@@ -353,7 +353,7 @@ func GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethcl
 		log.Fatalf("Failed to load contract ABI: %v", err)
 	}
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
 	}
@@ -386,7 +386,7 @@ func UpdateCurrentRoundFromContract(ctx context.Context, fallbackEthClient fallb
 		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
 	}
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		return nil, fmt.Errorf("CONTRACT_ADDRESS is not set in environment variables")
 	}
@@ -417,7 +417,7 @@ func GetTrialNumFromContract(ctx context.Context, fallbackEthClient fallback_eth
 		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
 	}
 
-	contractAddressStr := os.Getenv("CONTRACT_ADDRESS")
+	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		return nil, fmt.Errorf("CONTRACT_ADDRESS is not set in environment variables")
 	}

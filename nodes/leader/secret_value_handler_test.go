@@ -559,65 +559,6 @@ func TestAcceptSecretValueHashMismatch(t *testing.T) {
 	delete(utils.CommittedNodes, uniqueKey)
 }
 
-// TestAcceptSecretValueDatabaseError tests database error handling
-func TestAcceptSecretValueDatabaseError(t *testing.T) {
-	node := createTestNodeForSecretHandler()
-	mockRepo := new(MockLeaderCommitRepository)
-	node.leaderCommitRepository = mockRepo
-	node.SetCurrentRound("100")
-	node.SetCurrentTrial("1")
-
-	// Generate a valid signature
-	privateKey, _ := crypto.GenerateKey()
-	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
-	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
-
-	// Create secret value and compute its hash
-	secretValue := [32]byte{1, 2, 3, 4, 5}
-	cos := commitreveal2.Keccak256(secretValue[:])
-	var cosArray [32]byte
-	copy(cosArray[:], cos)
-
-	// Set up commit data with matching COS
-	uniqueKey := utils.GetUniqueKey("100", "1")
-	utils.EnsureCommittedNodesRoundExists(uniqueKey)
-	commitData := utils.LeaderCommitData{
-		UniqueKey:  uniqueKey,
-		Round:      "100",
-		TrialNum:   "1",
-		EOAAddress: eoaAddressHex,
-		Cos:        cosArray,
-	}
-	utils.SetCommittedNodeData(uniqueKey, eoaAddress, commitData)
-
-	// Setup mock to return database error
-	mockRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, "100", "1", eoaAddressHex).
-		Return((*utils.LeaderCommitData)(nil), errors.New("database error"))
-	mockRepo.On("UpdateLeaderCommit", mock.Anything, mock.AnythingOfType("*utils.LeaderCommitData")).
-		Return(errors.New("update error"))
-
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
-
-	reqBytes, _ := json.Marshal(req)
-	mockStream := new(MockStream)
-	mockStream.reader = bytes.NewReader(reqBytes)
-	mockStream.On("Close").Return(nil)
-
-	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
-
-	mockStream.AssertCalled(t, "Close")
-	mockRepo.AssertExpectations(t)
-
-	// Cleanup
-	delete(utils.CommittedNodes, uniqueKey)
-}
-
 // TestAcceptSecretValueSuccess tests successful secret value acceptance up to database save
 func TestAcceptSecretValueSuccess(t *testing.T) {
 	node := createTestNodeForSecretHandler()

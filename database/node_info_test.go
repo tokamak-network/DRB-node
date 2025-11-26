@@ -46,6 +46,7 @@ func TestNodeInfoRepository_AddUpdateGet(t *testing.T) {
 	err = GetDB().WithContext(ctx).Model(&updated).Where("eoa_address = ?", "0xabc123").Select()
 	assert.NoError(t, err)
 	assert.Equal(t, "9090", updated.Port)
+	assert.Equal(t, "0xabc123", updated.EOAAddress)
 
 	// Cleanup
 	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "127.0.0.1").Delete()
@@ -111,25 +112,33 @@ func TestNodeInfoRepository_DuplicateIP(t *testing.T) {
 		IP:         "10.0.0.1",
 		Port:       "8000",
 		PeerID:     "peerA",
-		EOAAddress: "0xaaa",
+		EOAAddress: "0xAAA",
 	}
 
 	err := repo.AddAndUpdateNodeInfo(ctx, node1)
 	assert.NoError(t, err)
 
-	// Try duplicate IP
+	// Try duplicate IP with different EOA - should succeed and replace old record
 	node2 := &utils.NodeInfo{
 		IP:         "10.0.0.1",
 		Port:       "9000",
 		PeerID:     "peerB",
-		EOAAddress: "0xbbb",
+		EOAAddress: "0xBBB",
 	}
 
 	err = repo.AddAndUpdateNodeInfo(ctx, node2)
-	assert.Error(t, err, "Should reject duplicate IP")
-	if err != nil {
-		assert.Contains(t, err.Error(), "duplicate key")
-	}
+	assert.NoError(t, err, "Should succeed and replace old record with conflicting IP")
+
+	// Verify node1 was deleted and node2 was inserted
+	var result NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&result).Where("eoa_address = ?", "0xAAA").Select()
+	assert.Error(t, err, "Node1 should be deleted")
+
+	err = GetDB().WithContext(ctx).Model(&result).Where("eoa_address = ?", "0xBBB").Select()
+	assert.NoError(t, err, "Node2 should exist")
+	assert.Equal(t, "10.0.0.1", result.IP)
+	assert.Equal(t, "9000", result.Port)
+	assert.Equal(t, "0xBBB", result.EOAAddress)
 
 	// Cleanup
 	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", "10.0.0.1").Delete()
@@ -204,34 +213,23 @@ func TestNodeInfoRepository_ConcurrentInserts(t *testing.T) {
 				IP:         testIP,
 				Port:       fmt.Sprintf("800%d", idx),
 				PeerID:     fmt.Sprintf("peer%d", idx),
-				EOAAddress: fmt.Sprintf("0xabc%d", idx),
+				EOAAddress: fmt.Sprintf("0xABC%d", idx),
 			}
 			err := repo.AddAndUpdateNodeInfo(ctx, node)
 			doneChan <- err
 		}(i)
 	}
 
-	// Collect results
-	successCount := 0
-	errorCount := 0
+	// Collect results - all should eventually succeed due to delete-then-insert behavior
 	for i := 0; i < numGoroutines; i++ {
-		err := <-doneChan
-		if err == nil {
-			successCount++
-		} else {
-			errorCount++
-		}
+		<-doneChan
 	}
 
-	// Only 1 should succeed due to UNIQUE constraint
-	assert.Equal(t, 1, successCount, "Only one should succeed")
-	assert.Equal(t, numGoroutines-1, errorCount, "Others should fail")
-
-	// Verify only 1 row
+	// Verify only 1 row remains (the last one to complete wins)
 	var nodes []NodeInfoScheme
 	count, err := GetDB().WithContext(ctx).Model(&nodes).Where("ip = ?", testIP).Count()
 	assert.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Equal(t, 1, count, "Should have exactly 1 row due to IP uniqueness and delete-insert behavior")
 
 	// Cleanup
 	GetDB().Model(&NodeInfoScheme{}).Where("ip = ?", testIP).Delete(ctx)
@@ -291,7 +289,7 @@ func TestAddAndUpdateNodeInfo_InsertNewNode(t *testing.T) {
 	assert.Equal(t, node.IP, inserted.IP)
 	assert.Equal(t, node.Port, inserted.Port)
 	assert.Equal(t, node.PeerID, inserted.PeerID)
-	assert.Equal(t, node.EOAAddress, inserted.EOAAddress)
+	assert.Equal(t, testEOA, inserted.EOAAddress)
 
 	// Cleanup
 	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
@@ -337,7 +335,7 @@ func TestAddAndUpdateNodeInfo_UpdateExistingNode(t *testing.T) {
 	assert.Equal(t, updatedNode.IP, result.IP, "IP should be updated")
 	assert.Equal(t, updatedNode.Port, result.Port, "Port should be updated")
 	assert.Equal(t, updatedNode.PeerID, result.PeerID, "PeerID should be updated")
-	assert.Equal(t, updatedNode.EOAAddress, result.EOAAddress, "EOA should remain same")
+	assert.Equal(t, testEOA, result.EOAAddress)
 
 	// Cleanup
 	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
@@ -405,6 +403,7 @@ func TestAddAndUpdateNodeInfo_MultipleUpdatesSameEOA(t *testing.T) {
 	assert.Equal(t, node3.IP, result.IP)
 	assert.Equal(t, node3.Port, result.Port)
 	assert.Equal(t, node3.PeerID, result.PeerID)
+	assert.Equal(t, testEOA, result.EOAAddress)
 
 	// Verify only one row exists
 	count, err := GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
@@ -455,6 +454,7 @@ func TestAddAndUpdateNodeInfo_UpdatePartialFields(t *testing.T) {
 		Select()
 	assert.NoError(t, err)
 	assert.Equal(t, updatedNode.IP, result.IP)
+	assert.Equal(t, testEOA, result.EOAAddress)
 
 	// Cleanup
 	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
@@ -556,7 +556,7 @@ func TestAddAndUpdateNodeInfo_UpdateAfterDelete(t *testing.T) {
 	err = repo.AddAndUpdateNodeInfo(ctx, node2)
 	assert.NoError(t, err, "Should successfully insert after delete")
 
-	// Verify new insertion
+	// Verify new insertion (EOA should be lowercase)
 	var result NodeInfoScheme
 	err = GetDB().WithContext(ctx).Model(&result).
 		Where("eoa_address = ?", testEOA).
@@ -564,6 +564,7 @@ func TestAddAndUpdateNodeInfo_UpdateAfterDelete(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, node2.IP, result.IP)
 	assert.Equal(t, node2.Port, result.Port)
+	assert.Equal(t, testEOA, result.EOAAddress)
 
 	// Cleanup
 	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()

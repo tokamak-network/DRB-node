@@ -3,20 +3,20 @@ package eth
 import (
 	"context"
 	"math/big"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/logger"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 )
 
 func Test_SendWithRetry(t *testing.T) {
 	logger.InitLogger()
-	fallbackEthClient, err := fallback_ethclient.NewFallbackRPCClient(strings.Split(os.Getenv("RPC_URLS"), ","))
+	envCfg := appconfig.Get()
+	fallbackEthClient, err := fallback_ethclient.NewFallbackRPCClient(envCfg.RPCURLs)
 	if err != nil {
 		t.Fatalf("Failed to create fallback eth client: %v", err)
 	}
@@ -24,7 +24,7 @@ func Test_SendWithRetry(t *testing.T) {
 	chainID, err := fallbackEthClient.ChainID(context.Background())
 	require.NoError(t, err)
 
-	privateKey, err := crypto.HexToECDSA(os.Getenv("PRIVATE_KEY"))
+	privateKey, err := crypto.HexToECDSA(envCfg.PrivateKey)
 	require.NoError(t, err)
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)

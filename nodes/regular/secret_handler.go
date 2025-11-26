@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -97,7 +97,7 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 	}
 
 	// Fetch the leader's EOA address from the environment variables
-	leaderEOA := os.Getenv("LEADER_EOA")
+	leaderEOA := appconfig.Get().LeaderEOA
 	if leaderEOA == "" {
 		log.Println("LEADER_EOA is not set in the environment variables")
 		return
@@ -132,7 +132,7 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 	}
 
 	// Send the secret value back to the leader
-	leaderPeerIDStr := os.Getenv("LEADER_PEER_ID")
+	leaderPeerIDStr := appconfig.Get().LeaderPeerID
 	if leaderPeerIDStr == "" {
 		log.Fatal("LEADER_PEER_ID is not set in environment variables.")
 	}
@@ -148,7 +148,7 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 // SendSecretValue sends the secret value for a round to the leader node
 func (n *RegularNode) SendSecretValue(ctx context.Context, h host.Host, leaderPeerID peer.ID, roundNum string, trialNum string) {
 	// Check if mocking is enabled - skip P2P send, will submit on-chain
-	if os.Getenv("MOCK_SEND_SECRET_TO_LEADER") == "true" {
+	if appconfig.Get().MockSendSecretToLeader {
 		log.Printf("MOCK MODE: Skipping P2P send secret to leader for round %s. Secret will be submitted on-chain when RequestedToSubmitSFromIndexK event is received.", roundNum)
 		return
 	}
@@ -161,7 +161,7 @@ func (n *RegularNode) SendSecretValue(ctx context.Context, h host.Host, leaderPe
 	}
 
 	// Fetch the regular node's private key
-	privateKeyHex := os.Getenv("EOA_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
 	}

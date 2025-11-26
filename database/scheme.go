@@ -1,11 +1,10 @@
 package database
 
 type NodeInfoScheme struct {
-	ID         int    `pg:"id,pk"`
 	IP         string `pg:"ip,notnull"`
 	Port       string `pg:"port,notnull"`
 	PeerID     string `pg:"peer_id,notnull"`
-	EOAAddress string `pg:"eoa_address,notnull"`
+	EOAAddress string `pg:"eoa_address,pk,notnull"`
 }
 
 type LeaderCommitScheme struct {

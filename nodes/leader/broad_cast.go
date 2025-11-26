@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -15,12 +14,13 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // getLeaderPrivateKey retrieves the leader's private key from environment
 func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
-	privateKeyHex := os.Getenv("LEADER_PRIVATE_KEY")
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
 		return nil, "", fmt.Errorf("LEADER_PRIVATE_KEY is not set in environment variables")
 	}
@@ -33,41 +33,6 @@ func getLeaderPrivateKey() (*ecdsa.PrivateKey, string, error) {
 	leaderEOA := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 	return privateKey, leaderEOA, nil
 }
-
-// ReliableBroadCastS broadcasts secret values with acknowledgment tracking
-// func ReliableBroadCastS(h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte) {
-// 	messageID := generateMessageID(roundNum, trialNum, eoaAddress, "secret")
-
-// 	tracker := &utils.BroadcastTracker{
-// 		Round:        roundNum,
-// 		TrialNum:     trialNum,
-// 		EOAAddress:   eoaAddress,
-// 		Type:         "secret",
-// 		MessageID:    messageID,
-// 		Data:         secret,
-// 		Attempts:     0,
-// 		MaxAttempts:  3,
-// 		Acknowledged: make(map[string]bool),
-// 		LastSent:     time.Now().Unix(),
-// 		Timeout:      3, // 3 seconds timeout
-// 	}
-
-// 	for _, op := range eth.ActivatedOperators {
-// 		tracker.Acknowledged[op.Hex()] = false
-// 	}
-
-// 	if err := database.AddBroadcastTracker(tracker); err != nil {
-// 		log.Printf("Failed to save broadcast tracker: %v", err)
-// 		return
-// 	}
-
-// 	broadcastMutex.Lock()
-// 	activeBroadcasts[messageID] = tracker
-// 	broadcastMutex.Unlock()
-
-// 	// Start the broadcast process
-// 	go performReliableBroadcast(h, tracker, "secret")
-// }
 
 // ReliableBroadCastSSync broadcasts secret values with acknowledgment tracking and waits for completion
 func (n *LeaderNode) ReliableBroadCastSSync(ctx context.Context, h host.Host, roundNum string, trialNum string, eoaAddress string, secret [32]byte, activatedOps []common.Address) bool {
@@ -372,8 +337,8 @@ func (n *LeaderNode) performReliableBroadcastSync(ctx context.Context, h host.Ho
 				log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
 				continue
 			}
-            defer stream.Close()
-			
+			defer stream.Close()
+
 			if err := json.NewEncoder(stream).Encode(message); err != nil {
 				log.Printf("Failed to send %s to regular node %s: %v", broadcastType, op.Hex(), err)
 			} else {
