@@ -322,8 +322,9 @@ func (n *LeaderNode) StartFailToSubmitSMonitoring(ctx context.Context, round str
 		n.SetLastSubmitSTimestamp(requestTimestamp)
 	}
 
-	onChainSubmissionPeriodPerOperator := big.NewInt(40)
-	n.startMonitoringWithPeriod(ctx, round, trialNum, onChainSubmissionPeriodPerOperator)
+	// Get timing parameters from config
+	periods := appconfig.GetContractPeriods()
+	n.startMonitoringWithPeriod(ctx, round, trialNum, periods.OnChainSubmissionPeriodPerOperator)
 }
 
 // startMonitoringWithPeriod starts the actual monitoring with the given period
@@ -376,9 +377,9 @@ func (n *LeaderNode) UpdateLastSubmitSTimestamp(ctx context.Context, newTimestam
 		log.Printf("Restarting failToSubmitS monitoring with updated timestamp")
 		n.StopFailToSubmitSMonitoring(ctx, round, trialNum)
 
-		// Use hardcoded period for restart - this should ideally get the period from contract
-		onChainSubmissionPeriodPerOperator := big.NewInt(30) // 30 seconds
-		n.startMonitoringWithPeriod(ctx, round, trialNum, onChainSubmissionPeriodPerOperator)
+		// Get timing parameters from config
+		periods := appconfig.GetContractPeriods()
+		n.startMonitoringWithPeriod(ctx, round, trialNum, periods.OnChainSubmissionPeriodPerOperator)
 	}
 }
 

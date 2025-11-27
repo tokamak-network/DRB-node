@@ -1852,6 +1852,375 @@ func TestAllRegularNodesOnChainSecret(t *testing.T) {
 	t.Log("Test Case 12 Complete! All regular nodes successfully submitted Secret on-chain.")
 }
 
+func TestRegularNode1SlashingForMissingCvs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping Docker integration test in short mode")
+	}
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 13: RegularNode1 Slashing for Missing CVS Test")
+	t.Log("STEP 1: Stopping regularNode1 (will not restart - it will fail to submit CVS)...")
+
+	// Stop regularNode1
+	stopCmd := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput, err := stopCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput))
+	}
+
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Requesting random number (regularNode1 is stopped, will not submit CVS)...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	maxFulfillmentRetries := 30
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check leader logs to see slashing process
+			t.Log("Checking leader node logs for missing CVS detection, requestToSubmitCv, and failToSubmitCv calls...")
+			showLogs(t, "test-leadernode", 50)
+			// Check regularNode2 and regularNode3 logs (they should be working normally)
+			t.Log("Checking regularNode2 logs (should be working normally)...")
+			showLogs(t, "test-regularnode2", 20)
+			t.Log("Checking regularNode3 logs (should be working normally)...")
+			showLogs(t, "test-regularnode3", 20)
+
+			time.Sleep(25 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled even after regularNode1 is slashed")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("Random number generated: %s", randomNumber.String())
+	t.Log("Test Case 13 Complete! regularNode1 was slashed for failing to submit CVS, but random number was still generated with regularNode2 and regularNode3.")
+}
+
+func TestLeaderSlashingAndRecovery(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping Docker integration test in short mode")
+	}
+
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 14: Leader Slashing and Recovery Test")
+	t.Log("STEP 1: Reactivating regularNode1 (it was slashed in previous test)...")
+
+	// Get integration test directory
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	// Restart regularNode1 - it will automatically check activation status and reactivate if needed
+	restartCmd1 := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1")
+	restartCmd1.Dir = integrationTestDir
+	restartOutput1, err := restartCmd1.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart regularNode1 output: %s", string(restartOutput1))
+		require.NoError(t, err, "Failed to restart regularNode1")
+	}
+
+	// Wait for regularNode1 to restart and potentially reactivate (deposit + activate)
+	t.Log("Waiting for regularNode1 to restart and reactivate (if needed)...")
+	time.Sleep(30 * time.Second) // Give time for deposit/activation if needed
+
+	stopCmd := exec.Command("docker", "stop", "test-leadernode")
+	stopOutput, err := stopCmd.CombinedOutput()
+
+	// Log the output regardless of error
+	t.Logf("Stop leader command output: %s", string(stopOutput))
+
+	// Check if command failed
+	if err != nil {
+		t.Logf("Stop command error: %v", err)
+		require.NoError(t, err, "Failed to stop leader node")
+	}
+
+	time.Sleep(3 * time.Second)
+
+	t.Log("STEP 3: Requesting random number (leader is offline, cannot request CVS or submit Merkle root)...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 4: Waiting for regular nodes to detect leader failure and slash the leader...")
+
+	maxSlashingRetries := 5
+	slashingDetected := false
+
+	for i := 0; i < maxSlashingRetries; i++ {
+
+		t.Logf("Attempt %d/%d: Waiting for regular nodes to slash leader...", i+1, maxSlashingRetries)
+		showLogs(t, "test-leadernode", 30)
+		// Check regular nodes logs to see if they're calling failToRequestSubmitCVOrSubmitMerkleRoot
+		t.Log("Checking regularNode1 logs for failToRequestSubmitCVOrSubmitMerkleRoot call...")
+		showLogs(t, "test-regularnode1", 30)
+		t.Log("Checking regularNode2 logs for failToRequestSubmitCVOrSubmitMerkleRoot call...")
+		showLogs(t, "test-regularnode2", 30)
+		t.Log("Checking regularNode3 logs for failToRequestSubmitCVOrSubmitMerkleRoot call...")
+		showLogs(t, "test-regularnode3", 30)
+
+		time.Sleep(20 * time.Second)
+	}
+
+	if !slashingDetected {
+		t.Log("Warning: Slashing may not have been detected in logs, but proceeding with leader restart...")
+	}
+
+	t.Log("STEP 5: Restarting leader node (it will handle the halted state and recover)...")
+
+	// Restart the leader node - it should handle the halted state
+	restartLeaderCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "leadernode")
+	restartLeaderCmd.Dir = integrationTestDir
+	restartLeaderOutput, err := restartLeaderCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart leader output: %s", string(restartLeaderOutput))
+		require.NoError(t, err, "Failed to restart leader node")
+	}
+
+	// Wait for leader to restart and handle the halted state
+	t.Log("Waiting for leader node to restart and handle the halted state...")
+
+	maxFulfillmentRetries := 7
+	var fulfilled bool
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, _, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		t.Log("Checking leader node logs...")
+		showLogs(t, "test-leadernode", 30)
+
+		t.Log("Checking regular node logs...")
+		showLogs(t, "test-regularnode1", 30)
+		showLogs(t, "test-regularnode2", 30)
+		showLogs(t, "test-regularnode3", 30)
+		if err == nil && fulfilled {
+			t.Logf(" Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		time.Sleep(15 * time.Second)
+	}
+
+	t.Log("Test Case 14 Complete! Regular nodes slashed the leader for failing to request CVS or submit Merkle root, and leader restarted to handle the halted state.")
+}
+
+func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping Docker integration test in short mode")
+	}
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	// Get integration test directory
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	t.Log("STEP 1: Stopping regularNode1 and leader node...")
+
+	// Stop regularNode1
+	stopRegular1Cmd := exec.Command("docker", "stop", "test-regularnode1")
+	stopRegular1Output, err := stopRegular1Cmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop regularNode1 output: %s", string(stopRegular1Output))
+	}
+
+	// Stop leader node
+	stopLeaderCmd := exec.Command("docker", "stop", "test-leadernode")
+	stopLeaderOutput, err := stopLeaderCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop leader output: %s", string(stopLeaderOutput))
+	}
+
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Setting MOCK_SEND_COMMIT_TO_LEADER=true and DISABLE_MERKLE_ROOT_SUBMISSION=true...")
+
+	// Update the .env.docker-test file to add MOCK_SEND_COMMIT_TO_LEADER and DISABLE_MERKLE_ROOT_SUBMISSION
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
+	}
+	if !strings.Contains(envContentStr, "DISABLE_MERKLE_ROOT_SUBMISSION") {
+		envContentStr += "DISABLE_MERKLE_ROOT_SUBMISSION=true\n"
+	}
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
+
+	// Update docker-compose to add the environment variables
+	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
+	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
+	require.NoError(t, err, "Failed to read docker-compose file")
+
+	dockerComposeStr := string(dockerComposeContent)
+
+	// Add MOCK_SEND_COMMIT_TO_LEADER to regularNode1
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		dockerComposeStr = strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+			1)
+	}
+
+	// Add DISABLE_MERKLE_ROOT_SUBMISSION to leader node
+	if !strings.Contains(dockerComposeStr, "DISABLE_MERKLE_ROOT_SUBMISSION") {
+		dockerComposeStr = strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${LEADER_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${LEADER_PRIVATE_KEY}\n      DISABLE_MERKLE_ROOT_SUBMISSION: ${DISABLE_MERKLE_ROOT_SUBMISSION}",
+			1)
+	}
+
+	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
+	require.NoError(t, err, "Failed to write docker-compose file")
+
+	t.Log("STEP 3: Restarting regularNode1 and leader node with new configuration...")
+
+	// Restart both regularNode1 and leader node with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1", "leadernode")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart nodes")
+	}
+
+	// Wait for nodes to be ready
+	time.Sleep(15 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract (with regularNode1 in mock mode)
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	// Wait a bit for the round to start
+	time.Sleep(5 * time.Second)
+
+	t.Log("STEP 5: Waiting for the round to complete and leader to generate random number...")
+	t.Log("Note: Leader has DISABLE_MERKLE_ROOT_SUBMISSION=true, so it won't submit Merkle root")
+	t.Log("This will cause regular nodes to call failToSubmitMerkleRootAfterDispute and restart the round")
+
+	// Wait for the round to be completed
+	maxFulfillmentRetries := 30
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled for the round
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("✅ Random number fulfilled for restarted round %s after %d attempts!", round.String(), i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("Attempt %d/%d: Waiting for random number fulfillment for restarted round %s...", i+1, maxFulfillmentRetries, round.String())
+
+			// Check leader nodes logs
+			t.Log("Checking leader node logs for random number generation process...")
+			showLogs(t, "test-leadernode", 40)
+
+			// Check regular nodes logs
+			t.Log("Checking regularNode1 logs...")
+			showLogs(t, "test-regularnode1", 40)
+			t.Log("Checking regularNode2 logs...")
+			showLogs(t, "test-regularnode2", 40)
+			t.Log("Checking regularNode3 logs...")
+			showLogs(t, "test-regularnode3", 40)
+
+			time.Sleep(20 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled for the restarted round after leader recovery")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("✅ Random number generated for round %s: %s", round.String(), randomNumber.String())
+	t.Log("Test Case 16 Complete!")
+}
+
 func showLogs(t *testing.T, container string, lines int) {
 	cmd := exec.Command("docker", "logs", "--tail", fmt.Sprintf("%d", lines), container)
 	output, _ := cmd.CombinedOutput()

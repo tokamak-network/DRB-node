@@ -260,6 +260,11 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 			}
 			if reconnect {
 				log.Printf("Reconnection triggered, breaking out of event loop to restart subscription...")
+				// Clean up old subscription before reconnecting
+				if sub != nil {
+					log.Printf("Unsubscribing from old subscription to prevent connection leak...")
+					sub.Unsubscribe()
+				}
 				break // break inner for loop to reconnect
 			}
 		}
@@ -274,7 +279,7 @@ func (n *RegularNode) processCvSubmitted(round *big.Int, trialNum *big.Int, inde
 
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
-
+	
 	// Use the new atomic setter function
 	indexStr := index.String()
 	n.SetSubmittedCvIndicesValue(uniqueKey, indexStr, true)
@@ -780,13 +785,12 @@ func (n *RegularNode) StartLeaderMonitoring(ctx context.Context, startTime *big.
 
 	n.SetLeaderMonitoringActive(true)
 
-	// Get timing parameters from contract
-	offChainSubmissionPeriod := big.NewInt(80)
-	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
+	// Get timing parameters from config
+	periods := appconfig.GetContractPeriods()
 
 	// Calculate deadline: startTime + offChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
-	deadline := new(big.Int).Add(startTime, offChainSubmissionPeriod)
-	deadline.Add(deadline, requestOrSubmitOrFailDecisionPeriod)
+	deadline := new(big.Int).Add(startTime, periods.OffChainSubmissionPeriod)
+	deadline.Add(deadline, periods.RequestOrSubmitOrFailDecisionPeriod)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -891,13 +895,12 @@ func (n *RegularNode) StartMerkleRootMonitoring(ctx context.Context, round strin
 		return
 	}
 
-	// Get timing parameters from contract
-	onChainSubmissionPeriod := big.NewInt(120)            // onChainSubmissionPeriod = 120
-	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60) // requestOrSubmitOrFailDecisionPeriod = 60
+	// Get timing parameters from config
+	periods := appconfig.GetContractPeriods()
 
 	// Calculate deadline: requestedToSubmitCvTime + onChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
-	deadline := new(big.Int).Add(requestedToSubmitCvTime, onChainSubmissionPeriod)
-	deadline.Add(deadline, requestOrSubmitOrFailDecisionPeriod)
+	deadline := new(big.Int).Add(requestedToSubmitCvTime, periods.OnChainSubmissionPeriod)
+	deadline.Add(deadline, periods.RequestOrSubmitOrFailDecisionPeriod)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -1007,16 +1010,15 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 		return
 	}
 
-	offChainSubmissionPeriod := big.NewInt(80)
-	offChainSubmissionPeriodPerOperator := big.NewInt(20)
+	// Get timing parameters from config
+	periods := appconfig.GetContractPeriods()
 	activatedOperatorsLength := new(big.Int).SetInt64(eth.Service.GetActivatedOperatorsLength())
-	requestOrSubmitOrFailDecisionPeriod := big.NewInt(60)
 
 	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod
-	deadline := new(big.Int).Add(n.GetMerkleRootSubmittedTOrRequestedCvTime(), offChainSubmissionPeriod)
-	operatorDelay := new(big.Int).Mul(offChainSubmissionPeriodPerOperator, activatedOperatorsLength)
+	deadline := new(big.Int).Add(n.GetMerkleRootSubmittedTOrRequestedCvTime(), periods.OffChainSubmissionPeriod)
+	operatorDelay := new(big.Int).Mul(periods.OffChainSubmissionPeriodPerOperator, activatedOperatorsLength)
 	deadline.Add(deadline, operatorDelay)
-	deadline.Add(deadline, requestOrSubmitOrFailDecisionPeriod)
+	deadline.Add(deadline, periods.RequestOrSubmitOrFailDecisionPeriod)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -1025,7 +1027,7 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 
 	log.Printf("Starting request to submit S or generate random number monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 	log.Printf("Parameters - merkleRootSubmittedTime: %v, offChainSubmissionPeriod: %v, offChainSubmissionPeriodPerOperator: %v, activatedOperatorsLength: %v, requestOrSubmitOrFailDecisionPeriod: %v",
-		n.GetMerkleRootSubmittedTOrRequestedCvTime(), offChainSubmissionPeriod, offChainSubmissionPeriodPerOperator, activatedOperatorsLength, requestOrSubmitOrFailDecisionPeriod)
+		n.GetMerkleRootSubmittedTOrRequestedCvTime(), periods.OffChainSubmissionPeriod, periods.OffChainSubmissionPeriodPerOperator, activatedOperatorsLength, periods.RequestOrSubmitOrFailDecisionPeriod)
 
 	// Set timer to call the function when deadline is reached
 	n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer = time.AfterFunc(duration, func() {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math/big"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -29,9 +30,10 @@ type EnvConfig struct {
 	LeaderEOA        string
 
 	// Flags for test/mocked flows
-	MockSendSecretToLeader bool
-	MockSendCosToLeader    bool
-	MockSendCommitToLeader bool
+	MockSendSecretToLeader      bool
+	MockSendCosToLeader         bool
+	MockSendCommitToLeader      bool
+	DisableMerkleRootSubmission bool
 
 	// External RPC endpoints and credentials
 	RPCURLs    []string
@@ -50,6 +52,26 @@ type DatabaseConfig struct {
 	PostgresPassword string
 	PostgresName     string
 	PostgresSSLMode  string
+}
+
+// ContractPeriods holds all time period configuration parameters for contract operations
+type ContractPeriods struct {
+	OffChainSubmissionPeriod            *big.Int // Time window for off-chain submissions
+	RequestOrSubmitOrFailDecisionPeriod *big.Int // Decision period for request handling
+	OnChainSubmissionPeriod             *big.Int // Time window for on-chain submissions
+	OffChainSubmissionPeriodPerOperator *big.Int // Off-chain submission time per operator
+	OnChainSubmissionPeriodPerOperator  *big.Int // On-chain submission time per operator
+}
+
+// GetContractPeriods returns the contract period configuration
+func GetContractPeriods() *ContractPeriods {
+	return &ContractPeriods{
+		OffChainSubmissionPeriod:            big.NewInt(40),
+		RequestOrSubmitOrFailDecisionPeriod: big.NewInt(30),
+		OnChainSubmissionPeriod:             big.NewInt(60),
+		OffChainSubmissionPeriodPerOperator: big.NewInt(20),
+		OnChainSubmissionPeriodPerOperator:  big.NewInt(30),
+	}
 }
 
 var (
@@ -107,10 +129,11 @@ func loadEnv() *EnvConfig {
 		EOAPrivateKey:          os.Getenv("EOA_PRIVATE_KEY"),
 		LeaderPrivateKey:       os.Getenv("LEADER_PRIVATE_KEY"),
 		LeaderEOA:              os.Getenv("LEADER_EOA"),
-		MockSendSecretToLeader: parseBool(os.Getenv("MOCK_SEND_SECRET_TO_LEADER")),
-		MockSendCosToLeader:    parseBool(os.Getenv("MOCK_SEND_COS_TO_LEADER")),
-		MockSendCommitToLeader: parseBool(os.Getenv("MOCK_SEND_COMMIT_TO_LEADER")),
-		RPCURLs:                splitAndTrim(os.Getenv("RPC_URLS")),
+		MockSendSecretToLeader:      parseBool(os.Getenv("MOCK_SEND_SECRET_TO_LEADER")),
+		MockSendCosToLeader:         parseBool(os.Getenv("MOCK_SEND_COS_TO_LEADER")),
+		MockSendCommitToLeader:      parseBool(os.Getenv("MOCK_SEND_COMMIT_TO_LEADER")),
+		DisableMerkleRootSubmission: parseBool(os.Getenv("DISABLE_MERKLE_ROOT_SUBMISSION")),
+		RPCURLs:                     splitAndTrim(os.Getenv("RPC_URLS")),
 		EthRPCURLs:             splitAndTrim(os.Getenv("ETH_RPC_URLS")),
 		PrivateKey:             os.Getenv("PRIVATE_KEY"),
 		Database: DatabaseConfig{

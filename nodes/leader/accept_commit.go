@@ -285,6 +285,11 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 			}
 			if reconnect {
 				log.Printf("Reconnection triggered, breaking out of event loop to restart subscription...")
+				// Clean up old subscription before reconnecting
+				if sub != nil {
+					log.Printf("Unsubscribing from old subscription to prevent connection leak...")
+					sub.Unsubscribe()
+				}
 				break // break inner for loop to reconnect
 			}
 		}
@@ -884,11 +889,11 @@ func (n *LeaderNode) startFailToSubmitCvMonitoring(ctx context.Context, round st
 
 	n.SetRequestedToSubmitCvMonitoringActive(true)
 
-	// Get s_onChainSubmissionPeriod from contract (60 seconds as specified)
-	onChainSubmissionPeriod := big.NewInt(60)
+	// Get timing parameters from config
+	periods := appconfig.GetContractPeriods()
 
 	// Calculate deadline: requestedToSubmitCvTimestamp + s_onChainSubmissionPeriod
-	deadline := new(big.Int).Add(requestedToSubmitCvTimestamp, onChainSubmissionPeriod)
+	deadline := new(big.Int).Add(requestedToSubmitCvTimestamp, periods.OnChainSubmissionPeriod)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -1048,12 +1053,12 @@ func (n *LeaderNode) startRequestToSubmitCvMonitoring(ctx context.Context, round
 
 	n.SetRequestToSubmitCvMonitoringActive(true)
 
-	// Calculate deadline: startTime + s_offChainSubmissionPeriod + s_requestOrSubmitOrFailDecisionPeriod
-	s_offChainSubmissionPeriod := big.NewInt(40)
-	s_requestOrSubmitOrFailDecisionPeriod := big.NewInt(30)
+	// Get timing parameters from config
+	periods := appconfig.GetContractPeriods()
 
-	// deadline = startTime + 40 + 30 = startTime + 70 seconds
-	totalPeriod := new(big.Int).Add(s_offChainSubmissionPeriod, s_requestOrSubmitOrFailDecisionPeriod)
+	// Calculate deadline: startTime + s_offChainSubmissionPeriod + s_requestOrSubmitOrFailDecisionPeriod
+	totalPeriod := new(big.Int).Add(periods.OffChainSubmissionPeriod, periods.RequestOrSubmitOrFailDecisionPeriod)
+	totalPeriod = new(big.Int).Sub(totalPeriod, big.NewInt(20)) // 20 seconds can vary according to block chain network
 	deadline := new(big.Int).Add(startTime, totalPeriod)
 
 	// Convert deadline to time.Duration
@@ -1063,7 +1068,7 @@ func (n *LeaderNode) startRequestToSubmitCvMonitoring(ctx context.Context, round
 
 	log.Printf("Starting requestToSubmitCv monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 	log.Printf("Parameters - StartTime: %v, offChainPeriod: %v, requestOrSubmitPeriod: %v",
-		startTime, s_offChainSubmissionPeriod, s_requestOrSubmitOrFailDecisionPeriod)
+		startTime, periods.OffChainSubmissionPeriod, periods.RequestOrSubmitOrFailDecisionPeriod)
 
 	// Set timer to call the function when deadline is reached
 	n.requestToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
@@ -1196,9 +1201,13 @@ func (n *LeaderNode) getMissingCvsOperators(uniqueKey string) []string {
 
 	return missingOperators
 }
-
 // GenerateMerkleRoot generates and submits merkle root for the given round and trial
 func (n *LeaderNode) GenerateMerkleRoot(ctx context.Context, roundNum string, trialNum string) {
+	if appconfig.Get().DisableMerkleRootSubmission {
+		log.Println("Merkle root submission is disabled via configuration. Skipping GenerateMerkleRoot once.")
+		appconfig.Get().DisableMerkleRootSubmission = false
+		return
+	}
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping GenerateMerkleRoot.")
 		return
@@ -1366,12 +1375,12 @@ func (n *LeaderNode) startRequestToSubmitCoMonitoring(ctx context.Context, round
 	n.SetRequestToSubmitCoTimerMonitoringActive(true)
 	log.Printf("Started requestToSubmitCo monitoring for round %s with trail %s", roundNum, trialNum)
 
-	// Calculate the deadline: merkleRootSubmittedTime + s_offChainSubmissionPeriod(40) + s_requestOrSubmitOrFailDecisionPeriod(30)
-	s_offChainSubmissionPeriod := big.NewInt(40)
-	s_requestOrSubmitOrFailDecisionPeriod := big.NewInt(30)
+	// Get timing parameters from config
+	periods := appconfig.GetContractPeriods()
 
-	deadline := new(big.Int).Add(merkleRootSubmittedTime, s_offChainSubmissionPeriod)
-	deadline.Add(deadline, s_requestOrSubmitOrFailDecisionPeriod)
+	// Calculate the deadline: merkleRootSubmittedTime + s_offChainSubmissionPeriod + s_requestOrSubmitOrFailDecisionPeriod
+	deadline := new(big.Int).Add(merkleRootSubmittedTime, periods.OffChainSubmissionPeriod)
+	deadline.Add(deadline, periods.RequestOrSubmitOrFailDecisionPeriod)
 
 	currentTime := big.NewInt(time.Now().Unix())
 
