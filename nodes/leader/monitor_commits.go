@@ -244,6 +244,11 @@ func sortLeaderCommitsByActivatedOperators(leaderCommits []*utils.LeaderCommitDa
 
 // generateRandomNumberTransaction sends a transaction to generate a random number for a round.
 func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
+	if appconfig.Get().MockGenerateRandomNumber {
+		appconfig.Get().MockGenerateRandomNumber = false
+		log.Println("Random number generation is mocked via configuration. Skipping on-chain submission.")
+		return nil
+	}
 	log.Printf("Preparing to execute generateRandomNumber...")
 
 	privateKeyHex := appconfig.Get().LeaderPrivateKey
