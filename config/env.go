@@ -34,6 +34,8 @@ type EnvConfig struct {
 	MockSendCosToLeader         bool
 	MockSendCommitToLeader      bool
 	DisableMerkleRootSubmission bool
+	DisableCosSubmission        bool
+	DisableSecretSubmission     bool
 
 	// External RPC endpoints and credentials
 	RPCURLs    []string
@@ -119,23 +121,25 @@ func loadEnv() *EnvConfig {
 	_ = godotenv.Load()
 
 	return &EnvConfig{
-		NodeType:               os.Getenv("NODE_TYPE"),
-		Port:                   os.Getenv("PORT"),
-		LeaderIP:               os.Getenv("LEADER_IP"),
-		LeaderPort:             os.Getenv("LEADER_PORT"),
-		LeaderPeerID:           os.Getenv("LEADER_PEER_ID"),
-		ContractAddress:        os.Getenv("CONTRACT_ADDRESS"),
-		ChainID:                os.Getenv("CHAIN_ID"),
-		EOAPrivateKey:          os.Getenv("EOA_PRIVATE_KEY"),
-		LeaderPrivateKey:       os.Getenv("LEADER_PRIVATE_KEY"),
-		LeaderEOA:              os.Getenv("LEADER_EOA"),
+		NodeType:                    os.Getenv("NODE_TYPE"),
+		Port:                        os.Getenv("PORT"),
+		LeaderIP:                    os.Getenv("LEADER_IP"),
+		LeaderPort:                  os.Getenv("LEADER_PORT"),
+		LeaderPeerID:                os.Getenv("LEADER_PEER_ID"),
+		ContractAddress:             os.Getenv("CONTRACT_ADDRESS"),
+		ChainID:                     os.Getenv("CHAIN_ID"),
+		EOAPrivateKey:               os.Getenv("EOA_PRIVATE_KEY"),
+		LeaderPrivateKey:            os.Getenv("LEADER_PRIVATE_KEY"),
+		LeaderEOA:                   os.Getenv("LEADER_EOA"),
 		MockSendSecretToLeader:      parseBool(os.Getenv("MOCK_SEND_SECRET_TO_LEADER")),
 		MockSendCosToLeader:         parseBool(os.Getenv("MOCK_SEND_COS_TO_LEADER")),
 		MockSendCommitToLeader:      parseBool(os.Getenv("MOCK_SEND_COMMIT_TO_LEADER")),
 		DisableMerkleRootSubmission: parseBool(os.Getenv("DISABLE_MERKLE_ROOT_SUBMISSION")),
+		DisableCosSubmission:        parseBool(os.Getenv("DISABLE_COS_SUBMISSION")),
+		DisableSecretSubmission:     parseBool(os.Getenv("DISABLE_SECRET_SUBMISSION")),
 		RPCURLs:                     splitAndTrim(os.Getenv("RPC_URLS")),
-		EthRPCURLs:             splitAndTrim(os.Getenv("ETH_RPC_URLS")),
-		PrivateKey:             os.Getenv("PRIVATE_KEY"),
+		EthRPCURLs:                  splitAndTrim(os.Getenv("ETH_RPC_URLS")),
+		PrivateKey:                  os.Getenv("PRIVATE_KEY"),
 		Database: DatabaseConfig{
 			PostgresHost:     getEnvOrDefault("POSTGRES_HOST", "localhost"),
 			PostgresPort:     getEnvAsInt("POSTGRES_PORT", 5432),

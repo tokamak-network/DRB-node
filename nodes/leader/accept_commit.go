@@ -1201,6 +1201,7 @@ func (n *LeaderNode) getMissingCvsOperators(uniqueKey string) []string {
 
 	return missingOperators
 }
+
 // GenerateMerkleRoot generates and submits merkle root for the given round and trial
 func (n *LeaderNode) GenerateMerkleRoot(ctx context.Context, roundNum string, trialNum string) {
 	if appconfig.Get().DisableMerkleRootSubmission {

@@ -336,7 +336,7 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, leaderID peer.ID, commitData utils.CommitData, eoaAddress string, privateKey *ecdsa.PrivateKey) {
 	// Check if mocking is enabled - skip P2P send, will submit on-chain
 	if appconfig.Get().MockSendCosToLeader {
-		log.Printf("MOCK MODE: Skipping P2P send COS to leader for round %s. COS will be submitted on-chain when RequestedToSubmitCo event is received.", commitData.Round)
+		log.Printf("MOCK MODE: Skipping P2P send COS to leader for round %s", commitData.Round)
 		commitData.SendCosToLeader = true
 		if err := rh.regularNode.UpdateCommit(ctx, &commitData); err != nil {
 			log.Printf("Failed to update SendCosToLeader flag: %v", err)

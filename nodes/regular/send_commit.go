@@ -352,6 +352,10 @@ func (n *RegularNode) processSecretRequest(ctx context.Context, round, trialNum,
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
 		return
 	}
+	if appconfig.Get().DisableSecretSubmission {
+		log.Println("Secret submission is disabled via configuration. Skipping processSecretRequest.")
+		return
+	}
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 
 	// Try to get reveal order, if it doesn't exist, try to create it
@@ -655,6 +659,10 @@ func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, 
 func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, TrialNum *big.Int, packedIndices *big.Int, indicesLength *big.Int) error {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping processCosRequest.")
+		return nil
+	}
+	if appconfig.Get().DisableCosSubmission {
+		log.Println("Cos submission is disabled via configuration. Skipping processCosRequest.")
 		return nil
 	}
 	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)

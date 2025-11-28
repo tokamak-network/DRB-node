@@ -96,7 +96,7 @@ func (m *mockTestingT) Logf(format string, args ...interface{}) {
 }
 
 func TestRandomNumberGeneration(t *testing.T) {
-
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -301,7 +301,7 @@ func TestRandomNumberGeneration(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCommit(t *testing.T) {
-
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -428,7 +428,7 @@ func TestRegularNodeOnChainCommit(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCos(t *testing.T) {
-
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -567,7 +567,7 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
-
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -719,7 +719,7 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 }
 
 func TestRegularNodeOnChainSecret(t *testing.T) {
-
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -867,6 +867,7 @@ func TestRegularNodeOnChainSecret(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1046,7 +1047,7 @@ func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
-	// Use the shared test environment
+	// t.Skip("Skipping integration test in short mode") // Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
 
@@ -1199,7 +1200,7 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
-
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1353,7 +1354,7 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 }
 
 func TestAllRegularNodesOnChainCvs(t *testing.T) {
-
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1519,7 +1520,7 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 }
 
 func TestAllRegularNodesOnChainCos(t *testing.T) {
-
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1686,7 +1687,7 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 }
 
 func TestAllRegularNodesOnChainSecret(t *testing.T) {
-
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1853,6 +1854,7 @@ func TestAllRegularNodesOnChainSecret(t *testing.T) {
 }
 
 func TestRegularNode1SlashingForMissingCvs(t *testing.T) {
+	// t.Skip("Skipping integration test in short mode")
 	if testing.Short() {
 		t.Skip("Skipping Docker integration test in short mode")
 	}
@@ -1919,10 +1921,14 @@ func TestRegularNode1SlashingForMissingCvs(t *testing.T) {
 	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
 
 	t.Logf("Random number generated: %s", randomNumber.String())
+	showLogs(t, "test-leadernode", 50)
+	showLogs(t, "test-regularnode2", 50)
+	showLogs(t, "test-leadernode3", 50)
 	t.Log("Test Case 13 Complete! regularNode1 was slashed for failing to submit CVS, but random number was still generated with regularNode2 and regularNode3.")
 }
 
 func TestLeaderSlashingAndRecovery(t *testing.T) {
+	// t.Skip("Skipping integration test in short mode")
 	if testing.Short() {
 		t.Skip("Skipping Docker integration test in short mode")
 	}
@@ -2059,6 +2065,7 @@ func TestLeaderSlashingAndRecovery(t *testing.T) {
 }
 
 func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing.T) {
+	// t.Skip("Skipping integration test in short mode")
 	if testing.Short() {
 		t.Skip("Skipping Docker integration test in short mode")
 	}
@@ -2219,6 +2226,164 @@ func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing
 
 	t.Logf("✅ Random number generated for round %s: %s", round.String(), randomNumber.String())
 	t.Log("Test Case 16 Complete!")
+}
+
+func TestDisableCosSubmission(t *testing.T) {
+	// t.Skip()
+	// Use the shared test environment
+	require.NotNil(t, testEnv, "Test environment should be initialized")
+	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
+
+	geth := testEnv.Geth
+
+	t.Log("🧪 Test Case 17: Disable COS Submission Test")
+	t.Log("STEP 1: Stopping regularNode1...")
+
+	// Stop regularNode1
+	stopCmd := exec.Command("docker", "stop", "test-regularnode1")
+	stopOutput, err := stopCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Stop output: %s", string(stopOutput))
+	}
+	time.Sleep(2 * time.Second)
+
+	t.Log("STEP 2: Updating regularNode1 environment to enable MOCK_SEND_COS_TO_LEADER and DISABLE_COS_SUBMISSION...")
+
+	wd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+
+	var integrationTestDir string
+	dockerComposePath := filepath.Join(wd, "docker-compose-test.yml")
+	if _, err := os.Stat(dockerComposePath); err == nil {
+		integrationTestDir = wd
+	} else {
+		integrationTestDir = filepath.Join(wd, "integration_test")
+		dockerComposePath = filepath.Join(integrationTestDir, "docker-compose-test.yml")
+		if _, err := os.Stat(dockerComposePath); err != nil {
+			integrationTestDir = filepath.Dir(wd)
+		}
+	}
+
+	// Update env file to add MOCK_SEND_COS_TO_LEADER and DISABLE_COS_SUBMISSION
+	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
+	envContent, err := os.ReadFile(envFile)
+	require.NoError(t, err, "Failed to read env file")
+
+	envContentStr := string(envContent)
+	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
+		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
+		t.Log("@1")
+	} else {
+		// Replace existing value
+		envContentStr = strings.ReplaceAll(envContentStr, "MOCK_SEND_COS_TO_LEADER=false", "MOCK_SEND_COS_TO_LEADER=true")
+		t.Log("@2")
+	}
+	if !strings.Contains(envContentStr, "DISABLE_COS_SUBMISSION") {
+
+		envContentStr += "DISABLE_COS_SUBMISSION=true\n"
+		t.Log("@3")
+	} else {
+		// Replace existing value
+		envContentStr = strings.ReplaceAll(envContentStr, "DISABLE_COS_SUBMISSION=false", "DISABLE_COS_SUBMISSION=true")
+		t.Log("@4")
+	}
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
+
+	t.Log("STEP 3: Starting regularNode1 with updated configuration...")
+
+	// Restart regularNode1 with the new environment
+	restartCmd := exec.Command("docker-compose",
+		"-f", "docker-compose-test.yml",
+		"-p", "drb-test",
+		"--env-file", ".env.docker-test",
+		"up", "-d", "--build", "regularnode1")
+	restartCmd.Dir = integrationTestDir
+	restartOutput, err := restartCmd.CombinedOutput()
+	if err != nil {
+		t.Logf("Restart output: %s", string(restartOutput))
+		require.NoError(t, err, "Failed to restart regularNode1")
+	}
+
+	// Wait for regularNode1 to be ready
+	time.Sleep(20 * time.Second)
+
+	t.Log("STEP 4: Requesting random number...")
+
+	// Request random number from consumer contract
+	round, err := requestRandomNumberFromConsumer(testCtx, geth)
+	require.NoError(t, err, "Failed to request random number")
+	t.Logf("✅ Random number requested, round: %s", round.String())
+
+	// Verify the round was actually created
+	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
+
+	t.Log("STEP 5: Waiting for random number to be generated...")
+
+	maxFulfillmentRetries := 20
+	var fulfilled bool
+	var randomNumber *big.Int
+
+	for i := 0; i < maxFulfillmentRetries; i++ {
+		// Check if random number was fulfilled
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		if err == nil && fulfilled {
+			t.Logf("✅ Random number fulfilled after %d attempts!", i+1)
+			break
+		}
+
+		if i < maxFulfillmentRetries-1 {
+			t.Logf("⏳ Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
+
+			// Check contract state periodically
+			currentRoundInput, _ := geth.ContractABI.Pack("s_currentRound")
+			currentRoundResult, _ := geth.Client.CallContract(testCtx, ethereum.CallMsg{
+				To:   &geth.ContractAddress,
+				Data: currentRoundInput,
+			}, nil)
+			var currentRound *big.Int
+			if currentRoundResult != nil {
+				geth.ContractABI.UnpackIntoInterface(&currentRound, "s_currentRound", currentRoundResult)
+				t.Logf("📊 Contract currentRound: %s (requested round: %s)", currentRound.String(), round.String())
+			}
+
+			// Check leader logs
+			t.Log("📋 Checking leader node logs...")
+			showLogs(t, "test-leadernode", 30)
+
+			// Check regularNode1 logs to verify COS submission is disabled
+			t.Log("📋 Checking regularNode1 logs (COS submission should be disabled)...")
+			showLogs(t, "test-regularnode1", 20)
+
+			time.Sleep(15 * time.Second)
+		}
+	}
+
+	require.NoError(t, err, "Failed to check random number fulfillment")
+	require.True(t, fulfilled, "Random number should be fulfilled")
+	require.NotNil(t, randomNumber, "Random number should not be nil")
+	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
+
+	t.Logf("✅ Random number generated: %s", randomNumber.String())
+
+	// Verify in consumer contract
+	requestInfo, err := getConsumerRequestInfo(testCtx, geth, round)
+	require.NoError(t, err, "Failed to get consumer request info")
+	require.NotNil(t, requestInfo, "Request info should not be nil")
+
+	t.Logf("📊 Consumer contract state:")
+	t.Logf("   RequestId: %s", requestInfo["requestId"].(*big.Int).String())
+	t.Logf("   FulfillBlockNumber: %s", requestInfo["fulfillBlockNumber"].(*big.Int).String())
+	t.Logf("   RandomNumber: %s", requestInfo["randomNumber"].(*big.Int).String())
+
+	fulfillBlockNum := requestInfo["fulfillBlockNumber"].(*big.Int)
+	consumerRandNum := requestInfo["randomNumber"].(*big.Int)
+
+	assert.True(t, fulfillBlockNum.Cmp(big.NewInt(0)) > 0, "Fulfill block number should be set in consumer contract")
+	assert.True(t, consumerRandNum.Cmp(big.NewInt(0)) > 0, "Random number should be set in consumer contract")
+	assert.Equal(t, randomNumber.String(), consumerRandNum.String(), "Random number in consumer contract should match")
+
+	t.Log("✅ Test Case Complete! RegularNode1 successfully generated random number with DISABLE_COS_SUBMISSION=true")
 }
 
 func showLogs(t *testing.T, container string, lines int) {
