@@ -44,6 +44,11 @@ func NewFallbackRPCClient(urls []string) (*FallbackRPCClient, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to RPC %s: %v", url, err)
 		}
+		_, err = client.ChainID(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to RPC %s: %v", url, err)
+		}
+
 		clients[i] = client
 	}
 
