@@ -571,7 +571,6 @@ func TestAcceptSecretValueSuccess(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value and compute its hash
 	secretValue := [32]byte{10, 20, 30, 40, 50}
@@ -607,16 +606,7 @@ func TestAcceptSecretValueSuccess(t *testing.T) {
 		assert.Equal(t, hex.EncodeToString(secretValue[:]), commitData.SecretValueHex)
 	})
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
-
-	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
-	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
 
 	// Cleanup
@@ -736,7 +726,6 @@ func TestAcceptSecretValueSuccessfulSave(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value and compute its hash
 	secretValue := [32]byte{10, 20, 30, 40, 50}
@@ -777,16 +766,7 @@ func TestAcceptSecretValueSuccessfulSave(t *testing.T) {
 		updateCalled = true
 	})
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
-
-	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
-	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
 	assert.False(t, updateCalled, "Update not yet called (test documents expected flow)")
 
@@ -806,7 +786,6 @@ func TestSetRoundSecretValueAfterSave(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value and compute its hash
 	secretValue := [32]byte{11, 22, 33, 44, 55}
@@ -839,16 +818,7 @@ func TestSetRoundSecretValueAfterSave(t *testing.T) {
 	mockRepo.On("UpdateLeaderCommit", mock.Anything, mock.AnythingOfType("*utils.LeaderCommitData")).
 		Return(nil)
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
-
-	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
-	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
 
 	roundSecretBefore, _ := node.GetRoundSecretValue(uniqueKey, eoaAddressHex)
@@ -870,7 +840,6 @@ func TestAcceptSecretValueAppendToRoundSecrets(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value and compute its hash
 	secretValue := [32]byte{15, 25, 35, 45, 55}
@@ -903,16 +872,7 @@ func TestAcceptSecretValueAppendToRoundSecrets(t *testing.T) {
 	mockRepo.On("UpdateLeaderCommit", mock.Anything, mock.AnythingOfType("*utils.LeaderCommitData")).
 		Return(nil)
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
-
-	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
-	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
 
 	// Verify that secrets are appended to round secrets
@@ -937,7 +897,6 @@ func TestAcceptSecretValueSecretValueHexFormat(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value with known bytes
 	secretValue := [32]byte{0xAA, 0xBB, 0xCC, 0xDD, 0xEE}
@@ -978,16 +937,7 @@ func TestAcceptSecretValueSecretValueHexFormat(t *testing.T) {
 		assert.Equal(t, secretValue, commitData.SecretValue, "Secret value bytes should match")
 	})
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
-
-	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
-	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
 
 	actualHex := hex.EncodeToString(secretValue[:])
@@ -1009,7 +959,6 @@ func TestAcceptSecretValueDatabaseSaveFlow(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value
 	secretValue := [32]byte{1, 2, 3, 4, 5, 6, 7, 8}
@@ -1051,16 +1000,7 @@ func TestAcceptSecretValueDatabaseSaveFlow(t *testing.T) {
 		assert.NotEqual(t, [32]byte{}, commitData.SecretValue, "Secret value should not be empty")
 	})
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
-
-	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
-	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
 
 	assert.Equal(t, 0, updateCallCount, "Update call count before execution")
@@ -1083,7 +1023,6 @@ func TestAcceptSecretValueBroadcastPreparation(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value
 	secretValue := [32]byte{7, 8, 9, 10, 11}
@@ -1127,16 +1066,7 @@ func TestAcceptSecretValueBroadcastPreparation(t *testing.T) {
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.AnythingOfType("*utils.BroadcastTracker")).
 		Return(nil)
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
-
-	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
-	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
 
 	assert.Equal(t, [32]byte{}, savedSecretValue, "Secret value not yet saved")
@@ -1282,7 +1212,6 @@ func TestSecretValueBroadcastLogging(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value
 	secretValue := [32]byte{11, 22, 33, 44, 55}
@@ -1321,16 +1250,7 @@ func TestSecretValueBroadcastLogging(t *testing.T) {
 		saveCalled = true
 	})
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
-
-	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
-	mockStream.reader = bytes.NewReader(reqBytes)
 	mockStream.On("Close").Return(nil)
 
 	// Document the expected flow

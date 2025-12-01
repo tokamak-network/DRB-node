@@ -15,10 +15,10 @@ func TestNodeInfoStructCreation(t *testing.T) {
 			EOAAddress: "0x1234567890123456789012345678901234567890",
 			PrivateKey: []byte{1, 2, 3, 4, 5},
 		}
-
+		assert.Equal(t, "0x1234567890123456789012345678901234567890", nodeInfo.EOAAddress)
 		assert.Equal(t, "192.168.1.1", nodeInfo.IP)
 		assert.Equal(t, "8080", nodeInfo.Port)
 		assert.Equal(t, "12D3KooWTest123", nodeInfo.PeerID)
-		assert.Equal(t, 5, len(nodeInfo.PrivateKey))
+		assert.Equal(t, []byte{1, 2, 3, 4, 5}, nodeInfo.PrivateKey)
 	})
 }

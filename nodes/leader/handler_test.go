@@ -1420,7 +1420,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_CoreL
 
 	round := req.Round
 	eoaAddress_addr := common.HexToAddress(req.EOAAddress)
-
+	assert.Equal(suite.T(), signature, req.Signature)
+	
 	suite.leaderNodeHandler.commitMu.Lock()
 	commitData := suite.leaderNodeHandler.leaderNode.GetOrCreateLeaderCommitData(round, req.TrialNum, uniqueKey, eoaAddress_addr)
 	if commitData.Cvs == [32]byte{} {

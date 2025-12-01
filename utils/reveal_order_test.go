@@ -16,7 +16,8 @@ func TestRevealOrderDataStructCreation(t *testing.T) {
 			RevealOrder:  []int{2, 0, 1},
 			RV:           "0xabcdef123456",
 		}
-
+		assert.Equal(t, "1", revealOrder.Round)
+		assert.Equal(t, "0", revealOrder.TrialNum)
 		assert.Equal(t, "1-0", revealOrder.UniqueKey)
 		assert.Equal(t, 3, len(revealOrder.OrderedNodes))
 		assert.Equal(t, []int{2, 0, 1}, revealOrder.RevealOrder)

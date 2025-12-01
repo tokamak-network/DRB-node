@@ -656,22 +656,6 @@ func createTestRegularNodeHandler() *RegularNodeHandler {
 	return handler
 }
 
-func createTestRegularNodeHandlerWithMockClient(mockClient *MockFallbackEthClient) *RegularNodeHandler {
-	mockCommitRepo := new(MockRegularCommitRepository)
-	mockNodeInfoRepo := new(MockNodeInfoRepository)
-
-	handler := &RegularNodeHandler{
-		fallbackEthClient: nil, // Will be set via unsafe pointer later
-		regularNode: &RegularNode{
-			regularCommitRepository: mockCommitRepo,
-			nodeInfoRepository:      mockNodeInfoRepo,
-		},
-	}
-
-	// Use interface for eth calls
-	return handler
-}
-
 func generateValidSignatureForRegular(eoaAddress string, privateKey *ecdsa.PrivateKey) []byte {
 	hash := crypto.Keccak256Hash([]byte(eoaAddress))
 	signature, err := crypto.Sign(hash.Bytes(), privateKey)
@@ -1440,6 +1424,13 @@ func TestRegularNodeHandler_CompleteCommitFlow(t *testing.T) {
 		SendCosToLeader: false,
 	}
 
+	assert.Equal(t, uniqueKey, commitData.UniqueKey)
+	assert.Equal(t, round, commitData.Round)
+	assert.Equal(t, trialNum, commitData.TrialNum)
+	assert.Equal(t, secretValue, commitData.SecretValue)
+	assert.Equal(t, cos, commitData.Cos)
+	assert.Equal(t, cvs, commitData.Cvs)
+
 	// Verify CVS is hash of COS + index
 	opIndexByte := []byte{uint8(0)}
 	recalculatedCvs := commitreveal2.Keccak256(commitreveal2.AbiEncodePacked(cos[:], opIndexByte))
@@ -1680,6 +1671,12 @@ func TestRegularNodeHandler_SignInfoInCommitRequest(t *testing.T) {
 		},
 	}
 
+	// Read fields so writes are meaningful and keep vet happy
+	assert.Equal(t, "100", req.Round)
+	assert.Equal(t, "1", req.TrialNum)
+	assert.Equal(t, cvs, req.Cvs)
+	assert.Equal(t, eoaAddress, req.EOAAddress)
+	assert.Equal(t, signature, req.Signature)
 	assert.Equal(t, "27", req.Sign.V)
 	assert.NotEmpty(t, req.Sign.R)
 	assert.NotEmpty(t, req.Sign.S)
@@ -2099,7 +2096,12 @@ func TestRegularNodeHandler_deposit_GetDepositAmountError(t *testing.T) {
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	defer os.Unsetenv("CONTRACT_ADDRESS")
 
-	txSent, err := handler.deposit(ctx, eoaAddress, privateKey)
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
+	defer os.Unsetenv("EOA_PRIVATE_KEY")
+
+	txSent, err := handler.deposit(ctx, eoaAddress)
 
 	assert.Error(t, err)
 	assert.False(t, txSent)
@@ -2132,7 +2134,12 @@ func TestRegularNodeHandler_deposit_SufficientDeposit(t *testing.T) {
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	defer os.Unsetenv("CONTRACT_ADDRESS")
 
-	txSent, err := handler.deposit(ctx, eoaAddress, privateKey)
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
+	defer os.Unsetenv("EOA_PRIVATE_KEY")
+
+	txSent, err := handler.deposit(ctx, eoaAddress)
 
 	assert.NoError(t, err)
 	assert.False(t, txSent) // False because deposit is already sufficient
@@ -2164,7 +2171,12 @@ func TestRegularNodeHandler_deposit_GetActivationThresholdError(t *testing.T) {
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	defer os.Unsetenv("CONTRACT_ADDRESS")
 
-	txSent, err := handler.deposit(ctx, eoaAddress, privateKey)
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
+	defer os.Unsetenv("EOA_PRIVATE_KEY")
+
+	txSent, err := handler.deposit(ctx, eoaAddress)
 
 	assert.Error(t, err)
 	assert.False(t, txSent)
@@ -2203,7 +2215,12 @@ func TestRegularNodeHandler_deposit_InsufficientDeposit_BalanceCheckError(t *tes
 	mockFallbackClient.On("BalanceAt", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("RPC connection timeout"))
 
-	txSent, err := handler.deposit(ctx, eoaAddress, privateKey)
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
+	defer os.Unsetenv("EOA_PRIVATE_KEY")
+
+	txSent, err := handler.deposit(ctx, eoaAddress)
 
 	assert.Error(t, err)
 	assert.False(t, txSent)
@@ -2244,7 +2261,12 @@ func TestRegularNodeHandler_deposit_InsufficientDeposit_InsufficientAccountBalan
 	mockFallbackClient.On("BalanceAt", mock.Anything, mock.Anything, mock.Anything).
 		Return(big.NewInt(500), nil)
 
-	txSent, err := handler.deposit(ctx, eoaAddress, privateKey)
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
+	defer os.Unsetenv("EOA_PRIVATE_KEY")
+
+	txSent, err := handler.deposit(ctx, eoaAddress)
 
 	assert.Error(t, err)
 	assert.False(t, txSent)
@@ -2294,7 +2316,12 @@ func TestRegularNodeHandler_deposit_InsufficientDeposit_TransactionSuccess(t *te
 	mockFallbackClient.On("BalanceAt", mock.Anything, mock.Anything, mock.Anything).
 		Return(big.NewInt(1000), nil)
 
-	txSent, err := handler.deposit(ctx, eoaAddress, privateKey)
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
+	defer os.Unsetenv("EOA_PRIVATE_KEY")
+
+	txSent, err := handler.deposit(ctx, eoaAddress)
 
 	// TESTS: return true, nil
 	assert.NoError(t, err)
@@ -2340,7 +2367,12 @@ func TestRegularNodeHandler_deposit_InsufficientDeposit_TransactionError(t *test
 	mockFallbackClient.On("BalanceAt", mock.Anything, mock.Anything, mock.Anything).
 		Return(big.NewInt(2000), nil)
 
-	txSent, err := handler.deposit(ctx, eoaAddress, privateKey)
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
+	defer os.Unsetenv("EOA_PRIVATE_KEY")
+
+	txSent, err := handler.deposit(ctx, eoaAddress)
 
 	assert.Error(t, err)
 	assert.False(t, txSent)
@@ -2389,7 +2421,12 @@ func TestRegularNodeHandler_deposit_InsufficientDeposit_ExactBalance(t *testing.
 	mockFallbackClient.On("BalanceAt", mock.Anything, mock.Anything, mock.Anything).
 		Return(big.NewInt(750), nil) // Exactly 750
 
-	txSent, err := handler.deposit(ctx, eoaAddress, privateKey)
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
+	defer os.Unsetenv("EOA_PRIVATE_KEY")
+
+	txSent, err := handler.deposit(ctx, eoaAddress)
 
 	assert.NoError(t, err)
 	assert.True(t, txSent)
@@ -2435,7 +2472,12 @@ func TestRegularNodeHandler_deposit_InsufficientDeposit_ZeroCurrentDeposit(t *te
 	mockFallbackClient.On("BalanceAt", mock.Anything, mock.Anything, mock.Anything).
 		Return(big.NewInt(5000), nil)
 
-	txSent, err := handler.deposit(ctx, eoaAddress, privateKey)
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	privateKeyHex := hex.EncodeToString(privateKeyBytes)
+	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
+	defer os.Unsetenv("EOA_PRIVATE_KEY")
+
+	txSent, err := handler.deposit(ctx, eoaAddress)
 
 	assert.NoError(t, err)
 	assert.True(t, txSent)

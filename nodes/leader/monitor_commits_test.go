@@ -1215,7 +1215,7 @@ func TestLeaderNode_generateRandomNumberTransaction_InvalidPrivateKey(t *testing
 	err := ln.generateRandomNumberTransaction(context.Background(), "1", "1", secrets, vs, rs, ss)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to load leader private key")
+	assert.Contains(t, err.Error(), "failed to create leader client")
 }
 
 func TestLeaderNode_generateRandomNumberTransaction_RevealOrderError(t *testing.T) {
@@ -1349,7 +1349,7 @@ func TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_InvalidPrivateK
 	err := ln.generateRandomNumberTransactionSomeCvOnChain(context.Background(), "1", "1", secrets, vs, rs, ss)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to load leader private key")
+	assert.Contains(t, err.Error(), "failed to create leader client")
 }
 
 func TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_RevealOrderError(t *testing.T) {

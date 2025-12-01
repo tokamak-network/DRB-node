@@ -1271,7 +1271,11 @@ func TestRegularNode_callFailToRequestSubmitCVOrSubmitMerkleRoot_InvalidPrivateK
 	node := createTestNodeForSendCommit()
 
 	os.Setenv("EOA_PRIVATE_KEY", "invalid-key")
-	defer os.Unsetenv("EOA_PRIVATE_KEY")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
 
 	node.callFailToRequestSubmitCVOrSubmitMerkleRoot(context.Background(), "100", "1")
 
@@ -1300,7 +1304,11 @@ func TestRegularNode_callFailToSubmitMerkleRootAfterDispute_InvalidPrivateKey(t 
 	node := createTestNodeForSendCommit()
 
 	os.Setenv("EOA_PRIVATE_KEY", "invalid")
-	defer os.Unsetenv("EOA_PRIVATE_KEY")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
 
 	node.callFailToSubmitMerkleRootAfterDispute(context.Background(), "100", "1")
 
@@ -1378,7 +1386,11 @@ func TestRegularNode_processCommitRequest_EOANotInIndices(t *testing.T) {
 	node.SetHalted(false)
 
 	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	defer os.Unsetenv("EOA_PRIVATE_KEY")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
 
 	testOp := common.HexToAddress("0x1111111111111111111111111111111111111111")
 	otherOp := common.HexToAddress("0x2222222222222222222222222222222222222222")
@@ -1457,7 +1469,11 @@ func TestRegularNode_processCosRequest_EOANotInIndices(t *testing.T) {
 	node.SetHalted(false)
 
 	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	defer os.Unsetenv("EOA_PRIVATE_KEY")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
 
 	testOp := common.HexToAddress("0x1111111111111111111111111111111111111111")
 	otherOp := common.HexToAddress("0x2222222222222222222222222222222222222222")
@@ -1614,7 +1630,9 @@ func (m *MockSubscription) Err() <-chan error {
 }
 
 func (m *MockSubscription) Unsubscribe() {
-	m.Called()
+	if len(m.ExpectedCalls) > 0 {
+		m.Called()
+	}
 }
 
 func TestRegularNode_receiveCommitRequest_SubscriptionFailure(t *testing.T) {
@@ -1666,6 +1684,7 @@ func TestRegularNode_receiveCommitRequest_WebsocketReconnection(t *testing.T) {
 		errChan: make(chan error, 1),
 	}
 	mockSub1.errChan <- errors.New("websocket: close 1006")
+	mockSub1.On("Unsubscribe").Return()
 
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Return(mockSub1, nil).Once()
@@ -1674,6 +1693,8 @@ func TestRegularNode_receiveCommitRequest_WebsocketReconnection(t *testing.T) {
 	mockSub2 := &MockSubscription{
 		errChan: make(chan error),
 	}
+	mockSub2.On("Unsubscribe").Return()
+
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Return(mockSub2, nil).Once()
 
@@ -1684,8 +1705,13 @@ func TestRegularNode_receiveCommitRequest_WebsocketReconnection(t *testing.T) {
 
 	<-ctx.Done()
 
+	// Give the goroutine time to call Unsubscribe()
+	time.Sleep(50 * time.Millisecond)
+
 	// Verify reconnection happened
 	mockClient.AssertNumberOfCalls(t, "SubscribeFilterLogs", 2)
+	mockSub1.AssertExpectations(t)
+	mockSub2.AssertExpectations(t)
 }
 
 func TestRegularNode_receiveCommitRequest_UnexpectedEOFReconnection(t *testing.T) {
@@ -1701,6 +1727,7 @@ func TestRegularNode_receiveCommitRequest_UnexpectedEOFReconnection(t *testing.T
 		errChan: make(chan error, 1),
 	}
 	mockSub1.errChan <- errors.New("unexpected EOF")
+	mockSub1.On("Unsubscribe").Return()
 
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Return(mockSub1, nil).Once()
@@ -1709,6 +1736,8 @@ func TestRegularNode_receiveCommitRequest_UnexpectedEOFReconnection(t *testing.T
 	mockSub2 := &MockSubscription{
 		errChan: make(chan error),
 	}
+	mockSub2.On("Unsubscribe").Return()
+
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Return(mockSub2, nil).Once()
 
@@ -1719,7 +1748,12 @@ func TestRegularNode_receiveCommitRequest_UnexpectedEOFReconnection(t *testing.T
 
 	<-ctx.Done()
 
+	// Give the goroutine time to call Unsubscribe()
+	time.Sleep(50 * time.Millisecond)
+
 	mockClient.AssertNumberOfCalls(t, "SubscribeFilterLogs", 2)
+	mockSub1.AssertExpectations(t)
+	mockSub2.AssertExpectations(t)
 }
 
 func TestRegularNode_receiveCommitRequest_ReorgDetection(t *testing.T) {
@@ -1734,6 +1768,7 @@ func TestRegularNode_receiveCommitRequest_ReorgDetection(t *testing.T) {
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+	mockSub.On("Unsubscribe").Return()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -1760,7 +1795,11 @@ func TestRegularNode_receiveCommitRequest_ReorgDetection(t *testing.T) {
 
 	<-ctx.Done()
 
+	// Give the goroutine time to call Unsubscribe()
+	time.Sleep(50 * time.Millisecond)
+
 	mockClient.AssertExpectations(t)
+	mockSub.AssertExpectations(t)
 }
 
 func TestRegularNode_receiveCommitRequest_StatusEvent_State1(t *testing.T) {
@@ -1794,6 +1833,7 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State1(t *testing.T) {
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+	mockSub.On("Unsubscribe").Return()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -1839,6 +1879,9 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State1(t *testing.T) {
 
 	<-ctx.Done()
 
+	// Give the goroutine time to call Unsubscribe()
+	time.Sleep(50 * time.Millisecond)
+
 	// Halt to stop goroutines
 	node.SetHalted(true)
 	time.Sleep(50 * time.Millisecond)
@@ -1849,6 +1892,7 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State1(t *testing.T) {
 
 	mockClient.AssertExpectations(t)
 	mockBatchRepo.AssertExpectations(t)
+	mockSub.AssertExpectations(t)
 }
 
 func TestRegularNode_receiveCommitRequest_StatusEvent_InvalidData(t *testing.T) {
@@ -1867,6 +1911,7 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_InvalidData(t *testing.T) 
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+	mockSub.On("Unsubscribe").Return()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -1894,7 +1939,11 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_InvalidData(t *testing.T) 
 
 	<-ctx.Done()
 
+	// Give the goroutine time to call Unsubscribe()
+	time.Sleep(50 * time.Millisecond)
+
 	mockClient.AssertExpectations(t)
+	mockSub.AssertExpectations(t)
 }
 
 func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_Success(t *testing.T) {
@@ -1930,6 +1979,7 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_Success(t *testing
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+	mockSub.On("Unsubscribe").Return()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -1978,8 +2028,10 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_Success(t *testing
 	go node.receiveCommitRequest(ctx)
 
 	<-ctx.Done()
+	time.Sleep(50 * time.Millisecond) // Give goroutine time to cleanup and call Unsubscribe
 
 	mockClient.AssertExpectations(t)
+	mockSub.AssertExpectations(t)
 }
 
 func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_DecodeError(t *testing.T) {
@@ -1998,6 +2050,7 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_DecodeError(t *tes
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+	mockSub.On("Unsubscribe").Return()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -2026,6 +2079,7 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_DecodeError(t *tes
 	<-ctx.Done()
 
 	mockClient.AssertExpectations(t)
+	mockSub.AssertExpectations(t)
 }
 
 func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_BlockTimestampError(t *testing.T) {
@@ -2051,6 +2105,7 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_BlockTimestampErro
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+	mockSub.On("Unsubscribe").Return()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -2080,8 +2135,10 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_BlockTimestampErro
 	go node.receiveCommitRequest(ctx)
 
 	<-ctx.Done()
+	time.Sleep(50 * time.Millisecond) // Give goroutine time to cleanup and call Unsubscribe
 
 	mockClient.AssertExpectations(t)
+	mockSub.AssertExpectations(t)
 }
 
 func TestRegularNode_receiveCommitRequest_MerkleRootSubmitted_Success(t *testing.T) {

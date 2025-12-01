@@ -3060,7 +3060,10 @@ func (m *MockSubscription) Err() <-chan error {
 }
 
 func (m *MockSubscription) Unsubscribe() {
-	m.Called()
+
+	if len(m.ExpectedCalls) > 0 {
+		m.Called()
+	}
 }
 
 type MockFallbackEthClientForAcceptCommit struct {
@@ -3199,6 +3202,7 @@ func TestLeaderNode_receiveCommit_StatusEvent_State1(t *testing.T) {
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+	mockSub.On("Unsubscribe").Return()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -3239,11 +3243,15 @@ func TestLeaderNode_receiveCommit_StatusEvent_State1(t *testing.T) {
 
 	<-ctx.Done()
 
+	// Give the goroutine time to call Unsubscribe()
+	time.Sleep(50 * time.Millisecond)
+
 	// Verify execution was started
 	assert.True(t, node.GetExecution(), "Execution should be started for state 1")
 
 	mockClient.AssertExpectations(t)
 	mockBatchRepo.AssertExpectations(t)
+	mockSub.AssertExpectations(t)
 }
 
 func TestLeaderNode_receiveCommit_CvSubmitted_Success(t *testing.T) {

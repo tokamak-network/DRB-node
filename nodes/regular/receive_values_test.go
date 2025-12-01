@@ -1398,11 +1398,14 @@ func TestRegularNode_BroadcastMessageStructure(t *testing.T) {
 		SignerEOA:  "0xSigner",
 		Signature:  []byte("signature"),
 	}
-
+	assert.Equal(t, "0x1234567890123456789012345678901234567890", message.EOAAddress)
+	assert.Equal(t, "msg-100", message.MessageID)
 	assert.Equal(t, "100", message.Round)
 	assert.Equal(t, "1", message.TrialNum)
 	assert.Equal(t, "cvs", message.Type)
 	assert.Equal(t, data, message.Data)
+	assert.Equal(t, "0xSigner", message.SignerEOA)
+	assert.Equal(t, []byte("signature"), message.Signature)
 }
 
 func TestRegularNode_BroadcastMessageMarshalling(t *testing.T) {
@@ -1443,7 +1446,11 @@ func TestRegularNode_AcknowledgmentMessageStructure(t *testing.T) {
 		Status:     "received",
 		Signature:  []byte("signature"),
 	}
-
+	assert.Equal(t, "0x1234567890123456789012345678901234567890", ack.EOAAddress)
+	assert.Equal(t, "msg-102", ack.MessageID)
+	assert.Equal(t, "1", ack.TrialNum)
+	assert.Equal(t, "received", ack.Status)
+	assert.Equal(t, []byte("signature"), ack.Signature)
 	assert.Equal(t, "100", ack.Round)
 	assert.Equal(t, "cvs", ack.Type)
 	assert.Equal(t, "received", ack.Status)

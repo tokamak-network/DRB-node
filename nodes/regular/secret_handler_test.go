@@ -1245,7 +1245,10 @@ func TestRegularNode_SecretValueRequest_Structure(t *testing.T) {
 		Signature:         []byte("signature"),
 		SecretValue:       []byte("secret"),
 	}
-
+	assert.Equal(t, "0x1234567890123456789012345678901234567890", req.RegularEoaAddress)
+	assert.Equal(t, "0xLeader", req.LeaderEoaAddress)
+	assert.Equal(t, []byte("signature"), req.Signature)
+	assert.Equal(t, []byte("secret"), req.SecretValue)
 	assert.Equal(t, "100", req.Round)
 	assert.Equal(t, "1", req.TrialNum)
 	assert.Equal(t, 0, req.Order)

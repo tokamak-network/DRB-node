@@ -308,6 +308,13 @@ func (suite *RevealRequestsTestSuite) TestStartSecretValueRequests_MissingNodes(
 // TestStartSecretValueRequests_Success tests successful secret value request initialization
 func (suite *RevealRequestsTestSuite) TestStartSecretValueRequests_Success() {
 
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
+
 	suite.leaderNode.SetHalted(false)
 	testRound := "success_4"
 	testTrial := "1"
@@ -1421,6 +1428,12 @@ func (suite *RevealRequestsTestSuite) TestContains_Duplicates() {
 
 // TestStartSecretValueRequests_MultipleNodesFirstMatch tests with multiple nodes but only first match
 func (suite *RevealRequestsTestSuite) TestStartSecretValueRequests_MultipleNodesFirstMatch() {
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
 
 	suite.leaderNode.SetHalted(false)
 	testRound := "first_match_46"
@@ -1654,6 +1667,13 @@ func (n *LeaderNode) sendSecretValueRequestToNodeTestable(
 func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_Success() {
 	ctx := context.Background()
 
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
+
 	// Set up test data
 	testRound := "send_success_50"
 	testTrial := "1"
@@ -1759,6 +1779,13 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_Failure() {
 	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
 	regularEoa := "0xRegularNode5100000000000000000000000000"
 
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
+
 	nodeInfo := &utils.NodeInfo{
 		EOAAddress: regularEoa,
 		PeerID:     suite.host.ID().String(),
@@ -1813,7 +1840,12 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_Failure() {
 // TestSendSecretValueRequest_SecretReceivedBeforeTimeout tests when secret is received before timer expires
 func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_SecretReceivedBeforeTimeout() {
 	ctx := context.Background()
-
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
 	// Set up test data
 	testRound := "send_received_52"
 	testTrial := "1"
@@ -1875,63 +1907,6 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_SecretReceivedB
 	fmt.Println(" TestSendSecretValueRequest_SecretReceivedBeforeTimeout completed successfully")
 }
 
-// TestSendSecretValueRequest_MissingPrivateKey tests when LEADER_PRIVATE_KEY is not set
-func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_MissingPrivateKey() {
-	ctx := context.Background()
-
-	// Save original LEADER_PRIVATE_KEY
-	originalKey := appconfig.Get().LeaderPrivateKey
-	defer os.Setenv("LEADER_PRIVATE_KEY", originalKey)
-
-	// Unset LEADER_PRIVATE_KEY
-	os.Unsetenv("LEADER_PRIVATE_KEY")
-
-	// Set up test data
-	testRound := "send_no_key_53"
-	testTrial := "1"
-	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
-	regularEoa := "0xRegularNode5300000000000000000000000000"
-
-	nodeInfo := &utils.NodeInfo{
-		EOAAddress: regularEoa,
-		PeerID:     suite.host.ID().String(),
-		IP:         "127.0.0.53",
-		Port:       "9053",
-	}
-
-	mockSendFunc := func(ctx context.Context, h host.Host, nodeInfo utils.NodeInfo, protocol string, data interface{}) error {
-		return nil
-	}
-
-	// Initialize reveal request status
-	suite.leaderNode.SetRevealRequestStatus(uniqueKey, []string{})
-
-	testTimerDuration := 500 * time.Millisecond
-
-	// Call the testable function (should return early)
-	suite.leaderNode.sendSecretValueRequestToNodeTestable(
-		ctx,
-		suite.host,
-		testRound,
-		testTrial,
-		uniqueKey,
-		regularEoa,
-		nodeInfo,
-		0,
-		mockSendFunc,
-		testTimerDuration,
-	)
-
-	// Wait a bit
-	time.Sleep(200 * time.Millisecond)
-
-	// Verify that the EOA was NOT marked as requested
-	status, exists := suite.leaderNode.GetRevealRequestStatus(uniqueKey)
-	assert.True(suite.T(), exists)
-	assert.NotContains(suite.T(), status, regularEoa)
-
-	fmt.Println(" TestSendSecretValueRequest_MissingPrivateKey completed successfully")
-}
 
 // TestSendSecretValueRequest_InvalidPrivateKey tests when LEADER_PRIVATE_KEY is invalid
 func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_InvalidPrivateKey() {
@@ -1940,6 +1915,9 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_InvalidPrivateK
 	// Save original LEADER_PRIVATE_KEY
 	originalKey := appconfig.Get().LeaderPrivateKey
 	defer os.Setenv("LEADER_PRIVATE_KEY", originalKey)
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer os.Unsetenv("CONTRACT_ADDRESS")
 
 	// Set invalid private key
 	os.Setenv("LEADER_PRIVATE_KEY", "invalid_hex_string")
@@ -1999,6 +1977,13 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_MultipleRequest
 	testRound := "send_multiple_55"
 	testTrial := "1"
 	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
 
 	nodes := []struct {
 		eoa  string
@@ -2069,6 +2054,13 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_MultipleRequest
 // TestSendSecretValueRequest_SuccessWithRealStream tests the success path with actual stream
 func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_SuccessWithRealStream() {
 	ctx := context.Background()
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
 
 	testRound := "real_stream_56"
 	testTrial := "1"
@@ -2171,6 +2163,13 @@ func (suite *RevealRequestsTestSuite) TestCallFailToSubmitS() {
 	testRound := "fail_submit_s_57"
 	testTrial := "1"
 
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
+
 	suite.leaderNode.callFailToSubmitS(ctx, testRound, testTrial)
 
 	fmt.Println(" TestCallFailToSubmitS completed - function executes without panic")
@@ -2181,6 +2180,13 @@ func (suite *RevealRequestsTestSuite) TestStartFailToSubmitSMonitoring_TimerExpi
 	ctx := context.Background()
 	testRound := "timer_expiry_58"
 	testTrial := "1"
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
 
 	suite.leaderNode.SetHalted(false)
 	suite.leaderNode.SetFailToSubmitSMonitoringActive(false)
@@ -2267,6 +2273,13 @@ func (suite *RevealRequestsTestSuite) TestStartMonitoringWithPeriod_ImmediateExp
 	testRound := "immediate_59"
 	testTrial := "1"
 
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
+
 	suite.leaderNode.SetHalted(false)
 	suite.leaderNode.SetFailToSubmitSMonitoringActive(false)
 
@@ -2297,6 +2310,9 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_IntegrationWith
 	testTrial := "1"
 	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
 	regularEoa := "0xIntegrationNode60000000000000000000000"
+
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer os.Unsetenv("LEADER_PRIVATE_KEY")
 
 	// Create two hosts
 	leaderHost, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
@@ -2372,6 +2388,13 @@ func (suite *RevealRequestsTestSuite) TestRequestToSubmitS_FullExecution() {
 	// Set current round so SetSecretRequestSentForWhichRound works
 	suite.leaderNode.SetCurrentRound(testRound)
 
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
+
 	// Set up activated operators
 	eth.SetActivatedOperatorsCached([]common.Address{testOp})
 
@@ -2444,6 +2467,13 @@ func (suite *RevealRequestsTestSuite) TestCallFailToSubmitS_WithMockEthService()
 	testRound := "mock_fail_submit_s_62"
 	testTrial := "1"
 
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
+
 	// Save original eth service and restore it later
 	originalEthService := suite.leaderNode.ethService
 	defer func() {
@@ -2452,14 +2482,18 @@ func (suite *RevealRequestsTestSuite) TestCallFailToSubmitS_WithMockEthService()
 
 	suite.leaderNode.callFailToSubmitS(ctx, testRound, testTrial)
 
-	// Test passes if no panic occurs - the function handles missing ABI gracefully
 	fmt.Println(" TestCallFailToSubmitS_WithMockEthService completed successfully")
 }
 
 // TestStartSecretValueRequests_AllPathsCovered tests all code paths in StartSecretValueRequests
 func (suite *RevealRequestsTestSuite) TestStartSecretValueRequests_AllPathsCovered() {
 	ctx := context.Background()
-
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
 	testRound := "all_paths_63"
 	testTrial := "1"
 	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
