@@ -226,7 +226,7 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 
 				if !depositSufficient {
 					log.Println("Deposit insufficient. Initiating deposit transaction...")
-					txSent, err := rh.deposit(ctx, eoaAddress, privateKey)
+					txSent, err := rh.deposit(ctx, eoaAddress)
 					if err != nil {
 						log.Printf("Error during deposit transaction: %v", err)
 						time.Sleep(30 * time.Second)
@@ -458,7 +458,7 @@ func (rh *RegularNodeHandler) sendRegistrationRequestToLeader(ctx context.Contex
 	}
 }
 
-func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string, privateKey *ecdsa.PrivateKey) (bool, error) {
+func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string) (bool, error) {
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
 		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
@@ -502,13 +502,14 @@ func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string, pr
 		}
 
 		// Create and send deposit transaction
+		clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
+		if err != nil {
+			return false, fmt.Errorf("failed to create EOA client: %v", err)
+		}
+
 		_, _, err = eth.Service.ExecuteTransaction(
 			ctx,
-			&utils.Client{
-				ContractAddress: contractAddress,
-				PrivateKey:      privateKey,
-				ContractABI:     parsedABI,
-			},
+			clientUtils,
 			rh.fallbackEthClient,
 			"deposit",
 			remaining,
@@ -635,30 +636,9 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 }
 
 func (rh *RegularNodeHandler) activateOnChain(ctx context.Context, abiFilePath string) error {
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-
-	contractAddress := common.HexToAddress(contractAddressStr)
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
+	clientUtils, err := utils.NewEOAClient(abiFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to load contract ABI: %v", err)
-	}
-
-	privateKeyHex := appconfig.Get().EOAPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("EOA_PRIVATE_KEY is not set in environment variables.")
-	}
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		return fmt.Errorf("failed to decode leader private key: %v", err)
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
+		return fmt.Errorf("failed to create EOA client: %v", err)
 	}
 
 	_, _, err = eth.Service.ExecuteTransaction(

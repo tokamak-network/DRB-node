@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
@@ -259,29 +258,9 @@ func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round 
 	}
 	log.Printf("Preparing to execute generateRandomNumber...")
 
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		return fmt.Errorf("failed to load leader private key: %v", err)
-	}
-
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to load contract ABI: %v", err)
-	}
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
+		return fmt.Errorf("failed to create leader client: %v", err)
 	}
 
 	type SigRS struct {
@@ -338,30 +317,9 @@ func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round 
 
 func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(ctx context.Context, round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumberTransactionSomeCvOnChain...")
-
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		return fmt.Errorf("failed to load leader private key: %v", err)
-	}
-
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to load contract ABI: %v", err)
-	}
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
+		return fmt.Errorf("failed to create leader client: %v", err)
 	}
 
 	type SigRS struct {

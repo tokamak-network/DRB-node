@@ -329,11 +329,7 @@ func (n *LeaderNode) performReliableBroadcastSync(ctx context.Context, h host.Ho
 			// Add peer info into peer store
 			peerID := nodeInfo[op.Hex()].PeerID
 			peerAddrStr := fmt.Sprintf("/ip4/%s/tcp/%s", nodeInfo[op.Hex()].IP, nodeInfo[op.Hex()].Port)
-			peerAddr, err := multiaddr.NewMultiaddr(peerAddrStr)
-			if err != nil {
-				log.Printf("Invalid multiaddress for peer %s: %v", op.Hex(), err)
-				continue
-			}
+			peerAddr, _ := multiaddr.NewMultiaddr(peerAddrStr)
 			h.Peerstore().AddAddr(peerID, peerAddr, peerstore.PermanentAddrTTL)
 
 			stream, err := h.NewStream(ctx, nodeInfo[op.Hex()].PeerID, streamProtocol)

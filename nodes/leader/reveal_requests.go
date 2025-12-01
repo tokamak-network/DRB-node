@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
 	appconfig "github.com/tokamak-network/DRB-node/config"
@@ -120,34 +119,10 @@ func (n *LeaderNode) sendSecretValueRequestToNode(ctx context.Context, h host.Ho
 func (n *LeaderNode) requestToSubmitS(ctx context.Context, round string, trialNum string) {
 	n.SetSecretRequestSentForWhichRound(n.GetCurrentRound())
 	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := n.prepareArgumentsForRequestToSubmitS(ctx, round, trialNum)
-
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
+		log.Printf("Failed to create leader client: %v", err)
 		return
-	}
-
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Printf("Failed to decode leader private key: %v", err)
-		return
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
 	}
 
 	_, _, err = eth.Service.ExecuteTransaction(
@@ -387,32 +362,10 @@ func (n *LeaderNode) UpdateLastSubmitSTimestamp(ctx context.Context, newTimestam
 func (n *LeaderNode) callFailToSubmitS(ctx context.Context, round string, trialNum string) {
 	log.Printf("Calling failToSubmitS for round %s with trial %s", round, trialNum)
 
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
+		log.Printf("Failed to create EOA client: %v", err)
 		return
-	}
-
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Printf("Failed to decode private key: %v", err)
-		return
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
 	}
 
 	// Execute the transaction

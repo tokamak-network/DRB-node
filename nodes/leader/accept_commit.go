@@ -418,26 +418,15 @@ func (n *LeaderNode) processRandomRequestNumber(ctx context.Context, blockTimest
 }
 
 func (n *LeaderNode) resuming(ctx context.Context) {
-	// Load contract ABI and address
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	// Load contract client (address, ABI, and leader private key)
+	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
+		log.Printf("Failed to create leader client: %v", err)
 		return
 	}
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Fatalf("Failed to decode leader private key: %v", err)
-	}
+	contractAddress := clientUtils.ContractAddress
+	parsedABI := clientUtils.ContractABI
+	privateKey := clientUtils.PrivateKey
 	leaderEOA := crypto.PubkeyToAddress(privateKey.PublicKey)
 
 	// Check deposit amount
@@ -812,33 +801,10 @@ func (n *LeaderNode) stopFailToSubmitCoMonitoring() {
 
 // Add function to call failToSubmitCo on chain
 func (n *LeaderNode) callFailToSubmitCo(ctx context.Context, round string, trialNum string) {
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
+		log.Printf("Failed to create leader client: %v", err)
 		return
-	}
-
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Printf("Failed to decode leader private key: %v", err)
-		return
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
 	}
 
 	_, _, err = n.ethService.ExecuteTransaction(
@@ -926,33 +892,10 @@ func (n *LeaderNode) stopFailToSubmitCvMonitoring() {
 
 // Add function to call failToSubmitCv on chain
 func (n *LeaderNode) callFailToSubmitCv(ctx context.Context, round string, trialNum string) {
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
+		log.Printf("Failed to create leader client: %v", err)
 		return
-	}
-
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Printf("Failed to decode leader private key: %v", err)
-		return
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
 	}
 
 	_, _, err = n.ethService.ExecuteTransaction(
@@ -1136,33 +1079,10 @@ func (n *LeaderNode) callRequestToSubmitCv(ctx context.Context, round string, tr
 
 	packedIndices := PackIndices(indices)
 
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-
-	contractAddress := common.HexToAddress(contractAddressStr)
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
+		log.Printf("Failed to create leader client: %v", err)
 		return
-	}
-
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Printf("Failed to decode leader private key: %v", err)
-		return
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
 	}
 
 	_, _, err = n.ethService.ExecuteTransaction(
@@ -1288,33 +1208,11 @@ func (n *LeaderNode) SubmitMerkleRoot(ctx context.Context, roundNum string, tria
 	var merkleRootBytes32 [32]byte
 	copy(merkleRootBytes32[:], merkleRoot)
 
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-
-	contractAddress := common.HexToAddress(contractAddressStr)
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
+		log.Printf("Failed to create leader client: %v", err)
+		n.SetSubmittingMerkleRoot(false) // Reset flag on failure
 		return
-	}
-
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Printf("Failed to decode leader private key: %v", err)
-		return
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
 	}
 
 	_, _, err = n.ethService.ExecuteTransaction(
@@ -1501,33 +1399,10 @@ type CvAndSigRS struct {
 func (n *LeaderNode) requestToSubmitCo(ctx context.Context, roundNum string, trialNum string, missingIndices []*big.Int) {
 	cvNotOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices := n.prepareArgumentsForRequestToSubmitCo(ctx, roundNum, trialNum, missingIndices)
 
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
+		log.Printf("Failed to create leader client: %v", err)
 		return
-	}
-
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
-	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
-	}
-
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		log.Printf("Failed to decode leader private key: %v", err)
-		return
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
 	}
 
 	_, _, err = n.ethService.ExecuteTransaction(

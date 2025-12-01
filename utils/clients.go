@@ -4,11 +4,14 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 )
 
 type Client struct {
@@ -38,4 +41,62 @@ func LoadContractABI(filename string) (abi.ABI, error) {
 	}
 
 	return parsedABI, nil
+}
+
+func NewLeaderClient(abiPath string) (*Client, error) {
+	contractAddressStr := appconfig.Get().ContractAddress
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := LoadContractABI(abiPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
+	if privateKeyHex == "" {
+		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode leader private key: %v", err)
+	}
+
+	return &Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}, nil
+}
+
+func NewEOAClient(abiPath string) (*Client, error) {
+	contractAddressStr := appconfig.Get().ContractAddress
+	if contractAddressStr == "" {
+		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := LoadContractABI(abiPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+
+	privateKeyHex := appconfig.Get().EOAPrivateKey
+	if privateKeyHex == "" {
+		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode leader private key: %v", err)
+	}
+
+	return &Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}, nil
 }
