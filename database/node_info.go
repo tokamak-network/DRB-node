@@ -83,34 +83,6 @@ func (r *NodeInfoRepository) AddAndUpdateNodeInfo(ctx context.Context, nodeInfo 
 	return err
 }
 
-// func (r *NodeInfoRepository) AddAndUpdateNodeInfo(ctx context.Context, nodeInfo *utils.NodeInfo) error {
-// 	if nodeInfo == nil {
-// 		return fmt.Errorf("nodeInfo cannot be nil")
-// 	}
-
-// 	node := &NodeInfoScheme{
-// 		IP:         nodeInfo.IP,
-// 		Port:       nodeInfo.Port,
-// 		PeerID:     nodeInfo.PeerID,
-// 		EOAAddress: nodeInfo.EOAAddress,
-// 	}
-
-// 	_, err := r.db.WithContext(ctx).Model(node).
-// 		OnConflict("(eoa_address) DO UPDATE").
-// 		Set("peer_id = EXCLUDED.peer_id").
-// 		Set("ip = EXCLUDED.ip").
-// 		Set("port = EXCLUDED.port").
-// 		Insert()
-
-// 	if err != nil {
-// 		log.Printf("Database error occurred: %s", err.Error())
-// 		return err
-// 	}
-
-//		log.Printf("Successfully inserted/updated NodeInfo: EOA=%s, IP=%s, Port=%s, PeerID=%s",
-//			nodeInfo.EOAAddress, nodeInfo.IP, nodeInfo.Port, nodeInfo.PeerID)
-//		return nil
-//	}
 func (r *NodeInfoRepository) GetNodeInfos(ctx context.Context) ([]*utils.NodeInfo, error) {
 	var nodes []NodeInfoScheme
 	if err := r.db.WithContext(ctx).Model(&nodes).Select(); err != nil {

@@ -174,18 +174,41 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 	IsNetworkError, isActivated := rh.checkActivationStatus(ctx, clientUtils, eoaAddress)
 	if IsNetworkError {
 		log.Println("Network error. Skipping activation check.")
-		time.Sleep(30 * time.Second)
+		select {
+		case <-ctx.Done():
+			log.Println("Regular node received shutdown signal during initial activation check...")
+			return
+		case <-time.After(30 * time.Second):
+			// Continue after delay
+		}
 	}
 	if isActivated {
 		rh.sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
 	}
+	// Main loop with context cancellation support
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
 	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Regular node received shutdown signal, cleaning up...")
+			return
+		case <-ticker.C:
+			// Continue with normal processing
+		}
+
 		// Check activation status
 		IsNetworkError, isActivated := rh.checkActivationStatus(ctx, clientUtils, eoaAddress)
 		if IsNetworkError {
 			log.Println("Network error. Skipping activation check.")
-			time.Sleep(30 * time.Second)
-			continue
+			select {
+			case <-ctx.Done():
+				log.Println("Regular node received shutdown signal during activation check...")
+				return
+			case <-time.After(30 * time.Second):
+				continue
+			}
 		}
 		if isActivated {
 			log.Println("Node is activated. No further action required.")

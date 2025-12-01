@@ -75,3 +75,17 @@ func GetDB() *pg.DB {
 	}
 	return dbClient
 }
+
+// Close gracefully closes the database connection
+func Close() error {
+	if dbClient != nil {
+		log.Println("Closing database connection...")
+		err := dbClient.Close()
+		if err != nil {
+			return fmt.Errorf("error closing database: %v", err)
+		}
+		log.Println("Database connection closed successfully.")
+		return nil
+	}
+	return nil
+}

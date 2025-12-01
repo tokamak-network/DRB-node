@@ -95,9 +95,6 @@ func (lh *LeaderNodeHandler) Run(ctx context.Context) {
 		log.Fatalf("Error creating host: %v", err)
 	}
 
-	// Populate peerstore from DB
-	// libp2putils.PopulatePeerstoreFromDB(h)
-
 	defer h.Close()
 	lh.leaderNode.SetHost(h)
 	h.SetStreamHandler("/register", func(s network.Stream) {
@@ -124,17 +121,15 @@ func (lh *LeaderNodeHandler) Run(ctx context.Context) {
 	go lh.leaderNode.CheckHaltedState(ctx)
 	go lh.leaderNode.MonitorCommits(ctx)
 	go lh.leaderNode.ReceiveCommit(ctx)
-	// leaderNode_helper.StartBroadcastCleanup()
-	// leaderNode_helper.StartLeaderCommitCleanup()
-	for {
-		if !lh.leaderNode.GetExecution() {
-			time.Sleep(10 * time.Second)
-			continue
-		}
-		// firstRequest := leaderNode_helper.GetReq()
-		// processRounds(fallbackEthClient, leaderNode_helper.GetReq())
-		time.Sleep(30 * time.Second)
-	}
+
+	// Block until shutdown signal is received
+	<-ctx.Done()
+	log.Println("Leader node received shutdown signal, cleaning up...")
+
+	// Give goroutines a moment to finish
+	time.Sleep(2 * time.Second)
+
+	log.Println("Leader node shutdown complete")
 }
 
 func (lh *LeaderNodeHandler) handleRegistrationRequest(ctx context.Context, s network.Stream) {

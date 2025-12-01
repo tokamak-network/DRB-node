@@ -20,9 +20,17 @@ import (
 
 // MonitorCommits continuously checks for rounds where all EOAs have submitted their secret values.
 func (n *LeaderNode) MonitorCommits(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
 	for {
-		n.checkRoundsForCompletion(ctx)
-		time.Sleep(10 * time.Second)
+		select {
+		case <-ctx.Done():
+			log.Println("MonitorCommits function received shutdown signal, stopping...")
+			return
+		case <-ticker.C:
+			n.checkRoundsForCompletion(ctx)
+		}
 	}
 }
 

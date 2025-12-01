@@ -86,6 +86,10 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 		reconnect := false
 		for {
 			select {
+			case <-ctx.Done():
+				log.Println("ReceiveCommit function received shutdown signal, closing subscription...")
+				sub.Unsubscribe()
+				return
 			case err := <-sub.Err():
 				log.Printf("Error in event subscription: %v", err)
 

@@ -82,6 +82,10 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 		reconnect := false
 		for {
 			select {
+			case <-ctx.Done():
+				log.Println("MonitorCommitRequest function received shutdown signal, closing subscription...")
+				sub.Unsubscribe()
+				return
 			case err := <-sub.Err():
 				log.Printf("Error in event subscription: %v", err)
 
@@ -553,21 +557,28 @@ func (n *RegularNode) CleanupRoundDataByUniqueKey(uniqueKey string) {
 }
 
 func (n *RegularNode) AllCosReceivedUnlocked(ctx context.Context, round string, trialNum string) {
-	for {
-		activatedOps := eth.Service.GetActivatedOperatorsCached()
-		if n.GetHalted() {
-			log.Println("System is halted. Skipping AllCosReceivedUnlocked.")
-			return
-		}
-		if n.allCosReceivedUnlockedRegular(round, trialNum, activatedOps) {
-			flag, _ := n.revealOrderService.DetermineRegularRevealOrder(ctx, round, trialNum, activatedOps)
-			if flag {
-				break
-			}
-			time.Sleep(5 * time.Second)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
 
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("AllCosReceivedUnlocked received shutdown signal, stopping...")
+			return
+		case <-ticker.C:
+			activatedOps := eth.Service.GetActivatedOperatorsCached()
+			if n.GetHalted() {
+				log.Println("System is halted. Skipping AllCosReceivedUnlocked.")
+				return
+			}
+			if n.allCosReceivedUnlockedRegular(round, trialNum, activatedOps) {
+				flag, _ := n.revealOrderService.DetermineRegularRevealOrder(ctx, round, trialNum, activatedOps)
+				if flag {
+					return
+				}
+				// Continue checking
+			}
 		}
-		time.Sleep(2 * time.Second)
 	}
 }
 
