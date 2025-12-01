@@ -423,8 +423,16 @@ func TestFallbackRPCClient_TransactionReceipt(t *testing.T) {
 				return &jsonRPCResponse{
 					JSONRPC: "2.0",
 					Result: map[string]interface{}{
-						"blockNumber": "0x1",
-						"status":      "0x1",
+						"blockHash":         common.Hash{}.String(),
+						"blockNumber":       "0x1",
+						"contractAddress":   nil,
+						"cumulativeGasUsed": "0x1",
+						"gasUsed":           "0x1",
+						"logs":              []*types.Log{},
+						"logsBloom":         types.Bloom{},
+						"status":            "0x1",
+						"transactionHash":   common.Hash{}.String(),
+						"transactionIndex":  "0x0",
 					},
 					ID: req.ID,
 				}
@@ -439,9 +447,8 @@ func TestFallbackRPCClient_TransactionReceipt(t *testing.T) {
 
 		tx := types.NewTransaction(0, common.Address{}, big.NewInt(0), 0, big.NewInt(0), nil)
 		receipt, err := client.TransactionReceipt(context.Background(), tx)
-		// Note: This might fail due to JSON unmarshaling, but we're testing the fallback logic
-		_ = receipt
-		_ = err
+		require.NoError(t, err)
+		assert.NotNil(t, receipt)
 	})
 
 	t.Run("not found error returns ethereum.NotFound", func(t *testing.T) {
@@ -1102,15 +1109,8 @@ func TestFallbackRPCClient_GetCurrentClient(t *testing.T) {
 func TestFallbackRPCClient_SubscribeFilterLogs(t *testing.T) {
 	logger.InitLogger()
 
-	t.Run("success on first client", func(t *testing.T) {
+	t.Run("fails on http client", func(t *testing.T) {
 		server := createMockRPCServer(t, func(req *jsonRPCRequest) *jsonRPCResponse {
-			if req.Method == "eth_subscribe" {
-				return &jsonRPCResponse{
-					JSONRPC: "2.0",
-					Result:  "0x123",
-					ID:      req.ID,
-				}
-			}
 			return &jsonRPCResponse{JSONRPC: "2.0", Result: "0x1", ID: req.ID}
 		})
 		defer server.Close()
@@ -1121,35 +1121,18 @@ func TestFallbackRPCClient_SubscribeFilterLogs(t *testing.T) {
 
 		ch := make(chan types.Log)
 		sub, err := client.SubscribeFilterLogs(context.Background(), ethereum.FilterQuery{}, ch)
-		// Note: This might fail due to WebSocket requirements, but we're testing the fallback logic
-		_ = sub
-		_ = err
+		assert.Error(t, err)
+		assert.Nil(t, sub)
+		assert.Contains(t, err.Error(), "notifications not supported")
 	})
 
-	t.Run("success after fallback", func(t *testing.T) {
+	t.Run("fallback also fails on http clients", func(t *testing.T) {
 		server1 := createMockRPCServer(t, func(req *jsonRPCRequest) *jsonRPCResponse {
-			if req.Method == "eth_subscribe" {
-				return &jsonRPCResponse{
-					JSONRPC: "2.0",
-					Error: &rpcError{
-						Code:    -32000,
-						Message: "network error",
-					},
-					ID: req.ID,
-				}
-			}
 			return &jsonRPCResponse{JSONRPC: "2.0", Result: "0x1", ID: req.ID}
 		})
 		defer server1.Close()
 
 		server2 := createMockRPCServer(t, func(req *jsonRPCRequest) *jsonRPCResponse {
-			if req.Method == "eth_subscribe" {
-				return &jsonRPCResponse{
-					JSONRPC: "2.0",
-					Result:  "0x123",
-					ID:      req.ID,
-				}
-			}
 			return &jsonRPCResponse{JSONRPC: "2.0", Result: "0x1", ID: req.ID}
 		})
 		defer server2.Close()
@@ -1160,9 +1143,10 @@ func TestFallbackRPCClient_SubscribeFilterLogs(t *testing.T) {
 
 		ch := make(chan types.Log)
 		sub, err := client.SubscribeFilterLogs(context.Background(), ethereum.FilterQuery{}, ch)
-		// Note: This might fail due to WebSocket requirements, but we're testing the fallback logic
-		_ = sub
-		_ = err
+		assert.Error(t, err)
+		assert.Nil(t, sub)
+		assert.Contains(t, err.Error(), "all RPCs failed")
+		assert.Contains(t, err.Error(), "notifications not supported")
 	})
 }
 
