@@ -1113,13 +1113,13 @@ func TestRegularNode_ResetMonitoringState(t *testing.T) {
 	node.SetLeaderMonitoringActive(true)
 	node.SetMerkleRootSubmittedEventEmitted(true)
 	node.SetCvRequestIndices([]*big.Int{big.NewInt(0), big.NewInt(1)})
-	node.MerkleRootSubmittedTOrRequestedCvTime(big.NewInt(123456))
+	node.SetSubmitSMonitoringReferenceTime(big.NewInt(123456))
 
 	node.ResetMonitoringState("100", "1")
 
 	assert.False(t, node.GetLeaderMonitoringActive())
 	assert.False(t, node.GetMerkleRootSubmittedEventEmitted())
-	assert.Nil(t, node.GetMerkleRootSubmittedTOrRequestedCvTime())
+	assert.Nil(t, node.GetSubmitSMonitoringReferenceTime())
 	assert.Empty(t, node.GetCvRequestIndices())
 }
 
@@ -1224,7 +1224,7 @@ func TestRegularNode_StartRequestToSubmitSOrGenerateRandomNumberMonitoring_Succe
 	defer func() { eth.Service = originalService }()
 
 	futureTime := big.NewInt(time.Now().Unix() + 1000)
-	node.MerkleRootSubmittedTOrRequestedCvTime(futureTime)
+	node.SetSubmitSMonitoringReferenceTime(futureTime)
 
 	node.StartRequestToSubmitSOrGenerateRandomNumberMonitoring(context.Background(), "100", "1")
 
@@ -1256,7 +1256,7 @@ func TestRegularNode_StopRequestToSubmitSOrGenerateRandomNumberMonitoring_WithTi
 	defer func() { eth.Service = originalService }()
 
 	futureTime := big.NewInt(time.Now().Unix() + 1000)
-	node.MerkleRootSubmittedTOrRequestedCvTime(futureTime)
+	node.SetSubmitSMonitoringReferenceTime(futureTime)
 
 	node.StartRequestToSubmitSOrGenerateRandomNumberMonitoring(context.Background(), "100", "1")
 
@@ -1601,7 +1601,7 @@ func TestRegularNode_MonitoringLifecycle(t *testing.T) {
 	assert.True(t, node.GetLeaderMonitoringActive())
 
 	// Start merkle root monitoring
-	node.MerkleRootSubmittedTOrRequestedCvTime(futureTime)
+	node.SetSubmitSMonitoringReferenceTime(futureTime)
 	node.StartMerkleRootMonitoring(context.Background(), "100", "1", futureTime)
 	assert.NotNil(t, node.merkleRootMonitoringTimer)
 
@@ -2380,6 +2380,9 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_Success(t *testing
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock BlockTimestamp for the RequestedToSubmitCo event
+	mockClient.On("BlockTimestamp", mock.Anything, big.NewInt(12345)).Return(uint64(1234567890), nil)
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).

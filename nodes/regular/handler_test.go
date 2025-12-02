@@ -1489,21 +1489,21 @@ func TestRegularNodeHandler_MerkleRootSubmittedTime(t *testing.T) {
 	handler := createTestRegularNodeHandler()
 
 	// Test default
-	assert.Nil(t, handler.regularNode.GetMerkleRootSubmittedTOrRequestedCvTime())
+	assert.Nil(t, handler.regularNode.GetSubmitSMonitoringReferenceTime())
 
 	// Set time
 	testTime := big.NewInt(1234567890)
-	handler.regularNode.MerkleRootSubmittedTOrRequestedCvTime(testTime)
+	handler.regularNode.SetSubmitSMonitoringReferenceTime(testTime)
 
-	retrieved := handler.regularNode.GetMerkleRootSubmittedTOrRequestedCvTime()
+	retrieved := handler.regularNode.GetSubmitSMonitoringReferenceTime()
 	assert.NotNil(t, retrieved)
 	assert.Equal(t, testTime, retrieved)
 
 	// Update time
 	newTime := big.NewInt(9876543210)
-	handler.regularNode.MerkleRootSubmittedTOrRequestedCvTime(newTime)
+	handler.regularNode.SetSubmitSMonitoringReferenceTime(newTime)
 
-	retrieved = handler.regularNode.GetMerkleRootSubmittedTOrRequestedCvTime()
+	retrieved = handler.regularNode.GetSubmitSMonitoringReferenceTime()
 	assert.Equal(t, newTime, retrieved)
 }
 

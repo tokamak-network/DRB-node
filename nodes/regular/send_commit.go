@@ -175,7 +175,7 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 						// Mark Merkle root as submitted and stop leader monitoring
 						n.SetMerkleRootSubmittedEventEmitted(true)
 						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
-						n.MerkleRootSubmittedTOrRequestedCvTime(big.NewInt(int64(blockTimestamp)))
+						n.SetSubmitSMonitoringReferenceTime(big.NewInt(int64(blockTimestamp)))
 
 						n.StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 						n.StopFailToSubmitMerkleRootAfterDisputeMonitoring(eventData.Round.String(), eventData.TrialNum.String())
@@ -202,6 +202,24 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 						}
 						fmt.Printf("RequestedToSubmitCo Event: Round %v, TrialNum %v, indicesLength %v\n, indices %v\n", eventData.Round, eventData.TrialNum, eventData.IndicesLength, eventData.PackedIndices)
 
+						// Get the block timestamp for RequestedToSubmitCo event
+						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
+						if err != nil {
+							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+							continue
+						}
+
+						// Stop the current monitoring
+						n.StopRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+
+						// Update the time reference to RequestedToSubmitCo event time
+						n.SetSubmitSMonitoringReferenceTime(big.NewInt(int64(blockTimestamp)))
+
+						// Restart monitoring with the new time reference
+						n.StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx, eventData.Round.String(), eventData.TrialNum.String())
+
+						log.Printf("Restarted monitoring for round %s trial %s with RequestedToSubmitCo event time", eventData.Round.String(), eventData.TrialNum.String())
+
 						n.processCosRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
 
 					case RequestedToSubmitSFromIndexKSig:
@@ -222,7 +240,7 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 						// Stop request to submit S or generate random number monitoring when RequestedToSubmitSFromIndexK event is received
 						n.StopRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
 						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
-						n.MerkleRootSubmittedTOrRequestedCvTime(big.NewInt(int64(blockTimestamp)))
+						n.SetSubmitSMonitoringReferenceTime(big.NewInt(int64(blockTimestamp)))
 						if err != nil {
 							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
 							continue
@@ -792,8 +810,7 @@ func (n *RegularNode) ResetMonitoringState(round string, trialNum string) {
 	n.StopFailToSubmitMerkleRootAfterDisputeMonitoring(round, trialNum)
 	n.StopRequestToSubmitSOrGenerateRandomNumberMonitoring(round, trialNum)
 	n.SetMerkleRootSubmittedEventEmitted(false)
-	// requestedToSubmitCvTime = nil
-	n.MerkleRootSubmittedTOrRequestedCvTime(nil)
+	n.SetSubmitSMonitoringReferenceTime(nil)
 
 	// Reset monitoring state variables
 	n.ClearCvRequestIndices()
@@ -929,7 +946,7 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 	activatedOperatorsLength := new(big.Int).SetInt64(eth.Service.GetActivatedOperatorsLength())
 
 	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod
-	deadline := new(big.Int).Add(n.GetMerkleRootSubmittedTOrRequestedCvTime(), periods.OffChainSubmissionPeriod)
+	deadline := new(big.Int).Add(n.GetSubmitSMonitoringReferenceTime(), periods.OffChainSubmissionPeriod)
 	operatorDelay := new(big.Int).Mul(periods.OffChainSubmissionPeriodPerOperator, activatedOperatorsLength)
 	deadline.Add(deadline, operatorDelay)
 	deadline.Add(deadline, periods.RequestOrSubmitOrFailDecisionPeriod)
@@ -941,7 +958,7 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 
 	log.Printf("Starting request to submit S or generate random number monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 	log.Printf("Parameters - merkleRootSubmittedTime: %v, offChainSubmissionPeriod: %v, offChainSubmissionPeriodPerOperator: %v, activatedOperatorsLength: %v, requestOrSubmitOrFailDecisionPeriod: %v",
-		n.GetMerkleRootSubmittedTOrRequestedCvTime(), periods.OffChainSubmissionPeriod, periods.OffChainSubmissionPeriodPerOperator, activatedOperatorsLength, periods.RequestOrSubmitOrFailDecisionPeriod)
+		n.GetSubmitSMonitoringReferenceTime(), periods.OffChainSubmissionPeriod, periods.OffChainSubmissionPeriodPerOperator, activatedOperatorsLength, periods.RequestOrSubmitOrFailDecisionPeriod)
 
 	// Set timer to call the function when deadline is reached
 	n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer = time.AfterFunc(duration, func() {

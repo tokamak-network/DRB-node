@@ -38,8 +38,8 @@ type RegularNode struct {
 	merkleRootSubmittedEventEmitted                       int32 // 0 = false, 1 = true
 	merkleRootMonitoringTimer                             *time.Timer
 	requestToSubmitSOrGenerateRandomNumberMonitoringTimer *time.Timer
-	merkleRootSubmittedTOrRequestedCvTime                 *big.Int
-	merkleRootTimeMu                                      sync.RWMutex // Protect big.Int pointer
+	submitSMonitoringReferenceTime                        *big.Int
+	submitSMonitoringReferenceTimeMu                      sync.RWMutex // Protect big.Int pointer
 
 	cvRequestIndices   []*big.Int
 	cvRequestIndicesMu sync.RWMutex

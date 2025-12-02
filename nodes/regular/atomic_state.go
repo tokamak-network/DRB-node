@@ -292,15 +292,15 @@ func (n *RegularNode) GetRegularNodePrivateKey() *ecdsa.PrivateKey {
 // MUTEX-PROTECTED BIG.INT POINTER VARIABLES
 // ============================================================================
 
-// MerkleRootSubmittedTime management
-func (n *RegularNode) MerkleRootSubmittedTOrRequestedCvTime(timestamp *big.Int) {
-	n.merkleRootTimeMu.Lock()
-	defer n.merkleRootTimeMu.Unlock()
-	n.merkleRootSubmittedTOrRequestedCvTime = timestamp
+// SubmitSMonitoringReferenceTime management
+func (n *RegularNode) SetSubmitSMonitoringReferenceTime(timestamp *big.Int) {
+	n.submitSMonitoringReferenceTimeMu.Lock()
+	defer n.submitSMonitoringReferenceTimeMu.Unlock()
+	n.submitSMonitoringReferenceTime = timestamp
 }
 
-func (n *RegularNode) GetMerkleRootSubmittedTOrRequestedCvTime() *big.Int {
-	n.merkleRootTimeMu.RLock()
-	defer n.merkleRootTimeMu.RUnlock()
-	return n.merkleRootSubmittedTOrRequestedCvTime
+func (n *RegularNode) GetSubmitSMonitoringReferenceTime() *big.Int {
+	n.submitSMonitoringReferenceTimeMu.RLock()
+	defer n.submitSMonitoringReferenceTimeMu.RUnlock()
+	return n.submitSMonitoringReferenceTime
 }

@@ -336,28 +336,28 @@ func TestRegularNode_RegularNodePrivateKey(t *testing.T) {
 	assert.Nil(t, node.GetRegularNodePrivateKey(), "PrivateKey should be nil after resetting")
 }
 
-func TestRegularNode_MerkleRootSubmittedTOrRequestedCvTime(t *testing.T) {
+func TestRegularNode_SubmitSMonitoringReferenceTime(t *testing.T) {
 	node := createTestRegularNode()
 
 	// Test default value (should be nil)
-	assert.Nil(t, node.GetMerkleRootSubmittedTOrRequestedCvTime(), "Time should be nil by default")
+	assert.Nil(t, node.GetSubmitSMonitoringReferenceTime(), "Time should be nil by default")
 
 	// Test setting a value
 	testTime := big.NewInt(1234567890)
-	node.MerkleRootSubmittedTOrRequestedCvTime(testTime)
-	retrievedTime := node.GetMerkleRootSubmittedTOrRequestedCvTime()
+	node.SetSubmitSMonitoringReferenceTime(testTime)
+	retrievedTime := node.GetSubmitSMonitoringReferenceTime()
 	assert.NotNil(t, retrievedTime, "Time should not be nil after setting")
 	assert.Equal(t, testTime, retrievedTime, "Retrieved time should match the set time")
 
 	// Test updating to a new value
 	newTime := big.NewInt(9876543210)
-	node.MerkleRootSubmittedTOrRequestedCvTime(newTime)
-	retrievedTime = node.GetMerkleRootSubmittedTOrRequestedCvTime()
+	node.SetSubmitSMonitoringReferenceTime(newTime)
+	retrievedTime = node.GetSubmitSMonitoringReferenceTime()
 	assert.Equal(t, newTime, retrievedTime, "Time should be updated")
 
 	// Test setting to nil
-	node.MerkleRootSubmittedTOrRequestedCvTime(nil)
-	assert.Nil(t, node.GetMerkleRootSubmittedTOrRequestedCvTime(), "Time should be nil after resetting")
+	node.SetSubmitSMonitoringReferenceTime(nil)
+	assert.Nil(t, node.GetSubmitSMonitoringReferenceTime(), "Time should be nil after resetting")
 }
 
 func TestRegularNode_EnqueueUniqueKeyForCleanup(t *testing.T) {
@@ -570,8 +570,8 @@ func TestRegularNode_NilAndEmptyValues(t *testing.T) {
 	assert.Empty(t, node.GetCurrentRound())
 
 	// Test nil big.Int
-	node.MerkleRootSubmittedTOrRequestedCvTime(nil)
-	assert.Nil(t, node.GetMerkleRootSubmittedTOrRequestedCvTime())
+	node.SetSubmitSMonitoringReferenceTime(nil)
+	assert.Nil(t, node.GetSubmitSMonitoringReferenceTime())
 
 	// Test empty slice
 	node.SetCvRequestIndices([]*big.Int{})
