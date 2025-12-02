@@ -20,7 +20,6 @@ import (
 	"github.com/tokamak-network/DRB-node/integration_test/setup"
 )
 
-// Global test environment - set up once for all tests
 var (
 	testEnv *setup.TestEnvironment
 	testCtx context.Context
@@ -45,7 +44,7 @@ func TestMain(m *testing.M) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
 	defer cancel()
 	testCtx = ctx
 
@@ -96,7 +95,7 @@ func (m *mockTestingT) Logf(format string, args ...interface{}) {
 }
 
 func TestRandomNumberGeneration(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -104,7 +103,7 @@ func TestRandomNumberGeneration(t *testing.T) {
 	geth := testEnv.Geth
 
 	t.Log("🧪 Test Case 1: Random Number Generation Test")
-	t.Log("STEP 5: Requesting random number...")
+	t.Log("STEP 1: Requesting random number...")
 
 	currentRoundInput, _ := geth.ContractABI.Pack("s_currentRound")
 	currentRoundResult, _ := geth.Client.CallContract(testCtx, ethereum.CallMsg{
@@ -153,7 +152,7 @@ func TestRandomNumberGeneration(t *testing.T) {
 	}
 	t.Logf("Verified request exists for round %s", round.String())
 
-	t.Log("\nSTEP 6: Waiting for random number to be generated...")
+	t.Log("\nSTEP 2: Waiting for random number to be generated...")
 
 	maxFulfillmentRetries := 7
 	var fulfilled bool
@@ -301,7 +300,7 @@ func TestRandomNumberGeneration(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCommit(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -319,7 +318,7 @@ func TestRegularNodeOnChainCommit(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating regularNode1 environment to enable mock mode...")
+	t.Log("STEP 2: Updating regularNode1 environment with MOCK and DISABLE variables...")
 
 	// Get integration test directory (same logic as setup package)
 	wd, err := os.Getwd()
@@ -337,17 +336,38 @@ func TestRegularNodeOnChainCommit(t *testing.T) {
 		}
 	}
 
-	// Update the .env.docker-test file to add MOCK_SEND_COMMIT_TO_LEADER for regularNode1
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
-		err = os.WriteFile(envFile, []byte(envContentStr), 0644)
-		require.NoError(t, err, "Failed to write env file")
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
+		"MOCK_SEND_COS_TO_LEADER":                "false",
+		"MOCK_SEND_SECRET_TO_LEADER":             "false",
+		"MOCK_SEND_SECRET":                       "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
+		"DISABLE_SECRET_SUBMISSION":              "false",
+		"DISABLE_COS_SUBMISSION":                 "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
 	}
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
 
 	// Update docker-compose to add the environment variable
 	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
@@ -400,19 +420,22 @@ func TestRegularNodeOnChainCommit(t *testing.T) {
 	var randomNumber *big.Int
 
 	for i := 0; i < maxFulfillmentRetries; i++ {
-		// Check if random number was fulfilled
-		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
-		if err == nil && fulfilled {
-			t.Logf("Random number fulfilled after %d attempts!", i+1)
-			break
-		}
-
 		if i < maxFulfillmentRetries-1 {
 			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
 
 			// Check regularNode1 logs to verify it's submitting on-chain
 			t.Log("Checking regularNode1 logs for on-chain submission...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-leadernode", 30)
+			showLogs(t, "test-regularnode1", 30)
+			showLogs(t, "test-regularnode2", 30)
+			showLogs(t, "test-regularnode3", 30)
+
+			// Check if random number was fulfilled
+			fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+			if err == nil && fulfilled {
+				t.Logf("Random number fulfilled after %d attempts!", i+1)
+				break
+			}
 
 			time.Sleep(15 * time.Second)
 		}
@@ -428,7 +451,7 @@ func TestRegularNodeOnChainCommit(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCos(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -446,7 +469,7 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating regularNode1 environment to enable COS mock mode...")
+	t.Log("STEP 2: Updating regularNode1 environment with MOCK and DISABLE variables...")
 
 	wd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get working directory")
@@ -462,17 +485,38 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 			integrationTestDir = filepath.Dir(wd)
 		}
 	}
-	// Update env
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
-		err = os.WriteFile(envFile, []byte(envContentStr), 0644)
-		require.NoError(t, err, "Failed to write env file")
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":             "false",
+		"MOCK_SEND_COS_TO_LEADER":                "true",
+		"MOCK_SEND_SECRET_TO_LEADER":             "false",
+		"MOCK_SEND_SECRET":                       "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
+		"DISABLE_SECRET_SUBMISSION":              "false",
+		"DISABLE_COS_SUBMISSION":                 "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
 	}
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
 
 	// Update docker-compose
 	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
@@ -499,7 +543,7 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 		}
 	}
 
-	t.Log("STEP 3: Restarting regularNode1 with COS mock mode enabled...")
+	t.Log("STEP 3: Restarting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
 	restartCmd := exec.Command("docker-compose",
@@ -534,12 +578,6 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 	var randomNumber *big.Int
 
 	for i := 0; i < maxFulfillmentRetries; i++ {
-		// Check if random number was fulfilled
-		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
-		if err == nil && fulfilled {
-			t.Logf("Random number fulfilled after %d attempts!", i+1)
-			break
-		}
 
 		if i < maxFulfillmentRetries-1 {
 			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
@@ -550,8 +588,17 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 
 			// Check regularNode1 logs to verify it's receiving RequestedToSubmitCo and submitting COS on-chain
 			t.Log("Checking regularNode1 logs for on-chain COS submission...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-regularnode1", 30)
+			t.Log("Checking regularNode2 logs")
+			showLogs(t, "test-regularnode2", 30)
+			t.Log("Checking regularNode3 logs")
+			showLogs(t, "test-regularnode3", 30)
 
+			fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+			if err == nil && fulfilled {
+				t.Logf("Random number fulfilled after %d attempts!", i+1)
+				break
+			}
 			// Wait longer to accommodate leader's monitoring period
 			time.Sleep(20 * time.Second)
 		}
@@ -567,7 +614,7 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -585,7 +632,7 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating regularNode1 environment to enable CVS and COS mock mode...")
+	t.Log("STEP 2: Updating regularNode1 environment with MOCK and DISABLE variables...")
 
 	wd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get working directory")
@@ -601,17 +648,36 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 			integrationTestDir = filepath.Dir(wd)
 		}
 	}
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
+		"MOCK_SEND_COS_TO_LEADER":                "true",
+		"MOCK_SEND_SECRET_TO_LEADER":             "false",
+		"MOCK_SEND_SECRET":                       "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
+		"DISABLE_SECRET_SUBMISSION":              "false",
+		"DISABLE_COS_SUBMISSION":                 "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
 	}
-	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
 	}
+
 	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
 	require.NoError(t, err, "Failed to write env file")
 
@@ -652,7 +718,7 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
 	require.NoError(t, err, "Failed to write docker-compose file")
 
-	t.Log("STEP 3: Restarting regularNode1 with CVS and COS mock mode enabled...")
+	t.Log("STEP 3: Restarting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
 	restartCmd := exec.Command("docker-compose",
@@ -687,13 +753,6 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 	var randomNumber *big.Int
 
 	for i := 0; i < maxFulfillmentRetries; i++ {
-		// Check if random number was fulfilled
-		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
-		if err == nil && fulfilled {
-			t.Logf("Random number fulfilled after %d attempts!", i+1)
-			break
-		}
-
 		if i < maxFulfillmentRetries-1 {
 			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
 
@@ -703,8 +762,14 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 
 			// Check regularNode1 logs to verify it's submitting both CVS and COS on-chain
 			t.Log("Checking regularNode1 logs for on-chain CVS and COS submission...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-regularnode1", 30)
 
+			// Check if random number was fulfilled
+			fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+			if err == nil && fulfilled {
+				t.Logf("Random number fulfilled after %d attempts!", i+1)
+				break
+			}
 			time.Sleep(20 * time.Second)
 		}
 	}
@@ -719,7 +784,7 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 }
 
 func TestRegularNodeOnChainSecret(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -835,12 +900,6 @@ func TestRegularNodeOnChainSecret(t *testing.T) {
 	var randomNumber *big.Int
 
 	for i := 0; i < maxFulfillmentRetries; i++ {
-		// Check if random number was fulfilled
-		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
-		if err == nil && fulfilled {
-			t.Logf("Random number fulfilled after %d attempts!", i+1)
-			break
-		}
 
 		if i < maxFulfillmentRetries-1 {
 			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
@@ -851,8 +910,14 @@ func TestRegularNodeOnChainSecret(t *testing.T) {
 
 			// Check regularNode1 logs to verify it's receiving RequestedToSubmitSFromIndexK and submitting secret on-chain
 			t.Log("Checking regularNode1 logs for on-chain secret submission...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-regularnode1", 30)
 
+			// Check if random number was fulfilled
+			fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+			if err == nil && fulfilled {
+				t.Logf("Random number fulfilled after %d attempts!", i+1)
+				break
+			}
 			time.Sleep(20 * time.Second)
 		}
 	}
@@ -867,7 +932,7 @@ func TestRegularNodeOnChainSecret(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -885,7 +950,7 @@ func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating regularNode1 environment to enable CVS, COS, and Secret mock mode...")
+	t.Log("STEP 2: Updating regularNode1 environment with MOCK and DISABLE variables...")
 
 	wd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get working directory")
@@ -902,21 +967,36 @@ func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
 		}
 	}
 
-	// Update env file to add all three mock environment variables
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
+		"MOCK_SEND_COS_TO_LEADER":                "true",
+		"MOCK_SEND_SECRET_TO_LEADER":             "true",
+		"MOCK_SEND_SECRET":                       "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
+		"DISABLE_SECRET_SUBMISSION":              "false",
+		"DISABLE_COS_SUBMISSION":                 "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
 	}
-	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
 	}
-	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
-		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
-	}
+
 	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
 	require.NoError(t, err, "Failed to write env file")
 
@@ -980,7 +1060,7 @@ func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
 	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
 	require.NoError(t, err, "Failed to write docker-compose file")
 
-	t.Log("STEP 3: Restarting regularNode1 with CVS, COS, and Secret mock mode enabled...")
+	t.Log("STEP 3: Restarting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
 	restartCmd := exec.Command("docker-compose",
@@ -1031,7 +1111,7 @@ func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
 
 			// Check regularNode1 logs to verify it's submitting CVS, COS, and Secret on-chain
 			t.Log("Checking regularNode1 logs for on-chain CVS, COS, and Secret submission...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-regularnode1", 30)
 
 			time.Sleep(20 * time.Second)
 		}
@@ -1047,7 +1127,7 @@ func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
-	t.Skip("Skipping integration test in short mode") // Use the shared test environment
+	// t.Skip("Skipping integration test in short mode") // Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
 
@@ -1064,7 +1144,7 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating regularNode1 environment to enable CVS and Secret mock mode...")
+	t.Log("STEP 2: Updating regularNode1 environment with MOCK and DISABLE variables...")
 
 	wd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get working directory")
@@ -1081,18 +1161,36 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 		}
 	}
 
-	// Update env file to add MOCK_SEND_COMMIT_TO_LEADER and MOCK_SEND_SECRET_TO_LEADER
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
+		"MOCK_SEND_COS_TO_LEADER":                "false",
+		"MOCK_SEND_SECRET_TO_LEADER":             "true",
+		"MOCK_SEND_SECRET":                       "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
+		"DISABLE_SECRET_SUBMISSION":              "false",
+		"DISABLE_COS_SUBMISSION":                 "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
 	}
-	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
-		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
 	}
+
 	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
 	require.NoError(t, err, "Failed to write env file")
 
@@ -1133,7 +1231,7 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
 	require.NoError(t, err, "Failed to write docker-compose file")
 
-	t.Log("STEP 3: Restarting regularNode1 with CVS and Secret mock mode enabled...")
+	t.Log("STEP 3: Restarting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
 	restartCmd := exec.Command("docker-compose",
@@ -1168,12 +1266,6 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 	var randomNumber *big.Int
 
 	for i := 0; i < maxFulfillmentRetries; i++ {
-		// Check if random number was fulfilled
-		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
-		if err == nil && fulfilled {
-			t.Logf("Random number fulfilled after %d attempts!", i+1)
-			break
-		}
 
 		if i < maxFulfillmentRetries-1 {
 			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
@@ -1184,7 +1276,14 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 
 			// Check regularNode1 logs to verify it's submitting CVS and Secret on-chain
 			t.Log("Checking regularNode1 logs for on-chain CVS and Secret submission...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-regularnode1", 30)
+
+			// Random number fulfillment check
+			fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+			if err == nil && fulfilled {
+				t.Logf("Random number fulfilled after %d attempts!", i+1)
+				break
+			}
 
 			time.Sleep(20 * time.Second)
 		}
@@ -1200,7 +1299,7 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1218,7 +1317,7 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating regularNode1 environment to enable COS and Secret mock mode...")
+	t.Log("STEP 2: Updating regularNode1 environment with MOCK and DISABLE variables...")
 
 	wd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get working directory")
@@ -1235,18 +1334,36 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 		}
 	}
 
-	// Update env file to add MOCK_SEND_COS_TO_LEADER and MOCK_SEND_SECRET_TO_LEADER
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":             "false",
+		"MOCK_SEND_COS_TO_LEADER":                "true",
+		"MOCK_SEND_SECRET_TO_LEADER":             "true",
+		"MOCK_SEND_SECRET":                       "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
+		"DISABLE_SECRET_SUBMISSION":              "false",
+		"DISABLE_COS_SUBMISSION":                 "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
 	}
-	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
-		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
 	}
+
 	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
 	require.NoError(t, err, "Failed to write env file")
 
@@ -1287,7 +1404,7 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
 	require.NoError(t, err, "Failed to write docker-compose file")
 
-	t.Log("STEP 3: Restarting regularNode1 with COS and Secret mock mode enabled...")
+	t.Log("STEP 3: Restarting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
 	restartCmd := exec.Command("docker-compose",
@@ -1322,12 +1439,6 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 	var randomNumber *big.Int
 
 	for i := 0; i < maxFulfillmentRetries; i++ {
-		// Check if random number was fulfilled
-		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
-		if err == nil && fulfilled {
-			t.Logf("Random number fulfilled after %d attempts!", i+1)
-			break
-		}
 
 		if i < maxFulfillmentRetries-1 {
 			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
@@ -1338,8 +1449,14 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 
 			// Check regularNode1 logs to verify it's submitting COS and Secret on-chain
 			t.Log("Checking regularNode1 logs for on-chain COS and Secret submission...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-regularnode1", 30)
 
+			// Check if random number was fulfilled
+			fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+			if err == nil && fulfilled {
+				t.Logf("Random number fulfilled after %d attempts!", i+1)
+				break
+			}
 			time.Sleep(20 * time.Second)
 		}
 	}
@@ -1354,14 +1471,14 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 }
 
 func TestAllRegularNodesOnChainCvs(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
 
 	geth := testEnv.Geth
 
-	t.Log("🧪 Test Case 10: All Regular Nodes On-Chain Commit Test")
+	t.Log("🧪 Test Case 9: All Regular Nodes On-Chain Commit Test")
 	t.Log("STEP 1: Stopping all regular nodes...")
 
 	// Stop all regular nodes
@@ -1385,7 +1502,7 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating all regular nodes environment to enable mock mode...")
+	t.Log("STEP 2: Updating all regular nodes environment with MOCK and DISABLE variables...")
 
 	// Get integration test directory (same logic as setup package)
 	wd, err := os.Getwd()
@@ -1403,17 +1520,38 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 		}
 	}
 
-	// Update the .env.docker-test file to add MOCK_SEND_COMMIT_TO_LEADER
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
-		err = os.WriteFile(envFile, []byte(envContentStr), 0644)
-		require.NoError(t, err, "Failed to write env file")
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
+		"MOCK_SEND_COS_TO_LEADER":                "false",
+		"MOCK_SEND_SECRET_TO_LEADER":             "false",
+		"MOCK_SEND_SECRET":                       "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
+		"DISABLE_SECRET_SUBMISSION":              "false",
+		"DISABLE_COS_SUBMISSION":                 "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
 	}
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
 
 	// Update docker-compose to add the environment variable for all regular nodes
 	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
@@ -1449,7 +1587,7 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 		require.NoError(t, err, "Failed to write docker-compose file")
 	}
 
-	t.Log("STEP 3: Restarting all regular nodes with mock mode enabled...")
+	t.Log("STEP 3: Restarting all regular nodes with updated configuration...")
 
 	// Restart all regular nodes with the new environment
 	restartCmd := exec.Command("docker-compose",
@@ -1484,12 +1622,6 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 	var randomNumber *big.Int
 
 	for i := 0; i < maxFulfillmentRetries; i++ {
-		// Check if random number was fulfilled
-		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
-		if err == nil && fulfilled {
-			t.Logf("Random number fulfilled after %d attempts!", i+1)
-			break
-		}
 
 		if i < maxFulfillmentRetries-1 {
 			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
@@ -1500,12 +1632,18 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 			showLogs(t, "test-leadernode", 40)
 
 			t.Log("Checking regularNode1 logs for on-chain submission...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-regularnode1", 30)
 			t.Log("Checking regularNode2 logs for on-chain submission...")
-			showLogs(t, "test-regularnode2", 20)
+			showLogs(t, "test-regularnode2", 30)
 			t.Log("Checking regularNode3 logs for on-chain submission...")
-			showLogs(t, "test-regularnode3", 20)
+			showLogs(t, "test-regularnode3", 30)
 
+			// Check if random number was fulfilled
+			fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+			if err == nil && fulfilled {
+				t.Logf("Random number fulfilled after %d attempts!", i+1)
+				break
+			}
 			time.Sleep(20 * time.Second)
 		}
 	}
@@ -1516,18 +1654,18 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
 
 	t.Logf("Random number generated: %s", randomNumber.String())
-	t.Log("Test Case 10 Complete! All regular nodes successfully submitted commit on-chain.")
+	t.Log("Test Case 9 Complete! All regular nodes successfully submitted commit on-chain.")
 }
 
 func TestAllRegularNodesOnChainCos(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
 
 	geth := testEnv.Geth
 
-	t.Log("🧪 Test Case 11: All Regular Nodes On-Chain COS Test")
+	t.Log("🧪 Test Case 10: All Regular Nodes On-Chain COS Test")
 	t.Log("STEP 1: Stopping all regular nodes...")
 
 	// Stop all regular nodes
@@ -1551,7 +1689,7 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating all regular nodes environment to enable COS mock mode...")
+	t.Log("STEP 2: Updating all regular nodes environment with MOCK and DISABLE variables...")
 
 	// Get integration test directory (same logic as setup package)
 	wd, err := os.Getwd()
@@ -1569,17 +1707,38 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 		}
 	}
 
-	// Update the .env.docker-test file to add MOCK_SEND_COS_TO_LEADER
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
-		err = os.WriteFile(envFile, []byte(envContentStr), 0644)
-		require.NoError(t, err, "Failed to write env file")
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":             "false",
+		"MOCK_SEND_COS_TO_LEADER":                "true",
+		"MOCK_SEND_SECRET_TO_LEADER":             "false",
+		"MOCK_SEND_SECRET":                       "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
+		"DISABLE_SECRET_SUBMISSION":              "false",
+		"DISABLE_COS_SUBMISSION":                 "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
 	}
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
 
 	// Update docker-compose to add the environment variable for all regular nodes
 	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
@@ -1615,7 +1774,7 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 		require.NoError(t, err, "Failed to write docker-compose file")
 	}
 
-	t.Log("STEP 3: Restarting all regular nodes with COS mock mode enabled...")
+	t.Log("STEP 3: Restarting all regular nodes with updated configuration...")
 
 	// Restart all regular nodes with the new environment
 	restartCmd := exec.Command("docker-compose",
@@ -1644,19 +1803,12 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 	require.True(t, round.Cmp(big.NewInt(0)) >= 0, "Round should be >= 0")
 
 	t.Log("STEP 5: Waiting for random number to be generated (all regular nodes will submit COS on-chain)...")
-	t.Log("NOTE: Leader waits ~51 seconds before checking for missing COS, then emits RequestedToSubmitCo event")
 
 	maxFulfillmentRetries := 20
 	var fulfilled bool
 	var randomNumber *big.Int
 
 	for i := 0; i < maxFulfillmentRetries; i++ {
-		// Check if random number was fulfilled
-		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
-		if err == nil && fulfilled {
-			t.Logf("Random number fulfilled after %d attempts!", i+1)
-			break
-		}
 
 		if i < maxFulfillmentRetries-1 {
 			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
@@ -1667,11 +1819,18 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 			showLogs(t, "test-leadernode", 40)
 
 			t.Log("Checking regularNode1 logs for on-chain COS submission...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-regularnode1", 30)
 			t.Log("Checking regularNode2 logs for on-chain COS submission...")
-			showLogs(t, "test-regularnode2", 20)
+			showLogs(t, "test-regularnode2", 30)
 			t.Log("Checking regularNode3 logs for on-chain COS submission...")
-			showLogs(t, "test-regularnode3", 20)
+			showLogs(t, "test-regularnode3", 30)
+
+			// Check if random number was fulfilled
+			fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+			if err == nil && fulfilled {
+				t.Logf("Random number fulfilled after %d attempts!", i+1)
+				break
+			}
 
 			time.Sleep(20 * time.Second)
 		}
@@ -1683,18 +1842,18 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
 
 	t.Logf("Random number generated: %s", randomNumber.String())
-	t.Log("Test Case 11 Complete! All regular nodes successfully submitted COS on-chain.")
+	t.Log("Test Case 10 Complete! All regular nodes successfully submitted COS on-chain.")
 }
 
 func TestAllRegularNodesOnChainSecret(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
 
 	geth := testEnv.Geth
 
-	t.Log("🧪 Test Case 12: All Regular Nodes On-Chain Secret Test")
+	t.Log("🧪 Test Case 11: All Regular Nodes On-Chain Secret Test")
 	t.Log("STEP 1: Stopping all regular nodes...")
 
 	// Stop all regular nodes
@@ -1818,12 +1977,6 @@ func TestAllRegularNodesOnChainSecret(t *testing.T) {
 	var randomNumber *big.Int
 
 	for i := 0; i < maxFulfillmentRetries; i++ {
-		// Check if random number was fulfilled
-		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
-		if err == nil && fulfilled {
-			t.Logf("Random number fulfilled after %d attempts!", i+1)
-			break
-		}
 
 		if i < maxFulfillmentRetries-1 {
 			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
@@ -1834,12 +1987,18 @@ func TestAllRegularNodesOnChainSecret(t *testing.T) {
 			showLogs(t, "test-leadernode", 40)
 
 			t.Log("Checking regularNode1 logs for on-chain Secret submission...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-regularnode1", 30)
 			t.Log("Checking regularNode2 logs for on-chain Secret submission...")
-			showLogs(t, "test-regularnode2", 20)
+			showLogs(t, "test-regularnode2", 30)
 			t.Log("Checking regularNode3 logs for on-chain Secret submission...")
-			showLogs(t, "test-regularnode3", 20)
+			showLogs(t, "test-regularnode3", 30)
 
+			// Check if random number was fulfilled
+			fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+			if err == nil && fulfilled {
+				t.Logf("Random number fulfilled after %d attempts!", i+1)
+				break
+			}
 			time.Sleep(20 * time.Second)
 		}
 	}
@@ -1850,11 +2009,11 @@ func TestAllRegularNodesOnChainSecret(t *testing.T) {
 	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
 
 	t.Logf("Random number generated: %s", randomNumber.String())
-	t.Log("Test Case 12 Complete! All regular nodes successfully submitted Secret on-chain.")
+	t.Log("Test Case 11 Complete! All regular nodes successfully submitted Secret on-chain.")
 }
 
 func TestRegularNode1SlashingForMissingCvs(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	if testing.Short() {
 		t.Skip("Skipping Docker integration test in short mode")
 	}
@@ -1865,7 +2024,7 @@ func TestRegularNode1SlashingForMissingCvs(t *testing.T) {
 
 	geth := testEnv.Geth
 
-	t.Log("🧪 Test Case 13: RegularNode1 Slashing for Missing CVS Test")
+	t.Log("🧪 Test Case 12: RegularNode1 Slashing for Missing CVS Test")
 	t.Log("STEP 1: Stopping regularNode1 (will not restart - it will fail to submit CVS)...")
 
 	// Stop regularNode1
@@ -1892,12 +2051,6 @@ func TestRegularNode1SlashingForMissingCvs(t *testing.T) {
 	var randomNumber *big.Int
 
 	for i := 0; i < maxFulfillmentRetries; i++ {
-		// Check if random number was fulfilled
-		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
-		if err == nil && fulfilled {
-			t.Logf("Random number fulfilled after %d attempts!", i+1)
-			break
-		}
 
 		if i < maxFulfillmentRetries-1 {
 			t.Logf("Attempt %d/%d: Waiting for random number fulfillment...", i+1, maxFulfillmentRetries)
@@ -1911,7 +2064,14 @@ func TestRegularNode1SlashingForMissingCvs(t *testing.T) {
 			t.Log("Checking regularNode3 logs (should be working normally)...")
 			showLogs(t, "test-regularnode3", 20)
 
-			time.Sleep(25 * time.Second)
+			// Check if random number was fulfilled
+			fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
+			if err == nil && fulfilled {
+				t.Logf("Random number fulfilled after %d attempts!", i+1)
+				break
+			}
+
+			time.Sleep(20 * time.Second)
 		}
 	}
 
@@ -1924,11 +2084,11 @@ func TestRegularNode1SlashingForMissingCvs(t *testing.T) {
 	showLogs(t, "test-leadernode", 50)
 	showLogs(t, "test-regularnode2", 50)
 	showLogs(t, "test-leadernode3", 50)
-	t.Log("Test Case 13 Complete! regularNode1 was slashed for failing to submit CVS, but random number was still generated with regularNode2 and regularNode3.")
+	t.Log("Test Case 12 Complete! regularNode1 was slashed for failing to submit CVS, but random number was still generated with regularNode2 and regularNode3.")
 }
 
 func TestLeaderSlashingAndRecovery(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	if testing.Short() {
 		t.Skip("Skipping Docker integration test in short mode")
 	}
@@ -1939,7 +2099,7 @@ func TestLeaderSlashingAndRecovery(t *testing.T) {
 
 	geth := testEnv.Geth
 
-	t.Log("🧪 Test Case 14: Leader Slashing and Recovery Test")
+	t.Log("🧪 Test Case 13: Leader Slashing and Recovery Test")
 	t.Log("STEP 1: Reactivating regularNode1 (it was slashed in previous test)...")
 
 	// Get integration test directory
@@ -1975,6 +2135,7 @@ func TestLeaderSlashingAndRecovery(t *testing.T) {
 	t.Log("Waiting for regularNode1 to restart and reactivate (if needed)...")
 	time.Sleep(30 * time.Second) // Give time for deposit/activation if needed
 
+	t.Log("STEP 2: Stopping leader node...")
 	stopCmd := exec.Command("docker", "stop", "test-leadernode")
 	stopOutput, err := stopCmd.CombinedOutput()
 
@@ -2043,9 +2204,10 @@ func TestLeaderSlashingAndRecovery(t *testing.T) {
 
 	maxFulfillmentRetries := 7
 	var fulfilled bool
+	var randomNumber *big.Int
 	for i := 0; i < maxFulfillmentRetries; i++ {
 		// Check if random number was fulfilled
-		fulfilled, _, err = checkRandomNumberFulfilled(testCtx, geth, round)
+		fulfilled, randomNumber, err = checkRandomNumberFulfilled(testCtx, geth, round)
 		t.Log("Checking leader node logs...")
 		showLogs(t, "test-leadernode", 30)
 
@@ -2060,12 +2222,12 @@ func TestLeaderSlashingAndRecovery(t *testing.T) {
 
 		time.Sleep(15 * time.Second)
 	}
-
-	t.Log("Test Case 14 Complete! Regular nodes slashed the leader for failing to request CVS or submit Merkle root, and leader restarted to handle the halted state.")
+	fmt.Println("Random Number:", randomNumber)
+	t.Log("Test Case 13 Complete! Regular nodes slashed the leader for failing to request CVS or submit Merkle root, and leader restarted to handle the halted state.")
 }
 
 func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing.T) {
-	t.Skip("Skipping integration test in short mode")
+	// t.Skip("Skipping integration test in short mode")
 	if testing.Short() {
 		t.Skip("Skipping Docker integration test in short mode")
 	}
@@ -2074,7 +2236,7 @@ func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
 
 	geth := testEnv.Geth
-
+	t.Log("🧪 Test Case 14: Disable Merkle Root Submission Test")
 	// Get integration test directory
 	wd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get working directory")
@@ -2109,20 +2271,38 @@ func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing
 
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Setting MOCK_SEND_COMMIT_TO_LEADER=true and DISABLE_MERKLE_ROOT_SUBMISSION=true...")
+	t.Log("STEP 2: Updating environment with MOCK and DISABLE variables...")
 
-	// Update the .env.docker-test file to add MOCK_SEND_COMMIT_TO_LEADER and DISABLE_MERKLE_ROOT_SUBMISSION
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_COMMIT_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COMMIT_TO_LEADER=true\n"
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
+		"MOCK_SEND_COS_TO_LEADER":                "false",
+		"MOCK_SEND_SECRET_TO_LEADER":             "false",
+		"MOCK_SEND_SECRET":                       "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
+		"DISABLE_SECRET_SUBMISSION":              "false",
+		"DISABLE_COS_SUBMISSION":                 "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":         "true",
 	}
-	if !strings.Contains(envContentStr, "DISABLE_MERKLE_ROOT_SUBMISSION") {
-		envContentStr += "DISABLE_MERKLE_ROOT_SUBMISSION=true\n"
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
 	}
+
 	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
 	require.NoError(t, err, "Failed to write env file")
 
@@ -2152,7 +2332,7 @@ func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing
 	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
 	require.NoError(t, err, "Failed to write docker-compose file")
 
-	t.Log("STEP 3: Restarting regularNode1 and leader node with new configuration...")
+	t.Log("STEP 3: Restarting regularNode1 and leader node with updated configuration...")
 
 	// Restart both regularNode1 and leader node with the new environment
 	restartCmd := exec.Command("docker-compose",
@@ -2225,18 +2405,18 @@ func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing
 	require.True(t, randomNumber.Cmp(big.NewInt(0)) > 0, "Random number should be greater than 0")
 
 	t.Logf("✅ Random number generated for round %s: %s", round.String(), randomNumber.String())
-	t.Log("Test Case 16 Complete!")
+	t.Log("Test Case 14 Complete!")
 }
 
 func TestDisableCosSubmission(t *testing.T) {
-	t.Skip()
+	// t.Skip()
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
 
 	geth := testEnv.Geth
 
-	t.Log("🧪 Test Case 17: Disable COS Submission Test")
+	t.Log("🧪 Test Case 15: Disable COS Submission Test")
 	t.Log("STEP 1: Stopping regularNode1...")
 
 	// Stop regularNode1
@@ -2245,9 +2425,9 @@ func TestDisableCosSubmission(t *testing.T) {
 	if err != nil {
 		t.Logf("Stop output: %s", string(stopOutput))
 	}
-	time.Sleep(2 * time.Second)
+	time.Sleep(20 * time.Second)
 
-	t.Log("STEP 2: Updating regularNode1 environment to enable MOCK_SEND_COS_TO_LEADER and DISABLE_COS_SUBMISSION...")
+	t.Log("STEP 2: Updating regularNode1 environment with MOCK and DISABLE variables...")
 
 	wd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get working directory")
@@ -2264,25 +2444,36 @@ func TestDisableCosSubmission(t *testing.T) {
 		}
 	}
 
-	// Update env file to add MOCK_SEND_COS_TO_LEADER and DISABLE_COS_SUBMISSION
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_COS_TO_LEADER") {
-		envContentStr += "MOCK_SEND_COS_TO_LEADER=true\n"
-	} else {
-		// Replace existing value
-		envContentStr = strings.ReplaceAll(envContentStr, "MOCK_SEND_COS_TO_LEADER=false", "MOCK_SEND_COS_TO_LEADER=true")
-	}
-	if !strings.Contains(envContentStr, "DISABLE_COS_SUBMISSION") {
 
-		envContentStr += "DISABLE_COS_SUBMISSION=true\n"
-	} else {
-		// Replace existing value
-		envContentStr = strings.ReplaceAll(envContentStr, "DISABLE_COS_SUBMISSION=false", "DISABLE_COS_SUBMISSION=true")
+	// Set MOCK variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":            "false",
+		"MOCK_SEND_COS_TO_LEADER":               "true",
+		"MOCK_SEND_SECRET_TO_LEADER":            "false",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "true",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
 	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
 	require.NoError(t, err, "Failed to write env file")
 
@@ -2349,7 +2540,13 @@ func TestDisableCosSubmission(t *testing.T) {
 
 			// Check regularNode1 logs to verify COS submission is disabled
 			t.Log("📋 Checking regularNode1 logs (COS submission should be disabled)...")
-			showLogs(t, "test-regularnode1", 20)
+			showLogs(t, "test-regularnode1", 30)
+
+			t.Log("📋 Checking regularNode2 logs")
+			showLogs(t, "test-regularnode2", 30)
+
+			t.Log("📋 Checking regularNode3 logs")
+			showLogs(t, "test-regularnode3", 30)
 
 			time.Sleep(15 * time.Second)
 		}
@@ -2379,18 +2576,18 @@ func TestDisableCosSubmission(t *testing.T) {
 	assert.True(t, consumerRandNum.Cmp(big.NewInt(0)) > 0, "Random number should be set in consumer contract")
 	assert.Equal(t, randomNumber.String(), consumerRandNum.String(), "Random number in consumer contract should match")
 
-	t.Log("✅ Test Case Complete! RegularNode1 successfully generated random number with DISABLE_COS_SUBMISSION=true")
+	t.Log("✅ Test Case 15 Complete! RegularNode1 successfully generated random number with DISABLE_COS_SUBMISSION=true")
 }
 
 func TestDisableSecretSubmission(t *testing.T) {
-	t.Skip()
+	// t.Skip()
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
 
 	geth := testEnv.Geth
 
-	t.Log("🧪 Test Case: Disable Secret Submission Test")
+	t.Log("🧪 Test Case 16: Disable Secret Submission Test")
 	t.Log("STEP 1: Stopping regularNode1...")
 
 	// Stop regularNode1
@@ -2401,7 +2598,7 @@ func TestDisableSecretSubmission(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating regularNode1 environment to enable MOCK_SEND_SECRET_TO_LEADER and DISABLE_SECRET_SUBMISSION...")
+	t.Log("STEP 2: Updating regularNode1 environment with MOCK and DISABLE variables...")
 
 	wd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get working directory")
@@ -2418,22 +2615,36 @@ func TestDisableSecretSubmission(t *testing.T) {
 		}
 	}
 
-	// Update env file to add MOCK_SEND_SECRET_TO_LEADER and DISABLE_SECRET_SUBMISSION
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
-		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
-	} else {
-		envContentStr = strings.ReplaceAll(envContentStr, "MOCK_SEND_SECRET_TO_LEADER=false", "MOCK_SEND_SECRET_TO_LEADER=true")
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":            "false",
+		"MOCK_SEND_COS_TO_LEADER":               "false",
+		"MOCK_SEND_SECRET_TO_LEADER":            "true",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "true",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
-	if !strings.Contains(envContentStr, "DISABLE_SECRET_SUBMISSION") {
-		envContentStr += "DISABLE_SECRET_SUBMISSION=true\n"
-	} else {
-		envContentStr = strings.ReplaceAll(envContentStr, "DISABLE_SECRET_SUBMISSION=false", "DISABLE_SECRET_SUBMISSION=true")
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
 	}
+
 	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
 	require.NoError(t, err, "Failed to write env file")
 
@@ -2536,7 +2747,7 @@ func TestDisableSecretSubmission(t *testing.T) {
 	assert.True(t, consumerRandNum.Cmp(big.NewInt(0)) > 0, "Random number should be set in consumer contract")
 	assert.Equal(t, randomNumber.String(), consumerRandNum.String(), "Random number in consumer contract should match")
 
-	t.Log("✅ Test Case Complete! RegularNode1 successfully generated random number with DISABLE_SECRET_SUBMISSION=true")
+	t.Log("✅ Test Case 16 Complete! RegularNode1 successfully generated random number with DISABLE_SECRET_SUBMISSION=true")
 }
 
 func TestMockGenerateRandomNumberToLeader(t *testing.T) {
@@ -2547,7 +2758,7 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 
 	geth := testEnv.Geth
 
-	t.Log("🧪 Test Case: Mock Generate Random Number To Leader")
+	t.Log("🧪 Test Case 17: Mock Generate Random Number To Leader")
 	t.Log("STEP 1: Stopping leader and regular nodes...")
 
 	// Stop leader and regular nodes
@@ -2558,7 +2769,7 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 	}
 	time.Sleep(5 * time.Second)
 
-	t.Log("STEP 2: Reseting regular node environments to normal")
+	t.Log("STEP 2: Updating environment with MOCK and DISABLE variables...")
 
 	wd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get working directory")
@@ -2575,30 +2786,34 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 		}
 	}
 
-	// Update env file to add MOCK_GENERATE_RANDOM_NUMBER
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
 
-	// Set MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER=true
-	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET") {
-		envContentStr += "MOCK_GENERATE_RANDOM_NUMBER=true\n"
-		t.Log("   ✓ Added MOCK_GENERATE_RANDOM_NUMBER=true")
-	} else {
-		envContentStr = strings.ReplaceAll(envContentStr, "MOCK_GENERATE_RANDOM_NUMBER=false", "MOCK_GENERATE_RANDOM_NUMBER=true")
-		t.Log("   ✓ Updated MOCK_GENERATE_RANDOM_NUMBER=true")
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":             "false",
+		"MOCK_SEND_COS_TO_LEADER":                "false",
+		"MOCK_SEND_SECRET_TO_LEADER":             "false",
+		"MOCK_SEND_SECRET":                       "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":            "true",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
+		"DISABLE_SECRET_SUBMISSION":              "false",
+		"DISABLE_COS_SUBMISSION":                 "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":         "true",
 	}
 
-	// Reset other mock/disable flags from previous tests
-	if strings.Contains(envContentStr, "DISABLE_COS_SUBMISSION=true") {
-		envContentStr = strings.ReplaceAll(envContentStr, "DISABLE_COS_SUBMISSION=true", "DISABLE_COS_SUBMISSION=false")
-		t.Log("   ✓ Reset DISABLE_COS_SUBMISSION=false")
-	}
-	if strings.Contains(envContentStr, "DISABLE_SECRET_SUBMISSION=true") {
-		envContentStr = strings.ReplaceAll(envContentStr, "DISABLE_SECRET_SUBMISSION=true", "DISABLE_SECRET_SUBMISSION=false")
-		t.Log("   ✓ Reset DISABLE_SECRET_SUBMISSION=false")
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
 	}
 
 	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
@@ -2717,7 +2932,7 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 	assert.True(t, consumerRandNum.Cmp(big.NewInt(0)) > 0, "Random number should be set in consumer contract")
 	assert.Equal(t, randomNumber.String(), consumerRandNum.String(), "Random number in consumer contract should match")
 
-	t.Log("✅ Test Case Complete! Leader node successfully generated random number with MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER=true (without on-chain submission)")
+	t.Log("✅ Test Case 17 Complete! Leader node successfully generated random number with MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER=true (without on-chain submission)")
 }
 
 func showLogs(t *testing.T, container string, lines int) {
