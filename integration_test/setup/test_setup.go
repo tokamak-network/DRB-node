@@ -81,6 +81,78 @@ func getDockerComposeCmd() []string {
 	return []string{"docker", "compose"}
 }
 
+func getWSL2HostIP() string {
+	isPrivateIP := func(ipStr string) bool {
+		parts := strings.Split(ipStr, ".")
+		if len(parts) != 4 {
+			return false
+		}
+		first := parts[0]
+		second := parts[1]
+
+		if first == "10" {
+			return true
+		}
+		if first == "172" {
+			if second >= "16" && second <= "31" {
+				return true
+			}
+		}
+		if first == "192" && second == "168" {
+			return true
+		}
+		return false
+	}
+	cmd := exec.Command("ip", "addr", "show", "docker0")
+	output, err := cmd.Output()
+	if err == nil {
+		lines := strings.Split(string(output), "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "inet ") {
+				parts := strings.Fields(line)
+				for _, part := range parts {
+					if strings.HasPrefix(part, "inet ") || strings.Contains(part, ".") {
+						ip := strings.TrimSpace(part)
+						if idx := strings.Index(ip, "/"); idx != -1 {
+							ip = ip[:idx]
+						}
+						ip = strings.TrimPrefix(ip, "inet")
+						ip = strings.TrimSpace(ip)
+						if isPrivateIP(ip) && len(ip) > 0 {
+							return ip
+						}
+					}
+				}
+			}
+		}
+	}
+	cmd = exec.Command("ip", "route", "show", "default")
+	output, err = cmd.Output()
+	if err == nil {
+		parts := strings.Fields(string(output))
+		for i, part := range parts {
+			if part == "via" && i+1 < len(parts) {
+				ip := strings.TrimSpace(parts[i+1])
+				if isPrivateIP(ip) && len(ip) > 0 {
+					return ip
+				}
+			}
+		}
+	}
+	cmd = exec.Command("grep", "nameserver", "/etc/resolv.conf")
+	output, err = cmd.Output()
+	if err == nil {
+		parts := strings.Fields(string(output))
+		if len(parts) >= 2 {
+			ip := strings.TrimSpace(parts[1])
+			if isPrivateIP(ip) && len(ip) > 0 {
+				return ip
+			}
+		}
+	}
+	return "host.docker.internal"
+}
+
 type TestEnvironment struct {
 	Geth         *GethTestEnv
 	EnvFile      string
@@ -215,10 +287,14 @@ func setupTestEnvironmentWithLogger(ctx context.Context, t Logger) (*TestEnviron
 	t.Logf("ConsumerExampleV2: %s", geth.ConsumerAddress.Hex())
 
 	t.Log("\nSTEP 2: Configuring Docker environment...")
+	wslHostIP := getWSL2HostIP()
+	ethRPCURL := fmt.Sprintf("ws://%s:8546", wslHostIP)
+	t.Logf("Detected host IP: %s", wslHostIP)
+	t.Logf("Using ETH_RPC_URLS: %s", ethRPCURL)
 
 	envContent := fmt.Sprintf(`CONTRACT_ADDRESS=%s
 CONSUMER_ADDRESS=%s
-ETH_RPC_URLS=ws://host.docker.internal:8546
+ETH_RPC_URLS=%s
 CHAIN_ID=%s
 LEADER_PRIVATE_KEY=ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 LEADER_EOA=%s
@@ -231,6 +307,7 @@ LEADER_PORT=61280
 `,
 		geth.ContractAddress.Hex(),
 		geth.ConsumerAddress.Hex(),
+		ethRPCURL,
 		geth.ChainID.String(),
 		geth.LeaderAccount.Address.Hex(),
 	)

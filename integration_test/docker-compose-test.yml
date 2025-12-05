@@ -90,6 +90,8 @@ services:
     depends_on:
       leaderpostgres:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_TYPE: leader
       LEADER_PORT: 61280
@@ -129,6 +131,8 @@ services:
         condition: service_healthy
       leadernode:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_TYPE: regular
       LEADER_IP: leadernode
@@ -167,6 +171,8 @@ services:
         condition: service_healthy
       leadernode:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_TYPE: regular
       LEADER_IP: leadernode
@@ -202,6 +208,8 @@ services:
         condition: service_healthy
       leadernode:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_TYPE: regular
       LEADER_IP: leadernode
