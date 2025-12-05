@@ -4,6 +4,9 @@ FROM golang:1.23-alpine AS build-env
 # Set the working directory
 WORKDIR /build
 
+# Allow Go to automatically download required toolchain
+ENV GOTOOLCHAIN=auto
+
 # Copy go mod and sum files
 COPY go.mod go.sum ./
 

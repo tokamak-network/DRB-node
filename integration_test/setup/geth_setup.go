@@ -54,8 +54,6 @@ func StartGethDevNode(ctx context.Context) (*GethTestEnv, error) {
 		return nil, fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
-	// Use Command() instead of CommandContext() so geth doesn't get killed
-	// when the test context expires. We'll kill it manually in Cleanup().
 	gethCmd := exec.Command("geth",
 		"--dev",
 		"--dev.period", "1",

@@ -68,6 +68,19 @@ func getIntegrationTestDir() (string, error) {
 	return "", fmt.Errorf("could not find integration_test directory")
 }
 
+func getDockerComposeCmd() []string {
+	if _, err := exec.LookPath("docker"); err == nil {
+		cmd := exec.Command("docker", "compose", "version")
+		if err := cmd.Run(); err == nil {
+			return []string{"docker", "compose"}
+		}
+	}
+	if _, err := exec.LookPath("docker-compose"); err == nil {
+		return []string{"docker-compose"}
+	}
+	return []string{"docker", "compose"}
+}
+
 type TestEnvironment struct {
 	Geth         *GethTestEnv
 	EnvFile      string
@@ -129,10 +142,12 @@ func setupTestEnvironmentWithLogger(ctx context.Context, t Logger) (*TestEnviron
 
 	t.Log("\n STEP 0: Cleaning Up Databases")
 
-	stopCmd := exec.CommandContext(ctx, "docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"down", "-v", "--remove-orphans")
+	dockerComposeCmd := getDockerComposeCmd()
+	stopCmd := exec.CommandContext(ctx, dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"down", "-v", "--remove-orphans")...)
 	stopCmd.Dir = integrationTestDir
 	stopOutput, _ := stopCmd.CombinedOutput()
 	if len(stopOutput) > 0 {
@@ -232,11 +247,13 @@ LEADER_PORT=61280
 	cleanupDocker(t, integrationTestDir)
 
 	t.Log("\n STEP 3: Starting Docker services...")
-	upCmd := exec.CommandContext(ctx, "docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build")
+	dockerComposeCmd = getDockerComposeCmd()
+	upCmd := exec.CommandContext(ctx, dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build")...)
 	upCmd.Dir = integrationTestDir
 	output, err := upCmd.CombinedOutput()
 	if err != nil {
@@ -275,11 +292,13 @@ LEADER_PORT=61280
 	}
 
 	// Restart regular nodes with LEADER_PEER_ID
-	restartCmd := exec.CommandContext(ctx, "docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--no-deps", "regularnode1", "regularnode2", "regularnode3")
+	dockerComposeCmd = getDockerComposeCmd()
+	restartCmd := exec.CommandContext(ctx, dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--no-deps", "regularnode1", "regularnode2", "regularnode3")...)
 	restartCmd.Dir = integrationTestDir
 	restartCmd.Run()
 	time.Sleep(5 * time.Second)
@@ -323,10 +342,12 @@ func isContainerRunningQuick(name string) (bool, error) {
 }
 
 func cleanupDocker(logger Logger, integrationTestDir string) {
-	cmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"down", "-v")
+	dockerComposeCmd := getDockerComposeCmd()
+	cmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"down", "-v")...)
 	cmd.Dir = integrationTestDir
 	cmd.Run() // Ignore errors
 }

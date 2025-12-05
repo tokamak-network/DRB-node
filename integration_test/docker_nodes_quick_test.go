@@ -35,6 +35,20 @@ func (tl *testLogger) Logf(format string, args ...interface{}) {
 	fmt.Printf(format+"\n", args...)
 }
 
+func getDockerComposeCmd() []string {
+	if _, err := exec.LookPath("docker"); err == nil {
+		cmd := exec.Command("docker", "compose", "version")
+		if err := cmd.Run(); err == nil {
+			return []string{"docker", "compose"}
+		}
+	}
+	if _, err := exec.LookPath("docker-compose"); err == nil {
+		return []string{"docker-compose"}
+	}
+	// Default to V2 (most common now)
+	return []string{"docker", "compose"}
+}
+
 // TestMain runs once before all tests to set up the shared test environment
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -345,15 +359,15 @@ func TestRegularNodeOnChainCommit(t *testing.T) {
 
 	// Set MOCK and DISABLE variables
 	envVars := map[string]string{
-		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
-		"MOCK_SEND_COS_TO_LEADER":                "false",
-		"MOCK_SEND_SECRET_TO_LEADER":             "false",
-		"MOCK_SEND_SECRET":                       "false",
-		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
-		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
-		"DISABLE_SECRET_SUBMISSION":              "false",
-		"DISABLE_COS_SUBMISSION":                 "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
+		"MOCK_SEND_COMMIT_TO_LEADER":            "true",
+		"MOCK_SEND_COS_TO_LEADER":               "false",
+		"MOCK_SEND_SECRET_TO_LEADER":            "false",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
 
 	for key, value := range envVars {
@@ -389,11 +403,13 @@ func TestRegularNodeOnChainCommit(t *testing.T) {
 	t.Log("STEP 3: Restarting regularNode1 with mock mode enabled...")
 
 	// Restart regularNode1 with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -494,15 +510,15 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 
 	// Set MOCK and DISABLE variables
 	envVars := map[string]string{
-		"MOCK_SEND_COMMIT_TO_LEADER":             "false",
-		"MOCK_SEND_COS_TO_LEADER":                "true",
-		"MOCK_SEND_SECRET_TO_LEADER":             "false",
-		"MOCK_SEND_SECRET":                       "false",
-		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
-		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
-		"DISABLE_SECRET_SUBMISSION":              "false",
-		"DISABLE_COS_SUBMISSION":                 "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
+		"MOCK_SEND_COMMIT_TO_LEADER":            "false",
+		"MOCK_SEND_COS_TO_LEADER":               "true",
+		"MOCK_SEND_SECRET_TO_LEADER":            "false",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
 
 	for key, value := range envVars {
@@ -546,11 +562,13 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 	t.Log("STEP 3: Restarting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -657,15 +675,15 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 
 	// Set MOCK and DISABLE variables
 	envVars := map[string]string{
-		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
-		"MOCK_SEND_COS_TO_LEADER":                "true",
-		"MOCK_SEND_SECRET_TO_LEADER":             "false",
-		"MOCK_SEND_SECRET":                       "false",
-		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
-		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
-		"DISABLE_SECRET_SUBMISSION":              "false",
-		"DISABLE_COS_SUBMISSION":                 "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
+		"MOCK_SEND_COMMIT_TO_LEADER":            "true",
+		"MOCK_SEND_COS_TO_LEADER":               "true",
+		"MOCK_SEND_SECRET_TO_LEADER":            "false",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
 
 	for key, value := range envVars {
@@ -721,11 +739,13 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 	t.Log("STEP 3: Restarting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -868,11 +888,13 @@ func TestRegularNodeOnChainSecret(t *testing.T) {
 	t.Log("STEP 3: Restarting regularNode1 with secret mock mode enabled...")
 
 	// Restart regularNode1 with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -976,15 +998,15 @@ func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
 
 	// Set MOCK and DISABLE variables
 	envVars := map[string]string{
-		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
-		"MOCK_SEND_COS_TO_LEADER":                "true",
-		"MOCK_SEND_SECRET_TO_LEADER":             "true",
-		"MOCK_SEND_SECRET":                       "false",
-		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
-		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
-		"DISABLE_SECRET_SUBMISSION":              "false",
-		"DISABLE_COS_SUBMISSION":                 "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
+		"MOCK_SEND_COMMIT_TO_LEADER":            "true",
+		"MOCK_SEND_COS_TO_LEADER":               "true",
+		"MOCK_SEND_SECRET_TO_LEADER":            "true",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
 
 	for key, value := range envVars {
@@ -1063,11 +1085,13 @@ func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
 	t.Log("STEP 3: Restarting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -1170,15 +1194,15 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 
 	// Set MOCK and DISABLE variables
 	envVars := map[string]string{
-		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
-		"MOCK_SEND_COS_TO_LEADER":                "false",
-		"MOCK_SEND_SECRET_TO_LEADER":             "true",
-		"MOCK_SEND_SECRET":                       "false",
-		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
-		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
-		"DISABLE_SECRET_SUBMISSION":              "false",
-		"DISABLE_COS_SUBMISSION":                 "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
+		"MOCK_SEND_COMMIT_TO_LEADER":            "true",
+		"MOCK_SEND_COS_TO_LEADER":               "false",
+		"MOCK_SEND_SECRET_TO_LEADER":            "true",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
 
 	for key, value := range envVars {
@@ -1234,11 +1258,13 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 	t.Log("STEP 3: Restarting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -1343,15 +1369,15 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 
 	// Set MOCK and DISABLE variables
 	envVars := map[string]string{
-		"MOCK_SEND_COMMIT_TO_LEADER":             "false",
-		"MOCK_SEND_COS_TO_LEADER":                "true",
-		"MOCK_SEND_SECRET_TO_LEADER":             "true",
-		"MOCK_SEND_SECRET":                       "false",
-		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
-		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
-		"DISABLE_SECRET_SUBMISSION":              "false",
-		"DISABLE_COS_SUBMISSION":                 "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
+		"MOCK_SEND_COMMIT_TO_LEADER":            "false",
+		"MOCK_SEND_COS_TO_LEADER":               "true",
+		"MOCK_SEND_SECRET_TO_LEADER":            "true",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
 
 	for key, value := range envVars {
@@ -1407,11 +1433,13 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 	t.Log("STEP 3: Restarting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -1529,15 +1557,15 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 
 	// Set MOCK and DISABLE variables
 	envVars := map[string]string{
-		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
-		"MOCK_SEND_COS_TO_LEADER":                "false",
-		"MOCK_SEND_SECRET_TO_LEADER":             "false",
-		"MOCK_SEND_SECRET":                       "false",
-		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
-		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
-		"DISABLE_SECRET_SUBMISSION":              "false",
-		"DISABLE_COS_SUBMISSION":                 "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
+		"MOCK_SEND_COMMIT_TO_LEADER":            "true",
+		"MOCK_SEND_COS_TO_LEADER":               "false",
+		"MOCK_SEND_SECRET_TO_LEADER":            "false",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
 
 	for key, value := range envVars {
@@ -1590,11 +1618,13 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 	t.Log("STEP 3: Restarting all regular nodes with updated configuration...")
 
 	// Restart all regular nodes with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1", "regularnode2", "regularnode3")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1", "regularnode2", "regularnode3")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -1716,15 +1746,15 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 
 	// Set MOCK and DISABLE variables
 	envVars := map[string]string{
-		"MOCK_SEND_COMMIT_TO_LEADER":             "false",
-		"MOCK_SEND_COS_TO_LEADER":                "true",
-		"MOCK_SEND_SECRET_TO_LEADER":             "false",
-		"MOCK_SEND_SECRET":                       "false",
-		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
-		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
-		"DISABLE_SECRET_SUBMISSION":              "false",
-		"DISABLE_COS_SUBMISSION":                 "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":         "false",
+		"MOCK_SEND_COMMIT_TO_LEADER":            "false",
+		"MOCK_SEND_COS_TO_LEADER":               "true",
+		"MOCK_SEND_SECRET_TO_LEADER":            "false",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
 
 	for key, value := range envVars {
@@ -1777,11 +1807,13 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 	t.Log("STEP 3: Restarting all regular nodes with updated configuration...")
 
 	// Restart all regular nodes with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1", "regularnode2", "regularnode3")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1", "regularnode2", "regularnode3")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -1944,11 +1976,13 @@ func TestAllRegularNodesOnChainSecret(t *testing.T) {
 	t.Log("STEP 3: Restarting all regular nodes with Secret mock mode enabled...")
 
 	// Restart all regular nodes with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1", "regularnode2", "regularnode3")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1", "regularnode2", "regularnode3")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -2119,11 +2153,13 @@ func TestLeaderSlashingAndRecovery(t *testing.T) {
 	}
 
 	// Restart regularNode1 - it will automatically check activation status and reactivate if needed
-	restartCmd1 := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd1 := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1")...)
 	restartCmd1.Dir = integrationTestDir
 	restartOutput1, err := restartCmd1.CombinedOutput()
 	if err != nil {
@@ -2187,11 +2223,13 @@ func TestLeaderSlashingAndRecovery(t *testing.T) {
 	t.Log("STEP 5: Restarting leader node (it will handle the halted state and recover)...")
 
 	// Restart the leader node - it should handle the halted state
-	restartLeaderCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "leadernode")
+	dockerComposeCmd = getDockerComposeCmd()
+	restartLeaderCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "leadernode")...)
 	restartLeaderCmd.Dir = integrationTestDir
 	restartLeaderOutput, err := restartLeaderCmd.CombinedOutput()
 	if err != nil {
@@ -2282,15 +2320,15 @@ func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing
 
 	// Set MOCK and DISABLE variables
 	envVars := map[string]string{
-		"MOCK_SEND_COMMIT_TO_LEADER":             "true",
-		"MOCK_SEND_COS_TO_LEADER":                "false",
-		"MOCK_SEND_SECRET_TO_LEADER":             "false",
-		"MOCK_SEND_SECRET":                       "false",
-		"MOCK_GENERATE_RANDOM_NUMBER":            "false",
-		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
-		"DISABLE_SECRET_SUBMISSION":              "false",
-		"DISABLE_COS_SUBMISSION":                 "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":         "true",
+		"MOCK_SEND_COMMIT_TO_LEADER":            "true",
+		"MOCK_SEND_COS_TO_LEADER":               "false",
+		"MOCK_SEND_SECRET_TO_LEADER":            "false",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "true",
 	}
 
 	for key, value := range envVars {
@@ -2335,11 +2373,13 @@ func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing
 	t.Log("STEP 3: Restarting regularNode1 and leader node with updated configuration...")
 
 	// Restart both regularNode1 and leader node with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1", "leadernode")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1", "leadernode")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -2480,11 +2520,13 @@ func TestDisableCosSubmission(t *testing.T) {
 	t.Log("STEP 3: Starting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -2651,11 +2693,13 @@ func TestDisableSecretSubmission(t *testing.T) {
 	t.Log("STEP 3: Starting regularNode1 with updated configuration...")
 
 	// Restart regularNode1 with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "regularnode1")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "regularnode1")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
@@ -2795,15 +2839,15 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 
 	// Set MOCK and DISABLE variables
 	envVars := map[string]string{
-		"MOCK_SEND_COMMIT_TO_LEADER":             "false",
-		"MOCK_SEND_COS_TO_LEADER":                "false",
-		"MOCK_SEND_SECRET_TO_LEADER":             "false",
-		"MOCK_SEND_SECRET":                       "false",
-		"MOCK_GENERATE_RANDOM_NUMBER":            "true",
-		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER":  "false",
-		"DISABLE_SECRET_SUBMISSION":              "false",
-		"DISABLE_COS_SUBMISSION":                 "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":         "true",
+		"MOCK_SEND_COMMIT_TO_LEADER":            "false",
+		"MOCK_SEND_COS_TO_LEADER":               "false",
+		"MOCK_SEND_SECRET_TO_LEADER":            "false",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "true",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "true",
 	}
 
 	for key, value := range envVars {
@@ -2822,11 +2866,13 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 	t.Log("STEP 3: Starting leader and regular nodes with updated configuration...")
 
 	// Restart all nodes with the new environment
-	restartCmd := exec.Command("docker-compose",
-		"-f", "docker-compose-test.yml",
-		"-p", "drb-test",
-		"--env-file", ".env.docker-test",
-		"up", "-d", "--build", "leadernode", "regularnode1", "regularnode2", "regularnode3")
+	dockerComposeCmd := getDockerComposeCmd()
+	restartCmd := exec.Command(dockerComposeCmd[0],
+		append(dockerComposeCmd[1:],
+			"-f", "docker-compose-test.yml",
+			"-p", "drb-test",
+			"--env-file", ".env.docker-test",
+			"up", "-d", "--build", "leadernode", "regularnode1", "regularnode2", "regularnode3")...)
 	restartCmd.Dir = integrationTestDir
 	restartOutput, err := restartCmd.CombinedOutput()
 	if err != nil {
