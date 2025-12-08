@@ -3,9 +3,11 @@ package setup
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -81,76 +83,42 @@ func getDockerComposeCmd() []string {
 	return []string{"docker", "compose"}
 }
 
-func getWSL2HostIP() string {
-	isPrivateIP := func(ipStr string) bool {
-		parts := strings.Split(ipStr, ".")
-		if len(parts) != 4 {
-			return false
-		}
-		first := parts[0]
-		second := parts[1]
-
-		if first == "10" {
-			return true
-		}
-		if first == "172" {
-			if second >= "16" && second <= "31" {
-				return true
-			}
-		}
-		if first == "192" && second == "168" {
-			return true
-		}
-		return false
+func getHostIP() string {
+	// On macOS and Windows, Docker provides host.docker.internal out of the box
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
+		return "host.docker.internal"
 	}
-	cmd := exec.Command("ip", "addr", "show", "docker0")
+
+	// On Linux, we need to detect the Docker gateway IP
+	// Try to get the default gateway from ip route
+	cmd := exec.Command("ip", "route", "show", "default")
 	output, err := cmd.Output()
 	if err == nil {
-		lines := strings.Split(string(output), "\n")
-		for _, line := range lines {
-			if strings.Contains(line, "inet ") {
-				parts := strings.Fields(line)
-				for _, part := range parts {
-					if strings.HasPrefix(part, "inet ") || strings.Contains(part, ".") {
-						ip := strings.TrimSpace(part)
-						if idx := strings.Index(ip, "/"); idx != -1 {
-							ip = ip[:idx]
-						}
-						ip = strings.TrimPrefix(ip, "inet")
-						ip = strings.TrimSpace(ip)
-						if isPrivateIP(ip) && len(ip) > 0 {
-							return ip
-						}
-					}
-				}
-			}
-		}
-	}
-	cmd = exec.Command("ip", "route", "show", "default")
-	output, err = cmd.Output()
-	if err == nil {
-		parts := strings.Fields(string(output))
-		for i, part := range parts {
-			if part == "via" && i+1 < len(parts) {
-				ip := strings.TrimSpace(parts[i+1])
-				if isPrivateIP(ip) && len(ip) > 0 {
+		// Parse output like "default via 172.17.0.1 dev docker0"
+		fields := strings.Fields(string(output))
+		for i, field := range fields {
+			if field == "via" && i+1 < len(fields) {
+				ip := fields[i+1]
+				// Validate it's an IP address
+				if net.ParseIP(ip) != nil {
 					return ip
 				}
 			}
 		}
 	}
-	cmd = exec.Command("grep", "nameserver", "/etc/resolv.conf")
+
+	// Fallback: try to get Docker bridge gateway
+	cmd = exec.Command("docker", "network", "inspect", "bridge", "--format", "{{range .IPAM.Config}}{{.Gateway}}{{end}}")
 	output, err = cmd.Output()
 	if err == nil {
-		parts := strings.Fields(string(output))
-		if len(parts) >= 2 {
-			ip := strings.TrimSpace(parts[1])
-			if isPrivateIP(ip) && len(ip) > 0 {
-				return ip
-			}
+		ip := strings.TrimSpace(string(output))
+		if net.ParseIP(ip) != nil {
+			return ip
 		}
 	}
-	return "host.docker.internal"
+
+	// Last resort: common Docker bridge gateway IP
+	return "172.17.0.1"
 }
 
 type TestEnvironment struct {
@@ -287,7 +255,7 @@ func setupTestEnvironmentWithLogger(ctx context.Context, t Logger) (*TestEnviron
 	t.Logf("ConsumerExampleV2: %s", geth.ConsumerAddress.Hex())
 
 	t.Log("\nSTEP 2: Configuring Docker environment...")
-	wslHostIP := getWSL2HostIP()
+	wslHostIP := getHostIP()
 	ethRPCURL := fmt.Sprintf("ws://%s:8546", wslHostIP)
 	t.Logf("Detected host IP: %s", wslHostIP)
 	t.Logf("Using ETH_RPC_URLS: %s", ethRPCURL)

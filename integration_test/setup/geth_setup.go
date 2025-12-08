@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -38,52 +37,13 @@ type GethTestEnv struct {
 	LeaderAccount   *TestAccount
 	RegularAccounts []*TestAccount
 	DevCoinbase     common.Address
-	GethCmd         *exec.Cmd
 	RpcURL          string
-	DataDir         string
 	ContractABIPath string
 	ConsumerABIPath string
 }
 
 func StartGethDevNode(ctx context.Context) (*GethTestEnv, error) {
 	fmt.Println(" Step 1: Starting Geth in dev mode...")
-
-	// Create temporary data directory
-	tmpDir, err := os.MkdirTemp("", "geth-test-*")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp dir: %w", err)
-	}
-
-	gethCmd := exec.Command("geth",
-		"--dev",
-		"--dev.period", "1",
-		"--datadir", tmpDir,
-		"--http",
-		"--http.api", "eth,net,web3,debug,personal,admin",
-		"--http.addr", "0.0.0.0",
-		"--http.port", "8545",
-		"--http.corsdomain", "*",
-		"--http.vhosts", "*",
-		"--ws",
-		"--ws.api", "eth,net,web3,debug,personal,admin",
-		"--ws.addr", "0.0.0.0",
-		"--ws.port", "8546",
-		"--ws.origins", "*",
-		"--allow-insecure-unlock",
-		"--nodiscover",
-		"--maxpeers", "0",
-		"--miner.gasprice", "1000000000",
-		"--verbosity", "3",
-	)
-
-	// Capture output for debugging
-	gethCmd.Stdout = os.Stdout
-	gethCmd.Stderr = os.Stderr
-
-	if err := gethCmd.Start(); err != nil {
-		os.RemoveAll(tmpDir)
-		return nil, fmt.Errorf("failed to start geth: %w", err)
-	}
 
 	fmt.Println("⏳ Waiting for Geth to be ready...")
 	time.Sleep(5 * time.Second)
@@ -92,16 +52,12 @@ func StartGethDevNode(ctx context.Context) (*GethTestEnv, error) {
 
 	rpcClient, err := rpc.Dial(rpcURL)
 	if err != nil {
-		gethCmd.Process.Kill()
-		os.RemoveAll(tmpDir)
 		return nil, fmt.Errorf("failed to connect to geth rpc: %w", err)
 	}
 
 	client := ethclient.NewClient(rpcClient)
 	if client == nil {
 		rpcClient.Close()
-		gethCmd.Process.Kill()
-		os.RemoveAll(tmpDir)
 		return nil, fmt.Errorf("failed to create eth client")
 	}
 
@@ -111,10 +67,8 @@ func StartGethDevNode(ctx context.Context) (*GethTestEnv, error) {
 	fmt.Printf("Geth ready! Chain ID: %s\n", chainID.String())
 	var accounts []string
 	if err := rpcClient.CallContext(ctx, &accounts, "eth_accounts"); err != nil {
-		gethCmd.Process.Kill()
 		client.Close()
 		rpcClient.Close()
-		os.RemoveAll(tmpDir)
 		return nil, fmt.Errorf("failed to get accounts: %w", err)
 	}
 
@@ -130,9 +84,7 @@ func StartGethDevNode(ctx context.Context) (*GethTestEnv, error) {
 	// Get project root
 	cwd, err := os.Getwd()
 	if err != nil {
-		gethCmd.Process.Kill()
 		client.Close()
-		os.RemoveAll(tmpDir)
 		return nil, fmt.Errorf("failed to get current directory: %w", err)
 	}
 
@@ -158,9 +110,7 @@ func StartGethDevNode(ctx context.Context) (*GethTestEnv, error) {
 		RpcClient:       rpcClient,
 		ChainID:         chainID,
 		DevCoinbase:     devCoinbase,
-		GethCmd:         gethCmd,
 		RpcURL:          rpcURL,
-		DataDir:         tmpDir,
 		ContractABIPath: contractABIPath,
 		ConsumerABIPath: consumerABIPath,
 	}
@@ -420,15 +370,6 @@ func (env *GethTestEnv) Cleanup() {
 
 	if env.RpcClient != nil {
 		env.RpcClient.Close()
-	}
-
-	if env.GethCmd != nil && env.GethCmd.Process != nil {
-		env.GethCmd.Process.Kill()
-		env.GethCmd.Wait()
-	}
-
-	if env.DataDir != "" {
-		os.RemoveAll(env.DataDir)
 	}
 
 	fmt.Println("Geth cleanup complete")
