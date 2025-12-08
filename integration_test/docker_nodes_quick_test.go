@@ -822,7 +822,7 @@ func TestRegularNodeOnChainSecret(t *testing.T) {
 	}
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating regularNode1 environment to enable secret mock mode...")
+	t.Log("STEP 2: Updating regularNode1 environment with MOCK and DISABLE variables...")
 
 	wd, err := os.Getwd()
 	require.NoError(t, err, "Failed to get working directory")
@@ -839,28 +839,75 @@ func TestRegularNodeOnChainSecret(t *testing.T) {
 		}
 	}
 
-	// Update env file to add MOCK_SEND_SECRET_TO_LEADER
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
-		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":            "false",
+		"MOCK_SEND_COS_TO_LEADER":               "false",
+		"MOCK_SEND_SECRET_TO_LEADER":            "true",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
+
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
 	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
 	require.NoError(t, err, "Failed to write env file")
 
-	// Update docker-compose to add the environment variable
+	// Update docker-compose to add all environment variables
 	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
 	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
 	require.NoError(t, err, "Failed to read docker-compose file")
 
 	dockerComposeStr := string(dockerComposeContent)
 
+	// Check if we need to add MOCK_SEND_COMMIT_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+		replacement := strings.Replace(dockerComposeStr,
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+			1)
+		dockerComposeStr = replacement
+	}
+
+	// Check if we need to add MOCK_SEND_COS_TO_LEADER
+	if !strings.Contains(dockerComposeStr, "MOCK_SEND_COS_TO_LEADER") {
+		if strings.Contains(dockerComposeStr, "MOCK_SEND_COMMIT_TO_LEADER") {
+			replacement := strings.Replace(dockerComposeStr,
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+				"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		} else {
+			replacement := strings.Replace(dockerComposeStr,
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
+				"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+				1)
+			dockerComposeStr = replacement
+		}
+	}
+
 	// Check if we need to add MOCK_SEND_SECRET_TO_LEADER
 	if !strings.Contains(dockerComposeStr, "MOCK_SEND_SECRET_TO_LEADER") {
-		// Try to add after existing mock variables if they exist
+		// Add after the last mock variable that exists
 		if strings.Contains(dockerComposeStr, "MOCK_SEND_COS_TO_LEADER") {
 			replacement := strings.Replace(dockerComposeStr,
 				"      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
@@ -1909,7 +1956,7 @@ func TestAllRegularNodesOnChainSecret(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	t.Log("STEP 2: Updating all regular nodes environment to enable Secret mock mode...")
+	t.Log("STEP 2: Updating all regular nodes environment with MOCK and DISABLE variables...")
 
 	// Get integration test directory (same logic as setup package)
 	wd, err := os.Getwd()
@@ -1927,51 +1974,90 @@ func TestAllRegularNodesOnChainSecret(t *testing.T) {
 		}
 	}
 
-	// Update the .env.docker-test file to add MOCK_SEND_SECRET_TO_LEADER
+	// Update env file to add all MOCK and DISABLE variables
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
 	envContent, err := os.ReadFile(envFile)
 	require.NoError(t, err, "Failed to read env file")
 
 	envContentStr := string(envContent)
-	if !strings.Contains(envContentStr, "MOCK_SEND_SECRET_TO_LEADER") {
-		envContentStr += "MOCK_SEND_SECRET_TO_LEADER=true\n"
-		err = os.WriteFile(envFile, []byte(envContentStr), 0644)
-		require.NoError(t, err, "Failed to write env file")
+
+	// Set MOCK and DISABLE variables
+	envVars := map[string]string{
+		"MOCK_SEND_COMMIT_TO_LEADER":            "false",
+		"MOCK_SEND_COS_TO_LEADER":               "false",
+		"MOCK_SEND_SECRET_TO_LEADER":            "true",
+		"MOCK_SEND_SECRET":                      "false",
+		"MOCK_GENERATE_RANDOM_NUMBER":           "false",
+		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
+		"DISABLE_SECRET_SUBMISSION":             "false",
+		"DISABLE_COS_SUBMISSION":                "false",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
 
-	// Update docker-compose to add the environment variable for all regular nodes
+	for key, value := range envVars {
+		if !strings.Contains(envContentStr, key) {
+			envContentStr += fmt.Sprintf("%s=%s\n", key, value)
+		} else {
+			// Replace existing value
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=true", key), fmt.Sprintf("%s=%s", key, value))
+			envContentStr = strings.ReplaceAll(envContentStr, fmt.Sprintf("%s=false", key), fmt.Sprintf("%s=%s", key, value))
+		}
+	}
+
+	err = os.WriteFile(envFile, []byte(envContentStr), 0644)
+	require.NoError(t, err, "Failed to write env file")
+
+	// Update docker-compose to add all environment variables for all regular nodes
 	dockerComposeFile := filepath.Join(integrationTestDir, "docker-compose-test.yml")
 	dockerComposeContent, err := os.ReadFile(dockerComposeFile)
 	require.NoError(t, err, "Failed to read docker-compose file")
 
 	dockerComposeStr := string(dockerComposeContent)
 
-	// Add MOCK_SEND_SECRET_TO_LEADER for regularNode1 if not present
-	if !strings.Contains(dockerComposeStr, "      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}") {
-		// Add for regularNode1
-		replacement := strings.Replace(dockerComposeStr,
-			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}",
-			"      EOA_PRIVATE_KEY: ${REGULAR1_PRIVATE_KEY}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
-			1)
-		dockerComposeStr = replacement
+	// Helper function to add environment variables for a node
+	addEnvVarsForNode := func(str string, privateKeyVar string) string {
+		result := str
+		// Check if we need to add MOCK_SEND_COMMIT_TO_LEADER
+		if !strings.Contains(result, "MOCK_SEND_COMMIT_TO_LEADER") {
+			replacement := strings.Replace(result,
+				fmt.Sprintf("      EOA_PRIVATE_KEY: ${%s}", privateKeyVar),
+				fmt.Sprintf("      EOA_PRIVATE_KEY: ${%s}\n      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}", privateKeyVar),
+				1)
+			result = replacement
+		}
 
-		// Add for regularNode2
-		replacement = strings.Replace(dockerComposeStr,
-			"      EOA_PRIVATE_KEY: ${REGULAR2_PRIVATE_KEY}",
-			"      EOA_PRIVATE_KEY: ${REGULAR2_PRIVATE_KEY}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
-			1)
-		dockerComposeStr = replacement
+		// Check if we need to add MOCK_SEND_COS_TO_LEADER
+		if !strings.Contains(result, "MOCK_SEND_COS_TO_LEADER") {
+			if strings.Contains(result, "MOCK_SEND_COMMIT_TO_LEADER") {
+				replacement := strings.Replace(result,
+					"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}",
+					"      MOCK_SEND_COMMIT_TO_LEADER: ${MOCK_SEND_COMMIT_TO_LEADER}\n      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+					1)
+				result = replacement
+			}
+		}
 
-		// Add for regularNode3
-		replacement = strings.Replace(dockerComposeStr,
-			"      EOA_PRIVATE_KEY: ${REGULAR3_PRIVATE_KEY}",
-			"      EOA_PRIVATE_KEY: ${REGULAR3_PRIVATE_KEY}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
-			1)
-		dockerComposeStr = replacement
+		// Check if we need to add MOCK_SEND_SECRET_TO_LEADER
+		if !strings.Contains(result, "MOCK_SEND_SECRET_TO_LEADER") {
+			if strings.Contains(result, "MOCK_SEND_COS_TO_LEADER") {
+				replacement := strings.Replace(result,
+					"      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}",
+					"      MOCK_SEND_COS_TO_LEADER: ${MOCK_SEND_COS_TO_LEADER}\n      MOCK_SEND_SECRET_TO_LEADER: ${MOCK_SEND_SECRET_TO_LEADER}",
+					1)
+				result = replacement
+			}
+		}
 
-		err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
-		require.NoError(t, err, "Failed to write docker-compose file")
+		return result
 	}
+
+	// Add environment variables for each regular node
+	dockerComposeStr = addEnvVarsForNode(dockerComposeStr, "REGULAR1_PRIVATE_KEY")
+	dockerComposeStr = addEnvVarsForNode(dockerComposeStr, "REGULAR2_PRIVATE_KEY")
+	dockerComposeStr = addEnvVarsForNode(dockerComposeStr, "REGULAR3_PRIVATE_KEY")
+
+	err = os.WriteFile(dockerComposeFile, []byte(dockerComposeStr), 0644)
+	require.NoError(t, err, "Failed to write docker-compose file")
 
 	t.Log("STEP 3: Restarting all regular nodes with Secret mock mode enabled...")
 
@@ -2590,7 +2676,7 @@ func TestDisableCosSubmission(t *testing.T) {
 			t.Log("📋 Checking regularNode3 logs")
 			showLogs(t, "test-regularnode3", 30)
 
-			time.Sleep(15 * time.Second)
+			time.Sleep(20 * time.Second)
 		}
 	}
 
@@ -2847,7 +2933,7 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 		"MOCK_GENERATE_RANDOM_NUMBER_TO_LEADER": "false",
 		"DISABLE_SECRET_SUBMISSION":             "false",
 		"DISABLE_COS_SUBMISSION":                "false",
-		"DISABLE_MERKLE_ROOT_SUBMISSION":        "true",
+		"DISABLE_MERKLE_ROOT_SUBMISSION":        "false",
 	}
 
 	for key, value := range envVars {

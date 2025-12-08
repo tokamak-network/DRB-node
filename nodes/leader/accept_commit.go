@@ -762,11 +762,8 @@ func (n *LeaderNode) startFailToSubmitCoMonitoring(ctx context.Context, round st
 
 	n.SetRequestedToSubmitCoMonitoringActive(true)
 
-	// Get s_onChainSubmissionPeriod from contract
-	onChainSubmissionPeriod := big.NewInt(120)
-
 	// Calculate deadline: requestedToSubmitCoTimestamp + s_onChainSubmissionPeriod
-	deadline := new(big.Int).Add(requestedToSubmitCoTimestamp, onChainSubmissionPeriod)
+	deadline := new(big.Int).Add(requestedToSubmitCoTimestamp, appconfig.GetContractPeriods().OnChainSubmissionPeriod)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
