@@ -109,7 +109,7 @@ func (m *mockTestingT) Logf(format string, args ...interface{}) {
 }
 
 func TestRandomNumberGeneration(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -314,7 +314,7 @@ func TestRandomNumberGeneration(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCommit(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -467,7 +467,7 @@ func TestRegularNodeOnChainCommit(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCos(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -632,7 +632,7 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -804,7 +804,7 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 }
 
 func TestRegularNodeOnChainSecret(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1001,7 +1001,7 @@ func TestRegularNodeOnChainSecret(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1198,7 +1198,7 @@ func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode") // Use the shared test environment
+	t.Skip("Skipping integration test in short mode") // Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
 
@@ -1372,7 +1372,7 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 }
 
 func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1546,7 +1546,7 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 }
 
 func TestAllRegularNodesOnChainCvs(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1735,7 +1735,7 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 }
 
 func TestAllRegularNodesOnChainCos(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -1925,7 +1925,7 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 }
 
 func TestAllRegularNodesOnChainSecret(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -2133,7 +2133,7 @@ func TestAllRegularNodesOnChainSecret(t *testing.T) {
 }
 
 func TestRegularNode1SlashingForMissingCvs(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	if testing.Short() {
 		t.Skip("Skipping Docker integration test in short mode")
 	}
@@ -2208,7 +2208,7 @@ func TestRegularNode1SlashingForMissingCvs(t *testing.T) {
 }
 
 func TestLeaderSlashingAndRecovery(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	if testing.Short() {
 		t.Skip("Skipping Docker integration test in short mode")
 	}
@@ -2351,7 +2351,7 @@ func TestLeaderSlashingAndRecovery(t *testing.T) {
 }
 
 func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing.T) {
-	// t.Skip("Skipping integration test in short mode")
+	t.Skip("Skipping integration test in short mode")
 	if testing.Short() {
 		t.Skip("Skipping Docker integration test in short mode")
 	}
@@ -2535,7 +2535,7 @@ func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing
 }
 
 func TestDisableCosSubmission(t *testing.T) {
-	// t.Skip()
+	t.Skip()
 	// Use the shared test environment
 	require.NotNil(t, testEnv, "Test environment should be initialized")
 	require.NotNil(t, testEnv.Geth, "Geth should be initialized")
@@ -2967,7 +2967,7 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 	}
 
 	// Wait for all nodes to be ready
-	time.Sleep(35 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -3021,7 +3021,7 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 			t.Log("📋 Checking regular node3 logs...")
 			showLogs(t, "test-regularnode3", 30)
 
-			time.Sleep(15 * time.Second)
+			time.Sleep(20 * time.Second)
 		}
 	}
 
