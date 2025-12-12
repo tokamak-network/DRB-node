@@ -418,7 +418,7 @@ func TestRegularNodeOnChainCommit(t *testing.T) {
 	}
 
 	// Wait for regularNode1 to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -577,7 +577,7 @@ func TestRegularNodeOnChainCos(t *testing.T) {
 	}
 
 	// Wait for regularNode1 to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -754,7 +754,7 @@ func TestRegularNodeOnChainCvsAndCos(t *testing.T) {
 	}
 
 	// Wait for regularNode1 to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -950,7 +950,7 @@ func TestRegularNodeOnChainSecret(t *testing.T) {
 	}
 
 	// Wait for regularNode1 to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -1320,7 +1320,7 @@ func TestRegularNodeOnChainCvsAndSecret(t *testing.T) {
 	}
 
 	// Wait for regularNode1 to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -1680,7 +1680,7 @@ func TestAllRegularNodesOnChainCvs(t *testing.T) {
 	}
 
 	// Wait for all regular nodes to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -1869,7 +1869,7 @@ func TestAllRegularNodesOnChainCos(t *testing.T) {
 	}
 
 	// Wait for all regular nodes to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -2474,7 +2474,7 @@ func TestLeaderSlashingForMissingMerkleRootAfterDisputeWithMockCommit(t *testing
 	}
 
 	// Wait for nodes to be ready
-	time.Sleep(15 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -2621,7 +2621,7 @@ func TestDisableCosSubmission(t *testing.T) {
 	}
 
 	// Wait for regularNode1 to be ready
-	time.Sleep(20 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -2967,7 +2967,7 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 	}
 
 	// Wait for all nodes to be ready
-	time.Sleep(35 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -3021,7 +3021,7 @@ func TestMockGenerateRandomNumberToLeader(t *testing.T) {
 			t.Log("📋 Checking regular node3 logs...")
 			showLogs(t, "test-regularnode3", 30)
 
-			time.Sleep(15 * time.Second)
+			time.Sleep(50 * time.Second)
 		}
 	}
 
