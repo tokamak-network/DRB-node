@@ -1147,7 +1147,7 @@ func TestRegularNodeOnChainCvsCosAndSecret(t *testing.T) {
 	}
 
 	// Wait for regularNode1 to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -1495,7 +1495,7 @@ func TestRegularNodeOnChainCosAndSecret(t *testing.T) {
 	}
 
 	// Wait for regularNode1 to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -2077,7 +2077,7 @@ func TestAllRegularNodesOnChainSecret(t *testing.T) {
 	}
 
 	// Wait for all regular nodes to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
@@ -2794,7 +2794,7 @@ func TestDisableSecretSubmission(t *testing.T) {
 	}
 
 	// Wait for regularNode1 to be ready
-	time.Sleep(10 * time.Second)
+	time.Sleep(50 * time.Second)
 
 	t.Log("STEP 4: Requesting random number...")
 
