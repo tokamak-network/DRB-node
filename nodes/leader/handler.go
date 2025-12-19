@@ -6,11 +6,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"log"
+	"math/big"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -163,6 +167,11 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 	}
 
 	if !lh.VerifySignatureAndCheckActivation(ctx, commitVerificationRequest, "commit") {
+		return
+	}
+
+	if !lh.VerifyCvsEIP712Signature(req.Round, req.TrialNum, req.Cvs, req.Sign, req.EOAAddress) {
+		log.Printf("EIP-712 signature verification failed for CVS from EOA %s, round %s, trial %s. Rejecting CVS.", req.EOAAddress, req.Round, req.TrialNum)
 		return
 	}
 
@@ -453,4 +462,83 @@ func (lh *LeaderNodeHandler) handleAcknowledgment(ctx context.Context, s network
 
 	// Process the acknowledgment
 	lh.leaderNode.HandleAcknowledgment(ctx, ack)
+}
+
+func (lh *LeaderNodeHandler) VerifyCvsEIP712Signature(round string, trialNum string, cvs [32]byte, signInfo utils.SignInfo, expectedEOA string) bool {
+	vStr := signInfo.V
+	rStr := signInfo.R
+	sStr := signInfo.S
+
+	if vStr == "" || rStr == "" || sStr == "" {
+		log.Printf("EIP-712 signature verification failed: v, r, or s is empty for EOA %s", expectedEOA)
+		return false
+	}
+
+	v, err := strconv.ParseUint(vStr, 10, 8)
+	if err != nil {
+		log.Printf("EIP-712 signature verification failed: invalid v value '%s' for EOA %s: %v", vStr, expectedEOA, err)
+		return false
+	}
+
+	if v < 27 {
+		v += 27
+	}
+
+	rBytes, err := hex.DecodeString(strings.TrimPrefix(rStr, "0x"))
+	if err != nil {
+		log.Printf("EIP-712 signature verification failed: invalid r value '%s' for EOA %s: %v", rStr, expectedEOA, err)
+		return false
+	}
+
+	sBytes, err := hex.DecodeString(strings.TrimPrefix(sStr, "0x"))
+	if err != nil {
+		log.Printf("EIP-712 signature verification failed: invalid s value '%s' for EOA %s: %v", sStr, expectedEOA, err)
+		return false
+	}
+
+	if len(rBytes) != 32 || len(sBytes) != 32 {
+		log.Printf("EIP-712 signature verification failed: r or s is not 32 bytes for EOA %s", expectedEOA)
+		return false
+	}
+
+	roundBigInt, ok := new(big.Int).SetString(round, 10)
+	if !ok {
+		log.Printf("EIP-712 signature verification failed: invalid round '%s' for EOA %s", round, expectedEOA)
+		return false
+	}
+
+	trialNumBigInt, ok := new(big.Int).SetString(trialNum, 10)
+	if !ok {
+		log.Printf("EIP-712 signature verification failed: invalid trialNum '%s' for EOA %s", trialNum, expectedEOA)
+		return false
+	}
+
+	typedDataHash, err := utils.ComputeCvsEIP712TypedDataHash(roundBigInt, trialNumBigInt, cvs)
+	if err != nil {
+		log.Printf("EIP-712 signature verification failed: error computing typed data hash for EOA %s: %v", expectedEOA, err)
+		return false
+	}
+
+	signature := make([]byte, 65)
+	copy(signature[:32], rBytes)
+	copy(signature[32:64], sBytes)
+	signature[64] = byte(v - 27)
+
+	pubKey, err := crypto.SigToPub(typedDataHash.Bytes(), signature)
+	if err != nil {
+		log.Printf("EIP-712 signature verification failed: error recovering public key for EOA %s: %v", expectedEOA, err)
+		return false
+	}
+
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey)
+	expectedAddress := common.HexToAddress(expectedEOA)
+
+	isValid := recoveredAddress == expectedAddress
+	if isValid {
+		log.Printf("EIP-712 signature verification successful for EOA %s (recovered: %s)", expectedEOA, recoveredAddress.Hex())
+	} else {
+		log.Printf("EIP-712 signature verification failed for EOA %s (recovered: %s)", expectedEOA, recoveredAddress.Hex())
+	}
+
+	return isValid
 }

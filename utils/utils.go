@@ -2,9 +2,14 @@ package utils
 
 import (
 	"crypto/ecdsa"
+	"fmt"
 	"log"
+	"math/big"
+	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 )
 
 type RegistrationRequest struct {
@@ -71,4 +76,85 @@ func SignData(data string, privateKey *ecdsa.PrivateKey) []byte {
 
 func GetUniqueKey(round string, trialNum string) string {
 	return round + "-" + trialNum
+}
+
+func ComputeCvsEIP712TypedDataHash(round *big.Int, trialNum *big.Int, cvs [32]byte) (common.Hash, error) {
+	name := "Commit Reveal2"
+	version := "1"
+
+	envCfg := appconfig.Get()
+
+	contractAddressEnv := envCfg.ContractAddress
+	if contractAddressEnv == "" {
+		return common.Hash{}, fmt.Errorf("CONTRACT_ADDRESS is not set in environment variables")
+	}
+	chainIDEnv := envCfg.ChainID
+	if chainIDEnv == "" {
+		return common.Hash{}, fmt.Errorf("CHAIN_ID is not set in environment variables")
+	}
+	contractAddressEnv = strings.TrimPrefix(contractAddressEnv, "0x")
+	contractAddress := common.HexToAddress(contractAddressEnv)
+
+	chainID := new(big.Int)
+	chainID, ok := chainID.SetString(chainIDEnv, 10)
+	if !ok {
+		return common.Hash{}, fmt.Errorf("invalid chain ID: %s", chainIDEnv)
+	}
+
+	// Step 1: Compute domain separator
+	domainTypeHash := crypto.Keccak256Hash([]byte("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"))
+	nameHash := crypto.Keccak256Hash([]byte(name))
+	versionHash := crypto.Keccak256Hash([]byte(version))
+
+	domainSeparator := crypto.Keccak256Hash(
+		abiEncode(
+			domainTypeHash.Bytes(),
+			nameHash.Bytes(),
+			versionHash.Bytes(),
+			intToBytes(chainID),
+			contractAddress.Bytes(),
+		),
+	)
+
+	// Step 2: Compute message hash
+	messageTypeHash := crypto.Keccak256Hash([]byte("Message(uint256 round,uint256 trialNum,bytes32 cv)"))
+	messageHash := crypto.Keccak256Hash(
+		abiEncode(
+			messageTypeHash.Bytes(),
+			intToBytes(round),
+			intToBytes(trialNum),
+			cvs[:],
+		),
+	)
+
+	// Step 3: Compute the final typed data hash
+	typedDataHash := crypto.Keccak256Hash(
+		abiEncodePacked(
+			[]byte{0x19, 0x01},
+			domainSeparator.Bytes(),
+			messageHash.Bytes(),
+		),
+	)
+
+	return typedDataHash, nil
+}
+
+func abiEncode(elements ...[]byte) []byte {
+	var encoded []byte
+	for _, e := range elements {
+		encoded = append(encoded, common.LeftPadBytes(e, 32)...)
+	}
+	return encoded
+}
+
+func abiEncodePacked(elements ...[]byte) []byte {
+	var packed []byte
+	for _, e := range elements {
+		packed = append(packed, e...)
+	}
+	return packed
+}
+
+func intToBytes(num *big.Int) []byte {
+	return common.LeftPadBytes(num.Bytes(), 32)
 }

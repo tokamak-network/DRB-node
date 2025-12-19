@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"strings"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	appconfig "github.com/tokamak-network/DRB-node/config"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // GenerateCvsSignature generates the EIP-712 signature components (v, r, s) for a given round, trialNum and CVS value.
@@ -19,31 +18,8 @@ func (n *RegularNode) GenerateCvsSignature(round *big.Int, trialNum *big.Int, cv
 	log.Printf("Received CVS as [32]byte: %x", cvs)
 	log.Printf("Converted CVS to String: %s", cvsString)
 
-	// Define constants for EIP-712
-	name := "Commit Reveal2"
-	version := "1"
-
-	envCfg := appconfig.Get()
-
-	// Fetch contract address and chain ID dynamically from the .env file
-	contractAddressEnv := envCfg.ContractAddress
-	if contractAddressEnv == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	chainIDEnv := envCfg.ChainID
-	if chainIDEnv == "" {
-		log.Fatal("CHAIN_ID is not set in environment variables.")
-	}
-	contractAddressEnv = strings.TrimPrefix(contractAddressEnv, "0x")
-	contractAddress := common.HexToAddress(contractAddressEnv)
-
-	chainID := new(big.Int)
-	chainID, okays := chainID.SetString(chainIDEnv, 10)
-	if !okays {
-		return 0, "", "", fmt.Errorf("invalid chain ID: %s", chainIDEnv)
-	}
-
 	// Load the private key
+	envCfg := appconfig.Get()
 	privateKeyHex := envCfg.EOAPrivateKey
 	if privateKeyHex == "" {
 		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
@@ -53,44 +29,13 @@ func (n *RegularNode) GenerateCvsSignature(round *big.Int, trialNum *big.Int, cv
 		return 0, "", "", fmt.Errorf("failed to decode private key: %v", err)
 	}
 
-	// Step 1: Compute domain separator
-	domainTypeHash := crypto.Keccak256Hash([]byte("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"))
-	nameHash := crypto.Keccak256Hash([]byte(name))
-	versionHash := crypto.Keccak256Hash([]byte(version))
-
-	domainSeparator := crypto.Keccak256Hash(
-		n.abiEncode(
-			domainTypeHash.Bytes(),
-			nameHash.Bytes(),
-			versionHash.Bytes(),
-			n.intToBytes(chainID),
-			contractAddress.Bytes(),
-		),
-	)
-
-	// Step 2: Compute message hash
-	messageTypeHash := crypto.Keccak256Hash([]byte("Message(uint256 round,uint256 trialNum,bytes32 cv)"))
-	messageHash := crypto.Keccak256Hash(
-		n.abiEncode(
-			messageTypeHash.Bytes(),
-			n.intToBytes(round),    // uint256 round
-			n.intToBytes(trialNum), // uint256 trialNum
-			cvs[:],                 // bytes32 CVS as [32]byte
-		),
-	)
-	log.Printf("Message Hash: %s", messageHash.Hex())
-
-	// Step 3: Compute the final typed data hash
-	typedDataHash := crypto.Keccak256Hash(
-		n.abiEncodePacked(
-			[]byte{0x19, 0x01}, // EIP-712 prefix
-			domainSeparator.Bytes(),
-			messageHash.Bytes(),
-		),
-	)
+	typedDataHash, err := utils.ComputeCvsEIP712TypedDataHash(round, trialNum, cvs)
+	if err != nil {
+		return 0, "", "", fmt.Errorf("failed to compute EIP-712 typed data hash: %v", err)
+	}
 	log.Printf("Typed Data Hash: %s", typedDataHash.Hex())
 
-	// Step 4: Sign the typed data hash
+	// Sign the typed data hash
 	signature, err := crypto.Sign(typedDataHash.Bytes(), privateKey)
 	if err != nil {
 		return 0, "", "", fmt.Errorf("failed to sign typed data: %v", err)
@@ -103,27 +48,4 @@ func (n *RegularNode) GenerateCvsSignature(round *big.Int, trialNum *big.Int, cv
 
 	log.Printf("Generated EIP-712 signature: v=%d, r=%s, s=%s", v, r, s)
 	return v, r, s, nil
-}
-
-// Helper: abiEncode replicates Solidity's `abi.encode` behavior with 32-byte padding.
-func (n *RegularNode) abiEncode(elements ...[]byte) []byte {
-	var encoded []byte
-	for _, e := range elements {
-		encoded = append(encoded, common.LeftPadBytes(e, 32)...)
-	}
-	return encoded
-}
-
-// Helper: abiEncodePacked replicates Solidity's `abi.encodePacked` behavior.
-func (n *RegularNode) abiEncodePacked(elements ...[]byte) []byte {
-	var packed []byte
-	for _, e := range elements {
-		packed = append(packed, e...)
-	}
-	return packed
-}
-
-// Helper: intToBytes converts a *big.Int to its padded big-endian byte representation.
-func (n *RegularNode) intToBytes(num *big.Int) []byte {
-	return common.LeftPadBytes(num.Bytes(), 32)
 }
