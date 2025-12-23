@@ -2078,6 +2078,9 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_DecodeError(t *tes
 
 	<-ctx.Done()
 
+	// Give the goroutine time to process context cancellation
+	time.Sleep(50 * time.Millisecond)
+
 	mockClient.AssertExpectations(t)
 	mockSub.AssertExpectations(t)
 }

@@ -17,12 +17,17 @@ import (
 )
 
 // generates a signature for the acknowledgment
-func (n *RegularNode) generateAcknowledgmentSignature(eoaAddress string) []byte {
+func (n *RegularNode) generateAcknowledgmentSignature(ack utils.AcknowledgmentMessage) []byte {
 	if n.GetRegularNodePrivateKey() == nil {
 		log.Printf("Regular node private key not set, cannot sign acknowledgment")
 		return nil
 	}
-	return utils.SignData(eoaAddress, n.GetRegularNodePrivateKey())
+	signature, err := utils.SignAcknowledgmentContent(ack, n.GetRegularNodePrivateKey())
+	if err != nil {
+		log.Printf("Failed to sign acknowledgment content: %v", err)
+		return nil
+	}
+	return signature
 }
 
 // sendAcknowledgment sends an acknowledgment back to the leader
@@ -62,14 +67,8 @@ func (n *RegularNode) HandleCvs(ctx context.Context, h host.Host, s network.Stre
 		return
 	}
 
-	// Verify leader signature for broadcast message
-	verifyReq := utils.Verification{
-		EOAAddress: message.SignerEOA,
-		Signature:  message.Signature,
-	}
-
-	if !utils.VerifySignatureForRegularNode(verifyReq, leaderEOA) {
-		log.Printf("Signature verification failed for CVS broadcast from signer: %s (message ID: %s)", message.SignerEOA, message.MessageID)
+	if !utils.VerifyBroadcastMessageContentSignature(message, leaderEOA) {
+		log.Printf("Signature verification failed for CVS broadcast from signer: %s (message ID: %s). Message content may have been tampered.", message.SignerEOA, message.MessageID)
 		return
 	}
 
@@ -109,8 +108,6 @@ func (n *RegularNode) HandleCvs(ctx context.Context, h host.Host, s network.Stre
 
 	// Send acknowledgment
 	eoaAddress := n.GetRegularNodeEOA()
-	signature := n.generateAcknowledgmentSignature(eoaAddress)
-
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
 		TrialNum:   message.TrialNum,
@@ -118,8 +115,9 @@ func (n *RegularNode) HandleCvs(ctx context.Context, h host.Host, s network.Stre
 		MessageID:  message.MessageID,
 		Type:       message.Type,
 		Status:     "received",
-		Signature:  signature,
 	}
+	signature := n.generateAcknowledgmentSignature(ack)
+	ack.Signature = signature
 
 	// Get leader peer ID from environment or connection
 	leaderPeerIDStr := appconfig.Get().LeaderPeerID
@@ -159,13 +157,8 @@ func (n *RegularNode) HandleCos(ctx context.Context, h host.Host, s network.Stre
 	}
 
 	// Verify leader signature for broadcast message
-	verifyReq := utils.Verification{
-		EOAAddress: message.SignerEOA,
-		Signature:  message.Signature,
-	}
-
-	if !utils.VerifySignatureForRegularNode(verifyReq, leaderEOA) {
-		log.Printf("Signature verification failed for COS broadcast from signer: %s (message ID: %s)", message.SignerEOA, message.MessageID)
+	if !utils.VerifyBroadcastMessageContentSignature(message, leaderEOA) {
+		log.Printf("Signature verification failed for COS broadcast from signer: %s (message ID: %s). Message content may have been tampered.", message.SignerEOA, message.MessageID)
 		return
 	}
 
@@ -209,8 +202,6 @@ func (n *RegularNode) HandleCos(ctx context.Context, h host.Host, s network.Stre
 
 	// Send acknowledgment
 	eoaAddress := n.GetRegularNodeEOA()
-	signature := n.generateAcknowledgmentSignature(eoaAddress)
-
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
 		TrialNum:   message.TrialNum,
@@ -218,8 +209,9 @@ func (n *RegularNode) HandleCos(ctx context.Context, h host.Host, s network.Stre
 		MessageID:  message.MessageID,
 		Type:       message.Type,
 		Status:     "received",
-		Signature:  signature,
 	}
+	signature := n.generateAcknowledgmentSignature(ack)
+	ack.Signature = signature
 
 	// Get leader peer ID from environment or connection
 	leaderPeerIDStr := appconfig.Get().LeaderPeerID
@@ -259,13 +251,8 @@ func (n *RegularNode) HandleSecret(ctx context.Context, h host.Host, s network.S
 	}
 
 	// Verify leader signature for broadcast message
-	verifyReq := utils.Verification{
-		EOAAddress: message.SignerEOA,
-		Signature:  message.Signature,
-	}
-
-	if !utils.VerifySignatureForRegularNode(verifyReq, leaderEOA) {
-		log.Printf("Signature verification failed for secret broadcast from signer: %s (message ID: %s)", message.SignerEOA, message.MessageID)
+	if !utils.VerifyBroadcastMessageContentSignature(message, leaderEOA) {
+		log.Printf("Signature verification failed for secret broadcast from signer: %s (message ID: %s). Message content may have been tampered.", message.SignerEOA, message.MessageID)
 		return
 	}
 
@@ -305,8 +292,6 @@ func (n *RegularNode) HandleSecret(ctx context.Context, h host.Host, s network.S
 
 	// Send acknowledgment
 	eoaAddress := n.GetRegularNodeEOA()
-	signature := n.generateAcknowledgmentSignature(eoaAddress)
-
 	ack := utils.AcknowledgmentMessage{
 		Round:      message.Round,
 		TrialNum:   message.TrialNum,
@@ -314,8 +299,9 @@ func (n *RegularNode) HandleSecret(ctx context.Context, h host.Host, s network.S
 		MessageID:  message.MessageID,
 		Type:       message.Type,
 		Status:     "received",
-		Signature:  signature,
 	}
+	signature := n.generateAcknowledgmentSignature(ack)
+	ack.Signature = signature
 
 	// Get leader peer ID from environment or connection
 	leaderPeerIDStr := appconfig.Get().LeaderPeerID

@@ -73,14 +73,9 @@ func (n *LeaderNode) AcceptSecretValue(ctx context.Context, h host.Host, s netwo
 		return
 	}
 
-	// Verify the EOA signature
-	verifyReq := utils.Verification{
-		EOAAddress: req.RegularEoaAddress,
-		Signature:  req.Signature,
-	}
-
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for secret value request from EOA: %s", req.RegularEoaAddress)
+	// Verify signature for ALL fields
+	if !utils.VerifySecretValueContentSignature(req, req.RegularEoaAddress) {
+		log.Printf("Signature verification failed for secret value from EOA: %s. Round, TrialNum, SecretValue, or RegularEoaAddress may have been tampered.", req.RegularEoaAddress)
 		return
 	}
 
@@ -110,8 +105,13 @@ func (n *LeaderNode) AcceptSecretValue(ctx context.Context, h host.Host, s netwo
 		log.Printf("Commit data not found  for round %s with trail %s EOA %s.", round, trial, eoaAddress.Hex())
 		return
 	}
+
 	var secretValueArray [32]byte
-	copy(secretValueArray[:], req.SecretValue[:]) // Convert req.SecretValue to [32]byte
+	if len(req.SecretValue) != 32 {
+		log.Printf("Invalid secret value length: expected 32 bytes, got %d", len(req.SecretValue))
+		return
+	}
+	copy(secretValueArray[:], req.SecretValue[:])
 
 	// Use the new atomic setter function
 	n.AppendToRoundSecrets(uniqueKey, secretValueArray)

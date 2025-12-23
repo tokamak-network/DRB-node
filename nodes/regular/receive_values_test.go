@@ -73,10 +73,18 @@ func TestRegularNode_generateAcknowledgmentSignature_Success(t *testing.T) {
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 
-	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 	node.SetRegularNodePrivateKey(privateKey)
 
-	signature := node.generateAcknowledgmentSignature(eoaAddress)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
+	ack := utils.AcknowledgmentMessage{
+		Round:      "100",
+		TrialNum:   "1",
+		EOAAddress: eoaAddress,
+		MessageID:  "msg-test",
+		Type:       "cvs",
+		Status:     "received",
+	}
+	signature := node.generateAcknowledgmentSignature(ack)
 
 	assert.NotNil(t, signature, "Signature should be generated")
 	assert.Len(t, signature, 65, "Signature should be 65 bytes")
@@ -86,9 +94,15 @@ func TestRegularNode_generateAcknowledgmentSignature_NoPrivateKey(t *testing.T) 
 	node := createTestNodeForReceiveValues()
 
 	// Don't set private key
-	eoaAddress := "0x1234567890123456789012345678901234567890"
-
-	signature := node.generateAcknowledgmentSignature(eoaAddress)
+	ack := utils.AcknowledgmentMessage{
+		Round:      "100",
+		TrialNum:   "1",
+		EOAAddress: "0x1234567890123456789012345678901234567890",
+		MessageID:  "msg-test",
+		Type:       "cvs",
+		Status:     "received",
+	}
+	signature := node.generateAcknowledgmentSignature(ack)
 
 	assert.Nil(t, signature, "Should return nil when private key not set")
 }
@@ -217,18 +231,20 @@ func TestRegularNode_HandleCvs_Success_NewRecord(t *testing.T) {
 	copy(cvs[:], []byte("test-cvs"))
 
 	// Generate valid signature
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-003"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-003",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cvs",
 		Data:       cvs,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -274,18 +290,20 @@ func TestRegularNode_HandleCvs_Success_UpdateRecord(t *testing.T) {
 	var cvs [32]byte
 	copy(cvs[:], []byte("test-cvs-update"))
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-004"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-004",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cvs",
 		Data:       cvs,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	// Mock repository - existing record
 	existingData := &database.PeerCommitDataScheme{
@@ -329,18 +347,20 @@ func TestRegularNode_HandleCvs_AddError(t *testing.T) {
 	defer os.Unsetenv("LEADER_EOA")
 
 	var cvs [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-005"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-005",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cvs",
 		Data:       cvs,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -378,18 +398,20 @@ func TestRegularNode_HandleCvs_UpdateError(t *testing.T) {
 	defer os.Unsetenv("LEADER_EOA")
 
 	var cvs [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-006"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-006",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cvs",
 		Data:       cvs,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	// Mock repository - existing record, but update fails
 	existingData := &database.PeerCommitDataScheme{
@@ -427,18 +449,20 @@ func TestRegularNode_HandleCvs_GetPeerCommitDataError(t *testing.T) {
 	defer os.Unsetenv("LEADER_EOA")
 
 	var cvs [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-007"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-007",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cvs",
 		Data:       cvs,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, errors.New("database connection error"))
@@ -476,18 +500,20 @@ func TestRegularNode_HandleCvs_MissingLeaderPeerID(t *testing.T) {
 	defer os.Unsetenv("LEADER_EOA")
 
 	var cvs [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-008"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-008",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cvs",
 		Data:       cvs,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -529,18 +555,20 @@ func TestRegularNode_HandleCvs_InvalidLeaderPeerID(t *testing.T) {
 	}()
 
 	var cvs [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-009"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-009",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cvs",
 		Data:       cvs,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -674,18 +702,20 @@ func TestRegularNode_HandleCos_Success_NewRecord(t *testing.T) {
 	var cos [32]byte
 	copy(cos[:], []byte("test-cos"))
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-012"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-012",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cos",
 		Data:       cos,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -735,18 +765,20 @@ func TestRegularNode_HandleCos_Success_UpdateRecord(t *testing.T) {
 	var cos [32]byte
 	copy(cos[:], []byte("test-cos-update"))
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-013"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-013",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cos",
 		Data:       cos,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	existingData := &database.PeerCommitDataScheme{
 		Round:      "100",
@@ -783,18 +815,20 @@ func TestRegularNode_HandleCos_AddError(t *testing.T) {
 	defer os.Unsetenv("LEADER_EOA")
 
 	var cos [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-014"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-014",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cos",
 		Data:       cos,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -826,18 +860,20 @@ func TestRegularNode_HandleCos_UpdateError(t *testing.T) {
 	defer os.Unsetenv("LEADER_EOA")
 
 	var cos [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-015"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-015",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cos",
 		Data:       cos,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	existingData := &database.PeerCommitDataScheme{
 		Round:      "100",
@@ -976,18 +1012,20 @@ func TestRegularNode_HandleSecret_Success_NewRecord(t *testing.T) {
 	var secret [32]byte
 	copy(secret[:], []byte("test-secret"))
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-022"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-022",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "secret",
 		Data:       secret,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -1031,18 +1069,20 @@ func TestRegularNode_HandleSecret_Success_UpdateRecord(t *testing.T) {
 	var secret [32]byte
 	copy(secret[:], []byte("test-secret-update"))
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-023"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-023",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "secret",
 		Data:       secret,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	existingData := &database.PeerCommitDataScheme{
 		Round:      "100",
@@ -1079,18 +1119,20 @@ func TestRegularNode_HandleSecret_AddError(t *testing.T) {
 	defer os.Unsetenv("LEADER_EOA")
 
 	var secret [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-024"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-024",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "secret",
 		Data:       secret,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -1122,18 +1164,20 @@ func TestRegularNode_HandleSecret_UpdateError(t *testing.T) {
 	defer os.Unsetenv("LEADER_EOA")
 
 	var secret [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-025"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-025",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "secret",
 		Data:       secret,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	existingData := &database.PeerCommitDataScheme{
 		Round:      "100",
@@ -1170,18 +1214,20 @@ func TestRegularNode_HandleSecret_GetPeerCommitDataError(t *testing.T) {
 	defer os.Unsetenv("LEADER_EOA")
 
 	var secret [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-026"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-026",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "secret",
 		Data:       secret,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, errors.New("database error"))
@@ -1219,18 +1265,20 @@ func TestRegularNode_HandleSecret_MissingLeaderPeerID(t *testing.T) {
 	defer os.Unsetenv("LEADER_EOA")
 
 	var secret [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-027"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-027",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "secret",
 		Data:       secret,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -1272,18 +1320,20 @@ func TestRegularNode_HandleSecret_InvalidLeaderPeerID(t *testing.T) {
 	}()
 
 	var secret [32]byte
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-028"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-028",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "secret",
 		Data:       secret,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -1378,8 +1428,15 @@ func TestRegularNode_sendAcknowledgment_NoPrivateKey(t *testing.T) {
 	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
 	// Don't set private key
 
-	eoaAddress := "0x1234567890123456789012345678901234567890"
-	signature := node.generateAcknowledgmentSignature(eoaAddress)
+	ack := utils.AcknowledgmentMessage{
+		Round:      "100",
+		TrialNum:   "1",
+		EOAAddress: "0x1234567890123456789012345678901234567890",
+		MessageID:  "msg-test",
+		Type:       "cvs",
+		Status:     "received",
+	}
+	signature := node.generateAcknowledgmentSignature(ack)
 
 	assert.Nil(t, signature, "Should return nil without private key")
 }
@@ -1518,18 +1575,20 @@ func TestRegularNode_HandleCvs_EmptyData(t *testing.T) {
 	}()
 
 	var cvs [32]byte // Empty data
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-030"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-030",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cvs",
 		Data:       cvs,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -1571,18 +1630,20 @@ func TestRegularNode_HandleCos_EmptyData(t *testing.T) {
 	}()
 
 	var cos [32]byte // Empty
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-031"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-031",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "cos",
 		Data:       cos,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)
@@ -1624,18 +1685,20 @@ func TestRegularNode_HandleSecret_EmptyData(t *testing.T) {
 	}()
 
 	var secret [32]byte // Empty
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	eoaAddress := "0x1234567890123456789012345678901234567890"
+	messageID := "msg-032"
 	message := utils.BroadcastMessage{
 		Round:      "100",
 		TrialNum:   "1",
-		EOAAddress: "0x1234567890123456789012345678901234567890",
-		MessageID:  "msg-032",
+		EOAAddress: eoaAddress,
+		MessageID:  messageID,
 		Type:       "secret",
 		Data:       secret,
 		SignerEOA:  leaderEOA,
-		Signature:  signature,
 	}
+	signature, err := utils.SignBroadcastMessageContent(message, leaderPrivateKey)
+	require.NoError(t, err)
+	message.Signature = signature
 
 	mockRepo.On("GetPeerCommitData", mock.Anything, "100", "1", "0x1234567890123456789012345678901234567890").
 		Return(nil, pg.ErrNoRows)

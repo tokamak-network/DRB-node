@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"os"
 	"testing"
 	"time"
 
@@ -245,16 +246,19 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleAcknowledgment_Deco
 	assert.True(suite.T(), stream.closed)
 }
 
-// TestLeaderHandler_VerifySignature_Fail tests signature verification failure
-func (suite *LeaderHandlerTestSuite) TestLeaderHandler_VerifySignature_Fail() {
-	req := utils.Request{
-		Round:      "1",
-		TrialNum:   "1",
-		EOAAddress: "0xTestOp",
-		Signature:  []byte("invalid"),
+// TestLeaderHandler_CheckActivation_NotActivated tests activation check failure
+func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_NotActivated() {
+	testOp := common.HexToAddress("0xTestOp")
+
+	mockEth := &MockEthService{
+		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
+			return []common.Address{}, nil // Empty list
+		},
 	}
 
-	result := suite.leaderNodeHandler.VerifySignatureAndCheckActivation(context.Background(), req, "commit")
+	suite.leaderNodeHandler.ethService = mockEth
+
+	result := suite.leaderNodeHandler.CheckActivation(context.Background(), testOp, "commit")
 	assert.False(suite.T(), result)
 }
 
@@ -857,18 +861,20 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_MemoryDatabaseSync() {
 
 }
 
-// TestLeaderHandler_VerifySignature_ActivationFail tests signature verification with activation failure
-func (suite *LeaderHandlerTestSuite) TestLeaderHandler_VerifySignature_ActivationFail() {
-	req := utils.Request{
-		Round:      "1",
-		TrialNum:   "1",
-		EOAAddress: "0xTest",
-		Signature:  []byte{1, 2, 3}, // Invalid
+// TestLeaderHandler_CheckActivation_NotActivated2 tests activation check failure (different EOA)
+func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_NotActivated2() {
+	testOp := common.HexToAddress("0xTest")
+
+	mockEth := &MockEthService{
+		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
+			return []common.Address{}, nil // Empty list
+		},
 	}
 
-	result := suite.leaderNodeHandler.VerifySignatureAndCheckActivation(context.Background(), req, "test")
-	assert.False(suite.T(), result)
+	suite.leaderNodeHandler.ethService = mockEth
 
+	result := suite.leaderNodeHandler.CheckActivation(context.Background(), testOp, "test")
+	assert.False(suite.T(), result)
 }
 
 // TestLeaderHandler_OperatorIndexByteConversion tests operator index to byte conversion
@@ -915,6 +921,64 @@ func generateValidSignature(eoaAddress string, privateKey *ecdsa.PrivateKey) []b
 	}
 
 	return signature
+}
+
+func generateCosRequestSignature(req utils.CosRequest, privateKey *ecdsa.PrivateKey) []byte {
+	signature, err := utils.SignCosRequestContent(req, privateKey)
+	if err != nil {
+		return nil
+	}
+	return signature
+}
+
+func generateAcknowledgmentSignature(ack utils.AcknowledgmentMessage, privateKey *ecdsa.PrivateKey) []byte {
+	signature, err := utils.SignAcknowledgmentContent(ack, privateKey)
+	if err != nil {
+		return nil
+	}
+	return signature
+}
+
+func generateCommitRequestSignature(req utils.CommitRequest, privateKey *ecdsa.PrivateKey) []byte {
+	signature, err := utils.SignCommitRequestContent(req, privateKey)
+	if err != nil {
+		return nil
+	}
+	return signature
+}
+
+func generateCvsEIP712Signature(round string, trialNum string, cvs [32]byte, privateKey *ecdsa.PrivateKey) utils.SignInfo {
+	roundBigInt, ok := new(big.Int).SetString(round, 10)
+	if !ok {
+		hash := crypto.Keccak256Hash([]byte(round))
+		roundBigInt = new(big.Int).SetBytes(hash.Bytes())
+	}
+
+	trialNumBigInt, ok := new(big.Int).SetString(trialNum, 10)
+	if !ok {
+		hash := crypto.Keccak256Hash([]byte(trialNum))
+		trialNumBigInt = new(big.Int).SetBytes(hash.Bytes())
+	}
+
+	typedDataHash, err := utils.ComputeCvsEIP712TypedDataHash(roundBigInt, trialNumBigInt, cvs)
+	if err != nil {
+		return utils.SignInfo{}
+	}
+
+	signature, err := crypto.Sign(typedDataHash.Bytes(), privateKey)
+	if err != nil {
+		return utils.SignInfo{}
+	}
+
+	r := hex.EncodeToString(signature[:32])
+	s := hex.EncodeToString(signature[32:64])
+	v := uint8(signature[64]) + 27
+
+	return utils.SignInfo{
+		R: r,
+		S: s,
+		V: fmt.Sprintf("%d", v),
+	}
 }
 
 func createTestKeyPair() (*ecdsa.PrivateKey, string) {
@@ -1335,22 +1399,19 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCOSRequest_ValidSig
 	require.NoError(suite.T(), err)
 	suite.leaderNodeHandler.updateInMemoryData(uniqueKey, testOp, *commitData)
 
-	// Generate VALID signature
-	signature := generateValidSignature(eoaAddress, privateKey)
-	require.NotNil(suite.T(), signature)
-
-	verifyReq := utils.Verification{
-		EOAAddress: eoaAddress,
-		Signature:  signature,
-	}
-	assert.True(suite.T(), utils.VerifySignature(verifyReq), "Signature should be valid")
-
 	// Now send COS request
 	cosReq := utils.CosRequest{
-		EOAAddress: eoaAddress,
+		UniqueKey:  uniqueKey,
+		Round:      testRound,
+		TrialNum:   testTrial,
 		Cos:        cos,
-		Signature:  signature,
+		EOAAddress: eoaAddress,
 	}
+
+	// Generate VALID signature for COS request (ALL fields)
+	signature := generateCosRequestSignature(cosReq, privateKey)
+	require.NotNil(suite.T(), signature)
+	cosReq.Signature = signature
 
 	reqBytes, _ := json.Marshal(cosReq)
 	mockStream := &mockStream{
@@ -1421,7 +1482,7 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_CoreL
 	round := req.Round
 	eoaAddress_addr := common.HexToAddress(req.EOAAddress)
 	assert.Equal(suite.T(), signature, req.Signature)
-	
+
 	suite.leaderNodeHandler.commitMu.Lock()
 	commitData := suite.leaderNodeHandler.leaderNode.GetOrCreateLeaderCommitData(round, req.TrialNum, uniqueKey, eoaAddress_addr)
 	if commitData.Cvs == [32]byte{} {
@@ -1480,16 +1541,20 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCOSRequest_MissingC
 	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
 
 	cos := [32]byte{10, 20, 30}
-
-	// Generate valid signature
-	signature := generateValidSignature(eoaAddress, privateKey)
-	require.NotNil(suite.T(), signature)
+	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
 
 	cosReq := utils.CosRequest{
-		EOAAddress: eoaAddress,
+		UniqueKey:  uniqueKey,
+		Round:      testRound,
+		TrialNum:   testTrial,
 		Cos:        cos,
-		Signature:  signature,
+		EOAAddress: eoaAddress,
 	}
+
+	// Generate valid signature
+	signature := generateCosRequestSignature(cosReq, privateKey)
+	require.NotNil(suite.T(), signature)
+	cosReq.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(cosReq)
@@ -1547,16 +1612,19 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCOSRequest_Duplicat
 	require.NoError(suite.T(), err)
 	suite.leaderNodeHandler.updateInMemoryData(uniqueKey, testOp, *commitData)
 
-	// Generate valid signature
-	signature := generateValidSignature(eoaAddress, privateKey)
-	require.NotNil(suite.T(), signature)
-
 	// Try to send COS again
 	cosReq := utils.CosRequest{
-		EOAAddress: eoaAddress,
+		UniqueKey:  uniqueKey,
+		Round:      testRound,
+		TrialNum:   testTrial,
 		Cos:        cos,
-		Signature:  signature,
+		EOAAddress: eoaAddress,
 	}
+
+	// Generate valid signature
+	signature := generateCosRequestSignature(cosReq, privateKey)
+	require.NotNil(suite.T(), signature)
+	cosReq.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(cosReq)
@@ -1611,15 +1679,18 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCOSRequest_InvalidH
 	// Send a COS that doesn't match
 	cos := [32]byte{10, 20, 30}
 
-	// Generate valid signature
-	signature := generateValidSignature(eoaAddress, privateKey)
-	require.NotNil(suite.T(), signature)
-
 	cosReq := utils.CosRequest{
-		EOAAddress: eoaAddress,
+		UniqueKey:  uniqueKey,
+		Round:      testRound,
+		TrialNum:   testTrial,
 		Cos:        cos,
-		Signature:  signature,
+		EOAAddress: eoaAddress,
 	}
+
+	// Generate valid signature
+	signature := generateCosRequestSignature(cosReq, privateKey)
+	require.NotNil(suite.T(), signature)
+	cosReq.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(cosReq)
@@ -1819,8 +1890,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_UpdatedallCommitsReceived
 	assert.True(suite.T(), result[testOp2.Hex()], "Op2 with valid CVS should be true")
 }
 
-// TestLeaderHandler_VerifySignatureAndCheckActivation_Success tests successful verification
-func (suite *LeaderHandlerTestSuite) TestLeaderHandler_VerifySignatureAndCheckActivation_Success() {
+// TestLeaderHandler_CheckActivation_Success tests successful activation check
+func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_Success() {
 	// Generate valid key pair
 	privateKey, eoaAddress := createTestKeyPair()
 	require.NotNil(suite.T(), privateKey)
@@ -1835,24 +1906,16 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_VerifySignatureAndCheckAc
 
 	suite.leaderNodeHandler.ethService = mockEth
 
-	// Generate valid signature
-	signature := generateValidSignature(eoaAddress, privateKey)
-
-	req := utils.Request{
-		Round:      "1",
-		TrialNum:   "1",
-		EOAAddress: eoaAddress,
-		Signature:  signature,
-	}
-
-	result := suite.leaderNodeHandler.VerifySignatureAndCheckActivation(context.Background(), req, "commit")
+	result := suite.leaderNodeHandler.CheckActivation(context.Background(), testOp, "commit")
 	assert.True(suite.T(), result)
 }
 
-// TestLeaderHandler_VerifySignatureAndCheckActivation_NetworkError tests network error case
-func (suite *LeaderHandlerTestSuite) TestLeaderHandler_VerifySignatureAndCheckActivation_NetworkError() {
+// TestLeaderHandler_CheckActivation_NetworkError tests network error case
+func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_NetworkError() {
 	privateKey, eoaAddress := createTestKeyPair()
 	require.NotNil(suite.T(), privateKey)
+
+	testOp := common.HexToAddress(eoaAddress)
 
 	mockEth := &MockEthService{
 		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
@@ -1862,22 +1925,13 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_VerifySignatureAndCheckAc
 
 	suite.leaderNodeHandler.ethService = mockEth
 
-	signature := generateValidSignature(eoaAddress, privateKey)
-
-	req := utils.Request{
-		Round:      "1",
-		TrialNum:   "1",
-		EOAAddress: eoaAddress,
-		Signature:  signature,
-	}
-
-	result := suite.leaderNodeHandler.VerifySignatureAndCheckActivation(context.Background(), req, "commit")
+	result := suite.leaderNodeHandler.CheckActivation(context.Background(), testOp, "commit")
 	assert.False(suite.T(), result)
 }
 
 // TestLeaderHandler_HandleCommitRequest_FullFlow_WithValidSig tests full commit flow with valid signature
 func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_FullFlow_WithValidSig() {
-	testRound := "full_flow_commit_70"
+	testRound := "70"
 	testTrial := "1"
 
 	// Generate valid key pair
@@ -1908,18 +1962,32 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_FullF
 	suite.leaderNodeHandler.leaderNode.SetHalted(false)
 	suite.leaderNodeHandler.SetMerkleRootSubmitted(false)
 
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("CHAIN_ID", "1")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("CHAIN_ID")
+	}()
+
 	cvs := [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
-	signature := generateValidSignature(eoaAddress, privateKey)
+	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
 
+	eip712Sign := generateCvsEIP712Signature(testRound, testTrial, cvs, privateKey)
+	require.NotEmpty(suite.T(), eip712Sign.R, "EIP-712 signature R should not be empty")
+	require.NotEmpty(suite.T(), eip712Sign.S, "EIP-712 signature S should not be empty")
+	require.NotEmpty(suite.T(), eip712Sign.V, "EIP-712 signature V should not be empty")
 	commitReq := utils.CommitRequest{
+		UniqueKey:  uniqueKey,
 		Round:      testRound,
 		TrialNum:   testTrial,
 		EOAAddress: eoaAddress,
 		Cvs:        cvs,
-		Sign:       utils.SignInfo{R: "123", S: "456", V: "27"},
-		Signature:  signature,
+		Sign:       eip712Sign,
 	}
+
+	signature := generateCommitRequestSignature(commitReq, privateKey)
+	commitReq.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(commitReq)
@@ -1978,15 +2046,17 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_Dupli
 	suite.leaderNodeHandler.updateInMemoryData(uniqueKey, testOp, *commitData)
 
 	// Try to send CVS again
-	signature := generateValidSignature(eoaAddress, privateKey)
 	commitReq := utils.CommitRequest{
+		UniqueKey:  uniqueKey,
 		Round:      testRound,
 		TrialNum:   testTrial,
 		EOAAddress: eoaAddress,
 		Cvs:        cvs,
 		Sign:       utils.SignInfo{R: "123", S: "456", V: "27"},
-		Signature:  signature,
 	}
+
+	signature := generateCommitRequestSignature(commitReq, privateKey)
+	commitReq.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(commitReq)
@@ -1998,7 +2068,7 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_Dupli
 
 // TestLeaderHandler_HandleCommitRequest_AllCommitsReceivedTrigger tests merkle root generation trigger
 func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_AllCommitsReceivedTrigger() {
-	testRound := "all_commits_trigger_72"
+	testRound := "72"
 	testTrial := "1"
 
 	// Generate 2 valid key pairs
@@ -2032,6 +2102,13 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_AllCo
 	suite.leaderNodeHandler.leaderNode.SetHalted(false)
 	suite.leaderNodeHandler.SetMerkleRootSubmitted(false)
 
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("CHAIN_ID", "1")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("CHAIN_ID")
+	}()
+
 	// Add first commit
 	cvs1 := [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 		17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32}
@@ -2047,16 +2124,23 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_AllCo
 	// Send second commit - this should trigger merkle root generation
 	cvs2 := [32]byte{32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
 		16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
-	signature2 := generateValidSignature(eoaAddress2, privateKey2)
+
+	eip712Sign2 := generateCvsEIP712Signature(testRound, testTrial, cvs2, privateKey2)
+	require.NotEmpty(suite.T(), eip712Sign2.R, "EIP-712 signature R should not be empty")
+	require.NotEmpty(suite.T(), eip712Sign2.S, "EIP-712 signature S should not be empty")
+	require.NotEmpty(suite.T(), eip712Sign2.V, "EIP-712 signature V should not be empty")
 
 	commitReq2 := utils.CommitRequest{
+		UniqueKey:  uniqueKey,
 		Round:      testRound,
 		TrialNum:   testTrial,
 		EOAAddress: eoaAddress2,
 		Cvs:        cvs2,
-		Sign:       utils.SignInfo{R: "789", S: "012", V: "27"},
-		Signature:  signature2,
+		Sign:       eip712Sign2,
 	}
+
+	signature2 := generateCommitRequestSignature(commitReq2, privateKey2)
+	commitReq2.Signature = signature2
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(commitReq2)
@@ -2145,8 +2229,6 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleAcknowledgment_Full
 	}
 	suite.leaderNodeHandler.leaderNode.SetActiveBroadcast(messageID, tracker)
 
-	signature := generateValidSignature(eoaAddress, privateKey)
-
 	ackMsg := utils.AcknowledgmentMessage{
 		Round:      testRound,
 		TrialNum:   testTrial,
@@ -2154,8 +2236,9 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleAcknowledgment_Full
 		MessageID:  messageID,
 		Type:       "cvs",
 		Status:     "received",
-		Signature:  signature,
 	}
+	signature := generateAcknowledgmentSignature(ackMsg, privateKey)
+	ackMsg.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(ackMsg)
@@ -2194,8 +2277,6 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleAcknowledgment_Erro
 	}
 	suite.leaderNodeHandler.leaderNode.SetActiveBroadcast(messageID, tracker)
 
-	signature := generateValidSignature(eoaAddress, privateKey)
-
 	ackMsg := utils.AcknowledgmentMessage{
 		Round:      testRound,
 		TrialNum:   testTrial,
@@ -2203,8 +2284,9 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleAcknowledgment_Erro
 		MessageID:  messageID,
 		Type:       "cos",
 		Status:     "error: processing failed",
-		Signature:  signature,
 	}
+	signature := generateAcknowledgmentSignature(ackMsg, privateKey)
+	ackMsg.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(ackMsg)
@@ -2252,14 +2334,17 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCOSRequest_Operator
 	commitData.Cvs = cvs
 	suite.leaderNodeHandler.updateInMemoryData(uniqueKey, testOp, *commitData)
 
-	signature := generateValidSignature(eoaAddress, privateKey)
 	cos := [32]byte{10, 20, 30}
-
 	cosReq := utils.CosRequest{
-		EOAAddress: eoaAddress,
+		UniqueKey:  uniqueKey,
+		Round:      testRound,
+		TrialNum:   testTrial,
 		Cos:        cos,
-		Signature:  signature,
+		EOAAddress: eoaAddress,
 	}
+
+	signature := generateCosRequestSignature(cosReq, privateKey)
+	cosReq.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(cosReq)
@@ -2304,13 +2389,16 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCOSRequest_DBLoadEr
 	suite.leaderNodeHandler.updateInMemoryData(uniqueKey, testOp, *commitData)
 	// Don't save to DB to trigger error
 
-	signature := generateValidSignature(eoaAddress, privateKey)
-
 	cosReq := utils.CosRequest{
-		EOAAddress: eoaAddress,
+		UniqueKey:  uniqueKey,
+		Round:      testRound,
+		TrialNum:   testTrial,
 		Cos:        cos,
-		Signature:  signature,
+		EOAAddress: eoaAddress,
 	}
+
+	signature := generateCosRequestSignature(cosReq, privateKey)
+	cosReq.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(cosReq)
@@ -2364,13 +2452,16 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCOSRequest_DBUpdate
 	require.NoError(suite.T(), err)
 	suite.leaderNodeHandler.updateInMemoryData(uniqueKey, testOp, *commitData)
 
-	signature := generateValidSignature(eoaAddress, privateKey)
-
 	cosReq := utils.CosRequest{
-		EOAAddress: eoaAddress,
+		UniqueKey:  uniqueKey,
+		Round:      testRound,
+		TrialNum:   testTrial,
 		Cos:        cos,
-		Signature:  signature,
+		EOAAddress: eoaAddress,
 	}
+
+	signature := generateCosRequestSignature(cosReq, privateKey)
+	cosReq.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(cosReq)
@@ -2448,11 +2539,12 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_AllCosReceivedUnlocked_Wi
 	assert.True(suite.T(), result)
 }
 
-// TestLeaderHandler_VerifySignatureAndCheckActivation_NotActivated tests when EOA not activated
-func (suite *LeaderHandlerTestSuite) TestLeaderHandler_VerifySignatureAndCheckActivation_NotActivated() {
+// TestLeaderHandler_CheckActivation_NotActivated3 tests when EOA not activated (different operator in list)
+func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_NotActivated3() {
 	privateKey, eoaAddress := createTestKeyPair()
 	require.NotNil(suite.T(), privateKey)
 
+	testOp := common.HexToAddress(eoaAddress)
 	otherOp := common.HexToAddress("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 
 	mockEth := &MockEthService{
@@ -2463,16 +2555,7 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_VerifySignatureAndCheckAc
 
 	suite.leaderNodeHandler.ethService = mockEth
 
-	signature := generateValidSignature(eoaAddress, privateKey)
-
-	req := utils.Request{
-		Round:      "1",
-		TrialNum:   "1",
-		EOAAddress: eoaAddress,
-		Signature:  signature,
-	}
-
-	result := suite.leaderNodeHandler.VerifySignatureAndCheckActivation(context.Background(), req, "commit")
+	result := suite.leaderNodeHandler.CheckActivation(context.Background(), testOp, "commit")
 	assert.False(suite.T(), result)
 }
 
@@ -2526,13 +2609,16 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCOSRequest_DBUpdate
 		Where("round = ? AND trial_num = ? AND eoa_address = ?", testRound, testTrial, testOp.Hex()).
 		Delete()
 
-	signature := generateValidSignature(eoaAddress, privateKey)
-
 	cosReq := utils.CosRequest{
-		EOAAddress: eoaAddress,
+		UniqueKey:  uniqueKey,
+		Round:      testRound,
+		TrialNum:   testTrial,
 		Cos:        cos,
-		Signature:  signature,
+		EOAAddress: eoaAddress,
 	}
+
+	signature := generateCosRequestSignature(cosReq, privateKey)
+	cosReq.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(cosReq)
@@ -2627,14 +2713,15 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCOSRequest_RevealOr
 	require.NoError(suite.T(), err)
 	suite.leaderNodeHandler.updateInMemoryData(uniqueKey, testOp2, *commitData2)
 
-	// Now send COS for op2 - this will complete all COS and trigger reveal order
-	signature2 := generateValidSignature(eoaAddress2, privateKey2)
-
 	cosReq2 := utils.CosRequest{
-		EOAAddress: eoaAddress2,
+		UniqueKey:  uniqueKey,
+		Round:      testRound,
+		TrialNum:   testTrial,
 		Cos:        cos2,
-		Signature:  signature2,
+		EOAAddress: eoaAddress2,
 	}
+	signature2 := generateCosRequestSignature(cosReq2, privateKey2)
+	cosReq2.Signature = signature2
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(cosReq2)
@@ -2672,9 +2759,6 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleAcknowledgment_Veri
 	suite.leaderNodeHandler.ethService = mockEth
 	suite.leaderNodeHandler.leaderNode.SetHalted(false)
 
-	// Generate valid signature (will pass signature verification)
-	signature := generateValidSignature(eoaAddress, privateKey)
-
 	ackMsg := utils.AcknowledgmentMessage{
 		Round:      testRound,
 		TrialNum:   testTrial,
@@ -2682,8 +2766,10 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleAcknowledgment_Veri
 		MessageID:  "msg-verify-fail",
 		Type:       "cvs",
 		Status:     "received",
-		Signature:  signature, // Valid signature
 	}
+
+	signature := generateAcknowledgmentSignature(ackMsg, privateKey)
+	ackMsg.Signature = signature
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(ackMsg)

@@ -161,10 +161,7 @@ func (n *LeaderNode) performReliableBroadcast(ctx context.Context, h host.Host, 
 			return
 		}
 
-		// Generate signature for the broadcast
-		signature := utils.SignData(leaderEOA, privateKey)
-
-		// Create broadcast message
+		// Create broadcast message first
 		message := utils.BroadcastMessage{
 			Round:      tracker.Round,
 			TrialNum:   tracker.TrialNum,
@@ -173,8 +170,15 @@ func (n *LeaderNode) performReliableBroadcast(ctx context.Context, h host.Host, 
 			Type:       broadcastType,
 			Data:       tracker.Data,
 			SignerEOA:  leaderEOA,
-			Signature:  signature,
 		}
+
+		// Sign ALL fields
+		signature, err := utils.SignBroadcastMessageContent(message, privateKey)
+		if err != nil {
+			log.Printf("Failed to sign broadcast message content: %v", err)
+			return
+		}
+		message.Signature = signature
 
 		// Determine stream protocol based on type
 		var streamProtocol protocol.ID
@@ -279,7 +283,7 @@ func (n *LeaderNode) performReliableBroadcastSync(ctx context.Context, h host.Ho
 	// Get connected peer information
 	nodeInfo := n.p2pClient.GetConnectedPeers(ctx)
 
-	// Create message
+	// Create message first
 	message := utils.BroadcastMessage{
 		MessageID:  tracker.MessageID,
 		Round:      tracker.Round,
@@ -290,8 +294,11 @@ func (n *LeaderNode) performReliableBroadcastSync(ctx context.Context, h host.Ho
 		SignerEOA:  leaderEOA,
 	}
 
-	// Sign the message
-	signature := utils.SignData(leaderEOA, privateKey)
+	signature, err := utils.SignBroadcastMessageContent(message, privateKey)
+	if err != nil {
+		log.Printf("Failed to sign broadcast message content: %v", err)
+		return false
+	}
 	message.Signature = signature
 
 	for tracker.Attempts < tracker.MaxAttempts {

@@ -159,24 +159,24 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 		return
 	}
 
-	commitVerificationRequest := utils.Request{
-		Round:      req.Round,
-		TrialNum:   req.TrialNum,
-		EOAAddress: req.EOAAddress,
-		Signature:  req.Signature,
-	}
-
-	if !lh.VerifySignatureAndCheckActivation(ctx, commitVerificationRequest, "commit") {
+	// Verify signature for ALL fields (Round, TrialNum, Cvs, EOAAddress, UniqueKey)
+	if !utils.VerifyCommitRequestContentSignature(req, req.EOAAddress) {
+		log.Printf("Signature verification failed for commit request from EOA: %s. Round, TrialNum, Cvs, EOAAddress, or UniqueKey may have been tampered.", req.EOAAddress)
 		return
 	}
 
+	// EIP-712 signature verification (content-based - Round, TrialNum, CVS)
 	if !lh.VerifyCvsEIP712Signature(req.Round, req.TrialNum, req.Cvs, req.Sign, req.EOAAddress) {
 		log.Printf("EIP-712 signature verification failed for CVS from EOA %s, round %s, trial %s. Rejecting CVS.", req.EOAAddress, req.Round, req.TrialNum)
 		return
 	}
 
-	round := req.Round
 	eoaAddress := common.HexToAddress(req.EOAAddress)
+	if !lh.CheckActivation(ctx, eoaAddress, "commit") {
+		return
+	}
+
+	round := req.Round
 
 	lh.commitMu.Lock()
 	defer lh.commitMu.Unlock()
@@ -221,14 +221,9 @@ func (lh *LeaderNodeHandler) handleCOSRequest(ctx context.Context, h host.Host, 
 		return
 	}
 
-	// Verify the EOA signature
-	verifyReq := utils.Verification{
-		EOAAddress: req.EOAAddress,
-		Signature:  req.Signature,
-	}
-
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for COS value request from EOA: %s", req.EOAAddress)
+	// Verify signature for ALL fields
+	if !utils.VerifyCosRequestContentSignature(req, req.EOAAddress) {
+		log.Printf("Signature verification failed for COS value request from EOA: %s. Round, TrialNum, Cos, EOAAddress, or UniqueKey may have been tampered.", req.EOAAddress)
 		return
 	}
 
@@ -310,15 +305,7 @@ func (lh *LeaderNodeHandler) handleCOSRequest(ctx context.Context, h host.Host, 
 	}
 }
 
-func (lh *LeaderNodeHandler) VerifySignatureAndCheckActivation(ctx context.Context, req utils.Request, reqType string) bool {
-	verifyReq := utils.Verification{EOAAddress: req.EOAAddress, Signature: req.Signature}
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
-		return false
-	}
-
-	eoaAddress := common.HexToAddress(req.EOAAddress)
-
+func (lh *LeaderNodeHandler) CheckActivation(ctx context.Context, eoaAddress common.Address, reqType string) bool {
 	IsNetworkError, isEOAActivated := lh.isEOAActivatedForRound(ctx, eoaAddress)
 	if IsNetworkError {
 		log.Printf("Network error. Skipping activation check.")
@@ -435,25 +422,15 @@ func (lh *LeaderNodeHandler) handleAcknowledgment(ctx context.Context, s network
 		return
 	}
 
-	// Verify EOA signature for acknowledgment
-	verifyReq := utils.Verification{
-		EOAAddress: ack.EOAAddress,
-		Signature:  ack.Signature,
-	}
-
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for acknowledgment from EOA: %s (message ID: %s)", ack.EOAAddress, ack.MessageID)
+	// Verify signature for ALL fields
+	if !utils.VerifyAcknowledgmentContentSignature(ack, ack.EOAAddress) {
+		log.Printf("Signature verification failed for acknowledgment from EOA: %s (message ID: %s). Round, TrialNum, EOAAddress, MessageID, Type, or Status may have been tampered.", ack.EOAAddress, ack.MessageID)
 		return
 	}
 
-	commitVerificationRequest := utils.Request{
-		Round:      ack.Round,
-		TrialNum:   ack.TrialNum,
-		EOAAddress: ack.EOAAddress,
-		Signature:  ack.Signature,
-	}
-
-	if !lh.VerifySignatureAndCheckActivation(ctx, commitVerificationRequest, "commit") {
+	// Check if EOA is activated
+	eoaAddress := common.HexToAddress(ack.EOAAddress)
+	if !lh.CheckActivation(ctx, eoaAddress, "acknowledgment") {
 		return
 	}
 

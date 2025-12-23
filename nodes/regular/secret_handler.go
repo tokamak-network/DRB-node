@@ -103,15 +103,9 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 		return
 	}
 
-	// Use the existing signature verification mechanism
-	verifyReq := utils.Verification{
-		EOAAddress: req.LeaderEoaAddress, // Sender's address
-		Signature:  req.Signature,        // Signature
-	}
-
-	// Verify the signature
-	if !utils.VerifySignatureForRegularNode(verifyReq, leaderEOA) {
-		log.Printf("Signature verification failed for secret value request: expected %s, got %s", leaderEOA, req.LeaderEoaAddress)
+	// Verify signature for ALL fields
+	if !utils.VerifySecretValueRequestContentSignature(req, leaderEOA) {
+		log.Printf("Signature verification failed for secret value request from EOA: %s. Round, TrialNum, Order, LeaderEoaAddress, or RegularEoaAddress may have been tampered.", req.LeaderEoaAddress)
 		return
 	}
 
@@ -174,17 +168,21 @@ func (n *RegularNode) SendSecretValue(ctx context.Context, h host.Host, leaderPe
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 	log.Printf("EOA Address: %s", eoaAddress)
 
-	// Sign the round number using the regular node's private key
-	signature := utils.SignData(eoaAddress, privateKey)
-	// Create the secret value request
+	// Create the secret value request first
 	req := utils.SecretValueRequest{
 		RegularEoaAddress: eoaAddress, // Regular node's Ethereum address
-		Signature:         signature,
 		SecretValue:       commitData.SecretValue[:],
 		Round:             roundNum,
 		TrialNum:          trialNum,
 	}
 
+	// Sign ALL fields
+	signature, err := utils.SignSecretValueContent(req, privateKey)
+	if err != nil {
+		log.Printf("Failed to sign secret value content: %v", err)
+		return
+	}
+	req.Signature = signature
 	// Open a stream to the leader node
 	stream, err := h.NewStream(ctx, leaderPeerID, "/secretValue")
 	if err != nil {

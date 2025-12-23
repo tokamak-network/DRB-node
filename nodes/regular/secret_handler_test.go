@@ -485,16 +485,17 @@ func TestRegularNode_HandleSecretValueRequest_CommitDataNotFound(t *testing.T) {
 		"0xNode1",
 	}
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	regularEoaAddress := "0xNode1"
 	req := utils.SecretValueRequest{
 		Round:             "100",
 		TrialNum:          "1",
-		RegularEoaAddress: "0xNode1",
-		LeaderEoaAddress:  leaderEOA,
 		Order:             0,
-		Signature:         signature,
+		LeaderEoaAddress:  leaderEOA,
+		RegularEoaAddress: regularEoaAddress,
 	}
+	signature, err := utils.SignSecretValueRequestContent(req, leaderPrivateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
@@ -538,16 +539,17 @@ func TestRegularNode_HandleSecretValueRequest_EmptySecretValue(t *testing.T) {
 		"0xNode1",
 	}
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	regularEoaAddress := "0xNode1"
 	req := utils.SecretValueRequest{
 		Round:             "100",
 		TrialNum:          "1",
-		RegularEoaAddress: "0xNode1",
-		LeaderEoaAddress:  leaderEOA,
 		Order:             0,
-		Signature:         signature,
+		LeaderEoaAddress:  leaderEOA,
+		RegularEoaAddress: regularEoaAddress,
 	}
+	signature, err := utils.SignSecretValueRequestContent(req, leaderPrivateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
@@ -604,16 +606,17 @@ func TestRegularNode_HandleSecretValueRequest_Success_FirstInOrder(t *testing.T)
 		"0xNode1",
 	}
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	regularEoaAddress := "0xNode1"
 	req := utils.SecretValueRequest{
 		Round:             "100",
 		TrialNum:          "1",
-		RegularEoaAddress: "0xNode1",
-		LeaderEoaAddress:  leaderEOA,
 		Order:             0,
-		Signature:         signature,
+		LeaderEoaAddress:  leaderEOA,
+		RegularEoaAddress: regularEoaAddress,
 	}
+	signature, err := utils.SignSecretValueRequestContent(req, leaderPrivateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
@@ -674,16 +677,17 @@ func TestRegularNode_HandleSecretValueRequest_Success_SecondInOrder(t *testing.T
 		"0xNode2",
 	}
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	regularEoaAddress := "0xNode2" // Second in order
 	req := utils.SecretValueRequest{
 		Round:             "100",
 		TrialNum:          "1",
-		RegularEoaAddress: "0xNode2", // Second in order
-		LeaderEoaAddress:  leaderEOA,
 		Order:             1,
-		Signature:         signature,
+		LeaderEoaAddress:  leaderEOA,
+		RegularEoaAddress: regularEoaAddress,
 	}
+	signature, err := utils.SignSecretValueRequestContent(req, leaderPrivateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
@@ -755,16 +759,17 @@ func TestRegularNode_HandleSecretValueRequest_InvalidLeaderPeerID(t *testing.T) 
 		"0xNode1",
 	}
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
+	regularEoaAddress := "0xNode1"
 	req := utils.SecretValueRequest{
 		Round:             "100",
 		TrialNum:          "1",
-		RegularEoaAddress: "0xNode1",
-		LeaderEoaAddress:  leaderEOA,
 		Order:             0,
-		Signature:         signature,
+		LeaderEoaAddress:  leaderEOA,
+		RegularEoaAddress: regularEoaAddress,
 	}
+	signature, err := utils.SignSecretValueRequestContent(req, leaderPrivateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
@@ -989,16 +994,16 @@ func TestRegularNode_SecretValueFlow_CompleteWorkflow(t *testing.T) {
 		nodeEOA, // This node is first
 	}
 
-	signature := utils.SignData(leaderEOA, leaderPrivateKey)
-
 	req := utils.SecretValueRequest{
 		Round:             "100",
 		TrialNum:          "1",
-		RegularEoaAddress: nodeEOA,
-		LeaderEoaAddress:  leaderEOA,
 		Order:             0,
-		Signature:         signature,
+		LeaderEoaAddress:  leaderEOA,
+		RegularEoaAddress: nodeEOA,
 	}
+	signature, err := utils.SignSecretValueRequestContent(req, leaderPrivateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",

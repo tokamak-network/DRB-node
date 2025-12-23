@@ -376,8 +376,11 @@ func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, 
 		EOAAddress: eoaAddress, // Include EOA address to verify
 	}
 
-	// Sign the request (just the round value here)
-	signedRequest := utils.SignData(eoaAddress, privateKey)
+	signedRequest, err := utils.SignCosRequestContent(req, privateKey)
+	if err != nil {
+		log.Printf("Failed to sign COS request content: %v", err)
+		return
+	}
 
 	// Send the COS commit to leader with the signed request
 	req.Signature = signedRequest
@@ -571,8 +574,12 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 		return
 	}
 
-	// Sign the request (round + EOA address)
-	signedRequest := utils.SignData(eoaAddress, privateKey)
+	// Sign the complete request struct
+	signedRequest, err := utils.SignCommitRequestContent(req, privateKey)
+	if err != nil {
+		log.Printf("Failed to sign commit request content: %v", err)
+		return
+	}
 
 	req.Signature = signedRequest
 

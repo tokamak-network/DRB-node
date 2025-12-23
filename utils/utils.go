@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -157,4 +158,264 @@ func abiEncodePacked(elements ...[]byte) []byte {
 
 func intToBytes(num *big.Int) []byte {
 	return common.LeftPadBytes(num.Bytes(), 32)
+}
+
+func SignBroadcastMessageContent(message BroadcastMessage, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	messageHash := crypto.Keccak256Hash(
+		[]byte(message.Round),
+		[]byte(message.TrialNum),
+		[]byte(message.EOAAddress),
+		[]byte(message.MessageID),
+		[]byte(message.Type),
+		message.Data[:],
+		[]byte(message.SignerEOA),
+	)
+
+	signature, err := crypto.Sign(messageHash.Bytes(), privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign broadcast message content: %v", err)
+	}
+
+	return signature, nil
+}
+func VerifyBroadcastMessageContentSignature(message BroadcastMessage, expectedSignerEOA string) bool {
+	messageHash := crypto.Keccak256Hash(
+		[]byte(message.Round),
+		[]byte(message.TrialNum),
+		[]byte(message.EOAAddress),
+		[]byte(message.MessageID),
+		[]byte(message.Type),
+		message.Data[:],
+		[]byte(message.SignerEOA),
+	)
+
+	// Recover public key from signature
+	pubKey, err := crypto.SigToPub(messageHash.Bytes(), message.Signature)
+	if err != nil {
+		log.Printf("Error recovering public key from broadcast message signature: %v", err)
+		return false
+	}
+
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
+	expectedAddress := common.HexToAddress(expectedSignerEOA).Hex()
+
+	log.Printf("Broadcast message signature verification - Recovered: %s, Expected: %s", recoveredAddress, expectedAddress)
+
+	return recoveredAddress == expectedAddress
+}
+
+func SignCosRequestContent(req CosRequest, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	messageHash := crypto.Keccak256Hash(
+		[]byte(req.Round),
+		[]byte(req.TrialNum),
+		req.Cos[:],
+		[]byte(req.EOAAddress),
+		[]byte(req.UniqueKey),
+	)
+
+	signature, err := crypto.Sign(messageHash.Bytes(), privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign COS request content: %v", err)
+	}
+	return signature, nil
+}
+
+
+func VerifyCosRequestContentSignature(req CosRequest, expectedSignerEOA string) bool {
+	messageHash := crypto.Keccak256Hash(
+		[]byte(req.Round),
+		[]byte(req.TrialNum),
+		req.Cos[:],
+		[]byte(req.EOAAddress),
+		[]byte(req.UniqueKey),
+	)
+
+	pubKey, err := crypto.SigToPub(messageHash.Bytes(), req.Signature)
+	if err != nil {
+		log.Printf("Error recovering public key from COS request signature: %v", err)
+		return false
+	}
+
+	// Get address from public key
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
+	expectedAddress := common.HexToAddress(expectedSignerEOA).Hex()
+	log.Printf("COS request signature verification - Recovered: %s, Expected: %s", recoveredAddress, expectedAddress)
+
+	return recoveredAddress == expectedAddress
+}
+
+func SignAcknowledgmentContent(ack AcknowledgmentMessage, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	messageHash := crypto.Keccak256Hash(
+		[]byte(ack.Round),
+		[]byte(ack.TrialNum),
+		[]byte(ack.EOAAddress),
+		[]byte(ack.MessageID),
+		[]byte(ack.Type),
+		[]byte(ack.Status),
+	)
+
+	signature, err := crypto.Sign(messageHash.Bytes(), privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign acknowledgment content: %v", err)
+	}
+
+	return signature, nil
+}
+
+func VerifyAcknowledgmentContentSignature(ack AcknowledgmentMessage, expectedSignerEOA string) bool {
+	messageHash := crypto.Keccak256Hash(
+		[]byte(ack.Round),
+		[]byte(ack.TrialNum),
+		[]byte(ack.EOAAddress),
+		[]byte(ack.MessageID),
+		[]byte(ack.Type),
+		[]byte(ack.Status),
+	)
+
+	pubKey, err := crypto.SigToPub(messageHash.Bytes(), ack.Signature)
+	if err != nil {
+		log.Printf("Error recovering public key from acknowledgment signature: %v", err)
+		return false
+	}
+
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
+	expectedAddress := common.HexToAddress(expectedSignerEOA).Hex()
+
+	log.Printf("Acknowledgment signature verification - Recovered: %s, Expected: %s", recoveredAddress, expectedAddress)
+
+	return recoveredAddress == expectedAddress
+}
+
+func SignSecretValueRequestContent(req SecretValueRequest, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	orderStr := strconv.Itoa(req.Order)
+
+	messageHash := crypto.Keccak256Hash(
+		[]byte(req.Round),
+		[]byte(req.TrialNum),
+		[]byte(orderStr),
+		[]byte(req.LeaderEoaAddress),
+		[]byte(req.RegularEoaAddress),
+	)
+
+	signature, err := crypto.Sign(messageHash.Bytes(), privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign secret value request content: %v", err)
+	}
+
+	return signature, nil
+}
+
+func VerifySecretValueRequestContentSignature(req SecretValueRequest, expectedSignerEOA string) bool {
+	orderStr := strconv.Itoa(req.Order)
+
+	messageHash := crypto.Keccak256Hash(
+		[]byte(req.Round),
+		[]byte(req.TrialNum),
+		[]byte(orderStr),
+		[]byte(req.LeaderEoaAddress),
+		[]byte(req.RegularEoaAddress),
+	)
+
+	pubKey, err := crypto.SigToPub(messageHash.Bytes(), req.Signature)
+	if err != nil {
+		log.Printf("Error recovering public key from secret value request signature: %v", err)
+		return false
+	}
+
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
+	expectedAddress := common.HexToAddress(expectedSignerEOA).Hex()
+
+	log.Printf("Secret value request signature verification - Recovered: %s, Expected: %s", recoveredAddress, expectedAddress)
+
+	return recoveredAddress == expectedAddress
+}
+
+func SignSecretValueContent(req SecretValueRequest, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	var secretValueArray [32]byte
+	if len(req.SecretValue) != 32 {
+		return nil, fmt.Errorf("invalid secret value length: expected 32 bytes, got %d", len(req.SecretValue))
+	}
+	copy(secretValueArray[:], req.SecretValue[:])
+
+	messageHash := crypto.Keccak256Hash(
+		[]byte(req.Round),
+		[]byte(req.TrialNum),
+		secretValueArray[:],
+		[]byte(req.RegularEoaAddress),
+	)
+
+	signature, err := crypto.Sign(messageHash.Bytes(), privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign secret value content: %v", err)
+	}
+
+	return signature, nil
+}
+
+func VerifySecretValueContentSignature(req SecretValueRequest, expectedSignerEOA string) bool {
+	var secretValueArray [32]byte
+	if len(req.SecretValue) != 32 {
+		log.Printf("Invalid secret value length: expected 32 bytes, got %d", len(req.SecretValue))
+		return false
+	}
+	copy(secretValueArray[:], req.SecretValue[:])
+
+	messageHash := crypto.Keccak256Hash(
+		[]byte(req.Round),
+		[]byte(req.TrialNum),
+		secretValueArray[:],
+		[]byte(req.RegularEoaAddress),
+	)
+
+	pubKey, err := crypto.SigToPub(messageHash.Bytes(), req.Signature)
+	if err != nil {
+		log.Printf("Error recovering public key from secret value signature: %v", err)
+		return false
+	}
+
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
+	expectedAddress := common.HexToAddress(expectedSignerEOA).Hex()
+
+	log.Printf("Secret value signature verification - Recovered: %s, Expected: %s", recoveredAddress, expectedAddress)
+
+	return recoveredAddress == expectedAddress
+}
+
+func SignCommitRequestContent(req CommitRequest, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	messageHash := crypto.Keccak256Hash(
+		[]byte(req.Round),
+		[]byte(req.TrialNum),
+		req.Cvs[:],
+		[]byte(req.EOAAddress),
+		[]byte(req.UniqueKey),
+	)
+
+	signature, err := crypto.Sign(messageHash.Bytes(), privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign commit request content: %v", err)
+	}
+	return signature, nil
+}
+
+func VerifyCommitRequestContentSignature(req CommitRequest, expectedSignerEOA string) bool {
+	messageHash := crypto.Keccak256Hash(
+		[]byte(req.Round),
+		[]byte(req.TrialNum),
+		req.Cvs[:],
+		[]byte(req.EOAAddress),
+		[]byte(req.UniqueKey),
+	)
+
+	pubKey, err := crypto.SigToPub(messageHash.Bytes(), req.Signature)
+	if err != nil {
+		log.Printf("Error recovering public key from commit request signature: %v", err)
+		return false
+	}
+
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
+	expectedAddress := common.HexToAddress(expectedSignerEOA).Hex()
+
+	log.Printf("Commit request signature verification - Recovered: %s, Expected: %s", recoveredAddress, expectedAddress)
+
+	return recoveredAddress == expectedAddress
 }
