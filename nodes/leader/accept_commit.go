@@ -122,7 +122,12 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 					}
 					fmt.Printf("CvSubmitted Event: Fetched successfully")
 
-					n.processCVS(ctx, eventData.Round, eventData.TrialNum, eventData.Cv, eventData.Index)
+					err = n.processCVS(ctx, eventData.Round, eventData.TrialNum, eventData.Cv, eventData.Index)
+					if err != nil {
+						log.Printf("Failed to process CVS for round %s, trial %s: %v",
+							eventData.Round.String(), eventData.TrialNum.String(), err)
+						continue
+					}
 
 				case CoSubmittedSig:
 					eventData := struct {
@@ -138,7 +143,12 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 					}
 					fmt.Printf("CoSubmitted Event: Fetched successfully")
 
-					n.processCOS(ctx, eventData.Round, eventData.TrialNum, eventData.Co, eventData.Index)
+					err = n.processCOS(ctx, eventData.Round, eventData.TrialNum, eventData.Co, eventData.Index)
+					if err != nil {
+						log.Printf("Failed to process COS for round %s, trial %s: %v",
+							eventData.Round.String(), eventData.TrialNum.String(), err)
+						continue
+					}
 
 				case MerkleRootSubmittedSig:
 					eventData := struct {
@@ -546,7 +556,8 @@ func (n *LeaderNode) processCOS(ctx context.Context, round *big.Int, trialNum *b
 		}
 		err := n.leaderCommitRepository.AddLeaderCommit(ctx, &leaderCommit)
 		if err != nil {
-			fmt.Printf("Failed to add leader commit: %v", err)
+			return fmt.Errorf("failed to add leader commit for round %s, trial %s, EOA %s: %v",
+				roundStr, trialNumStr, eoa.Hex(), err)
 		}
 	} else {
 		leaderCommitData.Cos = cos
@@ -554,7 +565,8 @@ func (n *LeaderNode) processCOS(ctx context.Context, round *big.Int, trialNum *b
 
 		err := n.leaderCommitRepository.UpdateLeaderCommit(ctx, leaderCommitData)
 		if err != nil {
-			fmt.Printf("Failed to update leader commit: %v", err)
+			return fmt.Errorf("failed to update leader commit for round %s, trial %s, EOA %s: %v",
+				roundStr, trialNumStr, eoa.Hex(), err)
 		}
 	}
 
@@ -640,7 +652,8 @@ func (n *LeaderNode) processCVS(ctx context.Context, round *big.Int, trialNum *b
 		}
 		err := n.leaderCommitRepository.AddLeaderCommit(ctx, &leaderCommit)
 		if err != nil {
-			fmt.Printf("Failed to add leader commit: %v", err)
+			return fmt.Errorf("failed to add leader commit for round %s, trial %s, EOA %s: %v",
+				roundStr, trialNumStr, eoa.Hex(), err)
 		}
 	} else {
 		leaderCommitData.Cvs = cvs
@@ -648,7 +661,8 @@ func (n *LeaderNode) processCVS(ctx context.Context, round *big.Int, trialNum *b
 
 		err := n.leaderCommitRepository.UpdateLeaderCommit(ctx, leaderCommitData)
 		if err != nil {
-			fmt.Printf("Failed to update leader commit: %v", err)
+			return fmt.Errorf("failed to update leader commit for round %s, trial %s, EOA %s: %v",
+				roundStr, trialNumStr, eoa.Hex(), err)
 		}
 	}
 

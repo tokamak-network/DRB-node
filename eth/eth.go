@@ -100,10 +100,48 @@ func ExecuteTransaction(
 
 	log.Infof("Preparing to execute %s...", functionName)
 
-	chainID, err := fallbackEthClient.NetworkID(ctx)
-	if err != nil {
-		log.Errorf("Failed to fetch network ID: %v", err)
-		return nil, nil, fmt.Errorf("failed to fetch network ID: %v", err)
+	maxRetries := 3
+	retryDelay := 2 * time.Second
+	var chainID *big.Int
+	var chainIDErrors []error
+	var err error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		chainID, err = fallbackEthClient.ChainID(ctx)
+		if err == nil {
+			if attempt > 1 {
+				log.Infof("Successfully fetched chain ID after %d retries for %s", attempt-1, functionName)
+			}
+			break
+		}
+
+		chainIDErrors = append(chainIDErrors, fmt.Errorf("attempt %d: %v", attempt, err))
+		log.Errorf("Failed to fetch chain ID for %s, attempt %d/%d: %v", functionName, attempt, maxRetries, err)
+
+		if attempt < maxRetries {
+			log.Printf("Waiting %v before retry %d/%d for ChainID", retryDelay, attempt+1, maxRetries)
+			select {
+			case <-ctx.Done():
+				errorDetails := fmt.Sprintf("failed to fetch chain ID after %d attempts for %s. Errors: ", attempt, functionName)
+				for i, e := range chainIDErrors {
+					if i > 0 {
+						errorDetails += "; "
+					}
+					errorDetails += fmt.Sprintf("Attempt %d: %v", i+1, e)
+				}
+				return nil, nil, errors.New(errorDetails)
+			case <-time.After(retryDelay):
+			}
+			continue
+		}
+		errorDetails := fmt.Sprintf("failed to fetch chain ID after %d attempts for %s. Errors: ", maxRetries, functionName)
+		for i, e := range chainIDErrors {
+			if i > 0 {
+				errorDetails += "; "
+			}
+			errorDetails += fmt.Sprintf("Attempt %d: %v", i+1, e)
+		}
+		return nil, nil, errors.New(errorDetails)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(client.PrivateKey, chainID)
@@ -112,10 +150,47 @@ func ExecuteTransaction(
 		return nil, nil, fmt.Errorf("failed to create authorized transactor: %v", err)
 	}
 
-	nonce, err := fallbackEthClient.PendingNonceAt(ctx, auth.From)
-	if err != nil {
-		log.Errorf("Failed to fetch nonce: %v", err)
-		return nil, nil, fmt.Errorf("failed to fetch nonce: %v", err)
+	var nonce uint64
+	var nonceErrors []error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		nonce, err = fallbackEthClient.PendingNonceAt(ctx, auth.From)
+		if err == nil {
+			if attempt > 1 {
+				log.Infof("Successfully fetched nonce after %d retries for %s", attempt-1, functionName)
+			}
+			break
+		}
+
+		nonceErrors = append(nonceErrors, fmt.Errorf("attempt %d: %v", attempt, err))
+		log.Errorf("Failed to fetch nonce for %s, attempt %d/%d: %v", functionName, attempt, maxRetries, err)
+
+		if attempt < maxRetries {
+			log.Printf("Waiting %v before retry %d/%d for nonce", retryDelay, attempt+1, maxRetries)
+			select {
+			case <-ctx.Done():
+				errorDetails := fmt.Sprintf("failed to fetch nonce after %d attempts for %s. Errors: ", attempt, functionName)
+				for i, e := range nonceErrors {
+					if i > 0 {
+						errorDetails += "; "
+					}
+					errorDetails += fmt.Sprintf("Attempt %d: %v", i+1, e)
+				}
+				return nil, nil, errors.New(errorDetails)
+			case <-time.After(retryDelay):
+			}
+			continue
+		}
+
+		// All retries exhausted
+		errorDetails := fmt.Sprintf("failed to fetch nonce after %d attempts for %s. Errors: ", maxRetries, functionName)
+		for i, e := range nonceErrors {
+			if i > 0 {
+				errorDetails += "; "
+			}
+			errorDetails += fmt.Sprintf("Attempt %d: %v", i+1, e)
+		}
+		return nil, nil, errors.New(errorDetails)
 	}
 
 	auth.Nonce = big.NewInt(int64(nonce))
@@ -186,14 +261,35 @@ func sendWithRetry(
 	maxRetries := 5 // Limit retries
 	retryCount := 0
 
-	priorityFee, err := client.SuggestGasTipCap(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to suggest tip cap: %v", err)
+	var priorityFee *big.Int
+	var err error
+	maxGasRetries := 3
+	gasRetryDelay := 2 * time.Second
+	for attempt := 1; attempt <= maxGasRetries; attempt++ {
+		priorityFee, err = client.SuggestGasTipCap(ctx)
+		if err == nil {
+			break
+		}
+		log.Printf("Failed to suggest tip cap, attempt %d/%d: %v", attempt, maxGasRetries, err)
+		if attempt < maxGasRetries {
+			time.Sleep(gasRetryDelay)
+			continue
+		}
+		return nil, nil, fmt.Errorf("failed to suggest tip cap after %d attempts: %v", maxGasRetries, err)
 	}
 
-	baseFee, err := client.SuggestGasPrice(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to suggest gas price: %v", err)
+	var baseFee *big.Int
+	for attempt := 1; attempt <= maxGasRetries; attempt++ {
+		baseFee, err = client.SuggestGasPrice(ctx)
+		if err == nil {
+			break
+		}
+		log.Printf("Failed to suggest gas price, attempt %d/%d: %v", attempt, maxGasRetries, err)
+		if attempt < maxGasRetries {
+			time.Sleep(gasRetryDelay)
+			continue
+		}
+		return nil, nil, fmt.Errorf("failed to suggest gas price after %d attempts: %v", maxGasRetries, err)
 	}
 
 	minBaseFee := big.NewInt(1000000000)     // 1 gwei
@@ -221,12 +317,22 @@ func sendWithRetry(
 	for retryCount < maxRetries {
 		nonce, err := client.PendingNonceAt(ctx, auth.From)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get nonce: %v", err)
+			log.Printf("Failed to get nonce: %v, continuing to next retry", err)
+			retryCount++
+			if retryCount >= maxRetries {
+				return nil, nil, fmt.Errorf("failed to get nonce after %d retries: %v", maxRetries, err)
+			}
+			continue
 		}
 
 		gasLimit, err := client.EstimateGas(ctx, callMsg)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to estimate gas: %v", err)
+			log.Printf("Failed to estimate gas: %v, continuing to next retry", err)
+			retryCount++
+			if retryCount >= maxRetries {
+				return nil, nil, fmt.Errorf("failed to estimate gas after %d retries: %v", maxRetries, err)
+			}
+			continue
 		}
 
 		log.Printf("Estimated gas: %d", gasLimit)
@@ -263,13 +369,23 @@ func sendWithRetry(
 		// Sign transaction
 		signedTx, err = auth.Signer(auth.From, tx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to sign tx: %v", err)
+			log.Printf("Failed to sign tx %v, continuing to next retry", err)
+			retryCount++
+			if retryCount >= maxRetries {
+				return nil, nil, fmt.Errorf("failed to sign tx after %d retries: %v", maxRetries, err)
+			}
+			continue
 		}
 
 		// Send
 		err = client.SendTransaction(ctx, signedTx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to send tx: %v", err)
+			log.Printf("Failed to send tx %v, continuing to next retry", err)
+			retryCount++
+			if retryCount >= maxRetries {
+				return nil, nil, fmt.Errorf("failed to send tx after %d retries: %v", maxRetries, err)
+			}
+			continue
 		}
 
 		log.Printf("Sent tx %s with maxFee %s wei, value: %s wei", signedTx.Hash().Hex(), maxFeePerGas.String(), amount.String())

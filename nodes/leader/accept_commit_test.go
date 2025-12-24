@@ -707,7 +707,9 @@ func TestProcessCOS_AddCommitError(t *testing.T) {
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCOS(context.Background(), round, trialNum, cos, index)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to add leader commit")
+	assert.Contains(t, err.Error(), "db error")
 
 	mockLeaderRepo.AssertExpectations(t)
 }
@@ -747,7 +749,9 @@ func TestProcessCOS_UpdateError(t *testing.T) {
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCOS(ctx, round, trialNum, cos, index)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to update leader commit")
+	assert.Contains(t, err.Error(), "update error")
 
 	mockLeaderRepo.AssertExpectations(t)
 }
@@ -779,7 +783,9 @@ func TestProcessCVS_AddCommitError(t *testing.T) {
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to add leader commit")
+	assert.Contains(t, err.Error(), "db error")
 
 	mockLeaderRepo.AssertExpectations(t)
 }
@@ -816,7 +822,9 @@ func TestProcessCVS_UpdateError(t *testing.T) {
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to update leader commit")
+	assert.Contains(t, err.Error(), "update error")
 
 	mockLeaderRepo.AssertExpectations(t)
 }

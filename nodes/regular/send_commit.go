@@ -133,7 +133,10 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 						// Start monitoring for merkle root submission
 						n.StartMerkleRootMonitoring(ctx, eventData.Round.String(), eventData.TrialNum.String(), big.NewInt(int64(blockTimestamp)))
 
-						n.processCommitRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
+						err = n.processCommitRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
+						if err != nil {
+							log.Printf("Failed to process commit request: %v", err)
+						}
 
 					case StatusSig:
 						eventData := struct {
@@ -220,7 +223,10 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 
 						log.Printf("Restarted monitoring for round %s trial %s with RequestedToSubmitCo event time", eventData.Round.String(), eventData.TrialNum.String())
 
-						n.processCosRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
+						err = n.processCosRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
+						if err != nil {
+							log.Printf("Failed to process cos request: %v", err)
+						}
 
 					case RequestedToSubmitSFromIndexKSig:
 						eventData := struct {
@@ -615,7 +621,7 @@ func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, 
 	flag, err := n.findEOAAddress(indices, activatedOpsStr, eoaAddress)
 
 	if err != nil {
-		fmt.Println(err)
+		return fmt.Errorf("failed to find EOA address: %v", err)
 	}
 	if !flag {
 		fmt.Println("Cv Request does not contain our EOA")
@@ -626,7 +632,7 @@ func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, 
 
 	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, round.String(), trialNum.String())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get commit by round: %v", err)
 	}
 
 	_, _, err = eth.Service.ExecuteTransaction(
@@ -638,7 +644,7 @@ func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, 
 		commitData.Cvs,
 	)
 	if err != nil {
-		fmt.Println("It contains error")
+		return fmt.Errorf("failed to execute submitCv transaction: %v", err)
 	}
 
 	return nil
@@ -670,7 +676,7 @@ func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, Tri
 	flag, err := n.findEOAAddress(indices, activatedOpsStr, eoaAddress)
 
 	if err != nil {
-		fmt.Println(err)
+		return fmt.Errorf("failed to find EOA address: %v", err)
 	}
 	if !flag {
 		fmt.Println("Cos Request does not contain our EOA")
@@ -681,8 +687,7 @@ func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, Tri
 
 	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, Round.String(), TrialNum.String())
 	if err != nil {
-		fmt.Println("Error loading commits:", err)
-		return err
+		return fmt.Errorf("failed to get commit by round: %v", err)
 	}
 
 	_, _, err = eth.Service.ExecuteTransaction(
@@ -694,7 +699,7 @@ func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, Tri
 		commitData.Cos,
 	)
 	if err != nil {
-		fmt.Println("It contains error")
+		return fmt.Errorf("failed to execute submitCo transaction: %v", err)
 	}
 	return nil
 }
