@@ -121,7 +121,12 @@ func (lh *LeaderNodeHandler) Run(ctx context.Context) {
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
 	lh.ethService.UpdateActivatedOperators(ctx, lh.fallbackEthClient)
-	lh.leaderNode.UpdateCurrentRoundAndTrial(ctx)
+
+	err = lh.leaderNode.UpdateCurrentRoundAndTrial(ctx)
+	if err != nil {
+		log.Fatalf("Failed to update current round and trial from contract: %v", err)
+	}
+
 	go lh.leaderNode.CheckHaltedState(ctx)
 	go lh.leaderNode.MonitorCommits(ctx)
 	go lh.leaderNode.ReceiveCommit(ctx)
