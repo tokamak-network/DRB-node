@@ -181,12 +181,15 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 		return
 	}
 
-	round := req.Round
+	// Use leader's current round and trial
+	round := lh.leaderNode.GetCurrentRound()
+	trial := lh.leaderNode.GetCurrentTrial()
+
 
 	lh.commitMu.Lock()
 	defer lh.commitMu.Unlock()
-	uniqueKey := utils.GetUniqueKey(round, req.TrialNum)
-	commitData := lh.leaderNode.GetOrCreateLeaderCommitData(round, req.TrialNum, uniqueKey, eoaAddress)
+	uniqueKey := utils.GetUniqueKey(round, trial)
+	commitData := lh.leaderNode.GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
 	if commitData.Cvs == [32]byte{} {
 		commitData.Cvs = req.Cvs
 		commitData.CvsHex = hex.EncodeToString(req.Cvs[:])
@@ -195,7 +198,7 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 		commitData.RandomNumberGenerated = false
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
+	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, commitData.EOAAddress)
 
 	// Update database for commit data from regular node
 	if err := lh.leaderNode.AddLeaderCommit(ctx, commitData); err != nil {
@@ -204,12 +207,12 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	activatedOps := lh.ethService.GetActivatedOperatorsCached()
-	lh.leaderNode.ReliableBroadCastCVS(ctx, round, req.TrialNum, eoaAddress, commitData.Cvs, activatedOps)
+	lh.leaderNode.ReliableBroadCastCVS(ctx, round, trial, eoaAddress, commitData.Cvs, activatedOps)
 	// Check if all commits are ready after this update
 	if !lh.GetMerkleRootSubmitted() && lh.allCommitsReceivedUnlocked(uniqueKey) {
-		log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", round, req.TrialNum)
+		log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", round, trial)
 		lh.commitMu.Unlock() // Unlock before calling GenerateMerkleRoot
-		lh.leaderNode.GenerateMerkleRoot(ctx, round, req.TrialNum)
+		lh.leaderNode.GenerateMerkleRoot(ctx, round, trial)
 		lh.commitMu.Lock() // Re-lock if needed
 	}
 }
