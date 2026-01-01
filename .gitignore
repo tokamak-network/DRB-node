@@ -27,6 +27,7 @@ config.json
 service.log
 
 ./cmd/service.log
+*.log
 
 # static-key
 static-key/
