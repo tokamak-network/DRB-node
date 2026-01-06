@@ -19,6 +19,12 @@ COPY . .
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./cmd/nodes/main.go
 
+# Build the generator binary
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o generator ./cmd/generator/main.go
+
+# Generate the static key
+RUN ./generator
+
 # Final stage
 FROM alpine:latest
 
