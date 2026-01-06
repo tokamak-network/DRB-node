@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"log"
 	"math/big"
 	"strconv"
@@ -158,9 +158,16 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 		return
 	}
 
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var req utils.CommitRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
-		log.Printf("Failed to decode commit request: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &req); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("Commit request decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode commit request: %v", err)
+		}
 		return
 	}
 
@@ -184,7 +191,6 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 	// Use leader's current round and trial
 	round := lh.leaderNode.GetCurrentRound()
 	trial := lh.leaderNode.GetCurrentTrial()
-
 
 	lh.commitMu.Lock()
 	defer lh.commitMu.Unlock()
@@ -223,9 +229,17 @@ func (lh *LeaderNodeHandler) handleCOSRequest(ctx context.Context, h host.Host, 
 		log.Println("System is halted. Skipping handleCOSRequest.")
 		return
 	}
+
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var req utils.CosRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
-		log.Printf("Failed to decode COS request: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &req); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("COS request decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode COS request: %v", err)
+		}
 		return
 	}
 
@@ -424,9 +438,16 @@ func (lh *LeaderNodeHandler) handleAcknowledgment(ctx context.Context, s network
 		log.Println("System is halted. Skipping handleAcknowledgment.")
 		return
 	}
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var ack utils.AcknowledgmentMessage
-	if err := json.NewDecoder(s).Decode(&ack); err != nil {
-		log.Printf("Failed to decode acknowledgment message: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &ack); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("Acknowledgment decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode acknowledgment message: %v", err)
+		}
 		return
 	}
 

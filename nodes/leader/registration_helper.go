@@ -2,10 +2,11 @@ package leader_node
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/tokamak-network/DRB-node/eth"
@@ -14,8 +15,14 @@ import (
 
 // RegisterNode handles both saving node information and activating the node on-chain.
 func (n *LeaderNode) RegisterNode(ctx context.Context, s network.Stream, abiFilePath string) error {
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var req utils.RegistrationRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &req); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("registration request decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		}
 		return fmt.Errorf("failed to decode registration request: %v", err)
 	}
 	remoteAddr := s.Conn().RemoteMultiaddr().String()

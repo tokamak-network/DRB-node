@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"log"
 	"math/big"
 	"time"
@@ -66,10 +66,18 @@ func (n *LeaderNode) AcceptSecretValue(ctx context.Context, h host.Host, s netwo
 		log.Println("System is halted. Skipping AcceptSecretValue.")
 		return
 	}
+
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	// Decode the incoming request
 	var req utils.SecretValueRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
-		log.Printf("Failed to decode secret value request: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &req); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("Secret value request decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode secret value request: %v", err)
+		}
 		return
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/tokamak-network/DRB-node/database"
 )
@@ -89,16 +90,39 @@ func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID
 		return nil, "", err
 	}
 
-	// Create the libp2p host with the private key identity
+	limits := rcmgr.DefaultLimits
+	limits.SystemBaseLimit.StreamsInbound = 512  
+	limits.SystemBaseLimit.StreamsOutbound = 512 
+	limits.SystemBaseLimit.ConnsInbound = 256    
+	limits.SystemBaseLimit.ConnsOutbound = 256  
+	limits.SystemBaseLimit.FD = 512
+
+	// per connection per peer limit
+	limits.ConnBaseLimit.StreamsInbound = 64  
+	limits.ConnBaseLimit.StreamsOutbound = 64 
+
+	limits.SystemBaseLimit.Memory = 1 << 30 
+
+	scaledLimits := limits.Scale(256, 512)  
+
+	rm, err := rcmgr.NewResourceManager(
+		rcmgr.NewFixedLimiter(scaledLimits),
+	)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create resource manager: %v", err)
+	}
+
 	h, err := libp2p.New(
 		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port)),
 		libp2p.Identity(privKey),
+		libp2p.ResourceManager(rm),
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create libp2p host: %v", err)
 	}
 
-	log.Printf("%s host created with PeerID: %s", nodeType, peerID.String())
+	log.Printf("%s host created with PeerID: %s (Resource limits: %d streams, %d conns)",
+		nodeType, peerID.String(), 512, 256)
 	return h, peerID, nil
 }
 

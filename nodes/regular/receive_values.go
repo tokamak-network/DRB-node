@@ -3,8 +3,10 @@ package regular_node
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -55,9 +57,16 @@ func (n *RegularNode) HandleCvs(ctx context.Context, h host.Host, s network.Stre
 		return
 	}
 
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var message utils.BroadcastMessage
-	if err := json.NewDecoder(s).Decode(&message); err != nil {
-		log.Printf("Failed to decode CVS broadcast message: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &message); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("CVS broadcast message decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode CVS broadcast message: %v", err)
+		}
 		return
 	}
 
@@ -144,9 +153,16 @@ func (n *RegularNode) HandleCos(ctx context.Context, h host.Host, s network.Stre
 		return
 	}
 
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var message utils.BroadcastMessage
-	if err := json.NewDecoder(s).Decode(&message); err != nil {
-		log.Printf("Failed to decode COS broadcast message: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &message); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("COS broadcast message decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode COS broadcast message: %v", err)
+		}
 		return
 	}
 
@@ -238,9 +254,16 @@ func (n *RegularNode) HandleSecret(ctx context.Context, h host.Host, s network.S
 		return
 	}
 
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var message utils.BroadcastMessage
-	if err := json.NewDecoder(s).Decode(&message); err != nil {
-		log.Printf("Failed to decode secret broadcast message: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &message); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("Secret broadcast message decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode secret broadcast message: %v", err)
+		}
 		return
 	}
 

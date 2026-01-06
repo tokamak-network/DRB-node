@@ -2,6 +2,8 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -39,4 +41,23 @@ func CreateStream(ctx context.Context, h host.Host, nodeInfo NodeInfo, protocolS
 	}
 
 	return stream, nil
+}
+
+func DecodeJSONWithContext(ctx context.Context, s network.Stream, v interface{}) error {
+	done := make(chan error, 1)
+	go func() {
+		err := json.NewDecoder(s).Decode(v)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		return err
+
+	case <-ctx.Done():
+		s.Reset()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("JSON decode timeout: %w", ctx.Err())
+		}
+		return fmt.Errorf("JSON decode cancelled: %w", ctx.Err())
+	}
 }
