@@ -108,18 +108,44 @@ This document maps the current test coverage against the identified execution pa
 
 ### 2.5 Concurrency and Synchronization Coverage
 
-#### 2.5.1 Thread Safety
+#### 2.5.1 Thread Safety - Leader Node
 | Component | Function/Path | Test Location | Coverage | Missing Tests |
 |-----------|---------------|---------------|----------|---------------|
-| Atomic operations | State management | No specific tests | ❌ **MISSING** | Race condition detection |
-| Mutex usage | Critical sections | No specific tests | ❌ **MISSING** | Deadlock scenarios |
-| Timer handling | Timeout management | No specific tests | ❌ **MISSING** | Timer race conditions |
+| Atomic operations | State management | `nodes/leader/concurrency_stress_test.go:179` | ✅ **COVERED** | None - comprehensive stress testing |
+| Mutex usage | Critical sections | `nodes/leader/concurrency_stress_test.go:369` | ✅ **COVERED** | None - deadlock prevention tested |
+| Race condition detection | Merkle root submission | `nodes/leader/concurrency_stress_test.go:484` | ✅ **COVERED** | None - race detection mechanisms tested |
+| Map operations | Concurrent map access | `nodes/leader/concurrency_stress_test.go:130` | ✅ **COVERED** | None - comprehensive map concurrency |
+| Timer handling | Timeout management | `nodes/leader/concurrency_stress_test.go:216` | ✅ **COVERED** | None - timer race conditions tested |
+| Broadcast operations | P2P message handling | `nodes/leader/concurrency_stress_test.go:431` | ✅ **COVERED** | None - broadcast concurrency tested |
+| High-load stability | System under stress | `nodes/leader/concurrency_stress_test.go:563` | ✅ **COVERED** | None - 100 workers, 500 ops each |
 
-#### 2.5.2 Goroutine Management
+#### 2.5.2 Thread Safety - Regular Node  
 | Component | Function/Path | Test Location | Coverage | Missing Tests |
 |-----------|---------------|---------------|----------|---------------|
-| Goroutine spawning | Background tasks | No specific tests | ❌ **MISSING** | Goroutine leak detection |
-| Context cancellation | Cleanup | No specific tests | ❌ **MISSING** | Cleanup verification |
+| Atomic operations | State management | `nodes/regular/concurrency_stress_test.go:19` | ✅ **COVERED** | None - all atomic states tested |
+| Map operations | Concurrent map access | `nodes/regular/concurrency_stress_test.go:82` | ✅ **COVERED** | None - RoundData, StrictOrder, CV indices |
+| Cleanup operations | Queue management | `nodes/regular/concurrency_stress_test.go:123` | ✅ **COVERED** | None - cleanup queue race conditions |
+| Index operations | CV request indices | `nodes/regular/concurrency_stress_test.go:175` | ✅ **COVERED** | None - concurrent index management |
+| String operations | Atomic string access | `nodes/regular/concurrency_stress_test.go:206` | ✅ **COVERED** | None - round, trial, EOA strings |
+| Private key access | Secure key handling | `nodes/regular/concurrency_stress_test.go:488` | ✅ **COVERED** | None - concurrent key operations |
+| High-load stability | System under stress | `nodes/regular/concurrency_stress_test.go:372` | ✅ **COVERED** | None - 50 workers, 300 ops each |
+
+#### 2.5.3 Goroutine Management
+| Component | Function/Path | Test Location | Coverage | Missing Tests |
+|-----------|---------------|---------------|----------|---------------|
+| Goroutine leak detection | Background tasks | `nodes/leader/concurrency_stress_test.go:316` | ✅ **COVERED** | None - leak prevention tested |
+| Goroutine leak detection | Regular node tasks | `nodes/regular/concurrency_stress_test.go:333` | ✅ **COVERED** | None - leak prevention tested |
+| Context cancellation | Cleanup | `nodes/leader/concurrency_stress_test.go:523` | ✅ **COVERED** | None - context cancellation cleanup |
+| Memory consistency | Cross-goroutine | `nodes/leader/concurrency_stress_test.go:248` | ✅ **COVERED** | None - memory consistency checks |
+| Memory consistency | Regular node | `nodes/regular/concurrency_stress_test.go:253` | ✅ **COVERED** | None - reader/writer consistency |
+
+#### 2.5.4 Advanced Concurrency Scenarios
+| Component | Function/Path | Test Location | Coverage | Missing Tests |
+|-----------|---------------|---------------|----------|---------------|
+| Network partition tolerance | Concurrent operations during network splits | `testing/5_concurrency_advanced/network_resilience/partition_simulation_test.go` | ✅ **COVERED** | None - split-brain protection tested |
+| Byzantine attack resistance | Concurrent malicious behavior handling | `testing/5_concurrency_advanced/fault_tolerance/byzantine_resistance_test.go` | ✅ **COVERED** | None - 6 attack types with concurrency |
+| Resource pressure handling | Concurrent operations under resource stress | `testing/5_concurrency_advanced/resource_stress/memory_pressure_test.go` | ✅ **COVERED** | None - memory/goroutine/CPU pressure |
+| Long-term concurrent stability | Extended high-concurrency execution | `testing/5_concurrency_advanced/stability/long_running_concurrent_test.go` | ✅ **COVERED** | None - 25+ workers, extended duration |
 
 ## 3. Integration Test Coverage
 
@@ -127,8 +153,8 @@ This document maps the current test coverage against the identified execution pa
 | Scenario | Test Location | Coverage | Missing Tests |
 |----------|---------------|----------|---------------|
 | 2-node basic flow | `docker_nodes_quick_test.go:*` | ⚠️ **PARTIAL** | Large-scale node testing |
-| Node failure scenarios | Not found | ❌ **MISSING** | Byzantine behavior simulation |
-| Network partitioning | Not found | ❌ **MISSING** | Split-brain scenarios |
+| Byzantine behavior simulation | `testing/5_concurrency_advanced/fault_tolerance/byzantine_resistance_test.go` | ✅ **COVERED** | None - comprehensive attack simulation |
+| Network partitioning | `testing/5_concurrency_advanced/network_resilience/partition_simulation_test.go` | ✅ **COVERED** | None - split-brain scenarios covered |
 
 ### 3.2 End-to-End Workflows
 | Scenario | Test Location | Coverage | Missing Tests |
