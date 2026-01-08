@@ -12,6 +12,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,8 +23,11 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-pg/pg/v10"
 	_ "github.com/lib/pq"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -123,25 +127,70 @@ func (suite *LeaderHandlerTestSuite) TearDownSuite() {
 	}
 }
 
+// Mock connection implementation
+type mockConn struct {
+	remotePeer peer.ID
+}
+
+func (m *mockConn) LocalPeer() peer.ID                                    { return "" }
+func (m *mockConn) RemotePeer() peer.ID                                   { return m.remotePeer }
+func (m *mockConn) LocalPrivateKey() libp2pcrypto.PrivKey                 { return nil }
+func (m *mockConn) RemotePublicKey() libp2pcrypto.PubKey                  { return nil }
+func (m *mockConn) ID() string                                            { return "mock-conn-id" }
+func (m *mockConn) Close() error                                          { return nil }
+func (m *mockConn) GetStreams() []network.Stream                          { return nil }
+func (m *mockConn) Stat() network.ConnStats                               { return network.ConnStats{} }
+func (m *mockConn) LocalMultiaddr() multiaddr.Multiaddr                   { return nil }
+func (m *mockConn) RemoteMultiaddr() multiaddr.Multiaddr                  { return nil }
+func (m *mockConn) Scope() network.ConnScope                              { return nil }
+func (m *mockConn) IsClosed() bool                                        { return false }
+func (m *mockConn) ConnState() network.ConnectionState                    { return network.ConnectionState{} }
+func (m *mockConn) NewStream(ctx context.Context) (network.Stream, error) { return nil, nil }
+
 // Mock stream implementation
 type mockStream struct {
 	readBuffer  *bytes.Buffer
 	writeBuffer *bytes.Buffer
 	closed      bool
+	mu          sync.Mutex // Add mutex for thread safety
+	conn        *mockConn
 }
 
 func newMockStream() *mockStream {
+	// Create a mock peer ID for the connection
+	mockPeerID, _ := peer.Decode("12D3KooWTestPeerID1234567890123456789012345678901234567890")
 	return &mockStream{
 		readBuffer:  new(bytes.Buffer),
 		writeBuffer: new(bytes.Buffer),
 		closed:      false,
+		conn:        &mockConn{remotePeer: mockPeerID},
 	}
 }
 
-func (m *mockStream) Read(p []byte) (n int, err error)   { return m.readBuffer.Read(p) }
-func (m *mockStream) Write(p []byte) (n int, err error)  { return m.writeBuffer.Write(p) }
-func (m *mockStream) Close() error                       { m.closed = true; return nil }
-func (m *mockStream) Reset() error                       { return nil }
+func (m *mockStream) Read(p []byte) (n int, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.readBuffer.Read(p)
+}
+
+func (m *mockStream) Write(p []byte) (n int, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.writeBuffer.Write(p)
+}
+
+func (m *mockStream) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.closed = true
+	return nil
+}
+
+func (m *mockStream) Reset() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return nil
+}
 func (m *mockStream) SetDeadline(t time.Time) error      { return nil }
 func (m *mockStream) SetReadDeadline(t time.Time) error  { return nil }
 func (m *mockStream) SetWriteDeadline(t time.Time) error { return nil }
@@ -149,10 +198,18 @@ func (m *mockStream) ID() string                         { return "mock-stream-i
 func (m *mockStream) Protocol() protocol.ID              { return protocol.ID("/test") }
 func (m *mockStream) SetProtocol(protocol.ID) error      { return nil }
 func (m *mockStream) Stat() network.Stats                { return network.Stats{} }
-func (m *mockStream) Conn() network.Conn                 { return nil }
-func (m *mockStream) CloseWrite() error                  { m.closed = true; return nil }
-func (m *mockStream) CloseRead() error                   { m.closed = true; return nil }
-func (m *mockStream) Scope() network.StreamScope         { return nil }
+func (m *mockStream) Conn() network.Conn {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.conn == nil {
+		mockPeerID, _ := peer.Decode("12D3KooWTestPeerID1234567890123456789012345678901234567890")
+		m.conn = &mockConn{remotePeer: mockPeerID}
+	}
+	return m.conn
+}
+func (m *mockStream) CloseWrite() error          { m.closed = true; return nil }
+func (m *mockStream) CloseRead() error           { m.closed = true; return nil }
+func (m *mockStream) Scope() network.StreamScope { return nil }
 
 // TestLeaderHandler_AtomicOperations tests atomic get/set operations
 func (suite *LeaderHandlerTestSuite) TestLeaderHandler_AtomicOperations() {
@@ -165,13 +222,557 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_AtomicOperations() {
 	assert.False(suite.T(), handler.GetMerkleRootSubmitted())
 }
 
-// TestLeaderHandler_Initialization tests handler initialization
 func (suite *LeaderHandlerTestSuite) TestLeaderHandler_Initialization() {
 	handler := NewLeaderNodeHandler(nil, suite.db)
 
 	require.NotNil(suite.T(), handler)
 	assert.NotNil(suite.T(), handler.leaderNode)
 	assert.False(suite.T(), handler.GetMerkleRootSubmitted())
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RepositoryInitialization() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+
+	require.NotNil(suite.T(), handler)
+	require.NotNil(suite.T(), handler.leaderNode)
+
+	assert.NotNil(suite.T(), handler.leaderNode.leaderCommitRepository, "LeaderCommitRepository should be initialized")
+	assert.NotNil(suite.T(), handler.leaderNode.batchRepository, "BatchRepository should be initialized")
+	assert.NotNil(suite.T(), handler.leaderNode.broadcastTrackerRepository, "BroadcastTrackerRepository should be initialized")
+	assert.NotNil(suite.T(), handler.leaderNode.reavealOrderRepository, "RevealOrderRepository should be initialized")
+	assert.NotNil(suite.T(), handler.leaderNode.nodeInfoRepository, "NodeInfoRepository should be initialized")
+
+	assert.NotNil(suite.T(), handler.leaderNode.revealOrderService, "RevealOrderService should be initialized")
+	assert.NotNil(suite.T(), handler.leaderNode.p2pClient, "P2PClient should be initialized")
+	assert.NotNil(suite.T(), handler.ethService, "EthService should be initialized")
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BatchRepositoryIntegration() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	ctx := context.Background()
+
+	testRound := "batch_test_round_1"
+	testTrial := "1"
+	testOp := common.HexToAddress("0xB111111111111111111111111111111111111111")
+	cvs := [32]byte{1, 2, 3}
+	commitData := &utils.LeaderCommitData{
+		Round:      testRound,
+		TrialNum:   testTrial,
+		EOAAddress: testOp.Hex(),
+		Cvs:        cvs,
+		CvsHex:     hex.EncodeToString(cvs[:]),
+	}
+
+	err := handler.leaderNode.AddLeaderCommit(ctx, commitData)
+	require.NoError(suite.T(), err, "Should be able to add commit data")
+	retrieved, err := handler.leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, testRound, testTrial, testOp.Hex())
+	require.NoError(suite.T(), err)
+	assert.Equal(suite.T(), cvs, retrieved.Cvs)
+	err = handler.leaderNode.batchRepository.DeleteRoundTrialDataForLeaderNode(ctx, testRound, testTrial)
+	require.NoError(suite.T(), err, "DeleteRoundTrialDataForLeaderNode should succeed")
+
+	_, err = handler.leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, testRound, testTrial, testOp.Hex())
+	assert.Error(suite.T(), err, "Data should be deleted after DeleteRoundTrialDataForLeaderNode")
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BatchRepositoryDeleteOldRounds() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	ctx := context.Background()
+
+	oldRound := "old_round_1"
+	currentRound := "current_round_1"
+	testTrial := "1"
+	testOp := common.HexToAddress("0xB222222222222222222222222222222222222222")
+	cvs := [32]byte{1, 2, 3}
+	oldCommitData := &utils.LeaderCommitData{
+		Round:      oldRound,
+		TrialNum:   testTrial,
+		EOAAddress: testOp.Hex(),
+		Cvs:        cvs,
+		CvsHex:     hex.EncodeToString(cvs[:]),
+	}
+	err := handler.leaderNode.AddLeaderCommit(ctx, oldCommitData)
+	require.NoError(suite.T(), err)
+	currentCommitData := &utils.LeaderCommitData{
+		Round:      currentRound,
+		TrialNum:   testTrial,
+		EOAAddress: testOp.Hex(),
+		Cvs:        cvs,
+		CvsHex:     hex.EncodeToString(cvs[:]),
+	}
+	err = handler.leaderNode.AddLeaderCommit(ctx, currentCommitData)
+	require.NoError(suite.T(), err)
+	err = handler.leaderNode.batchRepository.DeleteOldRoundDataForLeaderNode(ctx, currentRound)
+	require.NoError(suite.T(), err, "DeleteOldRoundDataForLeaderNode should succeed")
+	_, err = handler.leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, oldRound, testTrial, testOp.Hex())
+	assert.Error(suite.T(), err, "Old round data should be deleted")
+
+	retrieved, err := handler.leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, currentRound, testTrial, testOp.Hex())
+	require.NoError(suite.T(), err, "Current round data should still exist")
+	assert.Equal(suite.T(), currentRound, retrieved.Round)
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BroadcastTrackerRepositoryIntegration() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	ctx := context.Background()
+
+	testRound := "broadcast_test_round_1"
+	testTrial := "1"
+	testOp := common.HexToAddress("0xC111111111111111111111111111111111111111")
+	messageID := "test_message_001"
+
+	tracker := &utils.BroadcastTracker{
+		Round:        testRound,
+		TrialNum:     testTrial,
+		EOAAddress:   testOp.Hex(),
+		Type:         "cvs",
+		MessageID:    messageID,
+		Data:         [32]byte{1, 2, 3, 4, 5},
+		Attempts:     0,
+		MaxAttempts:  3,
+		Acknowledged: make(map[string]bool),
+		LastSent:     time.Now().Unix(),
+		Timeout:      30,
+	}
+
+	err := handler.leaderNode.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker)
+	require.NoError(suite.T(), err, "AddBroadcastTracker should succeed")
+
+	tracker.Attempts = 1
+	tracker.Acknowledged["peer1"] = true
+	err = handler.leaderNode.broadcastTrackerRepository.UpdateBroadcastTracker(ctx, tracker)
+	require.NoError(suite.T(), err, "UpdateBroadcastTracker should succeed")
+
+	suite.db.Model((*database.BroadcastTrackerScheme)(nil)).
+		Where("round = ? AND trial_num = ? AND eoa_address = ? AND message_id = ?",
+			testRound, testTrial, testOp.Hex(), messageID).
+		Delete()
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RevealOrderRepositoryIntegration() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	ctx := context.Background()
+
+	testRound := "reveal_test_round_1"
+	testTrial := "1"
+
+	revealOrder := &utils.RevealOrderData{
+		Round:        testRound,
+		TrialNum:     testTrial,
+		OrderedNodes: []string{"0xNode1", "0xNode2", "0xNode3"},
+		RevealOrder:  []int{0, 1, 2},
+		RV:           "test_rv_value",
+	}
+
+	err := handler.leaderNode.reavealOrderRepository.AddRevealOrder(ctx, revealOrder)
+	require.NoError(suite.T(), err, "AddRevealOrder should succeed")
+
+	retrieved, err := handler.leaderNode.reavealOrderRepository.GetRevealOrder(ctx, testRound, testTrial)
+	require.NoError(suite.T(), err, "GetRevealOrder should succeed")
+	assert.Equal(suite.T(), testRound, retrieved.Round)
+	assert.Equal(suite.T(), testTrial, retrieved.TrialNum)
+	assert.Equal(suite.T(), revealOrder.OrderedNodes, retrieved.OrderedNodes)
+	assert.Equal(suite.T(), revealOrder.RevealOrder, retrieved.RevealOrder)
+	assert.Equal(suite.T(), revealOrder.RV, retrieved.RV)
+
+	suite.db.Model((*database.RevealOrderScheme)(nil)).
+		Where("round = ? AND trial_num = ?", testRound, testTrial).
+		Delete()
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_NodeInfoRepositoryIntegration() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	ctx := context.Background()
+
+	testEOA := "0xD111111111111111111111111111111111111111"
+	testIP := "192.168.1.100"
+	testPort := "4001"
+	testPeerID := "12D3KooWTestPeerID1234567890123456789012345678901234567890"
+
+	nodeInfo := &utils.NodeInfo{
+		EOAAddress: testEOA,
+		IP:         testIP,
+		Port:       testPort,
+		PeerID:     testPeerID,
+	}
+
+	err := handler.leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo)
+	require.NoError(suite.T(), err, "AddAndUpdateNodeInfo should succeed")
+
+	nodes, err := handler.leaderNode.nodeInfoRepository.GetNodeInfos(ctx)
+	require.NoError(suite.T(), err, "GetNodeInfos should succeed")
+	assert.GreaterOrEqual(suite.T(), len(nodes), 1, "Should have at least one node")
+
+	found := false
+	for _, node := range nodes {
+		if node.EOAAddress == testEOA {
+			found = true
+			assert.Equal(suite.T(), testIP, node.IP)
+			assert.Equal(suite.T(), testPort, node.Port)
+			assert.Equal(suite.T(), testPeerID, node.PeerID)
+			break
+		}
+	}
+	assert.True(suite.T(), found, "Node should be found in GetNodeInfos")
+
+	err = handler.leaderNode.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, testEOA)
+	require.NoError(suite.T(), err, "DeleteNodeInfoByEOA should succeed")
+
+	nodes, err = handler.leaderNode.nodeInfoRepository.GetNodeInfos(ctx)
+	require.NoError(suite.T(), err)
+	for _, node := range nodes {
+		assert.NotEqual(suite.T(), testEOA, node.EOAAddress, "Node should be deleted")
+	}
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_PeerCommitRepositoryIntegration() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	require.NotNil(suite.T(), handler)
+	require.NotNil(suite.T(), handler.leaderNode)
+	require.NotNil(suite.T(), handler.leaderNode.revealOrderService, "RevealOrderService uses PeerCommitRepository")
+
+	ctx := context.Background()
+
+	testRound := "peer_commit_test_round_1"
+	testTrial := "1"
+	testEOA := "0xE111111111111111111111111111111111111111"
+
+	cvs := [32]byte{1, 2, 3}
+	cos := [32]byte{4, 5, 6}
+	secretValue := [32]byte{7, 8, 9}
+
+	peerCommit := &database.PeerCommitDataScheme{
+		Round:       testRound,
+		TrialNum:    testTrial,
+		EOAAddress:  testEOA,
+		Cvs:         cvs[:],
+		Cos:         cos[:],
+		SecretValue: secretValue[:],
+	}
+	err := suite.peerCommitRepo.AddPeerCommitData(ctx, peerCommit)
+	require.NoError(suite.T(), err, "AddPeerCommitData should succeed")
+
+	retrieved, err := suite.peerCommitRepo.GetPeerCommitData(ctx, testRound, testTrial, testEOA)
+	require.NoError(suite.T(), err, "GetPeerCommitData should succeed")
+	assert.Equal(suite.T(), testRound, retrieved.Round)
+	assert.Equal(suite.T(), testTrial, retrieved.TrialNum)
+	assert.Equal(suite.T(), testEOA, retrieved.EOAAddress)
+	assert.Equal(suite.T(), cvs[:], retrieved.Cvs)
+	assert.Equal(suite.T(), cos[:], retrieved.Cos)
+	assert.Equal(suite.T(), secretValue[:], retrieved.SecretValue)
+
+	retrieved.SecretValue = []byte{10, 11, 12}
+	err = suite.peerCommitRepo.UpdatePeerCommitData(ctx, retrieved)
+	require.NoError(suite.T(), err, "UpdatePeerCommitData should succeed")
+
+	updated, err := suite.peerCommitRepo.GetPeerCommitData(ctx, testRound, testTrial, testEOA)
+	require.NoError(suite.T(), err)
+	assert.Equal(suite.T(), []byte{10, 11, 12}, updated.SecretValue)
+
+	suite.db.Model((*database.PeerCommitDataScheme)(nil)).
+		Where("round = ? AND trial_num = ? AND eoa_address = ?", testRound, testTrial, testEOA).
+		Delete()
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RevealOrderServiceIntegration() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	ctx := context.Background()
+
+	assert.NotNil(suite.T(), handler.leaderNode.revealOrderService, "RevealOrderService should be initialized")
+
+	testRound := "reveal_service_test_round_1"
+	testTrial := "1"
+	testOp1 := common.HexToAddress("0xF111111111111111111111111111111111111111")
+	testOp2 := common.HexToAddress("0xF222222222222222222222222222222222222222")
+
+	cvs1 := [32]byte{1, 2, 3}
+	cos1 := [32]byte{10, 20, 30}
+	commitData1 := &utils.LeaderCommitData{
+		Round:      testRound,
+		TrialNum:   testTrial,
+		EOAAddress: testOp1.Hex(),
+		Cvs:        cvs1,
+		CvsHex:     hex.EncodeToString(cvs1[:]),
+		Cos:        cos1,
+		CosHex:     hex.EncodeToString(cos1[:]),
+	}
+	err := handler.leaderNode.AddLeaderCommit(ctx, commitData1)
+	require.NoError(suite.T(), err)
+
+	cvs2 := [32]byte{4, 5, 6}
+	cos2 := [32]byte{40, 50, 60}
+	commitData2 := &utils.LeaderCommitData{
+		Round:      testRound,
+		TrialNum:   testTrial,
+		EOAAddress: testOp2.Hex(),
+		Cvs:        cvs2,
+		CvsHex:     hex.EncodeToString(cvs2[:]),
+		Cos:        cos2,
+		CosHex:     hex.EncodeToString(cos2[:]),
+	}
+	err = handler.leaderNode.AddLeaderCommit(ctx, commitData2)
+	require.NoError(suite.T(), err)
+
+	// Test DetermineRevealOrder (uses RevealOrderService)
+	activatedOps := []common.Address{testOp1, testOp2}
+	success, err := handler.leaderNode.DetermineRevealOrder(ctx, testRound, testTrial, activatedOps)
+	require.NoError(suite.T(), err, "DetermineRevealOrder should succeed")
+	assert.True(suite.T(), success, "DetermineRevealOrder should return true")
+
+	// Verify reveal order was created
+	revealOrder, err := handler.leaderNode.reavealOrderRepository.GetRevealOrder(ctx, testRound, testTrial)
+	require.NoError(suite.T(), err)
+	assert.NotNil(suite.T(), revealOrder)
+	assert.Equal(suite.T(), testRound, revealOrder.Round)
+	assert.Equal(suite.T(), testTrial, revealOrder.TrialNum)
+	assert.Len(suite.T(), revealOrder.OrderedNodes, 2, "Should have 2 ordered nodes")
+	assert.Len(suite.T(), revealOrder.RevealOrder, 2, "Should have 2 reveal order indices")
+	assert.NotEmpty(suite.T(), revealOrder.RV, "RV should not be empty")
+
+	// Cleanup
+	suite.db.Model((*database.RevealOrderScheme)(nil)).
+		Where("round = ? AND trial_num = ?", testRound, testTrial).
+		Delete()
+	suite.db.Model((*database.LeaderCommitScheme)(nil)).
+		Where("round = ? AND trial_num = ?", testRound, testTrial).
+		Delete()
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_P2PClientIntegration() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	ctx := context.Background()
+
+	assert.NotNil(suite.T(), handler.leaderNode.p2pClient, "P2PClient should be initialized")
+
+	testEOA1 := "0xG111111111111111111111111111111111111111"
+	testEOA2 := "0xG222222222222222222222222222222222222222"
+
+	testPeerID1 := "12D3KooWPeer1ID123456789012345678901234567890123456789"
+	testPeerID2 := "12D3KooWPeer2ID123456789012345678901234567890123456789"
+
+	nodeInfo1 := &utils.NodeInfo{
+		EOAAddress: testEOA1,
+		IP:         "192.168.1.101",
+		Port:       "4001",
+		PeerID:     testPeerID1,
+	}
+	err := handler.leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo1)
+	require.NoError(suite.T(), err)
+
+	nodeInfo2 := &utils.NodeInfo{
+		EOAAddress: testEOA2,
+		IP:         "192.168.1.102",
+		Port:       "4002",
+		PeerID:     testPeerID2,
+	}
+	err = handler.leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo2)
+	require.NoError(suite.T(), err)
+
+	nodes := handler.leaderNode.p2pClient.GetConnectedPeers(ctx)
+	assert.NotNil(suite.T(), nodes, "GetConnectedPeers should return a map")
+
+	dbNodes, err := handler.leaderNode.nodeInfoRepository.GetNodeInfos(ctx)
+	require.NoError(suite.T(), err)
+	assert.GreaterOrEqual(suite.T(), len(dbNodes), 2, "Should have at least 2 nodes in database")
+
+	found1 := false
+	found2 := false
+	for _, node := range dbNodes {
+		if node.EOAAddress == testEOA1 {
+			found1 = true
+		}
+		if node.EOAAddress == testEOA2 {
+			found2 = true
+		}
+	}
+	assert.True(suite.T(), found1, "Node1 should be in database")
+	assert.True(suite.T(), found2, "Node2 should be in database")
+
+	if len(nodes) >= 2 {
+		if _, exists1 := nodes[testEOA1]; exists1 {
+			assert.Contains(suite.T(), nodes, testEOA1, "Node1 should be in GetConnectedPeers")
+		}
+		if _, exists2 := nodes[testEOA2]; exists2 {
+			assert.Contains(suite.T(), nodes, testEOA2, "Node2 should be in GetConnectedPeers")
+		}
+	}
+
+	handler.leaderNode.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, testEOA1)
+	handler.leaderNode.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, testEOA2)
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_EndToEndIntegration() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	ctx := context.Background()
+
+	testRound := "e2e_test_round_1"
+	testTrial := "1"
+	testOp := common.HexToAddress("0xH111111111111111111111111111111111111111")
+	messageID := "e2e_message_001"
+
+	cvs := [32]byte{1, 2, 3, 4, 5}
+	commitData := &utils.LeaderCommitData{
+		Round:      testRound,
+		TrialNum:   testTrial,
+		EOAAddress: testOp.Hex(),
+		Cvs:        cvs,
+		CvsHex:     hex.EncodeToString(cvs[:]),
+	}
+	err := handler.leaderNode.AddLeaderCommit(ctx, commitData)
+	require.NoError(suite.T(), err, "Step 1: AddLeaderCommit should succeed")
+
+	tracker := &utils.BroadcastTracker{
+		Round:        testRound,
+		TrialNum:     testTrial,
+		EOAAddress:   testOp.Hex(),
+		Type:         "cvs",
+		MessageID:    messageID,
+		Data:         cvs,
+		Attempts:     0,
+		MaxAttempts:  3,
+		Acknowledged: make(map[string]bool),
+		LastSent:     time.Now().Unix(),
+		Timeout:      30,
+	}
+	err = handler.leaderNode.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker)
+	require.NoError(suite.T(), err, "Step 2: AddBroadcastTracker should succeed")
+
+	revealOrder := &utils.RevealOrderData{
+		Round:        testRound,
+		TrialNum:     testTrial,
+		OrderedNodes: []string{testOp.Hex()},
+		RevealOrder:  []int{0},
+		RV:           "e2e_rv_value",
+	}
+	err = handler.leaderNode.reavealOrderRepository.AddRevealOrder(ctx, revealOrder)
+	require.NoError(suite.T(), err, "Step 3: AddRevealOrder should succeed")
+
+	nodeInfo := &utils.NodeInfo{
+		EOAAddress: testOp.Hex(),
+		IP:         "192.168.1.200",
+		Port:       "4003",
+		PeerID:     "12D3KooWE2EPeerID1234567890123456789012345678901234567890",
+	}
+	err = handler.leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo)
+	require.NoError(suite.T(), err, "Step 4: AddAndUpdateNodeInfo should succeed")
+
+	retrievedCommit, err := handler.leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, testRound, testTrial, testOp.Hex())
+	require.NoError(suite.T(), err)
+	assert.Equal(suite.T(), cvs, retrievedCommit.Cvs, "Step 5: LeaderCommit should persist")
+
+	retrievedRevealOrder, err := handler.leaderNode.reavealOrderRepository.GetRevealOrder(ctx, testRound, testTrial)
+	require.NoError(suite.T(), err)
+	assert.Equal(suite.T(), testRound, retrievedRevealOrder.Round, "Step 5: RevealOrder should persist")
+
+	nodes, err := handler.leaderNode.nodeInfoRepository.GetNodeInfos(ctx)
+	require.NoError(suite.T(), err)
+	found := false
+	for _, node := range nodes {
+		if node.EOAAddress == testOp.Hex() {
+			found = true
+			break
+		}
+	}
+	assert.True(suite.T(), found, "Step 5: NodeInfo should persist")
+
+	err = handler.leaderNode.batchRepository.DeleteRoundTrialDataForLeaderNode(ctx, testRound, testTrial)
+	require.NoError(suite.T(), err, "Step 6: DeleteRoundTrialDataForLeaderNode should succeed")
+
+	_, err = handler.leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, testRound, testTrial, testOp.Hex())
+	assert.Error(suite.T(), err, "Step 7: LeaderCommit should be deleted")
+
+	_, err = handler.leaderNode.reavealOrderRepository.GetRevealOrder(ctx, testRound, testTrial)
+	assert.Error(suite.T(), err, "Step 7: RevealOrder should be deleted")
+
+	nodes, err = handler.leaderNode.nodeInfoRepository.GetNodeInfos(ctx)
+	require.NoError(suite.T(), err)
+	for _, node := range nodes {
+		if node.EOAAddress == testOp.Hex() {
+			handler.leaderNode.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, testOp.Hex())
+			break
+		}
+	}
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_DatabaseConnectionValidation() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	ctx := context.Background()
+
+	err := suite.db.Ping(ctx)
+	require.NoError(suite.T(), err, "Database connection should be valid")
+
+	testRound := "conn_test_round_1"
+	testTrial := "1"
+	testOp := common.HexToAddress("0xI111111111111111111111111111111111111111")
+
+	cvs := [32]byte{1, 2, 3}
+	commitData := &utils.LeaderCommitData{
+		Round:      testRound,
+		TrialNum:   testTrial,
+		EOAAddress: testOp.Hex(),
+		Cvs:        cvs,
+		CvsHex:     hex.EncodeToString(cvs[:]),
+	}
+
+	err = handler.leaderNode.AddLeaderCommit(ctx, commitData)
+	require.NoError(suite.T(), err, "LeaderCommitRepository should work")
+
+	retrieved, err := handler.leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, testRound, testTrial, testOp.Hex())
+	require.NoError(suite.T(), err, "GetLeaderCommitByRoundAndEoaAddr should work")
+	assert.Equal(suite.T(), cvs, retrieved.Cvs)
+
+	suite.db.Model((*database.LeaderCommitScheme)(nil)).
+		Where("round = ? AND trial_num = ? AND eoa_address = ?", testRound, testTrial, testOp.Hex()).
+		Delete()
+}
+
+func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_ConcurrentDatabaseOperations() {
+	handler := NewLeaderNodeHandler(nil, suite.db)
+	ctx := context.Background()
+
+	testRound := "concurrent_test_round_1"
+	testTrial := "1"
+	numGoroutines := 5
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errors []error
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(goroutineID int) {
+			defer wg.Done()
+
+			testOp := common.HexToAddress(fmt.Sprintf("0x%040d", goroutineID))
+			cvs := [32]byte{byte(goroutineID)}
+			commitData := &utils.LeaderCommitData{
+				Round:      testRound,
+				TrialNum:   testTrial,
+				EOAAddress: testOp.Hex(),
+				Cvs:        cvs,
+				CvsHex:     hex.EncodeToString(cvs[:]),
+			}
+
+			err := handler.leaderNode.AddLeaderCommit(ctx, commitData)
+			mu.Lock()
+			if err != nil {
+				errors = append(errors, fmt.Errorf("goroutine %d: %v", goroutineID, err))
+			}
+			mu.Unlock()
+		}(i)
+	}
+
+	wg.Wait()
+
+	assert.Empty(suite.T(), errors, "Concurrent AddLeaderCommit operations should succeed")
+
+	commits, err := handler.leaderNode.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(ctx, testRound, testTrial)
+	require.NoError(suite.T(), err)
+	assert.GreaterOrEqual(suite.T(), len(commits), numGoroutines, "All concurrent commits should be saved")
+
+	suite.db.Model((*database.LeaderCommitScheme)(nil)).
+		Where("round = ? AND trial_num = ?", testRound, testTrial).
+		Delete()
 }
 
 // TestLeaderHandler_HandleRegistrationRequest tests registration request handling
@@ -1961,6 +2562,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_FullF
 
 	suite.leaderNodeHandler.leaderNode.SetHalted(false)
 	suite.leaderNodeHandler.SetMerkleRootSubmitted(false)
+	suite.leaderNodeHandler.leaderNode.SetCurrentRound(testRound)
+	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	os.Setenv("CHAIN_ID", "1")
@@ -2101,6 +2704,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_AllCo
 	suite.leaderNodeHandler.ethService = mockEth
 	suite.leaderNodeHandler.leaderNode.SetHalted(false)
 	suite.leaderNodeHandler.SetMerkleRootSubmitted(false)
+	suite.leaderNodeHandler.leaderNode.SetCurrentRound(testRound)
+	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	os.Setenv("CHAIN_ID", "1")
