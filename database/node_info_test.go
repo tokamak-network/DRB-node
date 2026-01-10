@@ -569,3 +569,114 @@ func TestAddAndUpdateNodeInfo_UpdateAfterDelete(t *testing.T) {
 	// Cleanup
 	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
 }
+
+// Test NewNodeInfoRepository constructor
+func TestNewNodeInfoRepository(t *testing.T) {
+	db := GetDB()
+	repo := NewNodeInfoRepository(db)
+	assert.NotNil(t, repo, "Repository should be created")
+	assert.Equal(t, db, repo.db, "Repository should store the database connection")
+}
+
+// TestAddAndUpdateNodeInfo_DeleteError tests the error path when deleting old record fails
+func TestAddAndUpdateNodeInfo_DeleteError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA := "0xTestDeleteError555"
+	testIP := "192.168.200.1"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", testIP).Delete()
+
+	// Insert a node with the IP we'll use
+	existingNode := &utils.NodeInfo{
+		IP:         testIP,
+		Port:       "7000",
+		PeerID:     "peer_existing",
+		EOAAddress: "0xExistingEOA",
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, existingNode)
+	assert.NoError(t, err)
+
+	// Now try to add a node with same IP but different EOA
+	// This should trigger the delete path, but we'll simulate a delete error
+	// by dropping the table temporarily
+	_, err = GetDB().Exec("DROP TABLE IF EXISTS node_info_schemes CASCADE")
+	assert.NoError(t, err)
+
+	// Try to add - should fail because table doesn't exist
+	newNode := &utils.NodeInfo{
+		IP:         testIP,
+		Port:       "7001",
+		PeerID:     "peer_new",
+		EOAAddress: testEOA,
+	}
+	err = repo.AddAndUpdateNodeInfo(ctx, newNode)
+	assert.Error(t, err, "Should fail when table is missing")
+
+	// Restore schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+}
+
+// TestAddAndUpdateNodeInfo_RetryLogic tests the retry logic when duplicate key error occurs
+func TestAddAndUpdateNodeInfo_RetryLogic(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA1 := "0xTestRetryEOA1"
+	testEOA2 := "0xTestRetryEOA2"
+	testIP := "192.168.201.1"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address IN (?)", []string{testEOA1, testEOA2}).Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", testIP).Delete()
+
+	// Insert first node with the IP
+	node1 := &utils.NodeInfo{
+		IP:         testIP,
+		Port:       "8000",
+		PeerID:     "peer_retry_1",
+		EOAAddress: testEOA1,
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, node1)
+	assert.NoError(t, err)
+
+	// Now try to insert a node with same IP but different EOA
+	// This should trigger the retry logic (delete and retry insert)
+	node2 := &utils.NodeInfo{
+		IP:         testIP,
+		Port:       "8001",
+		PeerID:     "peer_retry_2",
+		EOAAddress: testEOA2,
+	}
+	err = repo.AddAndUpdateNodeInfo(ctx, node2)
+	// Should succeed after retry logic
+	assert.NoError(t, err, "Should succeed after retry logic deletes conflicting IP")
+
+	// Verify node2 was inserted and node1 was deleted (due to IP conflict)
+	var result NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&result).
+		Where("eoa_address = ?", testEOA2).
+		Select()
+	assert.NoError(t, err)
+	assert.Equal(t, testEOA2, result.EOAAddress)
+	assert.Equal(t, testIP, result.IP)
+
+	// Verify node1 no longer exists (was deleted due to IP conflict)
+	var deleted NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&deleted).
+		Where("eoa_address = ?", testEOA1).
+		Select()
+	assert.Error(t, err, "Node1 should be deleted due to IP conflict")
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA2).Delete()
+}

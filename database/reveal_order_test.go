@@ -397,3 +397,11 @@ func TestRevealOrderRepository_EmptyRevealOrder(t *testing.T) {
 	assert.Error(t, err, "Should reject empty revealOrder")
 	assert.Contains(t, err.Error(), "revealOrder cannot be empty")
 }
+
+// Test NewRevealOrderRepository constructor
+func TestNewRevealOrderRepository(t *testing.T) {
+	db := GetDB()
+	repo := NewRevealOrderRepository(db)
+	assert.NotNil(t, repo, "Repository should be created")
+	assert.Equal(t, db, repo.db, "Repository should store the database connection")
+}

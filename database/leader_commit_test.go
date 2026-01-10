@@ -442,3 +442,11 @@ func TestLeaderCommitRepository_GetRoundsToProcess_ErrorHandling(t *testing.T) {
 	MigrationsDown(sqlDB)
 	MigrationsUp(sqlDB)
 }
+
+// Test NewLeaderCommitRepository constructor
+func TestNewLeaderCommitRepository(t *testing.T) {
+	db := GetDB()
+	repo := NewLeaderCommitRepository(db)
+	assert.NotNil(t, repo, "Repository should be created")
+	assert.Equal(t, db, repo.db, "Repository should store the database connection")
+}

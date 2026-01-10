@@ -2,9 +2,11 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/go-pg/pg/v10"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -93,7 +95,7 @@ func TestInitSQLDB_WithEmptyPassword(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// Test initialization with empty password (should fail for our test DB)
-	err := InitSQLDB(ctx,5433, "localhost", "postgres", "", "testdb")
+	err := InitSQLDB(ctx, 5433, "localhost", "postgres", "", "testdb")
 	// This will fail at connection level
 	assert.Error(t, err, "Should fail with empty password when password is required")
 }
@@ -164,7 +166,7 @@ func TestGetDB_AfterSuccessfulInit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// Ensure database is initialized
-	err := InitSQLDB(ctx,5433, "localhost", "postgres", "123", "testdb")
+	err := InitSQLDB(ctx, 5433, "localhost", "postgres", "123", "testdb")
 	assert.NoError(t, err)
 
 	// Get database and perform operations
@@ -180,6 +182,90 @@ func TestInitSQLDB_ContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// Since we're already initialized, this tests the final ping
-	err := InitSQLDB(ctx,5433, "localhost", "postgres", "123", "testdb")
+	err := InitSQLDB(ctx, 5433, "localhost", "postgres", "123", "testdb")
 	assert.NoError(t, err, "Should succeed with valid connection")
+}
+
+func TestClose_WhenInitialized(t *testing.T) {
+	// Database is already initialized by TestMain
+	// We'll create a temporary connection to test Close properly
+	originalDB := dbClient
+
+	// Create a temporary database connection
+	tempDB := pg.Connect(&pg.Options{
+		Addr:     fmt.Sprintf("%s:%s", "localhost", "5433"),
+		User:     "postgres",
+		Password: "123",
+		Database: "testdb",
+	})
+
+	// Set it as dbClient temporarily
+	dbClient = tempDB
+
+	// Test Close with a valid connection
+	err := Close()
+	assert.NoError(t, err, "Close should succeed with valid connection")
+
+	// Restore original dbClient
+	dbClient = originalDB
+}
+
+func TestClose_WhenNotInitialized(t *testing.T) {
+	// Save current dbClient
+	originalDB := dbClient
+
+	// Temporarily set to nil
+	dbClient = nil
+
+	// Close should return nil when dbClient is nil
+	err := Close()
+	assert.NoError(t, err, "Close should return nil when dbClient is nil")
+
+	// Restore
+	dbClient = originalDB
+}
+
+func TestClose_WhenCloseReturnsError(t *testing.T) {
+	// Save current dbClient
+	originalDB := dbClient
+
+	// Create a temporary database connection
+	tempDB := pg.Connect(&pg.Options{
+		Addr:     fmt.Sprintf("%s:%s", "localhost", "5433"),
+		User:     "postgres",
+		Password: "123",
+		Database: "testdb",
+	})
+
+	// Set it as dbClient temporarily
+	dbClient = tempDB
+
+	// Close it once (this should succeed)
+	err := tempDB.Close()
+	assert.NoError(t, err, "First close should succeed")
+
+	// Now try to close it again through our Close() function
+	// This should trigger the error path since the connection is already closed
+	err = Close()
+	assert.Error(t, err, "Close should return error when connection is already closed")
+	assert.Contains(t, err.Error(), "error closing database", "Error message should mention closing database")
+
+	// Restore original dbClient
+	dbClient = originalDB
+}
+
+func TestGetDB_PanicWhenNotInitialized(t *testing.T) {
+	// Save current dbClient
+	originalDB := dbClient
+
+	// Temporarily set to nil
+	dbClient = nil
+
+	// GetDB should panic when not initialized
+	assert.Panics(t, func() {
+		GetDB()
+	}, "GetDB should panic when database is not initialized")
+
+	// Restore
+	dbClient = originalDB
 }

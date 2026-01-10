@@ -357,3 +357,11 @@ func TestRegularCommitRepository_UpdateWithEmptySignatureFields(t *testing.T) {
 		Context(ctx).
 		Delete()
 }
+
+// Test NewRegularCommitRepository constructor
+func TestNewRegularCommitRepository(t *testing.T) {
+	db := GetDB()
+	repo := NewRegularCommitRepository(db)
+	assert.NotNil(t, repo, "Repository should be created")
+	assert.Equal(t, db, repo.db, "Repository should store the database connection")
+}

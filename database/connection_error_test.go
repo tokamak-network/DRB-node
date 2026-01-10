@@ -31,3 +31,9 @@ func TestInitSQLDB_InvalidDSN(t *testing.T) {
 	err := InitSQLDB(ctx, 5433, "host with spaces", "user@invalid", "pass word", "db name")
 	assert.Error(t, err, "Should fail with invalid DSN characters")
 }
+
+// Note: Testing InitSQLDB GetDB().Ping error path is difficult because:
+// 1. The once.Do ensures dbClient is only initialized once
+// 2. After initialization, GetDB().Ping() would need to fail, which is hard to simulate
+// 3. The panic path in once.Do is also hard to test without resetting the sync.Once
+// These paths are edge cases that would require significant code refactoring to test properly.

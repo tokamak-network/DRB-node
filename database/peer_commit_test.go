@@ -321,3 +321,11 @@ func TestPeerCommitRepository_UpdateNonExistent(t *testing.T) {
 	_, err = repo.GetPeerCommitData(ctx, "ghost", "ghost", "0xghost")
 	assert.Error(t, err, "Should not exist")
 }
+
+// Test NewPeerCommitRepository constructor
+func TestNewPeerCommitRepository(t *testing.T) {
+	db := GetDB()
+	repo := NewPeerCommitRepository(db)
+	assert.NotNil(t, repo, "Repository should be created")
+	assert.Equal(t, db, repo.db, "Repository should store the database connection")
+}

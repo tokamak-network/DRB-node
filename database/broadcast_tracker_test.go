@@ -315,7 +315,7 @@ func TestBroadcastTrackerRepository_GetBroadcastTrackers_ErrorHandling(t *testin
 	assert.NoError(t, err, "Failed to drop table for test")
 
 	// Try to get trackers - should get an error because table doesn't exist
-	_, err = repo.GetBroadcastTrackers(ctx)		
+	_, err = repo.GetBroadcastTrackers(ctx)
 	assert.Error(t, err, "Expected error when table is missing")
 
 	// Restore the schema
@@ -330,7 +330,7 @@ func TestBroadcastTrackerRepository_GetBroadcastTrackers_ErrorHandling(t *testin
 func TestBroadcastTrackerRepository_AddAllBroadcastTrackers_ErrorHandling(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	repo := NewBroadcastTrackerRepository(GetDB())
 
 	// Drop the table to force an error during batch insert
@@ -353,4 +353,156 @@ func TestBroadcastTrackerRepository_AddAllBroadcastTrackers_ErrorHandling(t *tes
 	defer sqlDB.Close()
 	MigrationsDown(sqlDB)
 	MigrationsUp(sqlDB)
+}
+
+// Test error handling for AddBroadcastTracker when insert fails
+func TestBroadcastTrackerRepository_AddBroadcastTracker_ErrorHandling(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	repo := NewBroadcastTrackerRepository(GetDB())
+
+	// Drop the table to force an error
+	_, err := GetDB().Exec("DROP TABLE IF EXISTS broadcast_tracker_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to add tracker - should fail because table doesn't exist
+	tracker := &utils.BroadcastTracker{
+		Round:      "test",
+		TrialNum:   "test",
+		EOAAddress: "0xtest",
+		Type:       "cvs",
+		MessageID:  "msg1",
+		Data:       [32]byte{0x01},
+	}
+
+	err = repo.AddBroadcastTracker(ctx, tracker)
+	assert.Error(t, err, "Expected error when table is missing")
+
+	// Restore the schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+}
+
+// Test error handling for UpdateBroadcastTracker when update fails
+func TestBroadcastTrackerRepository_UpdateBroadcastTracker_ErrorHandling(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	repo := NewBroadcastTrackerRepository(GetDB())
+
+	// Drop the table to force an error
+	_, err := GetDB().Exec("DROP TABLE IF EXISTS broadcast_tracker_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to update tracker - should fail because table doesn't exist
+	tracker := &utils.BroadcastTracker{
+		Round:      "test",
+		TrialNum:   "test",
+		EOAAddress: "0xtest",
+		Type:       "cvs",
+		MessageID:  "msg1",
+		Data:       [32]byte{0x01},
+	}
+
+	err = repo.UpdateBroadcastTracker(ctx, tracker)
+	assert.Error(t, err, "Expected error when table is missing")
+
+	// Restore the schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+}
+
+// Test error handling for DeleteBroadcastTracker when delete fails
+func TestBroadcastTrackerRepository_DeleteBroadcastTracker_ErrorHandling(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	repo := NewBroadcastTrackerRepository(GetDB())
+
+	// Drop the table to force an error
+	_, err := GetDB().Exec("DROP TABLE IF EXISTS broadcast_tracker_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to delete tracker - should fail because table doesn't exist
+	tracker := &utils.BroadcastTracker{
+		Round:      "test",
+		TrialNum:   "test",
+		EOAAddress: "0xtest",
+		Type:       "cvs",
+		MessageID:  "msg1",
+	}
+
+	err = repo.DeleteBroadcastTracker(ctx, tracker)
+	assert.Error(t, err, "Expected error when table is missing")
+
+	// Restore the schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+}
+
+// Test mapping functions with edge cases
+func TestBroadcastTrackerRepository_MapFunctions_EdgeCases(t *testing.T) {
+	repo := NewBroadcastTrackerRepository(GetDB())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	round := "map_test_round"
+	trialNum := "map_test_trial"
+
+	// Cleanup
+	GetDB().Model(&BroadcastTrackerScheme{}).
+		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
+		Delete()
+
+	// Test with empty data array
+	tracker := &utils.BroadcastTracker{
+		Round:      round,
+		TrialNum:   trialNum,
+		EOAAddress: "0xtest",
+		Type:       "cvs",
+		MessageID:  "msg1",
+		Data:       [32]byte{}, // Empty byte array
+	}
+
+	err := repo.AddBroadcastTracker(ctx, tracker)
+	assert.NoError(t, err, "Should handle empty data array")
+
+	// Test with nil acknowledged map
+	tracker2 := &utils.BroadcastTracker{
+		Round:        round,
+		TrialNum:     trialNum,
+		EOAAddress:   "0xtest2",
+		Type:         "cos",
+		MessageID:    "msg2",
+		Data:         [32]byte{0x01},
+		Acknowledged: nil, // nil map
+	}
+
+	err = repo.AddBroadcastTracker(ctx, tracker2)
+	assert.NoError(t, err, "Should handle nil acknowledged map")
+
+	// Cleanup
+	GetDB().Model(&BroadcastTrackerScheme{}).
+		Where("round = ? AND trial_num = ?", round, trialNum).
+		Context(ctx).
+		Delete()
+}
+
+// Test NewBroadcastTrackerRepository constructor
+func TestNewBroadcastTrackerRepository(t *testing.T) {
+	db := GetDB()
+	repo := NewBroadcastTrackerRepository(db)
+	assert.NotNil(t, repo, "Repository should be created")
+	assert.Equal(t, db, repo.db, "Repository should store the database connection")
 }
