@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
@@ -1371,7 +1372,7 @@ func TestNewLeaderNode(t *testing.T) {
 	mockRevealOrderRepo := new(MockRevealOrderRepo)
 
 	// Create LeaderNode
-	leaderNode := NewLeaderNode(
+	leaderNode, err := NewLeaderNode(
 		mockFallbackClient,
 		mockRevealOrderService,
 		p2pClient,
@@ -1381,6 +1382,7 @@ func TestNewLeaderNode(t *testing.T) {
 		mockRevealOrderRepo,
 		mockNodeInfoRepo,
 	)
+	require.NoError(t, err)
 
 	// Assertions
 	assert.NotNil(t, leaderNode)
@@ -1424,7 +1426,7 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 		mockBroadcastTrackerRepo := new(MockBroadcastTrackerRepo)
 		mockRevealOrderRepo := new(MockRevealOrderRepo)
 
-		leaderNode := NewLeaderNode(
+		leaderNode, err := NewLeaderNode(
 			mockFallbackClient,
 			mockRevealOrderService,
 			p2pClient,
@@ -1434,6 +1436,7 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 			mockRevealOrderRepo,
 			mockNodeInfoRepo,
 		)
+		require.NoError(t, err)
 
 		assert.Panics(t, func() {
 			_ = leaderNode.AddLeaderCommit(ctx, commitData)
@@ -1451,7 +1454,7 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 		mockBroadcastTrackerRepo := new(MockBroadcastTrackerRepo)
 		mockRevealOrderRepo := new(MockRevealOrderRepo)
 
-		leaderNode := NewLeaderNode(
+		leaderNode, err := NewLeaderNode(
 			mockFallbackClient,
 			mockRevealOrderService,
 			p2pClient,
@@ -1461,6 +1464,7 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 			mockRevealOrderRepo,
 			mockNodeInfoRepo,
 		)
+		require.NoError(t, err)
 
 		assert.Panics(t, func() {
 			_, _ = leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, "1", "0", "0x1234567890123456789012345678901234567890")
@@ -1479,7 +1483,7 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 		mockBroadcastTrackerRepo := new(MockBroadcastTrackerRepo)
 		mockRevealOrderRepo := new(MockRevealOrderRepo)
 
-		leaderNode := NewLeaderNode(
+		leaderNode, err := NewLeaderNode(
 			mockFallbackClient,
 			mockRevealOrderService,
 			p2pClient,
@@ -1489,6 +1493,7 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 			mockRevealOrderRepo,
 			mockNodeInfoRepo,
 		)
+		require.NoError(t, err)
 
 		// Attempt to update commit
 		assert.Panics(t, func() {
@@ -1515,7 +1520,7 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 		mockBroadcastTrackerRepo := new(MockBroadcastTrackerRepo)
 		mockRevealOrderRepo := new(MockRevealOrderRepo)
 
-		leaderNode := NewLeaderNode(
+		leaderNode, err := NewLeaderNode(
 			mockFallbackClient,
 			mockRevealOrderService,
 			p2pClient,
@@ -1525,8 +1530,9 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 			mockRevealOrderRepo,
 			mockNodeInfoRepo,
 		)
+		require.NoError(t, err)
 
-		err := leaderNode.AddLeaderCommit(ctx, commitData)
+		err = leaderNode.AddLeaderCommit(ctx, commitData)
 		assert.Error(t, err, "Expected error with invalid database connection")
 	})
 
@@ -1549,7 +1555,7 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 		mockBroadcastTrackerRepo := new(MockBroadcastTrackerRepo)
 		mockRevealOrderRepo := new(MockRevealOrderRepo)
 
-		leaderNode := NewLeaderNode(
+		leaderNode, err := NewLeaderNode(
 			mockFallbackClient,
 			mockRevealOrderService,
 			p2pClient,
@@ -1559,6 +1565,7 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 			mockRevealOrderRepo,
 			mockNodeInfoRepo,
 		)
+		require.NoError(t, err)
 
 		result, err := leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, "1", "0", "0x1234567890123456789012345678901234567890")
 		assert.Error(t, err, "Expected error with invalid database connection")
@@ -1584,7 +1591,7 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 		mockBroadcastTrackerRepo := new(MockBroadcastTrackerRepo)
 		mockRevealOrderRepo := new(MockRevealOrderRepo)
 
-		leaderNode := NewLeaderNode(
+		leaderNode, err := NewLeaderNode(
 			mockFallbackClient,
 			mockRevealOrderService,
 			p2pClient,
@@ -1594,26 +1601,18 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 			mockRevealOrderRepo,
 			mockNodeInfoRepo,
 		)
+		require.NoError(t, err)
 
-		err := leaderNode.UpdateLeaderCommit(ctx, commitData)
+		err = leaderNode.UpdateLeaderCommit(ctx, commitData)
 		assert.Error(t, err, "Expected error with invalid database connection")
 	})
 }
 func TestNewLeaderNodeHandler_DatabaseConnectionFailures(t *testing.T) {
-	t.Run("NewLeaderNodeHandler with nil database", func(t *testing.T) {
-		handler := NewLeaderNodeHandler(nil, nil)
+	t.Run("NewLeaderNodeHandler with nil fallbackEthClient", func(t *testing.T) {
+		handler, err := NewLeaderNodeHandler(nil, nil)
 
-		assert.NotNil(t, handler, "Handler should be created even with nil database")
-		assert.NotNil(t, handler.leaderNode, "LeaderNode should be created")
-		ctx := context.Background()
-		commitData := &utils.LeaderCommitData{
-			Round:      "1",
-			TrialNum:   "0",
-			EOAAddress: "0x1234567890123456789012345678901234567890",
-		}
-		assert.Panics(t, func() {
-			_ = handler.leaderNode.AddLeaderCommit(ctx, commitData)
-		}, "Expected panic when database is nil")
+		assert.Error(t, err, "Handler should return error with nil fallbackEthClient")
+		assert.Nil(t, handler, "Handler should be nil when error occurs")
 	})
 
 	t.Run("NewLeaderNodeHandler with invalid database connection", func(t *testing.T) {
@@ -1625,8 +1624,10 @@ func TestNewLeaderNodeHandler_DatabaseConnectionFailures(t *testing.T) {
 		})
 		defer invalidDB.Close()
 
-		handler := NewLeaderNodeHandler(nil, invalidDB)
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		handler, err := NewLeaderNodeHandler(mockFallbackClient, invalidDB)
 
+		require.NoError(t, err)
 		assert.NotNil(t, handler)
 		assert.NotNil(t, handler.leaderNode)
 
@@ -1637,7 +1638,7 @@ func TestNewLeaderNodeHandler_DatabaseConnectionFailures(t *testing.T) {
 			EOAAddress: "0x1234567890123456789012345678901234567890",
 		}
 
-		err := handler.leaderNode.AddLeaderCommit(ctx, commitData)
+		err = handler.leaderNode.AddLeaderCommit(ctx, commitData)
 		assert.Error(t, err, "Expected error with invalid database connection")
 	})
 }
@@ -1682,7 +1683,7 @@ func TestNewLeaderNode_RuntimeDatabaseDisconnection(t *testing.T) {
 		mockBroadcastTrackerRepo := new(MockBroadcastTrackerRepo)
 		mockRevealOrderRepo := new(MockRevealOrderRepo)
 
-		leaderNode := NewLeaderNode(
+		leaderNode, err := NewLeaderNode(
 			mockFallbackClient,
 			mockRevealOrderService,
 			p2pClient,
@@ -1692,8 +1693,9 @@ func TestNewLeaderNode_RuntimeDatabaseDisconnection(t *testing.T) {
 			mockRevealOrderRepo,
 			mockNodeInfoRepo,
 		)
+		require.NoError(t, err)
 
-		err := leaderNode.AddLeaderCommit(ctx, commitData)
+		err = leaderNode.AddLeaderCommit(ctx, commitData)
 		if err != nil {
 			testDB.Close()
 			t.Skip("Skipping test: Initial database operation failed:", err)
@@ -1730,7 +1732,7 @@ func TestNewLeaderNode_RuntimeDatabaseDisconnection(t *testing.T) {
 		mockBroadcastTrackerRepo := new(MockBroadcastTrackerRepo)
 		mockRevealOrderRepo := new(MockRevealOrderRepo)
 
-		leaderNode := NewLeaderNode(
+		leaderNode, err := NewLeaderNode(
 			mockFallbackClient,
 			mockRevealOrderService,
 			p2pClient,
@@ -1740,6 +1742,7 @@ func TestNewLeaderNode_RuntimeDatabaseDisconnection(t *testing.T) {
 			mockRevealOrderRepo,
 			mockNodeInfoRepo,
 		)
+		require.NoError(t, err)
 
 		testDB.Close()
 		result, err := leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, "1", "0", "0x1234567890123456789012345678901234567890")
@@ -1770,7 +1773,7 @@ func TestNewLeaderNode_RuntimeDatabaseDisconnection(t *testing.T) {
 		mockBroadcastTrackerRepo := new(MockBroadcastTrackerRepo)
 		mockRevealOrderRepo := new(MockRevealOrderRepo)
 
-		leaderNode := NewLeaderNode(
+		leaderNode, err := NewLeaderNode(
 			mockFallbackClient,
 			mockRevealOrderService,
 			p2pClient,
@@ -1780,8 +1783,9 @@ func TestNewLeaderNode_RuntimeDatabaseDisconnection(t *testing.T) {
 			mockRevealOrderRepo,
 			mockNodeInfoRepo,
 		)
+		require.NoError(t, err)
 		testDB.Close()
-		err := leaderNode.UpdateLeaderCommit(ctx, commitData)
+		err = leaderNode.UpdateLeaderCommit(ctx, commitData)
 		assert.Error(t, err, "Expected error when database is disconnected during update operation")
 	})
 }
@@ -1791,7 +1795,36 @@ func TestNewLeaderNode_BatchRepository_DatabaseConnectionFailures(t *testing.T) 
 
 	t.Run("DeleteOldRoundDataForLeaderNode with nil database", func(t *testing.T) {
 		batchRepo := database.NewBatchRepository(nil)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, batchRepo, nil, nil, nil)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		assert.NotNil(t, leaderNode)
+		assert.NotNil(t, leaderNode.batchRepository, "Repository should exist")
 
 		assert.Panics(t, func() {
 			_ = leaderNode.batchRepository.DeleteOldRoundDataForLeaderNode(ctx, "1")
@@ -1808,15 +1841,67 @@ func TestNewLeaderNode_BatchRepository_DatabaseConnectionFailures(t *testing.T) 
 		defer invalidDB.Close()
 
 		batchRepo := database.NewBatchRepository(invalidDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, batchRepo, nil, nil, nil)
 
-		err := leaderNode.batchRepository.DeleteOldRoundDataForLeaderNode(ctx, "1")
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		err = leaderNode.batchRepository.DeleteOldRoundDataForLeaderNode(ctx, "1")
 		assert.Error(t, err, "Expected error with invalid database connection")
 	})
 
 	t.Run("DeleteRoundTrialDataForLeaderNode with nil database", func(t *testing.T) {
 		batchRepo := database.NewBatchRepository(nil)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, batchRepo, nil, nil, nil)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		assert.Panics(t, func() {
 			_ = leaderNode.batchRepository.DeleteRoundTrialDataForLeaderNode(ctx, "1", "0")
@@ -1833,40 +1918,70 @@ func TestNewLeaderNode_BatchRepository_DatabaseConnectionFailures(t *testing.T) 
 		defer invalidDB.Close()
 
 		batchRepo := database.NewBatchRepository(invalidDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, batchRepo, nil, nil, nil)
 
-		err := leaderNode.batchRepository.DeleteRoundTrialDataForLeaderNode(ctx, "1", "0")
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		err = leaderNode.batchRepository.DeleteRoundTrialDataForLeaderNode(ctx, "1", "0")
 		assert.Error(t, err, "Expected error with invalid database connection")
 	})
 
 	t.Run("DeleteOldRoundDataForLeaderNode with database disconnect during operation", func(t *testing.T) {
-		const (
-			postgresHost     = "localhost"
-			postgresUser     = "postgres"
-			postgresPassword = "123"
-			postgresDB       = "testdb"
-			postgresPort     = "5433"
-		)
-
-		testDB := pg.Connect(&pg.Options{
-			Addr:     postgresHost + ":" + postgresPort,
-			User:     postgresUser,
-			Password: postgresPassword,
-			Database: postgresDB,
-		})
-
-		if err := testDB.Ping(ctx); err != nil {
-			testDB.Close()
-			t.Skip("Skipping test: PostgreSQL database not available:", err)
+		testDB := getTestDB(t)
+		if testDB == nil {
 			return
 		}
+		defer testDB.Close()
 
 		batchRepo := database.NewBatchRepository(testDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, batchRepo, nil, nil, nil)
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		testDB.Close()
 
-		err := leaderNode.batchRepository.DeleteOldRoundDataForLeaderNode(ctx, "1")
+		err = leaderNode.batchRepository.DeleteOldRoundDataForLeaderNode(ctx, "1")
 		assert.Error(t, err, "Expected error when database is disconnected during operation")
 	})
 }
@@ -1889,7 +2004,36 @@ func TestNewLeaderNode_BroadcastTrackerRepository_DatabaseConnectionFailures(t *
 
 	t.Run("AddBroadcastTracker with nil database", func(t *testing.T) {
 		broadcastRepo := database.NewBroadcastTrackerRepository(nil)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, broadcastRepo, nil, nil)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		assert.NotNil(t, leaderNode)
+		assert.NotNil(t, leaderNode.broadcastTrackerRepository, "Repository should exist")
 
 		assert.Panics(t, func() {
 			_ = leaderNode.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker)
@@ -1906,15 +2050,67 @@ func TestNewLeaderNode_BroadcastTrackerRepository_DatabaseConnectionFailures(t *
 		defer invalidDB.Close()
 
 		broadcastRepo := database.NewBroadcastTrackerRepository(invalidDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, broadcastRepo, nil, nil)
 
-		err := leaderNode.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker)
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		err = leaderNode.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker)
 		assert.Error(t, err, "Expected error with invalid database connection")
 	})
 
 	t.Run("UpdateBroadcastTracker with nil database", func(t *testing.T) {
 		broadcastRepo := database.NewBroadcastTrackerRepository(nil)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, broadcastRepo, nil, nil)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		assert.Panics(t, func() {
 			_ = leaderNode.broadcastTrackerRepository.UpdateBroadcastTracker(ctx, tracker)
@@ -1931,40 +2127,70 @@ func TestNewLeaderNode_BroadcastTrackerRepository_DatabaseConnectionFailures(t *
 		defer invalidDB.Close()
 
 		broadcastRepo := database.NewBroadcastTrackerRepository(invalidDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, broadcastRepo, nil, nil)
 
-		err := leaderNode.broadcastTrackerRepository.UpdateBroadcastTracker(ctx, tracker)
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		err = leaderNode.broadcastTrackerRepository.UpdateBroadcastTracker(ctx, tracker)
 		assert.Error(t, err, "Expected error with invalid database connection")
 	})
 
 	t.Run("AddBroadcastTracker with database disconnect during operation", func(t *testing.T) {
-		const (
-			postgresHost     = "localhost"
-			postgresUser     = "postgres"
-			postgresPassword = "123"
-			postgresDB       = "testdb"
-			postgresPort     = "5433"
-		)
-
-		testDB := pg.Connect(&pg.Options{
-			Addr:     postgresHost + ":" + postgresPort,
-			User:     postgresUser,
-			Password: postgresPassword,
-			Database: postgresDB,
-		})
-
-		if err := testDB.Ping(ctx); err != nil {
-			testDB.Close()
-			t.Skip("Skipping test: PostgreSQL database not available:", err)
+		testDB := getTestDB(t)
+		if testDB == nil {
 			return
 		}
+		defer testDB.Close()
 
 		broadcastRepo := database.NewBroadcastTrackerRepository(testDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, broadcastRepo, nil, nil)
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		testDB.Close()
 
-		err := leaderNode.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker)
+		err = leaderNode.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker)
 		assert.Error(t, err, "Expected error when database is disconnected during operation")
 	})
 }
@@ -1980,7 +2206,36 @@ func TestNewLeaderNode_NodeInfoRepository_DatabaseConnectionFailures(t *testing.
 
 	t.Run("AddAndUpdateNodeInfo with nil database", func(t *testing.T) {
 		nodeInfoRepo := database.NewNodeInfoRepository(nil)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, nil, nodeInfoRepo)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		assert.NotNil(t, leaderNode)
+		assert.NotNil(t, leaderNode.nodeInfoRepository, "Repository should exist")
 
 		assert.Panics(t, func() {
 			_ = leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo)
@@ -1997,15 +2252,67 @@ func TestNewLeaderNode_NodeInfoRepository_DatabaseConnectionFailures(t *testing.
 		defer invalidDB.Close()
 
 		nodeInfoRepo := database.NewNodeInfoRepository(invalidDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, nil, nodeInfoRepo)
 
-		err := leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo)
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		err = leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo)
 		assert.Error(t, err, "Expected error with invalid database connection")
 	})
 
 	t.Run("GetNodeInfos with nil database", func(t *testing.T) {
 		nodeInfoRepo := database.NewNodeInfoRepository(nil)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, nil, nodeInfoRepo)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		assert.Panics(t, func() {
 			_, _ = leaderNode.nodeInfoRepository.GetNodeInfos(ctx)
@@ -2022,7 +2329,33 @@ func TestNewLeaderNode_NodeInfoRepository_DatabaseConnectionFailures(t *testing.
 		defer invalidDB.Close()
 
 		nodeInfoRepo := database.NewNodeInfoRepository(invalidDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, nil, nodeInfoRepo)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		result, err := leaderNode.nodeInfoRepository.GetNodeInfos(ctx)
 		assert.Error(t, err, "Expected error with invalid database connection")
@@ -2031,7 +2364,33 @@ func TestNewLeaderNode_NodeInfoRepository_DatabaseConnectionFailures(t *testing.
 
 	t.Run("DeleteNodeInfoByEOA with nil database", func(t *testing.T) {
 		nodeInfoRepo := database.NewNodeInfoRepository(nil)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, nil, nodeInfoRepo)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		assert.Panics(t, func() {
 			_ = leaderNode.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, "0x1234567890123456789012345678901234567890")
@@ -2048,36 +2407,66 @@ func TestNewLeaderNode_NodeInfoRepository_DatabaseConnectionFailures(t *testing.
 		defer invalidDB.Close()
 
 		nodeInfoRepo := database.NewNodeInfoRepository(invalidDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, nil, nodeInfoRepo)
 
-		err := leaderNode.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, "0x1234567890123456789012345678901234567890")
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		err = leaderNode.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, "0x1234567890123456789012345678901234567890")
 		assert.Error(t, err, "Expected error with invalid database connection")
 	})
 
 	t.Run("GetNodeInfos with database disconnect during operation", func(t *testing.T) {
-		const (
-			postgresHost     = "localhost"
-			postgresUser     = "postgres"
-			postgresPassword = "123"
-			postgresDB       = "testdb"
-			postgresPort     = "5433"
-		)
-
-		testDB := pg.Connect(&pg.Options{
-			Addr:     postgresHost + ":" + postgresPort,
-			User:     postgresUser,
-			Password: postgresPassword,
-			Database: postgresDB,
-		})
-
-		if err := testDB.Ping(ctx); err != nil {
-			testDB.Close()
-			t.Skip("Skipping test: PostgreSQL database not available:", err)
+		testDB := getTestDB(t)
+		if testDB == nil {
 			return
 		}
+		defer testDB.Close()
 
 		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, nil, nodeInfoRepo)
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		testDB.Close()
 
@@ -2098,7 +2487,36 @@ func TestNewLeaderNode_RevealOrderRepository_DatabaseConnectionFailures(t *testi
 
 	t.Run("GetRevealOrder with nil database", func(t *testing.T) {
 		revealOrderRepo := database.NewRevealOrderRepository(nil)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, revealOrderRepo, nil)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		assert.NotNil(t, leaderNode)
+		assert.NotNil(t, leaderNode.reavealOrderRepository, "Repository should exist")
 
 		assert.Panics(t, func() {
 			_, _ = leaderNode.reavealOrderRepository.GetRevealOrder(ctx, "1", "0")
@@ -2115,7 +2533,33 @@ func TestNewLeaderNode_RevealOrderRepository_DatabaseConnectionFailures(t *testi
 		defer invalidDB.Close()
 
 		revealOrderRepo := database.NewRevealOrderRepository(invalidDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, revealOrderRepo, nil)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		result, err := leaderNode.reavealOrderRepository.GetRevealOrder(ctx, "1", "0")
 		assert.Error(t, err, "Expected error with invalid database connection")
@@ -2124,7 +2568,33 @@ func TestNewLeaderNode_RevealOrderRepository_DatabaseConnectionFailures(t *testi
 
 	t.Run("AddRevealOrder with nil database", func(t *testing.T) {
 		revealOrderRepo := database.NewRevealOrderRepository(nil)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, revealOrderRepo, nil)
+
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		assert.Panics(t, func() {
 			_ = leaderNode.reavealOrderRepository.AddRevealOrder(ctx, revealOrder)
@@ -2141,36 +2611,66 @@ func TestNewLeaderNode_RevealOrderRepository_DatabaseConnectionFailures(t *testi
 		defer invalidDB.Close()
 
 		revealOrderRepo := database.NewRevealOrderRepository(invalidDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, revealOrderRepo, nil)
 
-		err := leaderNode.reavealOrderRepository.AddRevealOrder(ctx, revealOrder)
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
+
+		err = leaderNode.reavealOrderRepository.AddRevealOrder(ctx, revealOrder)
 		assert.Error(t, err, "Expected error with invalid database connection")
 	})
 
 	t.Run("GetRevealOrder with database disconnect during operation", func(t *testing.T) {
-		const (
-			postgresHost     = "localhost"
-			postgresUser     = "postgres"
-			postgresPassword = "123"
-			postgresDB       = "testdb"
-			postgresPort     = "5433"
-		)
-
-		testDB := pg.Connect(&pg.Options{
-			Addr:     postgresHost + ":" + postgresPort,
-			User:     postgresUser,
-			Password: postgresPassword,
-			Database: postgresDB,
-		})
-
-		if err := testDB.Ping(ctx); err != nil {
-			testDB.Close()
-			t.Skip("Skipping test: PostgreSQL database not available:", err)
+		testDB := getTestDB(t)
+		if testDB == nil {
 			return
 		}
+		defer testDB.Close()
 
 		revealOrderRepo := database.NewRevealOrderRepository(testDB)
-		leaderNode := NewLeaderNode(nil, nil, nil, nil, nil, nil, revealOrderRepo, nil)
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		leaderNode, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+		require.NoError(t, err)
 
 		testDB.Close()
 
@@ -2179,47 +2679,188 @@ func TestNewLeaderNode_RevealOrderRepository_DatabaseConnectionFailures(t *testi
 		assert.Nil(t, result)
 	})
 }
-func TestNewLeaderNode_ConstructorNilValidation(t *testing.T) {
-	t.Run("NewLeaderNode with nil repositories", func(t *testing.T) {
-		leaderNode := NewLeaderNode(
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-			nil,
-		)
-		assert.NotNil(t, leaderNode, "LeaderNode should be created even with nil repositories")
-		assert.Nil(t, leaderNode.leaderCommitRepository, "Repository should be nil")
-		assert.Nil(t, leaderNode.batchRepository, "BatchRepository should be nil")
-		assert.Nil(t, leaderNode.broadcastTrackerRepository, "BroadcastTrackerRepository should be nil")
-		assert.Nil(t, leaderNode.reavealOrderRepository, "RevealOrderRepository should be nil")
-		assert.Nil(t, leaderNode.nodeInfoRepository, "NodeInfoRepository should be nil")
+
+func getTestDB(t *testing.T) *pg.DB {
+	testDB := pg.Connect(&pg.Options{
+		Addr:     "localhost:5433",
+		User:     "postgres",
+		Password: "123",
+		Database: "testdb",
 	})
 
-	t.Run("NewLeaderNode with partial nil repositories", func(t *testing.T) {
-		mockLeaderCommitRepo := new(MockLeaderCommitRepo)
-		mockBatchRepo := &database.BatchRepository{}
+	if err := testDB.Ping(context.Background()); err != nil {
+		testDB.Close()
+		t.Skip("Skipping test: PostgreSQL database not available:", err)
+		return nil
+	}
+	return testDB
+}
 
-		leaderNode := NewLeaderNode(
+func createLeaderNodeWithValidDeps(t *testing.T, testDB *pg.DB, fallbackClient *fallback_ethclient.FallbackRPCClient) (*LeaderNode, error) {
+	leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+	batchRepo := database.NewBatchRepository(testDB)
+	broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+	revealOrderRepo := database.NewRevealOrderRepository(testDB)
+	nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+	peerCommitRepo := database.NewPeerCommitRepository(testDB)
+	revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+	p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+	return NewLeaderNode(
+		fallbackClient,
+		revealOrderService,
+		p2pClient,
+		leaderCommitRepo,
+		batchRepo,
+		broadcastTrackerRepo,
+		revealOrderRepo,
+		nodeInfoRepo,
+	)
+}
+
+func TestNewLeaderNode_ConstructorNilValidation(t *testing.T) {
+	t.Run("NewLeaderNode rejects nil fallbackEthClient", func(t *testing.T) {
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		_, err := NewLeaderNode(
+			nil,
+			revealOrderService,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+
+		assert.Error(t, err, "Expected error when fallbackEthClient is nil")
+		assert.Contains(t, err.Error(), "fallbackEthClient cannot be nil")
+	})
+
+	t.Run("NewLeaderNode rejects nil revealOrderService", func(t *testing.T) {
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		_, err := NewLeaderNode(
+			mockFallbackClient,
+			nil,
+			p2pClient,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+
+		assert.Error(t, err, "Expected error when revealOrderService is nil")
+		assert.Contains(t, err.Error(), "revealOrderService cannot be nil")
+	})
+
+	t.Run("NewLeaderNode rejects nil p2pClient", func(t *testing.T) {
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		batchRepo := database.NewBatchRepository(testDB)
+		broadcastTrackerRepo := database.NewBroadcastTrackerRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+
+		_, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			nil,
+			leaderCommitRepo,
+			batchRepo,
+			broadcastTrackerRepo,
+			revealOrderRepo,
+			nodeInfoRepo,
+		)
+
+		assert.Error(t, err, "Expected error when p2pClient is nil")
+		assert.Contains(t, err.Error(), "p2pClient cannot be nil")
+	})
+
+	t.Run("NewLeaderNode rejects nil repositories", func(t *testing.T) {
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		nodeInfoRepo := database.NewNodeInfoRepository(testDB)
+		leaderCommitRepo := database.NewLeaderCommitRepository(testDB)
+		revealOrderRepo := database.NewRevealOrderRepository(testDB)
+		peerCommitRepo := database.NewPeerCommitRepository(testDB)
+		revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepo, peerCommitRepo, leaderCommitRepo)
+		p2pClient := libp2putils.NewP2PClient(nodeInfoRepo)
+
+		_, err := NewLeaderNode(
+			mockFallbackClient,
+			revealOrderService,
+			p2pClient,
 			nil,
 			nil,
-			nil,
-			mockLeaderCommitRepo,
-			mockBatchRepo,
 			nil,
 			nil,
 			nil,
 		)
 
-		assert.NotNil(t, leaderNode)
-		assert.NotNil(t, leaderNode.leaderCommitRepository)
-		assert.NotNil(t, leaderNode.batchRepository)
-		assert.Nil(t, leaderNode.broadcastTrackerRepository)
-		assert.Nil(t, leaderNode.reavealOrderRepository)
-		assert.Nil(t, leaderNode.nodeInfoRepository)
+		assert.Error(t, err, "Expected error when repositories are nil")
+		assert.Contains(t, err.Error(), "cannot be nil")
+	})
+
+	t.Run("NewLeaderNode accepts all valid dependencies", func(t *testing.T) {
+		testDB := getTestDB(t)
+		if testDB == nil {
+			return
+		}
+		defer testDB.Close()
+
+		mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+		node, err := createLeaderNodeWithValidDeps(t, testDB, mockFallbackClient)
+
+		require.NoError(t, err)
+		assert.NotNil(t, node)
+		assert.NotNil(t, node.leaderCommitRepository)
+		assert.NotNil(t, node.nodeInfoRepository)
+		assert.NotNil(t, node.p2pClient)
+		assert.NotNil(t, node.fallbackEthClient)
+		assert.NotNil(t, node.revealOrderService)
+		assert.NotNil(t, node.batchRepository)
+		assert.NotNil(t, node.broadcastTrackerRepository)
+		assert.NotNil(t, node.reavealOrderRepository)
 	})
 }
 

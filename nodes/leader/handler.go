@@ -48,7 +48,7 @@ type LeaderNodeHandler struct {
 	ethService          eth.IEthService // Injected eth service for testability
 }
 
-func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient, db *pg.DB) *LeaderNodeHandler {
+func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient, db *pg.DB) (*LeaderNodeHandler, error) {
 	leaderCommitRepository := database.NewLeaderCommitRepository(db)
 	batchRepository := database.NewBatchRepository(db)
 	broadcastTrackerRepository := database.NewBroadcastTrackerRepository(db)
@@ -61,7 +61,7 @@ func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		leaderCommitRepository,
 	)
 	p2pClient := libp2putils.NewP2PClient(nodeInfoRepository)
-	leaderNode := NewLeaderNode(
+	leaderNode, err := NewLeaderNode(
 		fallbackEthClient,
 		revealOrderService,
 		p2pClient,
@@ -71,6 +71,9 @@ func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		reavealOrderRepository,
 		nodeInfoRepository,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	return &LeaderNodeHandler{
 		fallbackEthClient:   fallbackEthClient,
@@ -78,7 +81,7 @@ func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		merkleRootSubmitted: 0,
 		commitMu:            sync.Mutex{},
 		ethService:          eth.Service, // Use default eth service
-	}
+	}, nil
 }
 
 func (lh *LeaderNodeHandler) Run(ctx context.Context) {

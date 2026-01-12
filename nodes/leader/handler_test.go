@@ -116,7 +116,10 @@ func (suite *LeaderHandlerTestSuite) SetupTest() {
 	)
 	suite.p2pClient = libp2putils.NewP2PClient(suite.nodeInfoRepo)
 
-	suite.leaderNodeHandler = NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	var err error
+	suite.leaderNodeHandler, err = NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 }
 
 // TearDownSuite runs once after all tests in the suite
@@ -223,7 +226,9 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_AtomicOperations() {
 }
 
 func (suite *LeaderHandlerTestSuite) TestLeaderHandler_Initialization() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 
 	require.NotNil(suite.T(), handler)
 	assert.NotNil(suite.T(), handler.leaderNode)
@@ -231,7 +236,9 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_Initialization() {
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RepositoryInitialization() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 
 	require.NotNil(suite.T(), handler)
 	require.NotNil(suite.T(), handler.leaderNode)
@@ -248,7 +255,9 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RepositoryInitiali
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BatchRepositoryIntegration() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	ctx := context.Background()
 
 	testRound := "batch_test_round_1"
@@ -263,7 +272,7 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BatchRepositoryInt
 		CvsHex:     hex.EncodeToString(cvs[:]),
 	}
 
-	err := handler.leaderNode.AddLeaderCommit(ctx, commitData)
+	err = handler.leaderNode.AddLeaderCommit(ctx, commitData)
 	require.NoError(suite.T(), err, "Should be able to add commit data")
 	retrieved, err := handler.leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, testRound, testTrial, testOp.Hex())
 	require.NoError(suite.T(), err)
@@ -276,7 +285,9 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BatchRepositoryInt
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BatchRepositoryDeleteOldRounds() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	ctx := context.Background()
 
 	oldRound := "old_round_1"
@@ -291,7 +302,7 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BatchRepositoryDel
 		Cvs:        cvs,
 		CvsHex:     hex.EncodeToString(cvs[:]),
 	}
-	err := handler.leaderNode.AddLeaderCommit(ctx, oldCommitData)
+	err = handler.leaderNode.AddLeaderCommit(ctx, oldCommitData)
 	require.NoError(suite.T(), err)
 	currentCommitData := &utils.LeaderCommitData{
 		Round:      currentRound,
@@ -313,7 +324,9 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BatchRepositoryDel
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BroadcastTrackerRepositoryIntegration() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	ctx := context.Background()
 
 	testRound := "broadcast_test_round_1"
@@ -335,7 +348,7 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BroadcastTrackerRe
 		Timeout:      30,
 	}
 
-	err := handler.leaderNode.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker)
+	err = handler.leaderNode.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker)
 	require.NoError(suite.T(), err, "AddBroadcastTracker should succeed")
 
 	tracker.Attempts = 1
@@ -350,7 +363,9 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_BroadcastTrackerRe
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RevealOrderRepositoryIntegration() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	ctx := context.Background()
 
 	testRound := "reveal_test_round_1"
@@ -364,7 +379,7 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RevealOrderReposit
 		RV:           "test_rv_value",
 	}
 
-	err := handler.leaderNode.reavealOrderRepository.AddRevealOrder(ctx, revealOrder)
+	err = handler.leaderNode.reavealOrderRepository.AddRevealOrder(ctx, revealOrder)
 	require.NoError(suite.T(), err, "AddRevealOrder should succeed")
 
 	retrieved, err := handler.leaderNode.reavealOrderRepository.GetRevealOrder(ctx, testRound, testTrial)
@@ -381,7 +396,9 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RevealOrderReposit
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_NodeInfoRepositoryIntegration() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	ctx := context.Background()
 
 	testEOA := "0xD111111111111111111111111111111111111111"
@@ -396,7 +413,7 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_NodeInfoRepository
 		PeerID:     testPeerID,
 	}
 
-	err := handler.leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo)
+	err = handler.leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo)
 	require.NoError(suite.T(), err, "AddAndUpdateNodeInfo should succeed")
 
 	nodes, err := handler.leaderNode.nodeInfoRepository.GetNodeInfos(ctx)
@@ -426,7 +443,9 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_NodeInfoRepository
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_PeerCommitRepositoryIntegration() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	require.NotNil(suite.T(), handler)
 	require.NotNil(suite.T(), handler.leaderNode)
 	require.NotNil(suite.T(), handler.leaderNode.revealOrderService, "RevealOrderService uses PeerCommitRepository")
@@ -449,7 +468,7 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_PeerCommitReposito
 		Cos:         cos[:],
 		SecretValue: secretValue[:],
 	}
-	err := suite.peerCommitRepo.AddPeerCommitData(ctx, peerCommit)
+	err = suite.peerCommitRepo.AddPeerCommitData(ctx, peerCommit)
 	require.NoError(suite.T(), err, "AddPeerCommitData should succeed")
 
 	retrieved, err := suite.peerCommitRepo.GetPeerCommitData(ctx, testRound, testTrial, testEOA)
@@ -475,7 +494,9 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_PeerCommitReposito
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RevealOrderServiceIntegration() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	ctx := context.Background()
 
 	assert.NotNil(suite.T(), handler.leaderNode.revealOrderService, "RevealOrderService should be initialized")
@@ -496,7 +517,7 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RevealOrderService
 		Cos:        cos1,
 		CosHex:     hex.EncodeToString(cos1[:]),
 	}
-	err := handler.leaderNode.AddLeaderCommit(ctx, commitData1)
+	err = handler.leaderNode.AddLeaderCommit(ctx, commitData1)
 	require.NoError(suite.T(), err)
 
 	cvs2 := [32]byte{4, 5, 6}
@@ -539,7 +560,9 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_RevealOrderService
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_P2PClientIntegration() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	ctx := context.Background()
 
 	assert.NotNil(suite.T(), handler.leaderNode.p2pClient, "P2PClient should be initialized")
@@ -556,7 +579,7 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_P2PClientIntegrati
 		Port:       "4001",
 		PeerID:     testPeerID1,
 	}
-	err := handler.leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo1)
+	err = handler.leaderNode.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, nodeInfo1)
 	require.NoError(suite.T(), err)
 
 	nodeInfo2 := &utils.NodeInfo{
@@ -602,7 +625,9 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_P2PClientIntegrati
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_EndToEndIntegration() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	ctx := context.Background()
 
 	testRound := "e2e_test_round_1"
@@ -618,7 +643,7 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_EndToEndIntegratio
 		Cvs:        cvs,
 		CvsHex:     hex.EncodeToString(cvs[:]),
 	}
-	err := handler.leaderNode.AddLeaderCommit(ctx, commitData)
+	err = handler.leaderNode.AddLeaderCommit(ctx, commitData)
 	require.NoError(suite.T(), err, "Step 1: AddLeaderCommit should succeed")
 
 	tracker := &utils.BroadcastTracker{
@@ -695,10 +720,12 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_EndToEndIntegratio
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_DatabaseConnectionValidation() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	ctx := context.Background()
 
-	err := suite.db.Ping(ctx)
+	err = suite.db.Ping(ctx)
 	require.NoError(suite.T(), err, "Database connection should be valid")
 
 	testRound := "conn_test_round_1"
@@ -727,7 +754,9 @@ func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_DatabaseConnection
 }
 
 func (suite *LeaderHandlerTestSuite) TestNewLeaderNodeHandler_ConcurrentDatabaseOperations() {
-	handler := NewLeaderNodeHandler(nil, suite.db)
+	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
+	handler, err := NewLeaderNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 	ctx := context.Background()
 
 	testRound := "concurrent_test_round_1"
@@ -2564,6 +2593,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_FullF
 	suite.leaderNodeHandler.SetMerkleRootSubmitted(false)
 	suite.leaderNodeHandler.leaderNode.SetCurrentRound(testRound)
 	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
+	suite.leaderNodeHandler.leaderNode.SetCurrentRound(testRound)
+	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	os.Setenv("CHAIN_ID", "1")
@@ -2704,6 +2735,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_AllCo
 	suite.leaderNodeHandler.ethService = mockEth
 	suite.leaderNodeHandler.leaderNode.SetHalted(false)
 	suite.leaderNodeHandler.SetMerkleRootSubmitted(false)
+	suite.leaderNodeHandler.leaderNode.SetCurrentRound(testRound)
+	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
 	suite.leaderNodeHandler.leaderNode.SetCurrentRound(testRound)
 	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
 
