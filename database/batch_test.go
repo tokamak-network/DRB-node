@@ -1627,39 +1627,48 @@ func TestBatchRepository_DeleteOldRoundDataForRegularNode_LargeBatch(t *testing.
 
 // Test batch deletion with context timeout - simulates failure due to timeout
 func TestBatchRepository_DeleteRoundTrialDataForLeaderNode_ContextTimeout(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond) // Very short timeout
+	// Start a transaction and lock a table to ensure the delete operation will block.
+	tx, err := GetDB().Begin()
+	assert.NoError(t, err)
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`LOCK TABLE leader_commit_schemes IN ACCESS EXCLUSIVE MODE`)
+	assert.NoError(t, err)
+
+	// Use a context with a short timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
 	batchRepo := NewBatchRepository(GetDB())
 
-	// Wait a bit to ensure context is already expired
-	time.Sleep(10 * time.Millisecond)
-
-	// Try to delete - should fail due to timeout
-	err := batchRepo.DeleteRoundTrialDataForLeaderNode(ctx, "test_round", "test_trial")
-	// May or may not error depending on how fast the operation is
-	// But if it errors, it should be a context error
-	if err != nil {
-		assert.Contains(t, err.Error(), "context", "Error should be related to context timeout")
-	}
+	// This call should now block on the locked table and time out.
+	err = batchRepo.DeleteRoundTrialDataForLeaderNode(ctx, "test_round", "test_trial")
+	assert.Error(t, err, "Expected an error due to context timeout")
+	// The underlying driver might return a different error message, but it should be related to the context.
+	assert.Contains(t, err.Error(), "i/o timeout", "Error should be related to i/o timeout")
 }
 
 // Test batch deletion with context timeout for regular node
 func TestBatchRepository_DeleteRoundTrialDataForRegularNode_ContextTimeout(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond) // Very short timeout
+	// Start a transaction and lock a table to ensure the delete operation will block.
+	tx, err := GetDB().Begin()
+	assert.NoError(t, err)
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`LOCK TABLE commit_data_schemes IN ACCESS EXCLUSIVE MODE`)
+	assert.NoError(t, err)
+
+	// Use a context with a short timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
 	batchRepo := NewBatchRepository(GetDB())
 
-	// Wait a bit to ensure context is already expired
-	time.Sleep(10 * time.Millisecond)
-
-	// Try to delete - should fail due to timeout
-	err := batchRepo.DeleteRoundTrialDataForRegularNode(ctx, "test_round", "test_trial")
-	// May or may not error depending on how fast the operation is
-	if err != nil {
-		assert.Contains(t, err.Error(), "context", "Error should be related to context timeout")
-	}
+	// This call should now block on the locked table and time out.
+	err = batchRepo.DeleteRoundTrialDataForRegularNode(ctx, "test_round", "test_trial")
+	assert.Error(t, err, "Expected an error due to context timeout")
+	// The underlying driver might return a different error message, but it should be related to the context.
+	assert.Contains(t, err.Error(), "i/o timeout", "Error should be related to i/o timeout")
 }
 
 // Test partial failure in batch deletion - when one table fails mid-operation
