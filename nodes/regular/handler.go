@@ -38,7 +38,7 @@ type RegularNodeHandler struct {
 	regularNode       *RegularNode
 }
 
-func NewRegularNodeHandler(fallbackEthClient fallback_ethclient.IFallbackEthClient, db *pg.DB) *RegularNodeHandler {
+func NewRegularNodeHandler(fallbackEthClient fallback_ethclient.IFallbackEthClient, db *pg.DB) (*RegularNodeHandler, error) {
 	peerCommitDataRepository := database.NewPeerCommitRepository(db)
 	revealOrderRepository := database.NewRevealOrderRepository(db)
 	regularCommitRepository := database.NewRegularCommitRepository(db)
@@ -47,7 +47,7 @@ func NewRegularNodeHandler(fallbackEthClient fallback_ethclient.IFallbackEthClie
 	leaderCommitRepository := database.NewLeaderCommitRepository(db)
 	revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepository, peerCommitDataRepository, leaderCommitRepository)
 	p2pClient := libp2putils.NewP2PClient(nodeInfoRepository)
-	regularNode := NewRegularNode(
+	regularNode, err := NewRegularNode(
 		fallbackEthClient,
 		revealOrderService,
 		p2pClient,
@@ -57,10 +57,13 @@ func NewRegularNodeHandler(fallbackEthClient fallback_ethclient.IFallbackEthClie
 		batchRepository,
 		nodeInfoRepository,
 	)
+	if err != nil {
+		return nil, err
+	}
 	return &RegularNodeHandler{
 		fallbackEthClient: fallbackEthClient,
 		regularNode:       regularNode,
-	}
+	}, nil
 }
 
 // RunRegularNode handles the behavior for a regular node

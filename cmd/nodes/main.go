@@ -55,7 +55,10 @@ func main() {
 
 	case "regular":
 		db := database.GetDB()
-		regularNodeHandler := regular_node.NewRegularNodeHandler(fallbackEthClient, db)
+		regularNodeHandler, err := regular_node.NewRegularNodeHandler(fallbackEthClient, db)
+		if err != nil {
+			log.Fatalf("Error creating regular node handler: %v", err)
+		}
 
 		wg.Add(1)
 		go func() {
