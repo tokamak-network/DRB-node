@@ -272,7 +272,7 @@ func TestConcurrentDatabaseTransactionDeadlocks(t *testing.T) {
 									}
 									atomic.AddInt64(&transactionDeadlocks, 1)
 									txSuccess = false
-									break
+									goto cleanup
 								}
 							}
 						}
