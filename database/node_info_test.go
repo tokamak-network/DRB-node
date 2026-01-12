@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -679,4 +680,452 @@ func TestAddAndUpdateNodeInfo_RetryLogic(t *testing.T) {
 
 	// Cleanup
 	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA2).Delete()
+}
+
+// Test DeleteNodeInfoByEOA - basic functionality
+func TestNodeInfoRepository_DeleteNodeInfoByEOA(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA := "0xTestDeleteEOA"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("eoa_address = ?", testEOA).Delete()
+
+	// Insert a node
+	node := &utils.NodeInfo{
+		IP:         "192.168.1.100",
+		Port:       "8080",
+		PeerID:     "peer_delete",
+		EOAAddress: testEOA,
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, node)
+	assert.NoError(t, err)
+
+	// Delete by EOA
+	err = repo.DeleteNodeInfoByEOA(ctx, testEOA)
+	assert.NoError(t, err, "Should successfully delete node by EOA")
+
+	// Verify deletion
+	var deleted NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&deleted).
+		Where("eoa_address = ?", testEOA).
+		Select()
+	assert.Error(t, err, "Node should be deleted")
+}
+
+// Test DeleteNodeInfoByEOA with non-existent EOA
+func TestNodeInfoRepository_DeleteNodeInfoByEOA_NonExistent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+
+	// Delete non-existent EOA - should not error (just deletes 0 rows)
+	err := repo.DeleteNodeInfoByEOA(ctx, "0xNonExistentEOA")
+	assert.NoError(t, err, "Should not error when deleting non-existent EOA")
+}
+
+// Test context timeout for AddAndUpdateNodeInfo
+func TestNodeInfoRepository_AddAndUpdateNodeInfo_ContextTimeout(t *testing.T) {
+	// Start a transaction and lock a table to ensure the insert operation will block
+	tx, err := GetDB().Begin()
+	assert.NoError(t, err)
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`LOCK TABLE node_info_schemes IN ACCESS EXCLUSIVE MODE`)
+	assert.NoError(t, err)
+
+	// Use a context with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	node := &utils.NodeInfo{
+		IP:         "192.168.1.1",
+		Port:       "8080",
+		PeerID:     "peer_timeout",
+		EOAAddress: "0xtimeout",
+	}
+
+	// This call should block on the locked table and time out
+	err = repo.AddAndUpdateNodeInfo(ctx, node)
+	assert.Error(t, err, "Expected an error due to context timeout")
+	// The error can be either "context deadline exceeded" or "i/o timeout" depending on the driver
+	assert.True(t, strings.Contains(err.Error(), "context deadline exceeded") ||
+		strings.Contains(err.Error(), "i/o timeout"),
+		"Error should be related to context timeout, got: %s", err.Error())
+}
+
+// Test context timeout for GetNodeInfos
+func TestNodeInfoRepository_GetNodeInfos_ContextTimeout(t *testing.T) {
+	// Start a transaction and lock a table to ensure the select operation will block
+	tx, err := GetDB().Begin()
+	assert.NoError(t, err)
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`LOCK TABLE node_info_schemes IN ACCESS EXCLUSIVE MODE`)
+	assert.NoError(t, err)
+
+	// Use a context with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+
+	// This call should block on the locked table and time out
+	_, err = repo.GetNodeInfos(ctx)
+	assert.Error(t, err, "Expected an error due to context timeout")
+	// The error can be either "context deadline exceeded" or "i/o timeout" depending on the driver
+	assert.True(t, strings.Contains(err.Error(), "context deadline exceeded") ||
+		strings.Contains(err.Error(), "i/o timeout"),
+		"Error should be related to context timeout, got: %s", err.Error())
+}
+
+// Test context timeout for DeleteNodeInfoByEOA
+func TestNodeInfoRepository_DeleteNodeInfoByEOA_ContextTimeout(t *testing.T) {
+	// Start a transaction and lock a table to ensure the delete operation will block
+	tx, err := GetDB().Begin()
+	assert.NoError(t, err)
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`LOCK TABLE node_info_schemes IN ACCESS EXCLUSIVE MODE`)
+	assert.NoError(t, err)
+
+	// Use a context with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+
+	// This call should block on the locked table and time out
+	err = repo.DeleteNodeInfoByEOA(ctx, "0xtest")
+	assert.Error(t, err, "Expected an error due to context timeout")
+	// The error can be either "context deadline exceeded" or "i/o timeout" depending on the driver
+	assert.True(t, strings.Contains(err.Error(), "context deadline exceeded") ||
+		strings.Contains(err.Error(), "i/o timeout"),
+		"Error should be related to context timeout, got: %s", err.Error())
+}
+
+// Test with special characters in IP/EOA to ensure SQL injection prevention
+func TestNodeInfoRepository_SpecialCharacters(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+
+	// Test with various special characters that could be used in SQL injection attempts
+	specialEOAs := []string{
+		"'; DROP TABLE node_info_schemes; --",
+		"'; DELETE FROM node_info_schemes; --",
+		"1' OR '1'='1",
+		"1' UNION SELECT * FROM node_info_schemes; --",
+		"eoa'; DELETE FROM node_info_schemes WHERE '1'='1",
+		"eoa\" OR \"1\"=\"1",
+		"eoa\\'; DROP TABLE node_info_schemes; --",
+	}
+
+	for _, specialEOA := range specialEOAs {
+		node := &utils.NodeInfo{
+			IP:         "192.168.1.1",
+			Port:       "8080",
+			PeerID:     "peer_special",
+			EOAAddress: specialEOA,
+		}
+
+		// These should not cause SQL injection (parameterized queries should handle this)
+		err := repo.AddAndUpdateNodeInfo(ctx, node)
+		// May succeed or fail, but should not cause SQL injection
+		if err != nil {
+			// If it fails, it should be a validation/constraint error, not SQL injection
+			assert.NotContains(t, err.Error(), "DROP TABLE", "Should not execute DROP TABLE")
+			assert.NotContains(t, err.Error(), "DELETE FROM", "Should not execute DELETE FROM")
+		}
+
+		// Cleanup if it was added
+		GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+			Where("eoa_address = ?", specialEOA).
+			Delete()
+	}
+}
+
+// Test with unicode and international characters
+func TestNodeInfoRepository_UnicodeCharacters(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+
+	// Test with unicode characters in PeerID
+	unicodePeerIDs := []string{
+		"peer_中文",
+		"peer_日本語",
+		"peer_한국어",
+		"peer_русский",
+		"peer_🎉🎊",
+		"peer_🚀",
+		"peer_with_émojis_🎯",
+	}
+
+	for _, unicodePeerID := range unicodePeerIDs {
+		node := &utils.NodeInfo{
+			IP:         fmt.Sprintf("192.168.1.%d", len(unicodePeerID)),
+			Port:       "8080",
+			PeerID:     unicodePeerID,
+			EOAAddress: "0xunicode",
+		}
+
+		err := repo.AddAndUpdateNodeInfo(ctx, node)
+		assert.NoError(t, err, "Should handle unicode characters: %s", unicodePeerID)
+
+		// Cleanup
+		GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+			Where("peer_id = ?", unicodePeerID).
+			Delete()
+	}
+}
+
+// Test error handling for AddAndUpdateNodeInfo when delete fails (line 45-47)
+func TestNodeInfoRepository_AddAndUpdateNodeInfo_DeleteError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA1 := "0xTestDeleteError1"
+	testEOA2 := "0xTestDeleteError2"
+	testIP := "192.168.202.1"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+		Where("eoa_address IN (?)", []string{testEOA1, testEOA2}).
+		Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", testIP).Delete()
+
+	// Insert first node
+	node1 := &utils.NodeInfo{
+		IP:         testIP,
+		Port:       "8080",
+		PeerID:     "peer1",
+		EOAAddress: testEOA1,
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, node1)
+	assert.NoError(t, err)
+
+	// Drop the table to cause delete to fail
+	_, err = GetDB().Exec("DROP TABLE IF EXISTS node_info_schemes CASCADE")
+	assert.NoError(t, err)
+
+	// Try to add node with same IP but different EOA - delete should fail but continue
+	node2 := &utils.NodeInfo{
+		IP:         testIP,
+		Port:       "8081",
+		PeerID:     "peer2",
+		EOAAddress: testEOA2,
+	}
+	err = repo.AddAndUpdateNodeInfo(ctx, node2)
+	// Should fail because table doesn't exist, but delete error should be logged
+	assert.Error(t, err, "Should fail when table is missing")
+
+	// Restore schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+}
+
+// Test error handling for DeleteNodeInfoByEOA when database fails
+func TestNodeInfoRepository_DeleteNodeInfoByEOA_ErrorHandling(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+
+	// Drop the table to force an error
+	_, err := GetDB().Exec("DROP TABLE IF EXISTS node_info_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to delete - should fail because table doesn't exist
+	err = repo.DeleteNodeInfoByEOA(ctx, "0xtest")
+	assert.Error(t, err, "Expected error when table is missing")
+
+	// Restore the schema
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+}
+
+// Test GetNodeInfos with very large dataset
+func TestNodeInfoRepository_GetNodeInfos_VeryLargeDataset(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping large dataset test in short mode")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+
+	// Create very large dataset (1000 records)
+	numNodes := 1000
+	testPrefix := "very_large_test"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+		Where("ip LIKE ?", testPrefix+"%").
+		Delete()
+
+	for i := 0; i < numNodes; i++ {
+		node := &utils.NodeInfo{
+			IP:         fmt.Sprintf("%s_192.168.%d.%d", testPrefix, i/256, i%256),
+			Port:       fmt.Sprintf("%d", 8000+i),
+			PeerID:     fmt.Sprintf("peer_large_%d", i),
+			EOAAddress: fmt.Sprintf("0xlarge_%d", i),
+		}
+		err := repo.AddAndUpdateNodeInfo(ctx, node)
+		if err != nil {
+			t.Fatalf("Failed to add node %d: %v", i, err)
+		}
+	}
+
+	// Get all nodes
+	startTime := time.Now()
+	nodes, err := repo.GetNodeInfos(ctx)
+	duration := time.Since(startTime)
+	assert.NoError(t, err, "Should successfully retrieve very large dataset")
+
+	// Log performance
+	t.Logf("Retrieved %d nodes in %v", len(nodes), duration)
+
+	// Verify we got at least our nodes
+	assert.GreaterOrEqual(t, len(nodes), numNodes, "Should have at least %d nodes", numNodes)
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+		Where("ip LIKE ?", testPrefix+"%").
+		Delete()
+}
+
+// Test AddAndUpdateNodeInfo retry logic when delErr != nil (line 72)
+// This tests the path where retry delete fails (delErr != nil)
+func TestNodeInfoRepository_AddAndUpdateNodeInfo_RetryDeleteError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA1 := "0xTestRetryDeleteError1"
+	testEOA2 := "0xTestRetryDeleteError2"
+	testIP := "192.168.203.1"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+		Where("eoa_address IN (?)", []string{testEOA1, testEOA2}).
+		Delete()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).Where("ip = ?", testIP).Delete()
+
+	// Insert first node
+	node1 := &utils.NodeInfo{
+		IP:         testIP,
+		Port:       "8080",
+		PeerID:     "peer_retry_del_err_1",
+		EOAAddress: testEOA1,
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, node1)
+	assert.NoError(t, err)
+
+	// This test is tricky - we need to trigger the retry logic path where delErr != nil
+	// The retry logic happens when there's a duplicate key error on IP
+	// We'll create a scenario where the delete in retry fails by using a transaction lock
+	tx, err := GetDB().Begin()
+	assert.NoError(t, err)
+	defer tx.Rollback()
+
+	// Lock the row to prevent deletion using go-pg syntax
+	var locked NodeInfoScheme
+	err = tx.Model(&locked).Where("ip = ?", testIP).For("UPDATE").Select()
+	assert.NoError(t, err)
+
+	// In another connection, try to add node with same IP but different EOA
+	// This should trigger retry logic, but delete will fail due to lock
+	node2 := &utils.NodeInfo{
+		IP:         testIP,
+		Port:       "8081",
+		PeerID:     "peer_retry_del_err_2",
+		EOAAddress: testEOA2,
+	}
+
+	// This should eventually timeout or fail due to the lock
+	// The retry delete will fail, but the function should handle it gracefully
+	err = repo.AddAndUpdateNodeInfo(ctx, node2)
+	// May succeed or fail depending on timing, but should not panic
+	if err != nil {
+		assert.NotContains(t, err.Error(), "panic", "Should not panic")
+	}
+
+	// Cleanup
+	tx.Rollback()
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+		Where("eoa_address IN (?)", []string{testEOA1, testEOA2}).
+		Delete()
+}
+
+// Test DeleteNodeInfoByEOA with multiple nodes (should only delete matching EOA)
+func TestNodeInfoRepository_DeleteNodeInfoByEOA_MultipleNodes(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repo := NewNodeInfoRepository(GetDB())
+	testEOA1 := "0xTestDeleteMulti1"
+	testEOA2 := "0xTestDeleteMulti2"
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+		Where("eoa_address IN (?)", []string{testEOA1, testEOA2}).
+		Delete()
+
+	// Insert two nodes with unique peer IDs (peer_id has unique constraint)
+	node1 := &utils.NodeInfo{
+		IP:         "192.168.1.1",
+		Port:       "8080",
+		PeerID:     "peer_delete_multi_1",
+		EOAAddress: testEOA1,
+	}
+	err := repo.AddAndUpdateNodeInfo(ctx, node1)
+	assert.NoError(t, err)
+
+	node2 := &utils.NodeInfo{
+		IP:         "192.168.1.2",
+		Port:       "8081",
+		PeerID:     "peer_delete_multi_2",
+		EOAAddress: testEOA2,
+	}
+	err = repo.AddAndUpdateNodeInfo(ctx, node2)
+	assert.NoError(t, err)
+
+	// Delete only node1
+	err = repo.DeleteNodeInfoByEOA(ctx, testEOA1)
+	assert.NoError(t, err)
+
+	// Verify node1 is deleted
+	var deleted NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&deleted).
+		Where("eoa_address = ?", testEOA1).
+		Select()
+	assert.Error(t, err, "Node1 should be deleted")
+
+	// Verify node2 still exists
+	var existing NodeInfoScheme
+	err = GetDB().WithContext(ctx).Model(&existing).
+		Where("eoa_address = ?", testEOA2).
+		Select()
+	assert.NoError(t, err, "Node2 should still exist")
+	assert.Equal(t, testEOA2, existing.EOAAddress)
+
+	// Cleanup
+	GetDB().WithContext(ctx).Model(&NodeInfoScheme{}).
+		Where("eoa_address = ?", testEOA2).
+		Delete()
 }

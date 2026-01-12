@@ -32,8 +32,48 @@ func TestInitSQLDB_InvalidDSN(t *testing.T) {
 	assert.Error(t, err, "Should fail with invalid DSN characters")
 }
 
-// Note: Testing InitSQLDB GetDB().Ping error path is difficult because:
-// 1. The once.Do ensures dbClient is only initialized once
-// 2. After initialization, GetDB().Ping() would need to fail, which is hard to simulate
-// 3. The panic path in once.Do is also hard to test without resetting the sync.Once
-// These paths are edge cases that would require significant code refactoring to test properly.
+// Test db.Ping() error path (line 29-30) - sql.Open succeeds but Ping fails
+// This tests the error path when the DSN is valid but the connection fails
+func TestInitSQLDB_DBPingError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// Use a valid DSN format but with wrong port to trigger db.Ping() error
+	// sql.Open will succeed (it doesn't actually connect), but db.Ping() will fail
+	err := InitSQLDB(ctx, 9999, "localhost", "postgres", "123", "testdb")
+	assert.Error(t, err, "Should fail when db.Ping() fails")
+	// The error should be from pinging database for migration
+	assert.Contains(t, err.Error(), "error pinging database for migration",
+		"Error should mention pinging database for migration")
+}
+
+// Test db.Ping() error with wrong host
+func TestInitSQLDB_DBPingErrorWrongHost(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// Use a host that doesn't exist - sql.Open succeeds but db.Ping() fails
+	err := InitSQLDB(ctx, 5433, "nonexistent-host-12345", "postgres", "123", "testdb")
+	assert.Error(t, err, "Should fail when host doesn't exist")
+	// Should fail at db.Ping() (connection refused or host not found)
+	assert.Contains(t, err.Error(), "error pinging database for migration",
+		"Error should mention pinging database for migration")
+}
+
+// Test db.Ping() error with wrong credentials
+// Note: This might fail at db.Ping() or later at MigrationsUp, but we want to ensure
+// the db.Ping() error path is covered
+func TestInitSQLDB_DBPingErrorWrongPassword(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	// Wrong password - sql.Open succeeds but db.Ping() fails with authentication error
+	err := InitSQLDB(ctx, 5433, "localhost", "postgres", "wrongpassword123", "testdb")
+	assert.Error(t, err, "Should fail with wrong password")
+	// Should fail at db.Ping() with authentication error
+	assert.Contains(t, err.Error(), "error pinging database for migration",
+		"Error should mention pinging database for migration")
+}
+
+// Note: The GetDB().Ping() error path (line 64-65) and the panic path in once.Do (line 56-58)
+// are now covered in connection_test.go:
+// - TestInitSQLDB_GetDBPingErrorAfterInit
+// - TestInitSQLDB_GetDBPingErrorWithCancelledContext
+// - TestInitSQLDB_PanicInOnceDo

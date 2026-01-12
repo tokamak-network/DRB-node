@@ -269,3 +269,114 @@ func TestGetDB_PanicWhenNotInitialized(t *testing.T) {
 	// Restore
 	dbClient = originalDB
 }
+
+// TestInitSQLDB_PanicInOnceDo tests the panic path when dbClient.Ping() fails
+// inside once.Do (lines 56-58). This happens when the connection fails during
+// the initial ping inside once.Do.
+func TestInitSQLDB_PanicInOnceDo(t *testing.T) {
+	// Save current state
+	originalDB := dbClient
+
+	// Reset dbClient to nil to allow once.Do to execute again
+	// Note: This is a workaround - in practice, once.Do only executes once per process
+	// But by setting dbClient to nil, we can test the panic path
+	dbClient = nil
+
+	// Create a context that's already cancelled - this will cause dbClient.Ping() to fail
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Call InitSQLDB - it will:
+	// 1. Pass SQL connection checks (lines 23-35)
+	// 2. Execute once.Do (because dbClient is nil)
+	// 3. Create dbClient and try to ping it, which will fail due to cancelled context
+	// 4. Panic at line 58
+	assert.Panics(t, func() {
+		InitSQLDB(ctx, 5433, "localhost", "postgres", "123", "testdb")
+	}, "Should panic when dbClient.Ping() fails inside once.Do")
+
+	// Restore
+	dbClient = originalDB
+}
+
+// TestInitSQLDB_GetDBPingErrorAfterInit tests the error path when GetDB().Ping() fails
+// after initialization (line 64-65). This tests the scenario where once.Do has already
+// executed, but GetDB().Ping() fails.
+func TestInitSQLDB_GetDBPingErrorAfterInit(t *testing.T) {
+	// Save current state
+	originalDB := dbClient
+
+	// Create a valid connection first (this simulates the once.Do block succeeding)
+	tempDB := pg.Connect(&pg.Options{
+		Addr:     fmt.Sprintf("%s:%s", "localhost", "5433"),
+		User:     "postgres",
+		Password: "123",
+		Database: "testdb",
+	})
+
+	// Set dbClient to the temp connection
+	dbClient = tempDB
+	defer func() {
+		if tempDB != nil {
+			tempDB.Close()
+		}
+		dbClient = originalDB
+	}()
+
+	// Close the connection to make it unusable
+	err := tempDB.Close()
+	assert.NoError(t, err, "Should be able to close the connection")
+
+	// Create a valid context for SQL operations
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Call InitSQLDB - it will:
+	// 1. Pass SQL connection checks (lines 23-35)
+	// 2. Skip once.Do (already executed in TestMain)
+	// 3. Try to ping via GetDB().Ping() which should fail because connection is closed (line 64-65)
+	err = InitSQLDB(ctx, 5433, "localhost", "postgres", "123", "testdb")
+
+	// Should fail at GetDB().Ping()
+	assert.Error(t, err, "Should fail when GetDB().Ping() fails after initialization")
+	assert.Contains(t, err.Error(), "error pinging main DB client after initialization",
+		"Error should mention pinging main DB client")
+}
+
+// TestInitSQLDB_GetDBPingErrorWithCancelledContext tests GetDB().Ping() error
+// when context is already cancelled
+func TestInitSQLDB_GetDBPingErrorWithCancelledContext(t *testing.T) {
+	// Save current state
+	originalDB := dbClient
+
+	// Create a valid connection
+	tempDB := pg.Connect(&pg.Options{
+		Addr:     fmt.Sprintf("%s:%s", "localhost", "5433"),
+		User:     "postgres",
+		Password: "123",
+		Database: "testdb",
+	})
+
+	// Set dbClient
+	dbClient = tempDB
+	defer func() {
+		if tempDB != nil {
+			tempDB.Close()
+		}
+		dbClient = originalDB
+	}()
+
+	// Create a context that's already cancelled
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Call InitSQLDB with cancelled context
+	// It should pass SQL checks, skip once.Do (already executed),
+	// but fail at GetDB().Ping() with cancelled context
+	err := InitSQLDB(ctx, 5433, "localhost", "postgres", "123", "testdb")
+
+	// Should fail at the GetDB().Ping() check
+	assert.Error(t, err, "Should fail when context is cancelled")
+	assert.Contains(t, err.Error(), "error pinging main DB client after initialization",
+		"Error should mention pinging main DB client")
+}

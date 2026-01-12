@@ -1879,3 +1879,413 @@ func TestBatchRepository_DeleteOldRoundDataForLeaderNode_MixedScenarios(t *testi
 	// Cleanup
 	GetDB().Model(&LeaderCommitScheme{}).Where("round = ?", currentRound).Delete(ctx)
 }
+
+// Test context timeout for DeleteOldRoundDataForLeaderNode
+func TestBatchRepository_DeleteOldRoundDataForLeaderNode_ContextTimeout(t *testing.T) {
+	// Start a transaction and lock a table to ensure the delete operation will block
+	tx, err := GetDB().Begin()
+	assert.NoError(t, err)
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`LOCK TABLE leader_commit_schemes IN ACCESS EXCLUSIVE MODE`)
+	assert.NoError(t, err)
+
+	// Use a context with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+
+	// This call should block on the locked table and time out
+	err = batchRepo.DeleteOldRoundDataForLeaderNode(ctx, "test_round")
+	assert.Error(t, err, "Expected an error due to context timeout")
+	assert.Contains(t, err.Error(), "i/o timeout", "Error should be related to i/o timeout")
+}
+
+// Test context timeout for DeleteOldRoundDataForRegularNode
+func TestBatchRepository_DeleteOldRoundDataForRegularNode_ContextTimeout(t *testing.T) {
+	// Start a transaction and lock a table to ensure the delete operation will block
+	tx, err := GetDB().Begin()
+	assert.NoError(t, err)
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`LOCK TABLE commit_data_schemes IN ACCESS EXCLUSIVE MODE`)
+	assert.NoError(t, err)
+
+	// Use a context with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+
+	// This call should block on the locked table and time out
+	err = batchRepo.DeleteOldRoundDataForRegularNode(ctx, "test_round")
+	assert.Error(t, err, "Expected an error due to context timeout")
+	assert.Contains(t, err.Error(), "i/o timeout", "Error should be related to i/o timeout")
+}
+
+// Test concurrent operations for DeleteOldRoundDataForLeaderNode
+func TestBatchRepository_DeleteOldRoundDataForLeaderNode_Concurrent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+	currentRound := "concurrent_old_leader_round"
+
+	// Cleanup
+	GetDB().Model(&LeaderCommitScheme{}).Where("round LIKE ?", "concurrent_old_leader_%").Delete(ctx)
+
+	// Run concurrent delete operations
+	done := make(chan error, 10)
+	for i := 0; i < 10; i++ {
+		go func() {
+			err := batchRepo.DeleteOldRoundDataForLeaderNode(ctx, currentRound)
+			done <- err
+		}()
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < 10; i++ {
+		err := <-done
+		assert.NoError(t, err, "Concurrent operations should not error")
+	}
+}
+
+// Test concurrent operations for DeleteOldRoundDataForRegularNode
+func TestBatchRepository_DeleteOldRoundDataForRegularNode_Concurrent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+	currentRound := "concurrent_old_regular_round"
+
+	// Cleanup
+	GetDB().Model(&CommitDataScheme{}).Where("round LIKE ?", "concurrent_old_regular_%").Delete(ctx)
+
+	// Run concurrent delete operations
+	done := make(chan error, 10)
+	for i := 0; i < 10; i++ {
+		go func() {
+			err := batchRepo.DeleteOldRoundDataForRegularNode(ctx, currentRound)
+			done <- err
+		}()
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < 10; i++ {
+		err := <-done
+		assert.NoError(t, err, "Concurrent operations should not error")
+	}
+}
+
+// Test failure recovery for DeleteOldRoundDataForRegularNode
+func TestBatchRepository_DeleteOldRoundDataForRegularNode_FailureRecovery(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+	regularRepo := NewRegularCommitRepository(GetDB())
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+
+	currentRound := "recovery_old_reg_current"
+	oldRound := "recovery_old_reg_old"
+
+	// Add data
+	var cvs [32]byte
+	cvs[0] = 0x09
+	oldCommit := &utils.CommitData{
+		Round:    oldRound,
+		TrialNum: "trial1",
+		Cvs:      cvs,
+	}
+	err := regularRepo.AddCommit(ctx, oldCommit)
+	assert.NoError(t, err)
+
+	// Cause a failure by dropping a table
+	_, err = GetDB().Exec("DROP TABLE IF EXISTS commit_data_schemes CASCADE")
+	assert.NoError(t, err)
+
+	// First attempt should fail
+	err = batchRepo.DeleteOldRoundDataForRegularNode(ctx, currentRound)
+	assert.Error(t, err, "Should fail when table is missing")
+
+	// Restore schema
+	sqlDB, _ := sql.Open("postgres", dsn)
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+	sqlDB.Close()
+
+	// Second attempt should succeed after recovery
+	err = batchRepo.DeleteOldRoundDataForRegularNode(ctx, currentRound)
+	assert.NoError(t, err, "Should succeed after schema is restored")
+
+	// Verify old round data is deleted
+	_, err = regularRepo.GetCommitByRound(ctx, oldRound, "trial1")
+	assert.Error(t, err, "Old round data should be deleted after successful retry")
+}
+
+// Test with special characters in round names to ensure SQL injection prevention
+func TestBatchRepository_SpecialCharactersInRoundNames(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+
+	// Test with various special characters that could be used in SQL injection attempts
+	specialRounds := []string{
+		"'; DROP TABLE leader_commit_schemes; --",
+		"'; DELETE FROM leader_commit_schemes; --",
+		"1' OR '1'='1",
+		"1' UNION SELECT * FROM leader_commit_schemes; --",
+		"round'; DELETE FROM leader_commit_schemes WHERE '1'='1",
+		"round\" OR \"1\"=\"1",
+		"round\\'; DROP TABLE leader_commit_schemes; --",
+	}
+
+	for _, specialRound := range specialRounds {
+		// These should not error (just delete nothing if the round doesn't exist)
+		// The important thing is that they don't cause SQL injection
+		err := batchRepo.DeleteRoundTrialDataForLeaderNode(ctx, specialRound, "trial")
+		assert.NoError(t, err, "Should handle special characters safely: %s", specialRound)
+
+		err = batchRepo.DeleteRoundTrialDataForRegularNode(ctx, specialRound, "trial")
+		assert.NoError(t, err, "Should handle special characters safely: %s", specialRound)
+
+		err = batchRepo.DeleteOldRoundDataForLeaderNode(ctx, specialRound)
+		assert.NoError(t, err, "Should handle special characters safely: %s", specialRound)
+
+		err = batchRepo.DeleteOldRoundDataForRegularNode(ctx, specialRound)
+		assert.NoError(t, err, "Should handle special characters safely: %s", specialRound)
+	}
+}
+
+// Test with unicode and international characters in round names
+func TestBatchRepository_UnicodeCharactersInRoundNames(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+
+	// Test with unicode characters
+	unicodeRounds := []string{
+		"round_中文",
+		"round_日本語",
+		"round_한국어",
+		"round_русский",
+		"round_العربية",
+		"round_עברית",
+		"round_🎉🎊",
+		"round_🚀",
+		"round_with_émojis_🎯",
+	}
+
+	for _, unicodeRound := range unicodeRounds {
+		err := batchRepo.DeleteRoundTrialDataForLeaderNode(ctx, unicodeRound, "trial")
+		assert.NoError(t, err, "Should handle unicode characters: %s", unicodeRound)
+
+		err = batchRepo.DeleteRoundTrialDataForRegularNode(ctx, unicodeRound, "trial")
+		assert.NoError(t, err, "Should handle unicode characters: %s", unicodeRound)
+
+		err = batchRepo.DeleteOldRoundDataForLeaderNode(ctx, unicodeRound)
+		assert.NoError(t, err, "Should handle unicode characters: %s", unicodeRound)
+
+		err = batchRepo.DeleteOldRoundDataForRegularNode(ctx, unicodeRound)
+		assert.NoError(t, err, "Should handle unicode characters: %s", unicodeRound)
+	}
+}
+
+// Test partial failure in DeleteOldRoundDataForRegularNode - when one table fails mid-operation
+func TestBatchRepository_DeleteOldRoundDataForRegularNode_PartialFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+	regularRepo := NewRegularCommitRepository(GetDB())
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+
+	currentRound := "partial_old_reg_current"
+	oldRound := "partial_old_reg_old"
+
+	// Add some data
+	var cvs [32]byte
+	cvs[0] = 0x0A
+	oldCommit := &utils.CommitData{
+		Round:    oldRound,
+		TrialNum: "trial1",
+		Cvs:      cvs,
+	}
+	err := regularRepo.AddCommit(ctx, oldCommit)
+	assert.NoError(t, err)
+
+	// Drop a table mid-operation to simulate partial failure
+	_, err = GetDB().Exec("DROP TABLE IF EXISTS peer_commit_data_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to delete - should fail on the third table (peer_commit_data_schemes)
+	err = batchRepo.DeleteOldRoundDataForRegularNode(ctx, currentRound)
+	assert.Error(t, err, "Should fail when table is missing")
+	assert.Contains(t, err.Error(), "peer_commit_data_schemes", "Error should mention peer_commit_data_schemes")
+
+	// Restore schema
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+
+	// Cleanup
+	GetDB().Model(&CommitDataScheme{}).Where("round = ?", oldRound).Delete(ctx)
+}
+
+// Test partial failure in DeleteOldRoundDataForLeaderNode - when one table fails mid-operation
+func TestBatchRepository_DeleteOldRoundDataForLeaderNode_PartialFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+	leaderRepo := NewLeaderCommitRepository(GetDB())
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+
+	currentRound := "partial_old_leader_current"
+	oldRound := "partial_old_leader_old"
+
+	// Add some data
+	var cvs [32]byte
+	cvs[0] = 0x0B
+	oldCommit := &utils.LeaderCommitData{
+		Round:      oldRound,
+		TrialNum:   "trial1",
+		EOAAddress: "0xpartial_old",
+		Cvs:        cvs,
+	}
+	err := leaderRepo.AddLeaderCommit(ctx, oldCommit)
+	assert.NoError(t, err)
+
+	// Drop a table mid-operation to simulate partial failure
+	_, err = GetDB().Exec("DROP TABLE IF EXISTS reveal_order_schemes CASCADE")
+	assert.NoError(t, err, "Failed to drop table for test")
+
+	// Try to delete - should fail on the second table (reveal_order_schemes)
+	err = batchRepo.DeleteOldRoundDataForLeaderNode(ctx, currentRound)
+	assert.Error(t, err, "Should fail when table is missing")
+	assert.Contains(t, err.Error(), "reveal_order_schemes", "Error should mention reveal_order_schemes")
+
+	// Restore schema
+	sqlDB, _ := sql.Open("postgres", dsn)
+	defer sqlDB.Close()
+	MigrationsDown(sqlDB)
+	MigrationsUp(sqlDB)
+
+	// Cleanup
+	GetDB().Model(&LeaderCommitScheme{}).Where("round = ?", oldRound).Delete(ctx)
+}
+
+// Test DeleteOldRoundDataForRegularNode with very large dataset - stress test
+func TestBatchRepository_DeleteOldRoundDataForRegularNode_VeryLargeDataset(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping large dataset test in short mode")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+	regularRepo := NewRegularCommitRepository(GetDB())
+
+	currentRound := "very_large_old_reg_current"
+	numOldRounds := 100
+	var cvs [32]byte
+	cvs[0] = 0x0C
+
+	// Create many old rounds with data
+	for i := 0; i < numOldRounds; i++ {
+		oldRound := fmt.Sprintf("very_large_old_reg_old_%d", i)
+		oldCommit := &utils.CommitData{
+			Round:    oldRound,
+			TrialNum: "trial1",
+			Cvs:      cvs,
+		}
+		err := regularRepo.AddCommit(ctx, oldCommit)
+		if err != nil {
+			t.Fatalf("Failed to add commit %d: %v", i, err)
+		}
+	}
+
+	// Verify old rounds exist
+	count, err := GetDB().WithContext(ctx).Model(&CommitDataScheme{}).
+		Where("round LIKE ?", "very_large_old_reg_old_%").
+		Count()
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, count, numOldRounds, "Should have old round data")
+
+	// Delete old rounds
+	startTime := time.Now()
+	err = batchRepo.DeleteOldRoundDataForRegularNode(ctx, currentRound)
+	duration := time.Since(startTime)
+	assert.NoError(t, err, "Should successfully delete very large batch of old rounds")
+
+	// Log performance
+	t.Logf("Deleted %d old rounds in %v", count, duration)
+
+	// Verify old rounds deleted
+	oldCount, err := GetDB().WithContext(ctx).Model(&CommitDataScheme{}).
+		Where("round LIKE ?", "very_large_old_reg_old_%").
+		Count()
+	assert.NoError(t, err)
+	assert.Equal(t, 0, oldCount, "All old rounds should be deleted")
+}
+
+// Test DeleteOldRoundDataForLeaderNode with very large dataset - stress test
+func TestBatchRepository_DeleteOldRoundDataForLeaderNode_VeryLargeDataset(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping large dataset test in short mode")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	batchRepo := NewBatchRepository(GetDB())
+	leaderRepo := NewLeaderCommitRepository(GetDB())
+
+	currentRound := "very_large_old_leader_current"
+	numOldRounds := 100
+	var cvs [32]byte
+	cvs[0] = 0x0D
+
+	// Create many old rounds with data
+	for i := 0; i < numOldRounds; i++ {
+		oldRound := fmt.Sprintf("very_large_old_leader_old_%d", i)
+		oldCommit := &utils.LeaderCommitData{
+			Round:      oldRound,
+			TrialNum:   "trial1",
+			EOAAddress: fmt.Sprintf("0xleader_%d", i),
+			Cvs:        cvs,
+		}
+		err := leaderRepo.AddLeaderCommit(ctx, oldCommit)
+		if err != nil {
+			t.Fatalf("Failed to add commit %d: %v", i, err)
+		}
+	}
+
+	// Verify old rounds exist
+	count, err := GetDB().WithContext(ctx).Model(&LeaderCommitScheme{}).
+		Where("round LIKE ?", "very_large_old_leader_old_%").
+		Count()
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, count, numOldRounds, "Should have old round data")
+
+	// Delete old rounds
+	startTime := time.Now()
+	err = batchRepo.DeleteOldRoundDataForLeaderNode(ctx, currentRound)
+	duration := time.Since(startTime)
+	assert.NoError(t, err, "Should successfully delete very large batch of old rounds")
+
+	// Log performance
+	t.Logf("Deleted %d old rounds in %v", count, duration)
+
+	// Verify old rounds deleted
+	oldCount, err := GetDB().WithContext(ctx).Model(&LeaderCommitScheme{}).
+		Where("round LIKE ?", "very_large_old_leader_old_%").
+		Count()
+	assert.NoError(t, err)
+	assert.Equal(t, 0, oldCount, "All old rounds should be deleted")
+}
