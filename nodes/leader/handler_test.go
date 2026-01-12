@@ -2593,8 +2593,6 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_FullF
 	suite.leaderNodeHandler.SetMerkleRootSubmitted(false)
 	suite.leaderNodeHandler.leaderNode.SetCurrentRound(testRound)
 	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
-	suite.leaderNodeHandler.leaderNode.SetCurrentRound(testRound)
-	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	os.Setenv("CHAIN_ID", "1")
@@ -2735,8 +2733,6 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_HandleCommitRequest_AllCo
 	suite.leaderNodeHandler.ethService = mockEth
 	suite.leaderNodeHandler.leaderNode.SetHalted(false)
 	suite.leaderNodeHandler.SetMerkleRootSubmitted(false)
-	suite.leaderNodeHandler.leaderNode.SetCurrentRound(testRound)
-	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
 	suite.leaderNodeHandler.leaderNode.SetCurrentRound(testRound)
 	suite.leaderNodeHandler.leaderNode.SetCurrentTrial(testTrial)
 
