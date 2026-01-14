@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/eth"
@@ -122,7 +123,12 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 					}
 					fmt.Printf("CvSubmitted Event: Fetched successfully")
 
-					n.processCVS(ctx, eventData.Round, eventData.TrialNum, eventData.Cv, eventData.Index)
+					err = n.processCVS(ctx, eventData.Round, eventData.TrialNum, eventData.Cv, eventData.Index)
+					if err != nil {
+						log.Printf("Failed to process CVS for round %s, trial %s: %v",
+							eventData.Round.String(), eventData.TrialNum.String(), err)
+						continue
+					}
 
 				case CoSubmittedSig:
 					eventData := struct {
@@ -138,7 +144,12 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 					}
 					fmt.Printf("CoSubmitted Event: Fetched successfully")
 
-					n.processCOS(ctx, eventData.Round, eventData.TrialNum, eventData.Co, eventData.Index)
+					err = n.processCOS(ctx, eventData.Round, eventData.TrialNum, eventData.Co, eventData.Index)
+					if err != nil {
+						log.Printf("Failed to process COS for round %s, trial %s: %v",
+							eventData.Round.String(), eventData.TrialNum.String(), err)
+						continue
+					}
 
 				case MerkleRootSubmittedSig:
 					eventData := struct {
@@ -304,13 +315,43 @@ func (n *LeaderNode) processDeactivated(ctx context.Context, operator common.Add
 	fmt.Printf("Deactivated Event:\n Operator %v\n", operator)
 	eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient)
 
-	// Delete node info for deactivated operator
-	if n.nodeInfoRepository != nil {
-		if err := n.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, operator.Hex()); err != nil {
-			log.Printf("Failed to delete node info for operator %s: %v", operator.Hex(), err)
-		} else {
-			log.Printf("Deleted node info for deactivated operator %s", operator.Hex())
+	var peerIDStr string
+	nodeInfos, err := n.nodeInfoRepository.GetNodeInfos(ctx)
+	if err == nil {
+		for _, nodeInfo := range nodeInfos {
+			if nodeInfo.EOAAddress == operator.Hex() {
+				peerIDStr = nodeInfo.PeerID
+				break
+			}
 		}
+	}
+
+	if peerIDStr != "" {
+		hostInstance := n.p2pClient.GetHostInstance()
+		if hostInstance != nil {
+			peerID, err := peer.Decode(peerIDStr)
+			if err == nil {
+				conns := hostInstance.Network().ConnsToPeer(peerID)
+				if len(conns) > 0 {
+					log.Printf("Closing libp2p connection for deactivated operator %s (PeerID: %s)", operator.Hex(), peerIDStr)
+					if err := hostInstance.Network().ClosePeer(peerID); err != nil {
+						log.Printf("Failed to close connection for peer %s: %v", peerIDStr, err)
+					} else {
+						log.Printf("Successfully closed connection for deactivated operator %s", operator.Hex())
+					}
+				} else {
+					log.Printf("No active connection found for operator %s (PeerID: %s)", operator.Hex(), peerIDStr)
+				}
+			} else {
+				log.Printf("Invalid PeerID format for operator %s: %s", operator.Hex(), peerIDStr)
+			}
+		}
+	}
+
+	if err := n.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, operator.Hex()); err != nil {
+		log.Printf("Failed to delete node info for operator %s: %v", operator.Hex(), err)
+	} else {
+		log.Printf("Deleted node info for deactivated operator %s", operator.Hex())
 	}
 }
 
@@ -546,7 +587,8 @@ func (n *LeaderNode) processCOS(ctx context.Context, round *big.Int, trialNum *b
 		}
 		err := n.leaderCommitRepository.AddLeaderCommit(ctx, &leaderCommit)
 		if err != nil {
-			fmt.Printf("Failed to add leader commit: %v", err)
+			return fmt.Errorf("failed to add leader commit for round %s, trial %s, EOA %s: %v",
+				roundStr, trialNumStr, eoa.Hex(), err)
 		}
 	} else {
 		leaderCommitData.Cos = cos
@@ -554,7 +596,8 @@ func (n *LeaderNode) processCOS(ctx context.Context, round *big.Int, trialNum *b
 
 		err := n.leaderCommitRepository.UpdateLeaderCommit(ctx, leaderCommitData)
 		if err != nil {
-			fmt.Printf("Failed to update leader commit: %v", err)
+			return fmt.Errorf("failed to update leader commit for round %s, trial %s, EOA %s: %v",
+				roundStr, trialNumStr, eoa.Hex(), err)
 		}
 	}
 
@@ -640,7 +683,8 @@ func (n *LeaderNode) processCVS(ctx context.Context, round *big.Int, trialNum *b
 		}
 		err := n.leaderCommitRepository.AddLeaderCommit(ctx, &leaderCommit)
 		if err != nil {
-			fmt.Printf("Failed to add leader commit: %v", err)
+			return fmt.Errorf("failed to add leader commit for round %s, trial %s, EOA %s: %v",
+				roundStr, trialNumStr, eoa.Hex(), err)
 		}
 	} else {
 		leaderCommitData.Cvs = cvs
@@ -648,7 +692,8 @@ func (n *LeaderNode) processCVS(ctx context.Context, round *big.Int, trialNum *b
 
 		err := n.leaderCommitRepository.UpdateLeaderCommit(ctx, leaderCommitData)
 		if err != nil {
-			fmt.Printf("Failed to update leader commit: %v", err)
+			return fmt.Errorf("failed to update leader commit for round %s, trial %s, EOA %s: %v",
+				roundStr, trialNumStr, eoa.Hex(), err)
 		}
 	}
 

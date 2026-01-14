@@ -251,7 +251,7 @@ func setupTestEnvironmentWithLogger(ctx context.Context, t Logger) (*TestEnviron
 		return nil, fmt.Errorf("failed to deploy contracts: %w", err)
 	}
 
-	t.Logf("CommitReveal2L2: %s", geth.ContractAddress.Hex())
+	t.Logf("Commit2RevealDRB: %s", geth.ContractAddress.Hex())
 	t.Logf("ConsumerExampleV2: %s", geth.ConsumerAddress.Hex())
 
 	t.Log("\nSTEP 2: Configuring Docker environment...")

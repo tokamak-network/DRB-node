@@ -9,7 +9,10 @@ This document provides comprehensive instructions for configuring and running a 
 Before setting up the DRB node, ensure the following requirements are met:
 
 1. **Install Go**:  
-   Ensure Go is installed on your system. **Go version 1.23.3 or greater** is required. [Refer to the Go installation guide](https://go.dev/doc/install) for details.
+   Ensure Go is installed on your system. **Go version 1.24.0 or greater** is required. [Refer to the Go installation guide](https://go.dev/doc/install) for details.
+   
+   Verify installation: `go version`
+   
 
 2. **Install Docker**:  
    Docker is required for running the nodes. [Refer to Docker installation guide](https://docs.docker.com/get-docker/) for details.
@@ -22,6 +25,195 @@ Before setting up the DRB node, ensure the following requirements are met:
    Ensure the Leader Node and Regular Node accounts have sufficient balance to perform transactions.
    - The **Leader Node** must have enough tokens to interact with the blockchain network, such as submitting Merkle roots and generating random numbers.
    - The **Regular Node** must have enough tokens to cover the deposit requirements set by the contract.
+
+---
+
+## Testing
+
+The DRB Node project includes comprehensive unit tests and integration tests to ensure code quality and reliability. This section provides instructions for running tests and the prerequisites required for testing.
+
+### Unit Testing
+
+Unit tests verify individual components and functions in isolation. The test scripts automatically set up a test database using Docker Compose, run the tests, and clean up afterward.
+
+#### Prerequisites for Unit Testing
+
+Before running unit tests, ensure the following requirements are met:
+
+1. **Docker** (Required):  
+   Docker and Docker Compose are required for running unit tests. The test scripts use Docker Compose to set up test databases.
+   - [Refer to Docker installation guide](https://docs.docker.com/get-docker/) for details.
+   
+   Verify installation:
+   ```bash
+   docker --version
+   docker-compose --version
+   docker compose version
+   ```
+   
+   Expected output should show:
+   ```
+   Docker version 28.4.0, build d8eb465
+   Docker Compose version v2.39.4-desktop.1
+   Docker Compose version v2.39.4-desktop.1
+   ```
+   
+   Ensure Docker is installed and running before executing unit tests.
+
+2. **PostgreSQL** (Required):  
+   PostgreSQL version 14.18 or greater is required for unit tests. The test scripts use Docker Compose to set up PostgreSQL test databases.
+   - Verify Docker PostgreSQL container is running: The test scripts automatically start PostgreSQL containers via Docker Compose.
+
+3. **Go** (Required):  
+   Go version 1.24.0 or greater is required for running unit tests.
+   
+   Verify installation: `go version`
+   
+
+#### Running Unit Tests
+
+**Using Shell Scripts**:
+
+The project provides shell scripts for running unit tests for specific packages. These scripts automatically handle database setup and cleanup:
+
+```bash
+# Test utils package
+./run_utils_test.sh
+
+# Test database package
+./run_database_test.sh
+
+# Test nodes/leader package
+./run_leader_tests.sh
+
+# Test nodes/regular package
+./run_regular_tests.sh
+
+# Test commit-reveal2 package
+./run_commit-reveal2_test.sh
+```
+
+**Using Go Test Command Directly**:
+
+You can also run tests directly using Go commands:
+
+```bash
+# Test specific packages (without coverage)
+go test -v ./utils/...
+go test -v ./database/...
+go test -v ./nodes/leader/...
+go test -v ./nodes/regular/...
+go test -v ./commit-reveal2/...
+
+# Test specific packages with coverage (generates coverage.out)
+go test -v -coverprofile=coverage.out ./utils/...
+go test -v -coverprofile=coverage.out ./database/...
+go test -v -coverprofile=coverage.out ./nodes/leader/...
+go test -v -coverprofile=coverage.out ./nodes/regular/...
+go test -v -coverprofile=coverage.out ./commit-reveal2/...
+```
+
+**Generating Coverage Report**:
+
+```bash
+# Generate HTML coverage report from coverage.out
+go tool cover -html=coverage.out -o coverage.html
+```
+
+### Integration Testing
+
+Integration tests verify the interaction between multiple components, including Docker containers, blockchain nodes, and databases. These tests require additional setup and take longer to execute.
+
+#### Prerequisites for Integration Testing
+
+Before running integration tests, ensure the following requirements are met:
+
+1. **Geth** (Required):  
+   Geth version 1.16.3-stable or greater is required for integration tests. Geth is an Ethereum client used for integration tests. Install with:
+   ```bash
+   go install github.com/ethereum/go-ethereum/cmd/geth@latest
+   ```
+   Verify installation: `geth version`
+   
+
+2. **PostgreSQL** (Required):  
+   PostgreSQL version 14.18 or greater is required for integration tests. Ensure PostgreSQL is running on `localhost:5432`.
+   - **macOS**: `brew services start postgresql`
+   - **Linux**: `sudo systemctl start postgresql`
+   - Verify: `pg_isready -h localhost -p 5432`
+
+3. **Docker** (Required):  
+   Docker and Docker Compose are required for running Docker-based integration tests. Ensure Docker is installed and running.
+   - [Refer to Docker installation guide](https://docs.docker.com/get-docker/) for details.
+   
+   Verify installation:
+   ```bash
+   docker --version
+   docker-compose --version
+   docker compose version
+   ```
+   
+   Expected output should show:
+   ```
+   Docker version 28.4.0, build d8eb465
+   Docker Compose version v2.39.4-desktop.1
+   Docker Compose version v2.39.4-desktop.1
+   ```
+
+4. **Go** (Required):  
+   Go version 1.24.0 or greater is required for running integration tests.
+   
+   Verify installation: `go version`
+   
+5. **Leader Node Key File** (Required):  
+   Before running integration tests, ensure that the `static-key/leadernode.bin` file exists. If this file does not exist, create it using:
+   ```bash
+   ./run_generator.sh
+   ```
+   This will generate the leader node key file required for integration tests. After generation, update the `LEADER_PEER_ID` in your `.env` file with the generated peer ID.
+
+#### Running Integration Tests
+
+Integration tests require a two-step process:
+
+**Step 1: Start Geth Node**
+
+First, run the script to start the Geth node:
+```bash
+./run_geth_test.sh
+```
+
+This script will:
+- Check if Geth is installed
+- Verify port availability
+- Start the Geth development node
+- Set up the blockchain environment for testing
+
+**Step 2: Run Integration Tests**
+
+Once the Geth node is running, execute the integration tests:
+```bash
+go test ./integration_test -v -timeout 120m
+```
+
+**Note**: Ensure the Geth node is running before executing the test command. The tests will connect to the Geth node running on the default port.
+
+#### Integration Test Details
+
+Integration tests include:
+- **Docker-based Node Testing**: Tests the full DRB node system with leader and regular nodes running in Docker containers
+- **Blockchain Interaction Testing**: Verifies contract deployment, transactions, and event handling using Geth blockchain nodes
+- **Database Testing**: Tests database operations with PostgreSQL instances
+- **End-to-End Protocol Testing**: Validates the complete commit-reveal protocol flow
+
+Integration tests use Docker Compose to orchestrate multiple PostgreSQL instances and node containers. The test environment automatically:
+- Starts Geth blockchain nodes
+- Deploys smart contracts
+- Sets up PostgreSQL databases
+- Configures and starts DRB nodes
+- Cleans up resources after test completion
+
+**Note**: Integration tests have a default timeout of 120 minutes. The test environment handles setup and cleanup automatically.
 
 ---
 
@@ -49,12 +241,51 @@ LEADER_EOA=<Leader Ethereum Address>
 EOA_PRIVATE_KEY_1=<Your Regular Node Private Key for Account 1>
 EOA_PRIVATE_KEY_2=<Your Regular Node Private Key for Account 2>
 EOA_PRIVATE_KEY_3=<Your Regular Node Private Key for Account 3>
-CHAIN_ID=111551119090
+CHAIN_ID=<Chain_ID>
 POSTGRES_PASSWORD=password
 
 ETH_RPC_URLS=<Your Ethereum RPC URLs separated by , (comma)>
 CONTRACT_ADDRESS=<Deployed DRB Contract Address>
 ```
+
+### Contract Period Configuration
+
+The contract period configuration variables control the timing windows for various operations in the DRB protocol. These values must be set based on your `CHAIN_ID`. All values are specified in seconds.
+
+**Required Environment Variables:**
+- `OFF_CHAIN_SUBMISSION_PERIOD`: Time window for off-chain submissions
+- `REQUEST_OR_SUBMIT_OR_FAIL_DECISION_PERIOD`: Decision period for request handling
+- `ON_CHAIN_SUBMISSION_PERIOD`: Time window for on-chain submissions
+- `OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR`: Off-chain submission time per operator
+- `ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR`: On-chain submission time per operator
+
+#### Configuration by Chain ID
+
+**For ThanosSepolia (CHAIN_ID = 111551119090), Anvil (CHAIN_ID = 31337), or OpSepolia (CHAIN_ID = 11155111):**
+
+If you are using ThanosSepolia, Anvil, or OpSepolia, use the following configuration:
+
+```bash
+OFF_CHAIN_SUBMISSION_PERIOD=40
+REQUEST_OR_SUBMIT_OR_FAIL_DECISION_PERIOD=30
+ON_CHAIN_SUBMISSION_PERIOD=60
+OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR=20
+ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR=30
+```
+
+**For Sepolia (CHAIN_ID = 11155420):**
+
+If you are using Sepolia, use the following configuration:
+
+```bash
+OFF_CHAIN_SUBMISSION_PERIOD=80
+REQUEST_OR_SUBMIT_OR_FAIL_DECISION_PERIOD=60
+ON_CHAIN_SUBMISSION_PERIOD=120
+OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR=20
+ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR=40
+```
+
+**Note**: These environment variables are required and must be set according to your network's `CHAIN_ID`. The application will fail to start if any of these variables are missing or contain invalid values.
 
 ### Running the Node
 
@@ -238,7 +469,13 @@ The repository is organized into several directories based on functionality. Her
 │   ├── reveal_order.go           # Reveal order utilities
 │   ├── streamHandler.go          # LibP2P stream handling
 │   └── utils.go                  # General utility functions (signature verification, etc.)
+├── integration_test/             # Integration test suite
+│   ├── docker_nodes_quick_test.go # Docker-based integration tests
+│   └── setup/                    # Test environment setup utilities
+│       ├── test_setup.go         # Test environment configuration
+│       └── geth_setup.go         # Geth blockchain node setup for tests
 ├── docker-compose.yml            # Docker Compose configuration for multi-node setup
+├── docker-compose-test.yml       # Docker Compose configuration for testing
 ├── Dockerfile                    # Docker container configuration
 ├── go.mod                        # Go module dependencies
 ├── go.sum                        # Go module checksums

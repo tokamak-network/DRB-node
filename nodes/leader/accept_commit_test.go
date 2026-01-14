@@ -13,6 +13,9 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -707,7 +710,9 @@ func TestProcessCOS_AddCommitError(t *testing.T) {
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCOS(context.Background(), round, trialNum, cos, index)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to add leader commit")
+	assert.Contains(t, err.Error(), "db error")
 
 	mockLeaderRepo.AssertExpectations(t)
 }
@@ -747,7 +752,9 @@ func TestProcessCOS_UpdateError(t *testing.T) {
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCOS(ctx, round, trialNum, cos, index)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to update leader commit")
+	assert.Contains(t, err.Error(), "update error")
 
 	mockLeaderRepo.AssertExpectations(t)
 }
@@ -779,7 +786,9 @@ func TestProcessCVS_AddCommitError(t *testing.T) {
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to add leader commit")
+	assert.Contains(t, err.Error(), "db error")
 
 	mockLeaderRepo.AssertExpectations(t)
 }
@@ -816,7 +825,9 @@ func TestProcessCVS_UpdateError(t *testing.T) {
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to update leader commit")
+	assert.Contains(t, err.Error(), "update error")
 
 	mockLeaderRepo.AssertExpectations(t)
 }
@@ -4168,6 +4179,9 @@ func TestLeaderNode_processDeactivated_Success(t *testing.T) {
 	eth.Service = mockEth
 	defer func() { eth.Service = originalService }()
 
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).
+		Return([]*utils.NodeInfo{}, nil)
+
 	mockNodeRepo.On("DeleteNodeInfoByEOA", mock.Anything, testOp.Hex()).
 		Return(nil)
 
@@ -4194,8 +4208,284 @@ func TestLeaderNode_processDeactivated_DeleteError(t *testing.T) {
 	eth.Service = mockEth
 	defer func() { eth.Service = originalService }()
 
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).
+		Return([]*utils.NodeInfo{}, nil)
+
 	mockNodeRepo.On("DeleteNodeInfoByEOA", mock.Anything, testOp.Hex()).
 		Return(errors.New("database error"))
+
+	node.processDeactivated(context.Background(), testOp)
+
+	mockNodeRepo.AssertExpectations(t)
+}
+
+type MockNetwork struct {
+	mock.Mock
+}
+
+func (m *MockNetwork) ConnsToPeer(p peer.ID) []network.Conn {
+	args := m.Called(p)
+	if args.Get(0) == nil {
+		return nil
+	}
+	return args.Get(0).([]network.Conn)
+}
+
+func (m *MockNetwork) ClosePeer(p peer.ID) error {
+	args := m.Called(p)
+	return args.Error(0)
+}
+
+type MockHostForConnectionCleanup struct {
+	mock.Mock
+	network network.Network
+}
+
+func (m *MockHostForConnectionCleanup) Network() network.Network {
+	return m.network
+}
+
+func (m *MockHostForConnectionCleanup) ID() peer.ID            { return "" }
+func (m *MockHostForConnectionCleanup) Addrs() []interface{}   { return nil }
+func (m *MockHostForConnectionCleanup) Peerstore() interface{} { return nil }
+func (m *MockHostForConnectionCleanup) Connect(ctx context.Context, pi peer.AddrInfo) error {
+	return nil
+}
+func (m *MockHostForConnectionCleanup) SetStreamHandler(pid interface{}, handler interface{}) {}
+func (m *MockHostForConnectionCleanup) SetStreamHandlerMatch(interface{}, func(interface{}) bool, interface{}) {
+}
+func (m *MockHostForConnectionCleanup) RemoveStreamHandler(pid interface{}) {}
+func (m *MockHostForConnectionCleanup) Close() error                        { return nil }
+func (m *MockHostForConnectionCleanup) Mux() interface{}                    { return nil }
+func (m *MockHostForConnectionCleanup) ConnManager() interface{}            { return nil }
+func (m *MockHostForConnectionCleanup) EventBus() interface{}               { return nil }
+
+type MockConnection struct {
+	mock.Mock
+}
+
+func (m *MockConnection) IsClosed() bool {
+	args := m.Called()
+	return args.Bool(0)
+}
+
+func (m *MockConnection) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *MockConnection) LocalPeer() peer.ID                                    { return "" }
+func (m *MockConnection) RemotePeer() peer.ID                                   { return "" }
+func (m *MockConnection) LocalPrivateKey() interface{}                          { return nil }
+func (m *MockConnection) RemotePublicKey() interface{}                          { return nil }
+func (m *MockConnection) ID() string                                            { return "" }
+func (m *MockConnection) GetStreams() []network.Stream                          { return nil }
+func (m *MockConnection) Stat() network.ConnStats                               { return network.ConnStats{} }
+func (m *MockConnection) LocalMultiaddr() interface{}                           { return nil }
+func (m *MockConnection) RemoteMultiaddr() interface{}                          { return nil }
+func (m *MockConnection) Scope() network.ConnScope                              { return nil }
+func (m *MockConnection) ConnState() network.ConnectionState                    { return network.ConnectionState{} }
+func (m *MockConnection) NewStream(ctx context.Context) (network.Stream, error) { return nil, nil }
+
+func TestLeaderNode_processDeactivated_ConnectionCleanup_Success(t *testing.T) {
+	node := createTestNodeForAcceptCommit()
+	mockNodeRepo := new(MockNodeInfoRepositoryForAcceptCommit)
+	node.nodeInfoRepository = mockNodeRepo
+
+	testOp := common.HexToAddress("0x3333333333333333333333333333333333333333")
+
+	testHost, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(t, err)
+	defer testHost.Close()
+
+	node.p2pClient.SetHost(testHost)
+
+	peerHost, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(t, err)
+	defer peerHost.Close()
+
+	testHost.Peerstore().AddAddrs(peerHost.ID(), peerHost.Addrs(), time.Hour)
+	err = testHost.Connect(context.Background(), peer.AddrInfo{
+		ID:    peerHost.ID(),
+		Addrs: peerHost.Addrs(),
+	})
+	require.NoError(t, err)
+
+	conns := testHost.Network().ConnsToPeer(peerHost.ID())
+	require.Greater(t, len(conns), 0, "Connection should exist before deactivation")
+
+	mockEth := &MockEthServiceForAcceptCommit{
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		},
+	}
+
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).
+		Return([]*utils.NodeInfo{
+			{
+				EOAAddress: testOp.Hex(),
+				PeerID:     peerHost.ID().String(),
+				IP:         "127.0.0.1",
+				Port:       "8081",
+			},
+		}, nil)
+
+	mockNodeRepo.On("DeleteNodeInfoByEOA", mock.Anything, testOp.Hex()).
+		Return(nil)
+
+	node.processDeactivated(context.Background(), testOp)
+
+	connsAfter := testHost.Network().ConnsToPeer(peerHost.ID())
+	assert.Equal(t, 0, len(connsAfter), "Connection should be closed after deactivation")
+
+	mockNodeRepo.AssertExpectations(t)
+}
+
+func TestLeaderNode_processDeactivated_ConnectionCleanup_NoConnection(t *testing.T) {
+	node := createTestNodeForAcceptCommit()
+	mockNodeRepo := new(MockNodeInfoRepositoryForAcceptCommit)
+	node.nodeInfoRepository = mockNodeRepo
+
+	testOp := common.HexToAddress("0x4444444444444444444444444444444444444444")
+	testHost, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(t, err)
+	defer testHost.Close()
+
+
+	peerHost, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	require.NoError(t, err)
+	defer peerHost.Close()
+
+	node.p2pClient.SetHost(testHost)
+
+	mockEth := &MockEthServiceForAcceptCommit{
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		},
+	}
+
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).
+		Return([]*utils.NodeInfo{
+			{
+				EOAAddress: testOp.Hex(),
+				PeerID:     peerHost.ID().String(),
+				IP:         "127.0.0.1",
+				Port:       "8081",
+			},
+		}, nil)
+
+	mockNodeRepo.On("DeleteNodeInfoByEOA", mock.Anything, testOp.Hex()).
+		Return(nil)
+
+	conns := testHost.Network().ConnsToPeer(peerHost.ID())
+	assert.Equal(t, 0, len(conns), "No connection should exist")
+
+	node.processDeactivated(context.Background(), testOp)
+
+	mockNodeRepo.AssertExpectations(t)
+}
+
+func TestLeaderNode_processDeactivated_ConnectionCleanup_InvalidPeerID(t *testing.T) {
+	node := createTestNodeForAcceptCommit()
+	mockNodeRepo := new(MockNodeInfoRepositoryForAcceptCommit)
+	node.nodeInfoRepository = mockNodeRepo
+
+	testOp := common.HexToAddress("0x5555555555555555555555555555555555555555")
+
+	mockEth := &MockEthServiceForAcceptCommit{
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+			// No-op
+		},
+	}
+
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).
+		Return([]*utils.NodeInfo{
+			{
+				EOAAddress: testOp.Hex(),
+				PeerID:     "invalid_peer_id",
+				IP:         "127.0.0.1",
+				Port:       "8081",
+			},
+		}, nil)
+
+	mockNodeRepo.On("DeleteNodeInfoByEOA", mock.Anything, testOp.Hex()).
+		Return(nil)
+
+	node.processDeactivated(context.Background(), testOp)
+
+	mockNodeRepo.AssertExpectations(t)
+}
+
+
+func TestLeaderNode_processDeactivated_ConnectionCleanup_NilP2PClient(t *testing.T) {
+	node := createTestNodeForAcceptCommit()
+	mockNodeRepo := new(MockNodeInfoRepositoryForAcceptCommit)
+	node.nodeInfoRepository = mockNodeRepo
+	node.p2pClient = nil 
+
+	testOp := common.HexToAddress("0x6666666666666666666666666666666666666666")
+
+	mockEth := &MockEthServiceForAcceptCommit{
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+			// No-op
+		},
+	}
+
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).
+		Return([]*utils.NodeInfo{}, nil)
+
+	mockNodeRepo.On("DeleteNodeInfoByEOA", mock.Anything, testOp.Hex()).
+		Return(nil)
+
+	node.processDeactivated(context.Background(), testOp)
+
+	mockNodeRepo.AssertExpectations(t)
+}
+
+func TestLeaderNode_processDeactivated_ConnectionCleanup_NilHostInstance(t *testing.T) {
+	node := createTestNodeForAcceptCommit()
+	mockNodeRepo := new(MockNodeInfoRepositoryForAcceptCommit)
+	node.nodeInfoRepository = mockNodeRepo
+
+	// Don't set host - HostInstance will be nil
+	testOp := common.HexToAddress("0x7777777777777777777777777777777777777777")
+
+	mockEth := &MockEthServiceForAcceptCommit{
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+			// No-op
+		},
+	}
+
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).
+		Return([]*utils.NodeInfo{
+			{
+				EOAAddress: testOp.Hex(),
+				PeerID:     "12D3KooWTestPeerID1234567890123456789012345678901234567890",
+				IP:         "127.0.0.1",
+				Port:       "8081",
+			},
+		}, nil)
+
+	mockNodeRepo.On("DeleteNodeInfoByEOA", mock.Anything, testOp.Hex()).
+		Return(nil)
 
 	node.processDeactivated(context.Background(), testOp)
 
@@ -4958,6 +5248,9 @@ func TestLeaderNode_receiveCommit_DeActivated_Success(t *testing.T) {
 			}
 		}).Return(mockSub, nil)
 
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).
+		Return([]*utils.NodeInfo{}, nil)
+
 	mockNodeRepo.On("DeleteNodeInfoByEOA", mock.Anything, operator.Hex()).
 		Return(nil)
 
@@ -5071,6 +5364,9 @@ func TestLeaderNode_receiveCommit_DeActivated_DeleteNodeError(t *testing.T) {
 				eventSent = true
 			}
 		}).Return(mockSub, nil)
+
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).
+		Return([]*utils.NodeInfo{}, nil)
 
 	mockNodeRepo.On("DeleteNodeInfoByEOA", mock.Anything, operator.Hex()).
 		Return(errors.New("database error"))

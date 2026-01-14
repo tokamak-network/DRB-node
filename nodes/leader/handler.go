@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"log"
+	"math/big"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -44,7 +48,7 @@ type LeaderNodeHandler struct {
 	ethService          eth.IEthService // Injected eth service for testability
 }
 
-func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient, db *pg.DB) *LeaderNodeHandler {
+func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClient, db *pg.DB) (*LeaderNodeHandler, error) {
 	leaderCommitRepository := database.NewLeaderCommitRepository(db)
 	batchRepository := database.NewBatchRepository(db)
 	broadcastTrackerRepository := database.NewBroadcastTrackerRepository(db)
@@ -57,7 +61,7 @@ func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		leaderCommitRepository,
 	)
 	p2pClient := libp2putils.NewP2PClient(nodeInfoRepository)
-	leaderNode := NewLeaderNode(
+	leaderNode, err := NewLeaderNode(
 		fallbackEthClient,
 		revealOrderService,
 		p2pClient,
@@ -67,6 +71,9 @@ func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		reavealOrderRepository,
 		nodeInfoRepository,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	return &LeaderNodeHandler{
 		fallbackEthClient:   fallbackEthClient,
@@ -74,7 +81,7 @@ func NewLeaderNodeHandler(fallbackEthClient *fallback_ethclient.FallbackRPCClien
 		merkleRootSubmitted: 0,
 		commitMu:            sync.Mutex{},
 		ethService:          eth.Service, // Use default eth service
-	}
+	}, nil
 }
 
 func (lh *LeaderNodeHandler) Run(ctx context.Context) {
@@ -117,7 +124,12 @@ func (lh *LeaderNodeHandler) Run(ctx context.Context) {
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
 	lh.ethService.UpdateActivatedOperators(ctx, lh.fallbackEthClient)
-	lh.leaderNode.UpdateCurrentRoundAndTrial(ctx)
+
+	err = lh.leaderNode.UpdateCurrentRoundAndTrial(ctx)
+	if err != nil {
+		log.Fatalf("Failed to update current round and trial from contract: %v", err)
+	}
+
 	go lh.leaderNode.CheckHaltedState(ctx)
 	go lh.leaderNode.MonitorCommits(ctx)
 	go lh.leaderNode.ReceiveCommit(ctx)
@@ -149,30 +161,44 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 		return
 	}
 
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var req utils.CommitRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
-		log.Printf("Failed to decode commit request: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &req); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("Commit request decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode commit request: %v", err)
+		}
 		return
 	}
 
-	commitVerificationRequest := utils.Request{
-		Round:      req.Round,
-		TrialNum:   req.TrialNum,
-		EOAAddress: req.EOAAddress,
-		Signature:  req.Signature,
-	}
-
-	if !lh.VerifySignatureAndCheckActivation(ctx, commitVerificationRequest, "commit") {
+	// Verify signature for ALL fields (Round, TrialNum, Cvs, EOAAddress, UniqueKey)
+	if !utils.VerifyCommitRequestContentSignature(req, req.EOAAddress) {
+		log.Printf("Signature verification failed for commit request from EOA: %s. Round, TrialNum, Cvs, EOAAddress, or UniqueKey may have been tampered.", req.EOAAddress)
 		return
 	}
 
-	round := req.Round
+	// EIP-712 signature verification (content-based - Round, TrialNum, CVS)
+	if !lh.VerifyCvsEIP712Signature(req.Round, req.TrialNum, req.Cvs, req.Sign, req.EOAAddress) {
+		log.Printf("EIP-712 signature verification failed for CVS from EOA %s, round %s, trial %s. Rejecting CVS.", req.EOAAddress, req.Round, req.TrialNum)
+		return
+	}
+
 	eoaAddress := common.HexToAddress(req.EOAAddress)
+	if !lh.CheckActivation(ctx, eoaAddress, "commit") {
+		return
+	}
+
+	// Use leader's current round and trial
+	round := lh.leaderNode.GetCurrentRound()
+	trial := lh.leaderNode.GetCurrentTrial()
 
 	lh.commitMu.Lock()
 	defer lh.commitMu.Unlock()
-	uniqueKey := utils.GetUniqueKey(round, req.TrialNum)
-	commitData := lh.leaderNode.GetOrCreateLeaderCommitData(round, req.TrialNum, uniqueKey, eoaAddress)
+	uniqueKey := utils.GetUniqueKey(round, trial)
+	commitData := lh.leaderNode.GetOrCreateLeaderCommitData(round, trial, uniqueKey, eoaAddress)
 	if commitData.Cvs == [32]byte{} {
 		commitData.Cvs = req.Cvs
 		commitData.CvsHex = hex.EncodeToString(req.Cvs[:])
@@ -181,7 +207,7 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 		commitData.RandomNumberGenerated = false
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, req.TrialNum, commitData.EOAAddress)
+	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, commitData.EOAAddress)
 
 	// Update database for commit data from regular node
 	if err := lh.leaderNode.AddLeaderCommit(ctx, commitData); err != nil {
@@ -190,12 +216,12 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
 	activatedOps := lh.ethService.GetActivatedOperatorsCached()
-	lh.leaderNode.ReliableBroadCastCVS(ctx, round, req.TrialNum, eoaAddress, commitData.Cvs, activatedOps)
+	lh.leaderNode.ReliableBroadCastCVS(ctx, round, trial, eoaAddress, commitData.Cvs, activatedOps)
 	// Check if all commits are ready after this update
 	if !lh.GetMerkleRootSubmitted() && lh.allCommitsReceivedUnlocked(uniqueKey) {
-		log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", round, req.TrialNum)
+		log.Printf("All CVS received for round %s with trail %s. Generating Merkle root...", round, trial)
 		lh.commitMu.Unlock() // Unlock before calling GenerateMerkleRoot
-		lh.leaderNode.GenerateMerkleRoot(ctx, round, req.TrialNum)
+		lh.leaderNode.GenerateMerkleRoot(ctx, round, trial)
 		lh.commitMu.Lock() // Re-lock if needed
 	}
 }
@@ -206,20 +232,23 @@ func (lh *LeaderNodeHandler) handleCOSRequest(ctx context.Context, h host.Host, 
 		log.Println("System is halted. Skipping handleCOSRequest.")
 		return
 	}
+
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var req utils.CosRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
-		log.Printf("Failed to decode COS request: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &req); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("COS request decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode COS request: %v", err)
+		}
 		return
 	}
 
-	// Verify the EOA signature
-	verifyReq := utils.Verification{
-		EOAAddress: req.EOAAddress,
-		Signature:  req.Signature,
-	}
-
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for COS value request from EOA: %s", req.EOAAddress)
+	// Verify signature for ALL fields
+	if !utils.VerifyCosRequestContentSignature(req, req.EOAAddress) {
+		log.Printf("Signature verification failed for COS value request from EOA: %s. Round, TrialNum, Cos, EOAAddress, or UniqueKey may have been tampered.", req.EOAAddress)
 		return
 	}
 
@@ -301,15 +330,7 @@ func (lh *LeaderNodeHandler) handleCOSRequest(ctx context.Context, h host.Host, 
 	}
 }
 
-func (lh *LeaderNodeHandler) VerifySignatureAndCheckActivation(ctx context.Context, req utils.Request, reqType string) bool {
-	verifyReq := utils.Verification{EOAAddress: req.EOAAddress, Signature: req.Signature}
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for round %s EOA %s", req.Round, req.EOAAddress)
-		return false
-	}
-
-	eoaAddress := common.HexToAddress(req.EOAAddress)
-
+func (lh *LeaderNodeHandler) CheckActivation(ctx context.Context, eoaAddress common.Address, reqType string) bool {
 	IsNetworkError, isEOAActivated := lh.isEOAActivatedForRound(ctx, eoaAddress)
 	if IsNetworkError {
 		log.Printf("Network error. Skipping activation check.")
@@ -420,31 +441,28 @@ func (lh *LeaderNodeHandler) handleAcknowledgment(ctx context.Context, s network
 		log.Println("System is halted. Skipping handleAcknowledgment.")
 		return
 	}
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var ack utils.AcknowledgmentMessage
-	if err := json.NewDecoder(s).Decode(&ack); err != nil {
-		log.Printf("Failed to decode acknowledgment message: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &ack); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("Acknowledgment decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode acknowledgment message: %v", err)
+		}
 		return
 	}
 
-	// Verify EOA signature for acknowledgment
-	verifyReq := utils.Verification{
-		EOAAddress: ack.EOAAddress,
-		Signature:  ack.Signature,
-	}
-
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for acknowledgment from EOA: %s (message ID: %s)", ack.EOAAddress, ack.MessageID)
+	// Verify signature for ALL fields
+	if !utils.VerifyAcknowledgmentContentSignature(ack, ack.EOAAddress) {
+		log.Printf("Signature verification failed for acknowledgment from EOA: %s (message ID: %s). Round, TrialNum, EOAAddress, MessageID, Type, or Status may have been tampered.", ack.EOAAddress, ack.MessageID)
 		return
 	}
 
-	commitVerificationRequest := utils.Request{
-		Round:      ack.Round,
-		TrialNum:   ack.TrialNum,
-		EOAAddress: ack.EOAAddress,
-		Signature:  ack.Signature,
-	}
-
-	if !lh.VerifySignatureAndCheckActivation(ctx, commitVerificationRequest, "commit") {
+	// Check if EOA is activated
+	eoaAddress := common.HexToAddress(ack.EOAAddress)
+	if !lh.CheckActivation(ctx, eoaAddress, "acknowledgment") {
 		return
 	}
 
@@ -453,4 +471,83 @@ func (lh *LeaderNodeHandler) handleAcknowledgment(ctx context.Context, s network
 
 	// Process the acknowledgment
 	lh.leaderNode.HandleAcknowledgment(ctx, ack)
+}
+
+func (lh *LeaderNodeHandler) VerifyCvsEIP712Signature(round string, trialNum string, cvs [32]byte, signInfo utils.SignInfo, expectedEOA string) bool {
+	vStr := signInfo.V
+	rStr := signInfo.R
+	sStr := signInfo.S
+
+	if vStr == "" || rStr == "" || sStr == "" {
+		log.Printf("EIP-712 signature verification failed: v, r, or s is empty for EOA %s", expectedEOA)
+		return false
+	}
+
+	v, err := strconv.ParseUint(vStr, 10, 8)
+	if err != nil {
+		log.Printf("EIP-712 signature verification failed: invalid v value '%s' for EOA %s: %v", vStr, expectedEOA, err)
+		return false
+	}
+
+	if v < 27 {
+		v += 27
+	}
+
+	rBytes, err := hex.DecodeString(strings.TrimPrefix(rStr, "0x"))
+	if err != nil {
+		log.Printf("EIP-712 signature verification failed: invalid r value '%s' for EOA %s: %v", rStr, expectedEOA, err)
+		return false
+	}
+
+	sBytes, err := hex.DecodeString(strings.TrimPrefix(sStr, "0x"))
+	if err != nil {
+		log.Printf("EIP-712 signature verification failed: invalid s value '%s' for EOA %s: %v", sStr, expectedEOA, err)
+		return false
+	}
+
+	if len(rBytes) != 32 || len(sBytes) != 32 {
+		log.Printf("EIP-712 signature verification failed: r or s is not 32 bytes for EOA %s", expectedEOA)
+		return false
+	}
+
+	roundBigInt, ok := new(big.Int).SetString(round, 10)
+	if !ok {
+		log.Printf("EIP-712 signature verification failed: invalid round '%s' for EOA %s", round, expectedEOA)
+		return false
+	}
+
+	trialNumBigInt, ok := new(big.Int).SetString(trialNum, 10)
+	if !ok {
+		log.Printf("EIP-712 signature verification failed: invalid trialNum '%s' for EOA %s", trialNum, expectedEOA)
+		return false
+	}
+
+	typedDataHash, err := utils.ComputeCvsEIP712TypedDataHash(roundBigInt, trialNumBigInt, cvs)
+	if err != nil {
+		log.Printf("EIP-712 signature verification failed: error computing typed data hash for EOA %s: %v", expectedEOA, err)
+		return false
+	}
+
+	signature := make([]byte, 65)
+	copy(signature[:32], rBytes)
+	copy(signature[32:64], sBytes)
+	signature[64] = byte(v - 27)
+
+	pubKey, err := crypto.SigToPub(typedDataHash.Bytes(), signature)
+	if err != nil {
+		log.Printf("EIP-712 signature verification failed: error recovering public key for EOA %s: %v", expectedEOA, err)
+		return false
+	}
+
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey)
+	expectedAddress := common.HexToAddress(expectedEOA)
+
+	isValid := recoveredAddress == expectedAddress
+	if isValid {
+		log.Printf("EIP-712 signature verification successful for EOA %s (recovered: %s)", expectedEOA, recoveredAddress.Hex())
+	} else {
+		log.Printf("EIP-712 signature verification failed for EOA %s (recovered: %s)", expectedEOA, recoveredAddress.Hex())
+	}
+
+	return isValid
 }

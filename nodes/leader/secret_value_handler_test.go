@@ -21,6 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
@@ -492,14 +493,20 @@ func TestAcceptSecretValueNoCOSFound(t *testing.T) {
 	// Generate a valid signature
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
-	signature := utils.SignData(eoaAddress, privateKey)
 
-	// Create a request with valid signature but no COS in commit data
+	var secretValue [32]byte
+	copy(secretValue[:], []byte{1, 2, 3})
+
 	req := utils.SecretValueRequest{
 		RegularEoaAddress: eoaAddress,
-		SecretValue:       []byte{1, 2, 3},
-		Signature:         signature,
+		Round:             "100",
+		TrialNum:          "1",
+		SecretValue:       secretValue[:],
 	}
+
+	signature, err := utils.SignSecretValueContent(req, privateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
@@ -525,7 +532,10 @@ func TestAcceptSecretValueHashMismatch(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
+
+	// Create valid 32-byte secret value
+	var secretValue [32]byte
+	copy(secretValue[:], []byte{1, 2, 3})
 
 	// Set up commit data with a different COS
 	uniqueKey := utils.GetUniqueKey("100", "1")
@@ -542,9 +552,14 @@ func TestAcceptSecretValueHashMismatch(t *testing.T) {
 	// Create a request
 	req := utils.SecretValueRequest{
 		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       []byte{1, 2, 3},
-		Signature:         signature,
+		Round:             "100",
+		TrialNum:          "1",
+		SecretValue:       secretValue[:],
 	}
+
+	signature, err := utils.SignSecretValueContent(req, privateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
@@ -625,13 +640,23 @@ func TestAcceptSecretValueUpdateCommitError(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value and compute its hash
 	secretValue := [32]byte{15, 25, 35, 45, 55}
 	cos := commitreveal2.Keccak256(secretValue[:])
 	var cosArray [32]byte
 	copy(cosArray[:], cos)
+
+	req := utils.SecretValueRequest{
+		RegularEoaAddress: eoaAddressHex,
+		Round:             "100",
+		TrialNum:          "1",
+		SecretValue:       secretValue[:],
+	}
+
+	signature, err := utils.SignSecretValueContent(req, privateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	// Set up commit data with matching COS
 	uniqueKey := utils.GetUniqueKey("100", "1")
@@ -657,13 +682,6 @@ func TestAcceptSecretValueUpdateCommitError(t *testing.T) {
 		Return(existingCommit, nil)
 	mockRepo.On("UpdateLeaderCommit", mock.Anything, mock.AnythingOfType("*utils.LeaderCommitData")).
 		Return(errors.New("update failed"))
-
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
 
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
@@ -1140,13 +1158,23 @@ func TestAcceptSecretValueStopsWhenUpdateFails(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value
 	secretValue := [32]byte{10, 20, 30}
 	cos := commitreveal2.Keccak256(secretValue[:])
 	var cosArray [32]byte
 	copy(cosArray[:], cos)
+
+	req := utils.SecretValueRequest{
+		Round:             "100",
+		TrialNum:          "1",
+		SecretValue:       secretValue[:],
+		RegularEoaAddress: eoaAddressHex,
+	}
+
+	signature, err := utils.SignSecretValueContent(req, privateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	// Set up commit data
 	uniqueKey := utils.GetUniqueKey("100", "1")
@@ -1176,12 +1204,8 @@ func TestAcceptSecretValueStopsWhenUpdateFails(t *testing.T) {
 	mockCommitRepo.On("UpdateLeaderCommit", mock.Anything, mock.AnythingOfType("*utils.LeaderCommitData")).
 		Return(errors.New("database update failed"))
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
+	// Create request (reuse existing req struct, just update signature)
+	req.Signature = signature
 
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
@@ -1284,13 +1308,23 @@ func TestBroadcastCompletedBranch(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value
 	secretValue := [32]byte{60, 61, 62, 63, 64, 65, 66, 67}
 	cos := commitreveal2.Keccak256(secretValue[:])
 	var cosArray [32]byte
 	copy(cosArray[:], cos)
+
+	req := utils.SecretValueRequest{
+		Round:             "600",
+		TrialNum:          "8",
+		SecretValue:       secretValue[:],
+		RegularEoaAddress: eoaAddressHex,
+	}
+
+	signature, err := utils.SignSecretValueContent(req, privateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	// Set up commit data
 	uniqueKey := utils.GetUniqueKey("600", "8")
@@ -1327,12 +1361,7 @@ func TestBroadcastCompletedBranch(t *testing.T) {
 		handleSecretValueResponseCalled = true
 	})
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
+	// Reuse existing req struct, signature already set
 
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
@@ -1376,13 +1405,23 @@ func TestBroadcastIncompleteBranch(t *testing.T) {
 	privateKey, _ := crypto.GenerateKey()
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 	eoaAddressHex := eoaAddress.Hex()
-	signature := utils.SignData(eoaAddressHex, privateKey)
 
 	// Create secret value
 	secretValue := [32]byte{70, 71, 72, 73, 74, 75, 76, 77}
 	cos := commitreveal2.Keccak256(secretValue[:])
 	var cosArray [32]byte
 	copy(cosArray[:], cos)
+
+	req := utils.SecretValueRequest{
+		Round:             "700",
+		TrialNum:          "9",
+		SecretValue:       secretValue[:],
+		RegularEoaAddress: eoaAddressHex,
+	}
+
+	signature, err := utils.SignSecretValueContent(req, privateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	// Set up commit data
 	uniqueKey := utils.GetUniqueKey("700", "9")
@@ -1418,12 +1457,6 @@ func TestBroadcastIncompleteBranch(t *testing.T) {
 		handleSecretValueResponseCalled = true
 	})
 
-	// Create request
-	req := utils.SecretValueRequest{
-		RegularEoaAddress: eoaAddressHex,
-		SecretValue:       secretValue[:],
-		Signature:         signature,
-	}
 
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)

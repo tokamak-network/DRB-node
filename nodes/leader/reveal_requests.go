@@ -70,18 +70,22 @@ func (n *LeaderNode) sendSecretValueRequestToNode(ctx context.Context, h host.Ho
 	leaderEoa := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 	log.Printf("EOA Address: %s", leaderEoa)
 
-	// Sign the round number
-	signature := utils.SignData(leaderEoa, privateKey)
-
-	// Create the secret value request
+	// Create the secret value request first
 	req := utils.SecretValueRequest{
 		LeaderEoaAddress:  leaderEoa, // Leader's EOA
 		RegularEoaAddress: regularEoa,
-		Round:             round,     // Round number
-		TrialNum:          trialNum,  // Trial number
-		Signature:         signature, // Signed round number
+		Round:             round,    // Round number
+		TrialNum:          trialNum, // Trial number
 		Order:             order,
 	}
+
+	// Sign ALL fields
+	signature, err := utils.SignSecretValueRequestContent(req, privateKey)
+	if err != nil {
+		log.Printf("Failed to sign secret value request content: %v", err)
+		return
+	}
+	req.Signature = signature // Signed Round, TrialNum, and Order
 
 	fmt.Println("Sending secret value request to EOA:", regularEoa)
 

@@ -38,7 +38,7 @@ type RegularNodeHandler struct {
 	regularNode       *RegularNode
 }
 
-func NewRegularNodeHandler(fallbackEthClient fallback_ethclient.IFallbackEthClient, db *pg.DB) *RegularNodeHandler {
+func NewRegularNodeHandler(fallbackEthClient fallback_ethclient.IFallbackEthClient, db *pg.DB) (*RegularNodeHandler, error) {
 	peerCommitDataRepository := database.NewPeerCommitRepository(db)
 	revealOrderRepository := database.NewRevealOrderRepository(db)
 	regularCommitRepository := database.NewRegularCommitRepository(db)
@@ -47,7 +47,7 @@ func NewRegularNodeHandler(fallbackEthClient fallback_ethclient.IFallbackEthClie
 	leaderCommitRepository := database.NewLeaderCommitRepository(db)
 	revealOrderService := commitreveal2.NewRevealOrderService(revealOrderRepository, peerCommitDataRepository, leaderCommitRepository)
 	p2pClient := libp2putils.NewP2PClient(nodeInfoRepository)
-	regularNode := NewRegularNode(
+	regularNode, err := NewRegularNode(
 		fallbackEthClient,
 		revealOrderService,
 		p2pClient,
@@ -57,10 +57,13 @@ func NewRegularNodeHandler(fallbackEthClient fallback_ethclient.IFallbackEthClie
 		batchRepository,
 		nodeInfoRepository,
 	)
+	if err != nil {
+		return nil, err
+	}
 	return &RegularNodeHandler{
 		fallbackEthClient: fallbackEthClient,
 		regularNode:       regularNode,
-	}
+	}, nil
 }
 
 // RunRegularNode handles the behavior for a regular node
@@ -376,8 +379,11 @@ func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, 
 		EOAAddress: eoaAddress, // Include EOA address to verify
 	}
 
-	// Sign the request (just the round value here)
-	signedRequest := utils.SignData(eoaAddress, privateKey)
+	signedRequest, err := utils.SignCosRequestContent(req, privateKey)
+	if err != nil {
+		log.Printf("Failed to sign COS request content: %v", err)
+		return
+	}
 
 	// Send the COS commit to leader with the signed request
 	req.Signature = signedRequest
@@ -571,8 +577,12 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 		return
 	}
 
-	// Sign the request (round + EOA address)
-	signedRequest := utils.SignData(eoaAddress, privateKey)
+	// Sign the complete request struct
+	signedRequest, err := utils.SignCommitRequestContent(req, privateKey)
+	if err != nil {
+		log.Printf("Failed to sign commit request content: %v", err)
+		return
+	}
 
 	req.Signature = signedRequest
 

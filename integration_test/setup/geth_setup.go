@@ -102,7 +102,7 @@ func StartGethDevNode(ctx context.Context) (*GethTestEnv, error) {
 		projectRoot = parent
 	}
 
-	contractABIPath := filepath.Join(projectRoot, "contract", "abi", "CommitReveal2L2.json")
+	contractABIPath := filepath.Join(projectRoot, "contract", "abi", "Commit2RevealDRB.json")
 	consumerABIPath := filepath.Join(projectRoot, "contract", "abi", "ConsumerExampleV2.json")
 
 	env := &GethTestEnv{
@@ -247,8 +247,8 @@ func (env *GethTestEnv) DeployContracts(ctx context.Context) error {
 	env.LeaderAccount.Auth.GasLimit = 10_000_000
 	env.LeaderAccount.Auth.GasPrice = big.NewInt(1000000000) // 1 gwei
 
-	// Deploy main DRB contract (CommitReveal2L2)
-	fmt.Println("\nDeploying CommitReveal2L2 contract...")
+	// Deploy main DRB contract (Commit2RevealDRB)
+	fmt.Println("\nDeploying Commit2RevealDRB contract...")
 	address, tx, parsedABI, err := DeployCommitReveal2L2(
 		ctx,
 		env.Client,
@@ -256,16 +256,16 @@ func (env *GethTestEnv) DeployContracts(ctx context.Context) error {
 		env.ContractABIPath,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to deploy CommitReveal2L2: %w", err)
+		return fmt.Errorf("failed to deploy Commit2RevealDRB: %w", err)
 	}
 
 	env.ContractAddress = address
 	env.ContractABI = parsedABI
 
 	if err := env.WaitForTransaction(ctx, tx); err != nil {
-		return fmt.Errorf("failed to wait for CommitReveal2L2 deployment: %w", err)
+		return fmt.Errorf("failed to wait for Commit2RevealDRB deployment: %w", err)
 	}
-	fmt.Printf("  CommitReveal2L2 deployed at: %s\n", address.Hex())
+	fmt.Printf("  Commit2RevealDRB deployed at: %s\n", address.Hex())
 
 	// Reset nonce for the deployer account
 	env.RegularAccounts[0].Auth.GasLimit = 10_000_000

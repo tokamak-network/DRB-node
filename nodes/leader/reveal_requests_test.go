@@ -1618,18 +1618,22 @@ func (n *LeaderNode) sendSecretValueRequestToNodeTestable(
 	leaderEoa := crypto.PubkeyToAddress(privateKey.PublicKey).Hex()
 	log.Printf("EOA Address: %s", leaderEoa)
 
-	// Sign the round number
-	signature := utils.SignData(leaderEoa, privateKey)
-
-	// Create the secret value request
+	// Create request first
 	req := utils.SecretValueRequest{
 		LeaderEoaAddress:  leaderEoa,
 		RegularEoaAddress: regularEoa,
 		Round:             round,
 		TrialNum:          trialNum,
-		Signature:         signature,
 		Order:             order,
 	}
+
+	// Sign ALL fields: Round, TrialNum, Order, LeaderEoaAddress, RegularEoaAddress
+	signature, err := utils.SignSecretValueRequestContent(req, privateKey)
+	if err != nil {
+		log.Printf("Failed to sign secret value request: %v", err)
+		return
+	}
+	req.Signature = signature
 
 	fmt.Println("Sending secret value request to EOA:", regularEoa)
 
@@ -2311,8 +2315,12 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_IntegrationWith
 	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
 	regularEoa := "0xIntegrationNode60000000000000000000000"
 
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	defer os.Unsetenv("LEADER_PRIVATE_KEY")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
 
 	// Create two hosts
 	leaderHost, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))

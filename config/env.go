@@ -45,6 +45,13 @@ type EnvConfig struct {
 
 	// Database configuration
 	Database DatabaseConfig
+
+	// Contract period configuration
+	OffChainSubmissionPeriod            *big.Int
+	RequestOrSubmitOrFailDecisionPeriod *big.Int
+	OnChainSubmissionPeriod             *big.Int
+	OffChainSubmissionPeriodPerOperator *big.Int
+	OnChainSubmissionPeriodPerOperator  *big.Int
 }
 
 // DatabaseConfig stores Postgres connection settings.
@@ -66,14 +73,14 @@ type ContractPeriods struct {
 	OnChainSubmissionPeriodPerOperator  *big.Int // On-chain submission time per operator
 }
 
-// GetContractPeriods returns the contract period configuration
 func GetContractPeriods() *ContractPeriods {
+	cfg := Get()
 	return &ContractPeriods{
-		OffChainSubmissionPeriod:            big.NewInt(40),
-		RequestOrSubmitOrFailDecisionPeriod: big.NewInt(30),
-		OnChainSubmissionPeriod:             big.NewInt(60),
-		OffChainSubmissionPeriodPerOperator: big.NewInt(20),
-		OnChainSubmissionPeriodPerOperator:  big.NewInt(30),
+		OffChainSubmissionPeriod:            cfg.OffChainSubmissionPeriod,
+		RequestOrSubmitOrFailDecisionPeriod: cfg.RequestOrSubmitOrFailDecisionPeriod,
+		OnChainSubmissionPeriod:             cfg.OnChainSubmissionPeriod,
+		OffChainSubmissionPeriodPerOperator: cfg.OffChainSubmissionPeriodPerOperator,
+		OnChainSubmissionPeriodPerOperator:  cfg.OnChainSubmissionPeriodPerOperator,
 	}
 }
 
@@ -150,6 +157,11 @@ func loadEnv() *EnvConfig {
 			PostgresName:     getEnvOrDefault("POSTGRES_NAME", "postgres"),
 			PostgresSSLMode:  getEnvOrDefault("POSTGRES_SSLMODE", "disable"),
 		},
+		OffChainSubmissionPeriod:            getEnvAsBigIntOrDefault("OFF_CHAIN_SUBMISSION_PERIOD", 40),
+		RequestOrSubmitOrFailDecisionPeriod: getEnvAsBigIntOrDefault("REQUEST_OR_SUBMIT_OR_FAIL_DECISION_PERIOD", 30),
+		OnChainSubmissionPeriod:             getEnvAsBigIntOrDefault("ON_CHAIN_SUBMISSION_PERIOD", 60),
+		OffChainSubmissionPeriodPerOperator: getEnvAsBigIntOrDefault("OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR", 20),
+		OnChainSubmissionPeriodPerOperator:  getEnvAsBigIntOrDefault("ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR", 30),
 	}
 }
 
@@ -195,6 +207,20 @@ func getEnvAsInt(key string, defaultValue int) int {
 	parsed, err := strconv.Atoi(value)
 	if err != nil {
 		return defaultValue
+	}
+	return parsed
+}
+
+func getEnvAsBigIntOrDefault(key string, defaultValue int64) *big.Int {
+	value := os.Getenv(key)
+	if value == "" {
+		return big.NewInt(defaultValue)
+	}
+
+	parsed := new(big.Int)
+	parsed, ok := parsed.SetString(value, 10)
+	if !ok {
+		return big.NewInt(defaultValue)
 	}
 	return parsed
 }

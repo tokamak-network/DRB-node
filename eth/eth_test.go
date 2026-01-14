@@ -333,7 +333,7 @@ func TestCallSmartContract_UnpackError(t *testing.T) {
 }
 
 // Test ExecuteTransaction
-func TestExecuteTransaction_NetworkIDError(t *testing.T) {
+func TestExecuteTransaction_ChainIDError(t *testing.T) {
 	mockClient := new(MockFallbackEthClient)
 	ctx := context.Background()
 
@@ -350,13 +350,14 @@ func TestExecuteTransaction_NetworkIDError(t *testing.T) {
 		PrivateKey:      privateKey,
 	}
 
-	mockClient.On("NetworkID", ctx).Return(nil, errors.New("network error"))
+	// ChainID should be called 3 times (maxRetries) before giving up
+	mockClient.On("ChainID", ctx).Return(nil, errors.New("chain ID error")).Times(3)
 
 	tx, auth, err := ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
 	assert.Error(t, err)
 	assert.Nil(t, tx)
 	assert.Nil(t, auth)
-	assert.Contains(t, err.Error(), "failed to fetch network ID")
+	assert.Contains(t, err.Error(), "failed to fetch chain ID")
 
 	mockClient.AssertExpectations(t)
 }
@@ -369,7 +370,8 @@ func TestExecuteTransaction_NonceError(t *testing.T) {
 	require.NoError(t, err)
 
 	chainID := big.NewInt(1337)
-	mockClient.On("NetworkID", ctx).Return(chainID, nil)
+	// ChainID succeeds on first attempt
+	mockClient.On("ChainID", ctx).Return(chainID, nil).Once()
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	require.NoError(t, err)
@@ -383,8 +385,7 @@ func TestExecuteTransaction_NonceError(t *testing.T) {
 		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
 		PrivateKey:      privateKey,
 	}
-
-	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), errors.New("nonce error"))
+	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), errors.New("nonce error")).Times(3)
 
 	tx, auth, err := ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
 	assert.Error(t, err)
@@ -403,7 +404,7 @@ func TestExecuteTransaction_PackError(t *testing.T) {
 	require.NoError(t, err)
 
 	chainID := big.NewInt(1337)
-	mockClient.On("NetworkID", ctx).Return(chainID, nil)
+	mockClient.On("ChainID", ctx).Return(chainID, nil).Once()
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	require.NoError(t, err)
@@ -417,10 +418,8 @@ func TestExecuteTransaction_PackError(t *testing.T) {
 		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
 		PrivateKey:      privateKey,
 	}
+	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil).Once()
 
-	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil)
-
-	// Call method without required parameter - should fail on pack
 	tx, auth, err := ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
 	assert.Error(t, err)
 	assert.Nil(t, tx)
@@ -438,7 +437,8 @@ func TestExecuteTransaction_GasEstimationError(t *testing.T) {
 	require.NoError(t, err)
 
 	chainID := big.NewInt(1337)
-	mockClient.On("NetworkID", ctx).Return(chainID, nil)
+	// ChainID succeeds on first attempt
+	mockClient.On("ChainID", ctx).Return(chainID, nil).Once()
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	require.NoError(t, err)
@@ -452,8 +452,7 @@ func TestExecuteTransaction_GasEstimationError(t *testing.T) {
 		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
 		PrivateKey:      privateKey,
 	}
-
-	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil)
+	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil).Once()
 
 	packedData, err := client.ContractABI.Pack("testMethod")
 	require.NoError(t, err)
@@ -645,14 +644,13 @@ func TestSendWithRetry_SuggestGasTipCapError(t *testing.T) {
 	chainID := big.NewInt(1337)
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	require.NoError(t, err)
-
-	mockClient.On("SuggestGasTipCap", ctx).Return(nil, errors.New("tip cap error"))
+	mockClient.On("SuggestGasTipCap", ctx).Return(nil, errors.New("tip cap error")).Times(3)
 
 	receipt, tx, err := sendWithRetry(ctx, mockClient, chainID, auth, auth.From, big.NewInt(0), []byte{})
 	assert.Error(t, err)
 	assert.Nil(t, receipt)
 	assert.Nil(t, tx)
-	assert.Contains(t, err.Error(), "failed to suggest tip cap")
+	assert.Contains(t, err.Error(), "failed to suggest tip cap after 3 attempts")
 
 	mockClient.AssertExpectations(t)
 }
@@ -669,13 +667,13 @@ func TestSendWithRetry_SuggestGasPriceError(t *testing.T) {
 	require.NoError(t, err)
 
 	mockClient.On("SuggestGasTipCap", ctx).Return(big.NewInt(1000000000), nil)
-	mockClient.On("SuggestGasPrice", ctx).Return(nil, errors.New("gas price error"))
+	mockClient.On("SuggestGasPrice", ctx).Return(nil, errors.New("gas price error")).Times(3)
 
 	receipt, tx, err := sendWithRetry(ctx, mockClient, chainID, auth, auth.From, big.NewInt(0), []byte{})
 	assert.Error(t, err)
 	assert.Nil(t, receipt)
 	assert.Nil(t, tx)
-	assert.Contains(t, err.Error(), "failed to suggest gas price")
+	assert.Contains(t, err.Error(), "failed to suggest gas price after 3 attempts")
 
 	mockClient.AssertExpectations(t)
 }
@@ -693,13 +691,15 @@ func TestSendWithRetry_PendingNonceAtError(t *testing.T) {
 
 	mockClient.On("SuggestGasTipCap", ctx).Return(big.NewInt(1000000000), nil)
 	mockClient.On("SuggestGasPrice", ctx).Return(big.NewInt(1000000000), nil)
-	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), errors.New("nonce error"))
+	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), errors.New("nonce error")).Times(5)
 
 	receipt, tx, err := sendWithRetry(ctx, mockClient, chainID, auth, auth.From, big.NewInt(0), []byte{})
 	assert.Error(t, err)
 	assert.Nil(t, receipt)
 	assert.Nil(t, tx)
-	assert.Contains(t, err.Error(), "failed to get nonce")
+	// Should return error after maxRetries
+	assert.Contains(t, err.Error(), "failed to get nonce after 5 retries")
+	assert.Contains(t, err.Error(), "nonce error")
 
 	mockClient.AssertExpectations(t)
 }
@@ -717,7 +717,7 @@ func TestSendWithRetry_EstimateGasError(t *testing.T) {
 
 	mockClient.On("SuggestGasTipCap", ctx).Return(big.NewInt(1000000000), nil)
 	mockClient.On("SuggestGasPrice", ctx).Return(big.NewInt(1000000000), nil)
-	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil)
+	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil).Times(5)
 
 	callMsg := ethereum.CallMsg{
 		From:  auth.From,
@@ -725,22 +725,18 @@ func TestSendWithRetry_EstimateGasError(t *testing.T) {
 		Data:  []byte{},
 		Value: big.NewInt(0),
 	}
-	mockClient.On("EstimateGas", ctx, callMsg).Return(uint64(0), errors.New("gas estimate error"))
+	mockClient.On("EstimateGas", ctx, callMsg).Return(uint64(0), errors.New("gas estimate error")).Times(5)
 
 	receipt, tx, err := sendWithRetry(ctx, mockClient, chainID, auth, auth.From, big.NewInt(0), []byte{})
 	assert.Error(t, err)
 	assert.Nil(t, receipt)
 	assert.Nil(t, tx)
-	assert.Contains(t, err.Error(), "failed to estimate gas")
+	assert.Contains(t, err.Error(), "failed to estimate gas after 5 retries")
+	assert.Contains(t, err.Error(), "gas estimate error")
 
 	mockClient.AssertExpectations(t)
 }
 
-// Note: Full integration test for sendWithRetry would require more complex setup
-// The existing Test_SendWithRetry in the file is an integration test
-
-// Test GetActivatedOperators, UpdateActivatedOperators, UpdateCurrentRoundFromContract, GetTrialNumFromContract
-// These require ABI file and config setup, so we'll test with mocks where possible
 
 func TestGetActivatedOperators_CallContractError(t *testing.T) {
 	// Test error when CallContract fails

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"log"
 	"math/big"
 	"time"
@@ -66,21 +66,24 @@ func (n *LeaderNode) AcceptSecretValue(ctx context.Context, h host.Host, s netwo
 		log.Println("System is halted. Skipping AcceptSecretValue.")
 		return
 	}
+
+	decodeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	// Decode the incoming request
 	var req utils.SecretValueRequest
-	if err := json.NewDecoder(s).Decode(&req); err != nil {
-		log.Printf("Failed to decode secret value request: %v", err)
+	if err := utils.DecodeJSONWithContext(decodeCtx, s, &req); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("Secret value request decode timeout after 10s from peer: %s", s.Conn().RemotePeer())
+		} else {
+			log.Printf("Failed to decode secret value request: %v", err)
+		}
 		return
 	}
 
-	// Verify the EOA signature
-	verifyReq := utils.Verification{
-		EOAAddress: req.RegularEoaAddress,
-		Signature:  req.Signature,
-	}
-
-	if !utils.VerifySignature(verifyReq) {
-		log.Printf("Signature verification failed for secret value request from EOA: %s", req.RegularEoaAddress)
+	// Verify signature for ALL fields
+	if !utils.VerifySecretValueContentSignature(req, req.RegularEoaAddress) {
+		log.Printf("Signature verification failed for secret value from EOA: %s. Round, TrialNum, SecretValue, or RegularEoaAddress may have been tampered.", req.RegularEoaAddress)
 		return
 	}
 
@@ -110,8 +113,13 @@ func (n *LeaderNode) AcceptSecretValue(ctx context.Context, h host.Host, s netwo
 		log.Printf("Commit data not found  for round %s with trail %s EOA %s.", round, trial, eoaAddress.Hex())
 		return
 	}
+
 	var secretValueArray [32]byte
-	copy(secretValueArray[:], req.SecretValue[:]) // Convert req.SecretValue to [32]byte
+	if len(req.SecretValue) != 32 {
+		log.Printf("Invalid secret value length: expected 32 bytes, got %d", len(req.SecretValue))
+		return
+	}
+	copy(secretValueArray[:], req.SecretValue[:])
 
 	// Use the new atomic setter function
 	n.AppendToRoundSecrets(uniqueKey, secretValueArray)
