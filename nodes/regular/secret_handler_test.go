@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"sync"
 	"testing"
 
+	"github.com/eapache/queue"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p"
@@ -21,33 +23,22 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-// MockRevealOrderRepository for testing
-type MockRevealOrderRepository struct {
-	mock.Mock
-}
-
-func (m *MockRevealOrderRepository) GetRevealOrder(ctx context.Context, round, trialNum string) (*utils.RevealOrderData, error) {
-	args := m.Called(ctx, round, trialNum)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*utils.RevealOrderData), args.Error(1)
-}
-
-func (m *MockRevealOrderRepository) AddRevealOrder(ctx context.Context, revealOrder *utils.RevealOrderData) error {
-	args := m.Called(ctx, revealOrder)
-	return args.Error(0)
-}
 
 func createTestNodeForSecretHandler() *RegularNode {
 	mockPeerRepo := new(MockPeerCommitRepository)
 	mockRevealRepo := new(MockRevealOrderRepository)
 	mockCommitRepo := new(MockRegularCommitRepository)
 
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
-	node.peerCommitDataRepository = mockPeerRepo
-	node.revealOrderRepository = mockRevealRepo
-	node.regularCommitRepository = mockCommitRepo
+	node := &RegularNode{
+		peerCommitDataRepository:      mockPeerRepo,
+		revealOrderRepository:         mockRevealRepo,
+		regularCommitRepository:       mockCommitRepo,
+		submittedCvIndices:            make(map[string]map[string]bool),
+		cleanupQueue:                  queue.New(),
+		strictOrderWhileSecretRequest: make(map[string][]string),
+		roundsData:                    make(map[string]RoundData),
+		cosRecevied:                   sync.Map{},
+	}
 
 	return node
 }

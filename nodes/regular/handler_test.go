@@ -12,9 +12,11 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/eapache/queue"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -641,6 +643,82 @@ func (m *MockNodeInfoRepository) DeleteNodeInfoByEOA(ctx context.Context, eoaAdd
 	return args.Error(0)
 }
 
+type MockRevealOrderRepository struct {
+	mock.Mock
+}
+
+func (m *MockRevealOrderRepository) GetRevealOrder(ctx context.Context, round, trialNum string) (*utils.RevealOrderData, error) {
+	args := m.Called(ctx, round, trialNum)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*utils.RevealOrderData), args.Error(1)
+}
+
+func (m *MockRevealOrderRepository) AddRevealOrder(ctx context.Context, revealOrder *utils.RevealOrderData) error {
+	args := m.Called(ctx, revealOrder)
+	return args.Error(0)
+}
+
+type MockBatchRepository struct {
+	mock.Mock
+}
+
+func (m *MockBatchRepository) DeleteOldRoundDataForRegularNode(ctx context.Context, currentRound string) error {
+	args := m.Called(ctx, currentRound)
+	return args.Error(0)
+}
+
+func (m *MockBatchRepository) DeleteRoundTrialDataForRegularNode(ctx context.Context, round, trialNum string) error {
+	args := m.Called(ctx, round, trialNum)
+	return args.Error(0)
+}
+
+func (m *MockBatchRepository) DeleteOldRoundDataForLeaderNode(ctx context.Context, currentRound string) error {
+	args := m.Called(ctx, currentRound)
+	return args.Error(0)
+}
+
+func (m *MockBatchRepository) DeleteRoundTrialDataForLeaderNode(ctx context.Context, round, trialNum string) error {
+	args := m.Called(ctx, round, trialNum)
+	return args.Error(0)
+}
+
+type MockLeaderCommitRepository struct {
+	mock.Mock
+}
+
+func (m *MockLeaderCommitRepository) GetLeaderCommitByRoundAndEoaAddr(ctx context.Context, round, trialNum, eoaAddress string) (*utils.LeaderCommitData, error) {
+	args := m.Called(ctx, round, trialNum, eoaAddress)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*utils.LeaderCommitData), args.Error(1)
+}
+
+func (m *MockLeaderCommitRepository) UpdateLeaderCommit(ctx context.Context, commitData *utils.LeaderCommitData) error {
+	args := m.Called(ctx, commitData)
+	return args.Error(0)
+}
+
+func (m *MockLeaderCommitRepository) AddLeaderCommit(ctx context.Context, commitData *utils.LeaderCommitData) error {
+	args := m.Called(ctx, commitData)
+	return args.Error(0)
+}
+
+func (m *MockLeaderCommitRepository) GetLeaderCommitsByRoundAndTrialNum(ctx context.Context, round, trialNum string) ([]*utils.LeaderCommitData, error) {
+	args := m.Called(ctx, round, trialNum)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*utils.LeaderCommitData), args.Error(1)
+}
+
+func (m *MockLeaderCommitRepository) UpdateLeaderCommitRandomNumberGenerated(ctx context.Context, round, trialNum string) error {
+	args := m.Called(ctx, round, trialNum)
+	return args.Error(0)
+}
+
 func createTestRegularNodeHandler() *RegularNodeHandler {
 	mockCommitRepo := new(MockRegularCommitRepository)
 	mockNodeInfoRepo := new(MockNodeInfoRepository)
@@ -1255,9 +1333,19 @@ func TestRegularNodeHandler_SubmittedCvIndices(t *testing.T) {
 	assert.False(t, exists)
 }
 
+func createTestNodeForHandler() *RegularNode {
+	return &RegularNode{
+		submittedCvIndices:            make(map[string]map[string]bool),
+		cleanupQueue:                  queue.New(),
+		strictOrderWhileSecretRequest: make(map[string][]string),
+		roundsData:                    make(map[string]RoundData),
+		cosRecevied:                   sync.Map{},
+	}
+}
+
 func TestRegularNodeHandler_StrictOrderManagement(t *testing.T) {
 	// Create node with NewRegularNode to properly initialize maps
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	node := createTestNodeForHandler()
 
 	uniqueKey := "100:1"
 	order := []string{"node1", "node2", "node3"}
@@ -1684,7 +1772,7 @@ func TestRegularNodeHandler_SignInfoInCommitRequest(t *testing.T) {
 
 func TestRegularNodeHandler_CleanupQueueBehavior(t *testing.T) {
 	// Use NewRegularNode to properly initialize cleanup queue
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	node := createTestNodeForHandler()
 
 	// Add keys below threshold
 	for i := 1; i <= 4; i++ {
@@ -3039,7 +3127,10 @@ func (suite *RegularHandlerTestSuite) SetupTest() {
 	)
 	suite.p2pClient = libp2putils.NewP2PClient(suite.nodeInfoRepo)
 
-	suite.regularNodeHandler = NewRegularNodeHandler(nil, suite.db)
+	mockFallbackClient := new(MockFallbackEthClient)
+	var err error
+	suite.regularNodeHandler, err = NewRegularNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 }
 
 // TearDownTest runs after each test to clean up data
@@ -3065,7 +3156,9 @@ func (suite *RegularHandlerTestSuite) TearDownSuite() {
 
 // TestRegularHandler_NewRegularNodeHandler tests handler initialization
 func (suite *RegularHandlerTestSuite) TestRegularHandler_NewRegularNodeHandler() {
-	handler := NewRegularNodeHandler(nil, suite.db)
+	mockFallbackClient := new(MockFallbackEthClient)
+	handler, err := NewRegularNodeHandler(mockFallbackClient, suite.db)
+	require.NoError(suite.T(), err)
 
 	require.NotNil(suite.T(), handler)
 	assert.NotNil(suite.T(), handler.regularNode)
@@ -3230,8 +3323,9 @@ func TestRegularNodeHandler_NewRegularNodeHandler_WithRealDB(t *testing.T) {
 	}
 	defer db.Close()
 
-	handler := NewRegularNodeHandler(nil, db)
-
+	mockFallbackClient := new(MockFallbackEthClient)
+	handler, err := NewRegularNodeHandler(mockFallbackClient, db)
+	require.NoError(t, err)
 	require.NotNil(t, handler)
 	assert.NotNil(t, handler.regularNode)
 	assert.NotNil(t, handler.regularNode.peerCommitDataRepository)

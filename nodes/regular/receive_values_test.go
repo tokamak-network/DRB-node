@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 
 	"os"
 
+	"github.com/eapache/queue"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p"
@@ -53,9 +55,14 @@ func (m *MockPeerCommitRepository) GetAllPeerCommitData(ctx context.Context, rou
 func createTestNodeForReceiveValues() *RegularNode {
 	mockPeerRepo := new(MockPeerCommitRepository)
 
-	// Create node with NewRegularNode to initialize sync.Maps, then assign mock
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
-	node.peerCommitDataRepository = mockPeerRepo
+	node := &RegularNode{
+		peerCommitDataRepository:      mockPeerRepo,
+		submittedCvIndices:            make(map[string]map[string]bool),
+		cleanupQueue:                  queue.New(),
+		strictOrderWhileSecretRequest: make(map[string][]string),
+		roundsData:                    make(map[string]RoundData),
+		cosRecevied:                   sync.Map{},
+	}
 
 	return node
 }
@@ -1350,7 +1357,7 @@ func TestRegularNode_HandleSecret_InvalidLeaderPeerID(t *testing.T) {
 }
 
 func TestRegularNode_SetCosReceived_Success(t *testing.T) {
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	node := createTestNodeForReceiveValues()
 
 	uniqueKey := "100:1"
 	eoaAddress := "0x1234567890123456789012345678901234567890"
@@ -1365,7 +1372,7 @@ func TestRegularNode_SetCosReceived_Success(t *testing.T) {
 }
 
 func TestRegularNode_SetCosReceived_MultiplKeys(t *testing.T) {
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	node := createTestNodeForReceiveValues()
 
 	// Set for different keys
 	node.SetCosReceived("100:1", "0xAddr1", true)
@@ -1387,7 +1394,7 @@ func TestRegularNode_SetCosReceived_MultiplKeys(t *testing.T) {
 }
 
 func TestRegularNode_GetCosReceived_NotExists(t *testing.T) {
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	node := createTestNodeForReceiveValues()
 
 	// Get non-existent key
 	value, exists := node.GetCosReceived("non-existent", "addr")
@@ -1396,7 +1403,7 @@ func TestRegularNode_GetCosReceived_NotExists(t *testing.T) {
 }
 
 func TestRegularNode_GetCosReceived_InnerNotExists(t *testing.T) {
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	node := createTestNodeForReceiveValues()
 
 	// Set one value
 	node.SetCosReceived("100:1", "0xAddr1", true)
@@ -1408,7 +1415,7 @@ func TestRegularNode_GetCosReceived_InnerNotExists(t *testing.T) {
 }
 
 func TestRegularNode_CosReceived_Update(t *testing.T) {
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	node := createTestNodeForReceiveValues()
 
 	uniqueKey := "100:1"
 	eoaAddress := "0x1234567890123456789012345678901234567890"
@@ -1425,7 +1432,7 @@ func TestRegularNode_CosReceived_Update(t *testing.T) {
 }
 
 func TestRegularNode_sendAcknowledgment_NoPrivateKey(t *testing.T) {
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	node := createTestNodeForReceiveValues()
 	// Don't set private key
 
 	ack := utils.AcknowledgmentMessage{
@@ -1514,7 +1521,7 @@ func TestRegularNode_AcknowledgmentMessageStructure(t *testing.T) {
 }
 
 func TestRegularNode_ConcurrentCosReceived(t *testing.T) {
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	node := createTestNodeForReceiveValues()
 	done := make(chan bool, 3)
 
 	uniqueKey := "100:1"

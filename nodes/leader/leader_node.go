@@ -2,6 +2,7 @@ package leader_node
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"sync"
 	"time"
@@ -121,7 +122,32 @@ func NewLeaderNode(
 	broadcastTrackerRepository database.IBroadcastTrackerRepository,
 	reavealOrderRepository database.IRevealOrderRepository,
 	nodeInfoRepository database.INodeInfoRepository,
-) *LeaderNode {
+) (*LeaderNode, error) {
+	if fallbackEthClient == nil {
+		return nil, errors.New("fallbackEthClient cannot be nil")
+	}
+	if revealOrderService == nil {
+		return nil, errors.New("revealOrderService cannot be nil")
+	}
+	if p2pClient == nil {
+		return nil, errors.New("p2pClient cannot be nil")
+	}
+	if leaderCommitRepository == nil {
+		return nil, errors.New("leaderCommitRepository cannot be nil")
+	}
+	if batchRepository == nil {
+		return nil, errors.New("batchRepository cannot be nil")
+	}
+	if broadcastTrackerRepository == nil {
+		return nil, errors.New("broadcastTrackerRepository cannot be nil")
+	}
+	if reavealOrderRepository == nil {
+		return nil, errors.New("reavealOrderRepository cannot be nil")
+	}
+	if nodeInfoRepository == nil {
+		return nil, errors.New("nodeInfoRepository cannot be nil")
+	}
+
 	return &LeaderNode{
 		fallbackEthClient:          fallbackEthClient,
 		leaderCommitRepository:     leaderCommitRepository,
@@ -130,7 +156,7 @@ func NewLeaderNode(
 		broadcastTrackerRepository: broadcastTrackerRepository,
 		reavealOrderRepository:     reavealOrderRepository,
 		nodeInfoRepository:         nodeInfoRepository,
-		p2pClient:                  libp2putils.NewP2PClient(nodeInfoRepository),
+		p2pClient:                  p2pClient,
 		ethService:                 eth.Service, // Use default eth service
 		roundsData:                 make(map[string]RoundData),
 		activeBroadcasts:           make(map[string]*utils.BroadcastTracker),
@@ -141,7 +167,7 @@ func NewLeaderNode(
 		indices:                    make([]*big.Int, 0),
 		revealRequestStatus:        make(map[string][]string),
 		cleanupQueue:               queue.New(),
-	}
+	}, nil
 }
 
 func (n *LeaderNode) AddLeaderCommit(ctx context.Context, commitData *utils.LeaderCommitData) error {

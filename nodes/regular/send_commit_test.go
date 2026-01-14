@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/eapache/queue"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -24,29 +25,6 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-type MockBatchRepository struct {
-	mock.Mock
-}
-
-func (m *MockBatchRepository) DeleteOldRoundDataForRegularNode(ctx context.Context, currentRound string) error {
-	args := m.Called(ctx, currentRound)
-	return args.Error(0)
-}
-
-func (m *MockBatchRepository) DeleteRoundTrialDataForRegularNode(ctx context.Context, round, trialNum string) error {
-	args := m.Called(ctx, round, trialNum)
-	return args.Error(0)
-}
-
-func (m *MockBatchRepository) DeleteOldRoundDataForLeaderNode(ctx context.Context, currentRound string) error {
-	args := m.Called(ctx, currentRound)
-	return args.Error(0)
-}
-
-func (m *MockBatchRepository) DeleteRoundTrialDataForLeaderNode(ctx context.Context, round, trialNum string) error {
-	args := m.Called(ctx, round, trialNum)
-	return args.Error(0)
-}
 
 func TestRegularNode_RoundData_Structure(t *testing.T) {
 	roundData := RoundData{
@@ -104,9 +82,15 @@ func createTestNodeForSendCommit() *RegularNode {
 	mockCommitRepo := new(MockRegularCommitRepository)
 	mockRevealRepo := new(MockRevealOrderRepository)
 
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
-	node.regularCommitRepository = mockCommitRepo
-	node.revealOrderRepository = mockRevealRepo
+	node := &RegularNode{
+		regularCommitRepository:       mockCommitRepo,
+		revealOrderRepository:         mockRevealRepo,
+		submittedCvIndices:            make(map[string]map[string]bool),
+		cleanupQueue:                  queue.New(),
+		strictOrderWhileSecretRequest: make(map[string][]string),
+		roundsData:                    make(map[string]RoundData),
+		cosRecevied:                   sync.Map{},
+	}
 
 	return node
 }
@@ -115,19 +99,26 @@ func createTestNodeForReceiveCommitRequest() *RegularNode {
 	mockCommitRepo := new(MockRegularCommitRepository)
 	mockRevealRepo := new(MockRevealOrderRepository)
 	mockPeerRepo := new(MockPeerCommitRepository)
+	mockLeaderCommitRepo := new(MockLeaderCommitRepository)
 
 	// Create real RevealOrderService with mock repositories
 	revealOrderService := commitreveal2.NewRevealOrderService(
 		mockRevealRepo,
 		mockPeerRepo,
-		nil,
+		mockLeaderCommitRepo,
 	)
 
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
-	node.regularCommitRepository = mockCommitRepo
-	node.revealOrderRepository = mockRevealRepo
-	node.peerCommitDataRepository = mockPeerRepo
-	node.revealOrderService = revealOrderService
+	node := &RegularNode{
+		regularCommitRepository:       mockCommitRepo,
+		revealOrderRepository:         mockRevealRepo,
+		peerCommitDataRepository:      mockPeerRepo,
+		revealOrderService:            revealOrderService,
+		submittedCvIndices:            make(map[string]map[string]bool),
+		cleanupQueue:                  queue.New(),
+		strictOrderWhileSecretRequest: make(map[string][]string),
+		roundsData:                    make(map[string]RoundData),
+		cosRecevied:                   sync.Map{},
+	}
 
 	return node
 }
@@ -136,19 +127,26 @@ func createTestNodeWithRevealOrderService() *RegularNode {
 	mockCommitRepo := new(MockRegularCommitRepository)
 	mockRevealRepo := new(MockRevealOrderRepository)
 	mockPeerRepo := new(MockPeerCommitRepository)
+	mockLeaderCommitRepo := new(MockLeaderCommitRepository)
 
 	// Create real Reveal OrderService with mock repositories
 	revealOrderService := commitreveal2.NewRevealOrderService(
 		mockRevealRepo,
 		mockPeerRepo,
-		nil,
+		mockLeaderCommitRepo,
 	)
 
-	node := NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
-	node.regularCommitRepository = mockCommitRepo
-	node.revealOrderRepository = mockRevealRepo
-	node.peerCommitDataRepository = mockPeerRepo
-	node.revealOrderService = revealOrderService
+	node := &RegularNode{
+		regularCommitRepository:       mockCommitRepo,
+		revealOrderRepository:         mockRevealRepo,
+		peerCommitDataRepository:      mockPeerRepo,
+		revealOrderService:            revealOrderService,
+		submittedCvIndices:            make(map[string]map[string]bool),
+		cleanupQueue:                  queue.New(),
+		strictOrderWhileSecretRequest: make(map[string][]string),
+		roundsData:                    make(map[string]RoundData),
+		cosRecevied:                   sync.Map{},
+	}
 
 	return node
 }

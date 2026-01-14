@@ -45,7 +45,10 @@ func main() {
 	switch envCfg.NodeType {
 	case "leader":
 		db := database.GetDB()
-		leaderNodeHandler := leader_node.NewLeaderNodeHandler(fallbackEthClient, db)
+		leaderNodeHandler, err := leader_node.NewLeaderNodeHandler(fallbackEthClient, db)
+		if err != nil {
+			log.Fatalf("Error creating leader node handler: %v", err)
+		}
 
 		wg.Add(1)
 		go func() {
@@ -55,7 +58,10 @@ func main() {
 
 	case "regular":
 		db := database.GetDB()
-		regularNodeHandler := regular_node.NewRegularNodeHandler(fallbackEthClient, db)
+		regularNodeHandler, err := regular_node.NewRegularNodeHandler(fallbackEthClient, db)
+		if err != nil {
+			log.Fatalf("Error creating regular node handler: %v", err)
+		}
 
 		wg.Add(1)
 		go func() {

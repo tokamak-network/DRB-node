@@ -3,6 +3,7 @@ package regular_node
 import (
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"math/big"
 	"sync"
 	"time"
@@ -93,7 +94,32 @@ func NewRegularNode(
 	regularCommitRepository *database.RegularCommitRepository,
 	batchRepository *database.BatchRepository,
 	nodeInfoRepository *database.NodeInfoRepository,
-) *RegularNode {
+) (*RegularNode, error) {
+	if fallbackEthClient == nil {
+		return nil, errors.New("fallbackEthClient cannot be nil")
+	}
+	if revealOrderService == nil {
+		return nil, errors.New("revealOrderService cannot be nil")
+	}
+	if p2pClient == nil {
+		return nil, errors.New("p2pClient cannot be nil")
+	}
+	if peerCommitDataRepository == nil {
+		return nil, errors.New("peerCommitDataRepository cannot be nil")
+	}
+	if revealOrderRepository == nil {
+		return nil, errors.New("revealOrderRepository cannot be nil")
+	}
+	if regularCommitRepository == nil {
+		return nil, errors.New("regularCommitRepository cannot be nil")
+	}
+	if batchRepository == nil {
+		return nil, errors.New("batchRepository cannot be nil")
+	}
+	if nodeInfoRepository == nil {
+		return nil, errors.New("nodeInfoRepository cannot be nil")
+	}
+
 	return &RegularNode{
 		fallbackEthClient:             fallbackEthClient,
 		revealOrderService:            revealOrderService,
@@ -108,7 +134,7 @@ func NewRegularNode(
 		strictOrderWhileSecretRequest: make(map[string][]string),
 		roundsData:                    make(map[string]RoundData),
 		cosRecevied:                   sync.Map{},
-	}
+	}, nil
 }
 
 func (n *RegularNode) GetCommitByRound(ctx context.Context, round, trialNum string) (*utils.CommitData, error) {

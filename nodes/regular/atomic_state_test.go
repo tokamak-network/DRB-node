@@ -8,13 +8,20 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/eapache/queue"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // Helper function to create a test regular node
 func createTestRegularNode() *RegularNode {
-	return NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	return &RegularNode{
+		submittedCvIndices:            make(map[string]map[string]bool),
+		cleanupQueue:                  queue.New(),
+		strictOrderWhileSecretRequest: make(map[string][]string),
+		roundsData:                    make(map[string]RoundData),
+		cosRecevied:                   sync.Map{},
+	}
 }
 
 func TestRegularNode_Execution(t *testing.T) {
