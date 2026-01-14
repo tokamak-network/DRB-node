@@ -12,9 +12,13 @@ until docker exec testdb pg_isready -U postgres > /dev/null 2>&1; do
 done
 echo "Database is ready!"
 
-# Run leader node tests
+# Run regular node tests
 echo "Running regular node tests..."
 go test -v ./nodes/regular/...
+
+# Run regular node tests with race detector
+echo "Running regular node tests with race detector..."
+go test -race -v ./nodes/regular/...
 
 # Cleanup
 echo "Cleaning up..."

@@ -16,6 +16,10 @@ echo "Database is ready!"
 echo "Running leader node tests..."
 go test -v ./nodes/leader/...
 
+# Run leader node tests with race detector
+echo "Running leader node tests with race detector..."
+go test -race -v ./nodes/leader/...
+
 # Cleanup
 echo "Cleaning up..."
 docker compose -f docker-compose.test.yml down -v

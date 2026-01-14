@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/eapache/queue"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/tokamak-network/DRB-node/eth"
@@ -55,23 +54,9 @@ func (m *MockEthServiceForAtomicState) GetActivatedOperatorsLength() int64 {
 	return 0
 }
 
-// createTestLeaderNode creates a minimal LeaderNode for testing
-func createTestLeaderNode() *LeaderNode {
-	return &LeaderNode{
-		roundsData:          make(map[string]RoundData),
-		activeBroadcasts:    make(map[string]*utils.BroadcastTracker),
-		cvOnChain:           make(map[string]bool),
-		roundSecrets:        make(map[string][][32]byte),
-		roundSecret:         make(map[string]map[string]bool),
-		secretsOnChain:      make(map[string]bool),
-		revealRequestStatus: make(map[string][]string),
-		cleanupQueue:        queue.New(),
-	}
-}
-
 // TestSetGetExecution tests the atomic execution flag
 func TestSetGetExecution(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state
 	assert.False(t, node.GetExecution(), "Initial execution should be false")
@@ -87,7 +72,7 @@ func TestSetGetExecution(t *testing.T) {
 
 // TestSetGetHalted tests the atomic halted flag
 func TestSetGetHalted(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state
 	assert.False(t, node.GetHalted(), "Initial halted should be false")
@@ -103,7 +88,7 @@ func TestSetGetHalted(t *testing.T) {
 
 // TestSetGetSubmittingMerkleRoot tests the atomic submittingMerkleRoot flag
 func TestSetGetSubmittingMerkleRoot(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state
 	assert.False(t, node.GetSubmittingMerkleRoot(), "Initial submittingMerkleRoot should be false")
@@ -119,7 +104,7 @@ func TestSetGetSubmittingMerkleRoot(t *testing.T) {
 
 // TestCompareAndSwapSubmittingMerkleRoot tests the CAS operation
 func TestCompareAndSwapSubmittingMerkleRoot(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test CAS from false to true
 	success := node.CompareAndSwapSubmittingMerkleRoot(false, true)
@@ -139,7 +124,7 @@ func TestCompareAndSwapSubmittingMerkleRoot(t *testing.T) {
 
 // TestSetGetRequestedToSubmitCoMonitoringActive tests the monitoring flag
 func TestSetGetRequestedToSubmitCoMonitoringActive(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state
 	assert.False(t, node.GetRequestedToSubmitCoMonitoringActive(), "Initial should be false")
@@ -155,7 +140,7 @@ func TestSetGetRequestedToSubmitCoMonitoringActive(t *testing.T) {
 
 // TestSetGetRequestedToSubmitCvMonitoringActive tests the monitoring flag
 func TestSetGetRequestedToSubmitCvMonitoringActive(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state
 	assert.False(t, node.GetRequestedToSubmitCvMonitoringActive(), "Initial should be false")
@@ -171,7 +156,7 @@ func TestSetGetRequestedToSubmitCvMonitoringActive(t *testing.T) {
 
 // TestSetGetRequestToSubmitCvMonitoringActive tests the monitoring flag
 func TestSetGetRequestToSubmitCvMonitoringActive(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state
 	assert.False(t, node.GetRequestToSubmitCvMonitoringActive(), "Initial should be false")
@@ -187,7 +172,7 @@ func TestSetGetRequestToSubmitCvMonitoringActive(t *testing.T) {
 
 // TestSetGetRequestToSubmitCoTimerMonitoringActive tests the monitoring flag
 func TestSetGetRequestToSubmitCoTimerMonitoringActive(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state
 	assert.False(t, node.GetRequestToSubmitCoTimerMonitoringActive(), "Initial should be false")
@@ -203,7 +188,7 @@ func TestSetGetRequestToSubmitCoTimerMonitoringActive(t *testing.T) {
 
 // TestSetGetFailToSubmitSMonitoringActive tests the monitoring flag
 func TestSetGetFailToSubmitSMonitoringActive(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state
 	assert.False(t, node.GetFailToSubmitSMonitoringActive(), "Initial should be false")
@@ -219,7 +204,7 @@ func TestSetGetFailToSubmitSMonitoringActive(t *testing.T) {
 
 // TestDeleteActiveBroadcasts tests deleting from activeBroadcasts map
 func TestDeleteActiveBroadcasts(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Add a broadcast tracker
 	key := "test-key"
@@ -233,7 +218,7 @@ func TestDeleteActiveBroadcasts(t *testing.T) {
 
 // TestDeleteCvOnChain tests deleting from cvOnChain map
 func TestDeleteCvOnChain(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Add a value
 	key := "test-key"
@@ -247,7 +232,7 @@ func TestDeleteCvOnChain(t *testing.T) {
 
 // TestDeleteRoundSecrets tests deleting from roundSecrets map
 func TestDeleteRoundSecrets(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Add a value
 	key := "test-key"
@@ -261,7 +246,7 @@ func TestDeleteRoundSecrets(t *testing.T) {
 
 // TestSetGetRoundSecretValue tests roundSecret map operations
 func TestSetGetRoundSecretValue(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	uniqueKey := "round-1-trial-1"
 	eoaAddress := "0x123"
@@ -288,7 +273,7 @@ func TestSetGetRoundSecretValue(t *testing.T) {
 
 // TestDeleteRoundSecret tests deleting from roundSecret map
 func TestDeleteRoundSecret(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	uniqueKey := "round-1-trial-1"
 	eoaAddress := "0x123"
@@ -304,7 +289,7 @@ func TestDeleteRoundSecret(t *testing.T) {
 
 // TestSetGetSecretsOnChain tests secretsOnChain map operations
 func TestSetGetSecretsOnChain(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	uniqueKey := "round-1-trial-1"
 
@@ -330,7 +315,7 @@ func TestSetGetSecretsOnChain(t *testing.T) {
 
 // TestDeleteSecretsOnChain tests deleting from secretsOnChain map
 func TestDeleteSecretsOnChain(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	uniqueKey := "round-1-trial-1"
 
@@ -345,7 +330,7 @@ func TestDeleteSecretsOnChain(t *testing.T) {
 
 // TestGetRoundSecretsValue tests getting values from roundSecrets map
 func TestGetRoundSecretsValue(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	uniqueKey := "round-1-trial-1"
 
@@ -373,7 +358,7 @@ func TestGetRoundSecretsValue(t *testing.T) {
 
 // TestAppendToRoundSecrets tests appending to roundSecrets map
 func TestAppendToRoundSecrets(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	uniqueKey := "round-1-trial-1"
 	secret1 := [32]byte{1, 2, 3}
@@ -397,7 +382,7 @@ func TestAppendToRoundSecrets(t *testing.T) {
 
 // TestEnqueueUniqueKeyForCleanup tests the cleanup queue functionality
 func TestEnqueueUniqueKeyForCleanup(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Add some data to the maps that would be cleaned up
 	for i := 1; i <= 6; i++ {
@@ -440,7 +425,7 @@ func TestEnqueueUniqueKeyForCleanup(t *testing.T) {
 
 // TestSetGetSecretRequestSentForWhichRound tests atomic string operations
 func TestSetGetSecretRequestSentForWhichRound(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state (nil pointer)
 	value := node.GetSecretRequestSentForWhichRound()
@@ -459,7 +444,7 @@ func TestSetGetSecretRequestSentForWhichRound(t *testing.T) {
 
 // TestSetGetCurrentRound tests atomic string operations
 func TestSetGetCurrentRound(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state (nil pointer)
 	value := node.GetCurrentRound()
@@ -478,7 +463,7 @@ func TestSetGetCurrentRound(t *testing.T) {
 
 // TestSetGetCurrentTrial tests atomic string operations
 func TestSetGetCurrentTrial(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state (nil pointer)
 	value := node.GetCurrentTrial()
@@ -497,7 +482,7 @@ func TestSetGetCurrentTrial(t *testing.T) {
 
 // TestSetGetRoundData tests roundsData map operations
 func TestSetGetRoundData(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	key := "round-1-trial-1"
 
@@ -531,7 +516,7 @@ func TestSetGetRoundData(t *testing.T) {
 
 // TestDeleteRoundsData tests deleting from roundsData map
 func TestDeleteRoundsData(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	key := "round-1-trial-1"
 	roundData := RoundData{MerkleRoot: true, RandomNumber: false}
@@ -562,7 +547,7 @@ func TestSetRoundDataWithNilMap(t *testing.T) {
 
 // TestSetGetRevealRequestStatus tests revealRequestStatus map operations
 func TestSetGetRevealRequestStatus(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	key := "round-1-trial-1"
 
@@ -590,7 +575,7 @@ func TestSetGetRevealRequestStatus(t *testing.T) {
 
 // TestDeleteRevealRequestStatus tests deleting from revealRequestStatus map
 func TestDeleteRevealRequestStatus(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	key := "round-1-trial-1"
 	status := []string{"0x123"}
@@ -606,7 +591,7 @@ func TestDeleteRevealRequestStatus(t *testing.T) {
 
 // TestSetGetActiveBroadcast tests activeBroadcasts map operations
 func TestSetGetActiveBroadcast(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	key := "test-key"
 
@@ -627,7 +612,7 @@ func TestSetGetActiveBroadcast(t *testing.T) {
 
 // TestDeleteActiveBroadcast tests deleting from activeBroadcasts map
 func TestDeleteActiveBroadcast(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	key := "test-key"
 	broadcastTracker := &utils.BroadcastTracker{}
@@ -643,7 +628,7 @@ func TestDeleteActiveBroadcast(t *testing.T) {
 
 // TestSetGetCvOnChain tests cvOnChain map operations
 func TestSetGetCvOnChain(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	key := "test-key"
 
@@ -669,7 +654,7 @@ func TestSetGetCvOnChain(t *testing.T) {
 
 // TestSetGetReq tests req struct operations
 func TestSetGetReq(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state
 	req := node.GetReq()
@@ -705,7 +690,7 @@ func TestSetGetReq(t *testing.T) {
 
 // TestSetGetLastSubmitSTimestamp tests timestamp operations
 func TestSetGetLastSubmitSTimestamp(t *testing.T) {
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Test initial state
 	timestamp := node.GetLastSubmitSTimestamp()
@@ -729,7 +714,7 @@ func TestSetGetLastSubmitSTimestamp(t *testing.T) {
 // TestUpdateCurrentRoundAndTrial_Success tests successful update of current round and trial
 func TestUpdateCurrentRoundAndTrial_Success(t *testing.T) {
 	ctx := context.Background()
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Create a mock eth service
 	mockEthService := &MockEthServiceForAtomicState{
@@ -759,7 +744,7 @@ func TestUpdateCurrentRoundAndTrial_Success(t *testing.T) {
 // TestUpdateCurrentRoundAndTrial_ErrorFetchingRound tests error when fetching current round fails
 func TestUpdateCurrentRoundAndTrial_ErrorFetchingRound(t *testing.T) {
 	ctx := context.Background()
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Create a mock eth service that returns error on UpdateCurrentRoundFromContract
 	mockEthService := &MockEthServiceForAtomicState{
@@ -794,7 +779,7 @@ func TestUpdateCurrentRoundAndTrial_ErrorFetchingRound(t *testing.T) {
 // TestUpdateCurrentRoundAndTrial_ErrorFetchingTrial tests error when fetching trial number fails
 func TestUpdateCurrentRoundAndTrial_ErrorFetchingTrial(t *testing.T) {
 	ctx := context.Background()
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Create a mock eth service that returns error on GetTrialNumFromContract
 	mockEthService := &MockEthServiceForAtomicState{
@@ -830,7 +815,7 @@ func TestUpdateCurrentRoundAndTrial_ErrorFetchingTrial(t *testing.T) {
 // TestUpdateCurrentRoundAndTrial_MultipleUpdates tests multiple consecutive updates
 func TestUpdateCurrentRoundAndTrial_MultipleUpdates(t *testing.T) {
 	ctx := context.Background()
-	node := createTestLeaderNode()
+	node := CreateTestLeaderNodeMinimal()
 
 	// Create a mock fallback client
 	mockClient := &MockFallbackEthClientForAtomicState{}
