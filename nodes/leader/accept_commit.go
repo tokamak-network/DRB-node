@@ -316,44 +316,42 @@ func (n *LeaderNode) processDeactivated(ctx context.Context, operator common.Add
 	eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient)
 
 	var peerIDStr string
-	if n.nodeInfoRepository != nil {
-		nodeInfos, err := n.nodeInfoRepository.GetNodeInfos(ctx)
-		if err == nil {
-			for _, nodeInfo := range nodeInfos {
-				if nodeInfo.EOAAddress == operator.Hex() {
-					peerIDStr = nodeInfo.PeerID
-					break
-				}
+	nodeInfos, err := n.nodeInfoRepository.GetNodeInfos(ctx)
+	if err == nil {
+		for _, nodeInfo := range nodeInfos {
+			if nodeInfo.EOAAddress == operator.Hex() {
+				peerIDStr = nodeInfo.PeerID
+				break
 			}
 		}
+	}
 
-		if peerIDStr != "" && n.p2pClient != nil {
-			hostInstance := n.p2pClient.GetHostInstance()
-			if hostInstance != nil {
-				peerID, err := peer.Decode(peerIDStr)
-				if err == nil {
-					conns := hostInstance.Network().ConnsToPeer(peerID)
-					if len(conns) > 0 {
-						log.Printf("Closing libp2p connection for deactivated operator %s (PeerID: %s)", operator.Hex(), peerIDStr)
-						if err := hostInstance.Network().ClosePeer(peerID); err != nil {
-							log.Printf("Failed to close connection for peer %s: %v", peerIDStr, err)
-						} else {
-							log.Printf("Successfully closed connection for deactivated operator %s", operator.Hex())
-						}
+	if peerIDStr != "" {
+		hostInstance := n.p2pClient.GetHostInstance()
+		if hostInstance != nil {
+			peerID, err := peer.Decode(peerIDStr)
+			if err == nil {
+				conns := hostInstance.Network().ConnsToPeer(peerID)
+				if len(conns) > 0 {
+					log.Printf("Closing libp2p connection for deactivated operator %s (PeerID: %s)", operator.Hex(), peerIDStr)
+					if err := hostInstance.Network().ClosePeer(peerID); err != nil {
+						log.Printf("Failed to close connection for peer %s: %v", peerIDStr, err)
 					} else {
-						log.Printf("No active connection found for operator %s (PeerID: %s)", operator.Hex(), peerIDStr)
+						log.Printf("Successfully closed connection for deactivated operator %s", operator.Hex())
 					}
 				} else {
-					log.Printf("Invalid PeerID format for operator %s: %s", operator.Hex(), peerIDStr)
+					log.Printf("No active connection found for operator %s (PeerID: %s)", operator.Hex(), peerIDStr)
 				}
+			} else {
+				log.Printf("Invalid PeerID format for operator %s: %s", operator.Hex(), peerIDStr)
 			}
 		}
+	}
 
-		if err := n.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, operator.Hex()); err != nil {
-			log.Printf("Failed to delete node info for operator %s: %v", operator.Hex(), err)
-		} else {
-			log.Printf("Deleted node info for deactivated operator %s", operator.Hex())
-		}
+	if err := n.nodeInfoRepository.DeleteNodeInfoByEOA(ctx, operator.Hex()); err != nil {
+		log.Printf("Failed to delete node info for operator %s: %v", operator.Hex(), err)
+	} else {
+		log.Printf("Deleted node info for deactivated operator %s", operator.Hex())
 	}
 }
 
