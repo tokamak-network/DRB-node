@@ -1181,16 +1181,21 @@ func (n *LeaderNode) GenerateMerkleRoot(ctx context.Context, roundNum string, tr
 		log.Println("System is halted. Skipping GenerateMerkleRoot.")
 		return
 	}
-	n.commitMu.Lock()
-	// Check if merkle root is a-lready done before proceeding
-	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
 
-	// Check if merkle root is already submitted using atomic operation
-	if n.GetSubmittingMerkleRoot() {
-		log.Printf("Merkle root is already being submitted for round %s with trail %s, skipping.", roundNum, trialNum)
-		n.commitMu.Unlock()
+	if !n.CompareAndSwapSubmittingMerkleRoot(false, true) {
+		log.Printf("Merkle root generation already in progress for round %s with trail %s, skipping.", roundNum, trialNum)
 		return
 	}
+
+	shouldResetFlag := true
+	defer func() {
+		if shouldResetFlag {
+			n.SetSubmittingMerkleRoot(false)
+		}
+	}()
+
+	n.commitMu.Lock()
+	uniqueKey := utils.GetUniqueKey(roundNum, trialNum)
 
 	// Check if already done via round data
 	roundData, exists := n.GetRoundData(uniqueKey)
@@ -1241,10 +1246,9 @@ func (n *LeaderNode) GenerateMerkleRoot(ctx context.Context, roundNum string, tr
 		log.Printf("Failed to create Merkle tree for round %s with trail %s: %v", roundNum, trialNum, err)
 		return
 	}
-	// Use atomic compare-and-swap to prevent race condition
-	if n.CompareAndSwapSubmittingMerkleRoot(false, true) {
-		n.SubmitMerkleRoot(ctx, roundNum, trialNum, merkleRoot)
-	}
+
+	shouldResetFlag = false
+	n.SubmitMerkleRoot(ctx, roundNum, trialNum, merkleRoot)
 }
 
 // SubmitMerkleRoot submits the merkle root to the blockchain
