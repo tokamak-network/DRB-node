@@ -362,3 +362,142 @@ func TestValidateMigrations_Success(t *testing.T) {
 		validateMigrations(migrations)
 	}, "validateMigrations should not panic with valid migrations")
 }
+
+// Test MigrationsUp with nil database connection
+func TestMigrationsUp_WithNilDatabase(t *testing.T) {
+	// Test with nil database - this will cause a panic due to nil pointer dereference
+	var db *sql.DB = nil
+
+	// This should panic when trying to use nil database
+	assert.Panics(t, func() {
+		_ = MigrationsUp(db)
+	}, "MigrationsUp should panic with nil database")
+}
+
+// Test MigrationsDown with nil database connection
+func TestMigrationsDown_WithNilDatabase(t *testing.T) {
+	// Test with nil database - this will cause a panic due to nil pointer dereference
+	var db *sql.DB = nil
+
+	// This should panic when trying to use nil database
+	assert.Panics(t, func() {
+		_ = MigrationsDown(db)
+	}, "MigrationsDown should panic with nil database")
+}
+
+// Test MigrationsUp when migrations return 0 (already applied)
+func TestMigrationsUp_ZeroMigrationsApplied(t *testing.T) {
+	// Open a connection to test database
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	db, err := sql.Open("postgres", dsn)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	// Run migrations up first time
+	err = MigrationsUp(db)
+	assert.NoError(t, err, "First MigrationsUp should succeed")
+
+	// Run migrations up again - should return 0 migrations applied
+	// This tests the fmt.Printf path with n=0
+	err = MigrationsUp(db)
+	assert.NoError(t, err, "Second MigrationsUp should succeed (0 migrations applied)")
+}
+
+// Test MigrationsUp error path when migrate.Exec fails
+func TestMigrationsUp_ExecError(t *testing.T) {
+	// Create a database connection that will fail during execution
+	// Using wrong database name to trigger error during migration execution
+	dsn := "postgres://postgres:123@localhost:5433/database_does_not_exist?sslmode=disable"
+	db, err := sql.Open("postgres", dsn)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	// This should fail at migrate.Exec, testing the error return path (line 34-35)
+	err = MigrationsUp(db)
+	assert.Error(t, err, "MigrationsUp should fail when migrate.Exec fails")
+}
+
+// Test MigrationsDown error path when migrate.Exec fails
+func TestMigrationsDown_ExecError(t *testing.T) {
+	// Create a database connection that will fail during execution
+	dsn := "postgres://postgres:123@localhost:5433/database_does_not_exist?sslmode=disable"
+	db, err := sql.Open("postgres", dsn)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	// This should fail at migrate.Exec, testing the error return path (line 43-44)
+	err = MigrationsDown(db)
+	assert.Error(t, err, "MigrationsDown should fail when migrate.Exec fails")
+}
+
+// Test MigrationsUp with database that has connection issues mid-execution
+func TestMigrationsUp_ConnectionLostDuringExecution(t *testing.T) {
+	// Open a connection
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	db, err := sql.Open("postgres", dsn)
+	assert.NoError(t, err)
+
+	// Close the connection before running migrations
+	db.Close()
+
+	// Try to run migrations on closed connection
+	err = MigrationsUp(db)
+	assert.Error(t, err, "MigrationsUp should fail when connection is closed")
+}
+
+// Test MigrationsDown with database that has connection issues mid-execution
+func TestMigrationsDown_ConnectionLostDuringExecution(t *testing.T) {
+	// Open a connection
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	db, err := sql.Open("postgres", dsn)
+	assert.NoError(t, err)
+
+	// Close the connection before running migrations
+	db.Close()
+
+	// Try to run migrations down on closed connection
+	err = MigrationsDown(db)
+	assert.Error(t, err, "MigrationsDown should fail when connection is closed")
+}
+
+// Test MigrationsUp output when migrations are applied (n > 0)
+func TestMigrationsUp_WithMigrationsApplied(t *testing.T) {
+	// Open a connection to test database
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	db, err := sql.Open("postgres", dsn)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	// First, run migrations down to ensure we can run up again
+	err = MigrationsDown(db)
+	if err != nil {
+		// If down fails, migrations might not be applied, continue anyway
+	}
+
+	// Run migrations up - should apply migrations and print success message
+	err = MigrationsUp(db)
+	assert.NoError(t, err, "MigrationsUp should succeed")
+	// The fmt.Printf line (line 37) should execute
+}
+
+// Test MigrationsDown output path
+func TestMigrationsDown_OutputPath(t *testing.T) {
+	// Open a connection to test database
+	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
+	db, err := sql.Open("postgres", dsn)
+	assert.NoError(t, err)
+	defer db.Close()
+
+	// Ensure migrations are up first
+	err = MigrationsUp(db)
+	assert.NoError(t, err)
+
+	// Run migrations down - should print success message
+	err = MigrationsDown(db)
+	assert.NoError(t, err, "MigrationsDown should succeed")
+	// The fmt.Println line (line 46) should execute
+
+	// Restore migrations
+	err = MigrationsUp(db)
+	assert.NoError(t, err)
+}
