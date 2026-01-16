@@ -7,7 +7,6 @@ This document details critical concurrency edge cases discovered through testing
 ## Executive Summary
 
 **Critical Issues Identified:**
-- ✅ **Atomic State Corruption**: 0.05% corruption rate under rapid context switching
 - ✅ **Database Connection Pool Exhaustion**: 21.1% failure rate under high load
 - ⚠️ **Timer Race Conditions**: Intermittent cleanup failures
 - ⚠️ **Cross-Node State Inconsistency**: 30% inconsistency rate during concurrent updates
@@ -16,161 +15,7 @@ This document details critical concurrency edge cases discovered through testing
 
 ---
 
-## 1. Atomic State Corruption During Context Switching
-
-### **Issue Description**
-**Severity**: 🔴 **CRITICAL**
-
-The atomic state management system exhibits corruption when subjected to rapid context switching under high concurrency load.
-
-### **Detailed Scenario**
-
-**Affected Functions:**
-- `nodes/leader/leader_node.go`: `SetExecution()`, `GetExecution()`, `SetHalted()`, `GetHalted()`
-- `nodes/leader/leader_node.go`: `SetRequestedToSubmitCvMonitoringActive()`, `GetRequestedToSubmitCvMonitoringActive()`
-- `nodes/regular/regular_node.go`: `SetCurrentRound()`, `GetCurrentRound()`, `SetCurrentTrialNum()`, `GetCurrentTrialNum()`
-
-**DRB Workflow Phase:** **Node State Management** - Occurs during all phases of the DRB protocol when nodes need to update their operational state
-
-**Specific Scenario:**
-1. **Concurrent State Updates**: 50 goroutines simultaneously update node execution state during round initialization
-2. **Context Switching Pressure**: `runtime.Gosched()` forces context switches between atomic operations
-3. **Compound State Changes**: Multiple atomic variables (`execution`, `halted`, `monitoring`) updated in sequence
-4. **Read-After-Write Verification**: Immediate state reads show corrupted values different from what was set
-
-**Example Corruption Sequence:**
-```go
-// Goroutine A: Sets execution=true
-node.SetExecution(true)
-// Context switch occurs here due to runtime.Gosched()
-// Goroutine B: Sets execution=false  
-node.SetExecution(false)
-// Context switch back to Goroutine A
-actual := node.GetExecution()  // Expected: true, Actual: false
-```
-
-### **Failure Details**
-```
-Test: TestAtomicStateCorruptionDuringContextSwitching
-Workers: 50 concurrent goroutines
-Operations: 50,000 total atomic operations
-Corruption Rate: 0.05% (25 corrupted operations)
-State Inconsistencies: 3.32% (1,660 inconsistent states)
-Context Switching Frequency: Forced after every atomic operation
-```
-
-### **Observed Failures**
-```go
-// Example corruption patterns detected:
-Execution state corruption: expected=true, actual=false
-Halted state corruption: expected=true, actual=false  
-Monitoring state corruption: expected=false, actual=true
-
-// Cross-state inconsistencies (compound corruption):
-execution=true && halted=true && monitoring=true  // Impossible combination
-```
-
-### **Root Cause Analysis**
-1. **Memory Ordering Issues**: Go's atomic operations don't guarantee sequential consistency across multiple variables
-2. **Cache Coherency Delays**: State changes not immediately visible across CPU cores under high context switching
-3. **Compound State Dependencies**: Setting multiple atomic variables in sequence creates windows for inconsistency
-4. **Missing Memory Barriers**: Lack of proper synchronization between related atomic operations
-
-### **Impact on System**
-- **Data Integrity**: Node state can become corrupted, leading to incorrect decision making
-- **Protocol Violations**: Inconsistent states may violate DRB protocol assumptions
-- **Cascade Failures**: State corruption in one node can propagate to connected peers
-
-### **Specific Recommendations**
-
-#### **Immediate Actions**
-
-1. **Implement Atomic State Struct**:
-   ```go
-   // Replace individual atomic variables with single atomic state
-   type AtomicNodeState struct {
-       state int64  // Combine execution, halted, monitoring into bitfield
-   }
-   
-   func (ans *AtomicNodeState) SetCompoundState(execution, halted, monitoring bool) {
-       var state int64
-       if execution { state |= 0x01 }
-       if halted { state |= 0x02 }
-       if monitoring { state |= 0x04 }
-       atomic.StoreInt64(&ans.state, state)
-   }
-   
-   func (ans *AtomicNodeState) GetCompoundState() (bool, bool, bool) {
-       state := atomic.LoadInt64(&ans.state)
-       return state&0x01 != 0, state&0x02 != 0, state&0x04 != 0
-   }
-   ```
-
-2. **Add State Validation**:
-   ```go
-   func (node *LeaderNode) ValidateStateConsistency() error {
-       exec, halted, monitoring := node.GetCompoundState()
-       if exec && halted && monitoring {
-           return fmt.Errorf("invalid state combination: exec=%t, halted=%t, monitoring=%t", 
-               exec, halted, monitoring)
-       }
-       return nil
-   }
-   ```
-
-3. **Memory Barrier Implementation**:
-   ```go
-   func (node *LeaderNode) SetStateWithBarrier(execution, halted, monitoring bool) {
-       node.SetCompoundState(execution, halted, monitoring)
-       runtime.MemoryBarrier()  // Ensure visibility across cores
-   }
-   ```
-
-#### **Short-term Actions**
-
-1. **State Change Auditing**: Add logging for all state changes to detect corruption patterns
-2. **Consistency Checks**: Implement periodic state validation during DRB protocol execution
-3. **Context Switch Testing**: Add regular stress testing with forced context switching
-
-#### **Long-term Actions (Architectural improvements)**
-
-1. **State Machine Implementation**: Replace atomic variables with formal state machine
-2. **Version-based State**: Implement versioned state with compare-and-swap semantics
-3. **State Synchronization Protocol**: Design atomic multi-field update protocol
-
-### **Test Commands**
-
-#### **Run All Atomic Corruption Tests**
-```bash
-# Run all atomic corruption edge case tests
-go test -v ./testing/5_concurrency_advanced/atomic_corruption_edge_cases_test.go -timeout 60s
-
-# Run specific atomic state corruption test
-go test -v ./testing/5_concurrency_advanced/atomic_corruption_edge_cases_test.go \
-  -run TestAtomicStateCorruptionDuringContextSwitching -timeout 30s
-
-# Run timer race condition tests
-go test -v ./testing/5_concurrency_advanced/atomic_corruption_edge_cases_test.go \
-  -run TestTimerRaceConditionsWithContextCancellation -timeout 20s
-
-# Run regular node atomic edge cases
-go test -v ./testing/5_concurrency_advanced/atomic_corruption_edge_cases_test.go \
-  -run TestConcurrentRegularNodeAtomicEdgeCases -timeout 15s
-
-# Run compare-and-swap edge cases
-go test -v ./testing/5_concurrency_advanced/atomic_corruption_edge_cases_test.go \
-  -run TestAtomicCompareAndSwapEdgeCases -timeout 10s
-```
-
-#### **Run with Race Detection**
-```bash
-# Run with Go race detector for additional corruption detection
-go test -race -v ./testing/5_concurrency_advanced/atomic_corruption_edge_cases_test.go -timeout 90s
-```
-
----
-
-## 2. Database Connection Pool Exhaustion
+## 1. Database Connection Pool Exhaustion
 
 ### **Issue Description**
 **Severity**: 🔴 **CRITICAL**
@@ -370,7 +215,7 @@ go test -v ./testing/5_concurrency_advanced/database_concurrency_edge_cases_test
 
 ---
 
-## 3. Timer Race Conditions with Context Cancellation
+## 2. Timer Race Conditions with Context Cancellation
 
 ### **Issue Description**
 **Severity**: 🟡 **HIGH**
@@ -590,7 +435,7 @@ go test -v ./testing/5_concurrency_advanced/atomic_corruption_edge_cases_test.go
 
 ---
 
-## 4. Cross-Node State Synchronization Failures
+## 3. Cross-Node State Synchronization Failures
 
 ### **Issue Description**  
 **Severity**: 🟡 **HIGH**
@@ -819,7 +664,7 @@ go test -run TestConcurrentCrossNodeStateSynchronization -v -timeout=120s
 
 ---
 
-## 5. Database Transaction Deadlocks
+## 4. Database Transaction Deadlocks
 
 ### **Issue Description**
 **Severity**: 🟠 **MEDIUM-HIGH**
@@ -1058,28 +903,14 @@ go test -run TestDatabaseDeadlock -v
 
 ### **Immediate Actions (Critical)**
 
-1. **Atomic State Management**
-   ```go
-   // Replace individual atomic operations with compound operations
-   type AtomicNodeState struct {
-       execution int64
-       halted    int64
-       monitoring int64
-   }
-   
-   func (ans *AtomicNodeState) SetState(exec, halt, monitor bool) {
-       // Single atomic operation for compound state
-   }
-   ```
-
-2. **Database Connection Pool Expansion**
+1. **Database Connection Pool Expansion**
    ```go
    // Increase connection pool size based on concurrency requirements
    maxConnections := numWorkers * 2  // 2x safety margin
    connectionTimeout := 30 * time.Second
    ```
 
-3. **Timer Synchronization Enhancement**
+2. **Timer Synchronization Enhancement**
    ```go
    // Proper timer cleanup with mutex protection
    func (node *Node) stopMonitoring() {
@@ -1111,12 +942,12 @@ go test -run TestDatabaseDeadlock -v
 
 ## Conclusion
 
-The edge case testing revealed significant vulnerabilities in the DRB Node's concurrency handling that could lead to system failures under production load. The 0.05% atomic corruption rate and 21% database failure rate represent serious risks that require immediate attention.
+The edge case testing revealed significant vulnerabilities in the DRB Node's concurrency handling that could lead to system failures under production load. The 21% database failure rate and timer race conditions represent serious risks that require immediate attention.
 
 **Priority Actions:**
-1. ✅ Fix atomic state corruption (CRITICAL)
-2. ✅ Expand database connection pools (CRITICAL)  
-3. ⚠️ Improve timer synchronization (HIGH)
-4. ⚠️ Implement state sync versioning (HIGH)
+1. ✅ Expand database connection pools (CRITICAL)  
+2. ⚠️ Improve timer synchronization (HIGH)
+3. ⚠️ Implement state sync versioning (HIGH)
+4. ⚠️ Fix database transaction deadlocks (MEDIUM-HIGH)
 
 These issues demonstrate the critical importance of comprehensive edge case testing in distributed systems where concurrency failures can have cascading effects across the entire network.
