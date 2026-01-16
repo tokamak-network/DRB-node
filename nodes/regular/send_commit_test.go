@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -3736,12 +3737,12 @@ func TestRegularNode_StartMerkleRootMonitoring_TimerFires_ConditionsMet_CallsFai
 	// Merkle root NOT emitted
 	node.SetMerkleRootSubmittedEventEmitted(false)
 
-	// Track if ExecuteTransaction was called
-	executeCalled := false
+	// Track if ExecuteTransaction was called using atomic
+	var executeCalled int32
 	mockEth := &MockEthService{
 		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
 			if method == "failToSubmitMerkleRootAfterDispute" {
-				executeCalled = true
+				atomic.StoreInt32(&executeCalled, 1)
 			}
 			return nil, nil, nil
 		},
@@ -3760,7 +3761,7 @@ func TestRegularNode_StartMerkleRootMonitoring_TimerFires_ConditionsMet_CallsFai
 	time.Sleep(150 * time.Millisecond)
 
 	// The timer should have fired and called the fail function
-	assert.True(t, executeCalled, "failToSubmitMerkleRootAfterDispute should have been called")
+	assert.True(t, atomic.LoadInt32(&executeCalled) == 1, "failToSubmitMerkleRootAfterDispute should have been called")
 }
 
 func TestRegularNode_StartMerkleRootMonitoring_TimerFires_BothConditionsFail(t *testing.T) {
@@ -3913,12 +3914,12 @@ func TestRegularNode_StartMerkleRootMonitoring_TimerFires_WithShortDelay(t *test
 	node.SetSubmittedCvIndicesValue(uniqueKey, "0", true)
 	node.SetMerkleRootSubmittedEventEmitted(false)
 
-	// Track if ExecuteTransaction was called
-	executeCalled := false
+	// Track if ExecuteTransaction was called using atomic
+	var executeCalled int32
 	mockEth := &MockEthService{
 		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
 			if method == "failToSubmitMerkleRootAfterDispute" {
-				executeCalled = true
+				atomic.StoreInt32(&executeCalled, 1)
 			}
 			return nil, nil, nil
 		},
@@ -3937,7 +3938,7 @@ func TestRegularNode_StartMerkleRootMonitoring_TimerFires_WithShortDelay(t *test
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify the fail function was called
-	assert.True(t, executeCalled, "failToSubmitMerkleRootAfterDispute should have been called")
+	assert.True(t, atomic.LoadInt32(&executeCalled) == 1, "failToSubmitMerkleRootAfterDispute should have been called")
 }
 
 func TestRegularNode_StartMerkleRootMonitoring_TimerStoppedBeforeFiring(t *testing.T) {
