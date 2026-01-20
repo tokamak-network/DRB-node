@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -749,17 +750,28 @@ func (n *RegularNode) StartLeaderMonitoring(ctx context.Context, startTime *big.
 		log.Println("System is halted. Skipping StartLeaderMonitoring.")
 		return
 	}
-	if n.GetLeaderMonitoringActive() {
+
+	// Use atomic compare-and-swap to prevent double start
+	if !atomic.CompareAndSwapInt32(&n.leaderMonitoringActive, 0, 1) {
 		log.Printf("Leader monitoring already active for round %s", round)
 		return
 	}
 
 	if startTime == nil {
 		log.Printf("StartTime is nil, cannot start monitoring")
+		atomic.StoreInt32(&n.leaderMonitoringActive, 0)
 		return
 	}
 
-	n.SetLeaderMonitoringActive(true)
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
+
+	// Stop existing timer if present
+	if n.monitoringTimer != nil {
+		n.monitoringTimer.Stop()
+		n.monitoringTimer = nil
+	}
 
 	// Get timing parameters from config
 	periods := appconfig.GetContractPeriods()
@@ -775,6 +787,7 @@ func (n *RegularNode) StartLeaderMonitoring(ctx context.Context, startTime *big.
 
 	if duration <= 0 {
 		log.Printf("Deadline has already passed for round %s with trail %s, calling failToRequestSubmitCVOrSubmitMerkleRoot immediately", round, trialNum)
+		atomic.StoreInt32(&n.leaderMonitoringActive, 0)
 		n.callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx, round, trialNum)
 		return
 	}
@@ -785,22 +798,22 @@ func (n *RegularNode) StartLeaderMonitoring(ctx context.Context, startTime *big.
 	n.monitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToRequestSubmitCVOrSubmitMerkleRoot", round)
 		n.callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx, round, trialNum)
-		n.SetLeaderMonitoringActive(false)
+		atomic.StoreInt32(&n.leaderMonitoringActive, 0)
 	})
 }
 
 // StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring stops the current leader monitoring
 func (n *RegularNode) StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round string, trialNum string) {
-	if !n.GetLeaderMonitoringActive() {
-		return
-	}
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
 
 	if n.monitoringTimer != nil {
 		n.monitoringTimer.Stop()
 		n.monitoringTimer = nil
 	}
 
-	n.SetLeaderMonitoringActive(false)
+	atomic.StoreInt32(&n.leaderMonitoringActive, 0)
 	log.Printf("Stopped leader monitoring for round %s", round)
 }
 
@@ -842,10 +855,19 @@ func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx context.Co
 
 // StartMerkleRootMonitoring starts monitoring for merkle root submission after CV request
 func (n *RegularNode) StartMerkleRootMonitoring(ctx context.Context, round string, trialNum string, requestedToSubmitCvTime *big.Int) {
-
 	if requestedToSubmitCvTime == nil {
 		log.Printf("RequestedToSubmitCvTime is nil, cannot start merkle root monitoring")
 		return
+	}
+
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
+
+	// Stop existing timer if present
+	if n.merkleRootMonitoringTimer != nil {
+		n.merkleRootMonitoringTimer.Stop()
+		n.merkleRootMonitoringTimer = nil
 	}
 
 	// Get timing parameters from config
@@ -878,6 +900,9 @@ func (n *RegularNode) StartMerkleRootMonitoring(ctx context.Context, round strin
 
 // StopFailToSubmitMerkleRootAfterDisputeMonitoring stops the current merkle root monitoring
 func (n *RegularNode) StopFailToSubmitMerkleRootAfterDisputeMonitoring(round string, trialNum string) {
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
 
 	if n.merkleRootMonitoringTimer != nil {
 		n.merkleRootMonitoringTimer.Stop()
@@ -941,6 +966,16 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 		return
 	}
 
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
+
+	// Stop existing timer if present
+	if n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer != nil {
+		n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer.Stop()
+		n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer = nil
+	}
+
 	// Get timing parameters from config
 	periods := appconfig.GetContractPeriods()
 	activatedOperatorsLength := new(big.Int).SetInt64(eth.Service.GetActivatedOperatorsLength())
@@ -969,6 +1004,9 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 
 // StopRequestToSubmitSOrGenerateRandomNumberMonitoring stops the monitoring
 func (n *RegularNode) StopRequestToSubmitSOrGenerateRandomNumberMonitoring(round string, trialNum string) {
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
 
 	if n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer != nil {
 		n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer.Stop()

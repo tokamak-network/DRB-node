@@ -50,11 +50,12 @@ type LeaderNode struct {
 	requestToSubmitCvMonitoringActive      int32 // 0 = false, 1 = true
 	requestToSubmitCoTimerMonitoringActive int32 // 0 = false, 1 = true
 
-	// Timer variables (already safe as they're pointers)
+	// Timer variables with mutex protection for race condition safety
 	requestedToSubmitCoMonitoringTimer    *time.Timer
 	requestedToSubmitCvMonitoringTimer    *time.Timer
 	requestToSubmitCvMonitoringTimer      *time.Timer
 	requestToSubmitCoTimerMonitoringTimer *time.Timer
+	timerMutex                           sync.RWMutex
 
 	// In case last SSubmitted event also get's emmitted with Status event and curState is IN_PROGRESS then CurrentRound vairable will not be consistent
 	// Note: secretRequestSentForWhichRound, CurrentRound, CurrentTrial, and Req are now handled with atomic operations

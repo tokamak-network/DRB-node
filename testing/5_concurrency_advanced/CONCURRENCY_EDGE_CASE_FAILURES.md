@@ -16,7 +16,7 @@ This document details concurrency edge cases discovered through testing that cau
 ## 1. Timer Race Conditions with Context Cancellation
 
 ### **Issue Description**
-**Severity**: 🟡 **HIGH**
+**Severity**: 🟡 **MEDIUM**
 
 Timer-based monitoring operations exhibit race conditions when contexts are cancelled concurrently, leading to resource leaks and inconsistent state.
 
