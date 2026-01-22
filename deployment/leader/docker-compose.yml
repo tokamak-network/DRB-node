@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  leaderpostgres:
+    image: postgres:14.13
+    container_name: leaderpostgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file: ../../.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - leaderpostgres-data:/var/lib/postgresql/data
+    networks:
+      - drb-production-net
+    restart: unless-stopped
+
+  leadernode:
+    build:
+      context: ../..
+      dockerfile: deployment/leader/Dockerfile
+    container_name: leadernode
+    depends_on:
+      leaderpostgres:
+        condition: service_healthy
+    env_file: ../../.env
+    environment:
+      LEADER_PORT: ${LEADER_PORT}
+      NODE_TYPE: leader
+      POSTGRES_HOST: "leaderpostgres"
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./static-key:/app/static-key
+    ports:
+      - "${LEADER_PORT}:${LEADER_PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost ${LEADER_PORT}"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - drb-production-net
+    restart: unless-stopped
+
+volumes:
+  leaderpostgres-data:
+
+networks:
+  drb-production-net:
+    external: true
+

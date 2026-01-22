@@ -2,7 +2,6 @@ package libp2putils
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/multiformats/go-multiaddr"
+	"github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/database"
 )
 
@@ -44,43 +44,39 @@ func (p *P2PClient) GetHostInstance() host.Host {
 
 // CreateHost creates a new libp2p host with a given port and private key.
 func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
-	// Define the file path based on nodeType to separate keys for leader and regular nodes
-	filePath := fmt.Sprintf("/app/static-key/%snode.bin", nodeType)
+	// Load configuration once
+	cfg := config.Get()
+
+	var keyFileName string
+	if nodeType == "regular" {
+		if cfg.RegularNodeNumber == "" {
+			keyFileName = "regularnode.bin"
+		} else {
+			keyFileName = fmt.Sprintf("regularnode%s.bin", cfg.RegularNodeNumber)
+		}
+	} else {
+		keyFileName = fmt.Sprintf("%snode.bin", nodeType)
+	}
+
+	filePath := fmt.Sprintf("static-key/%s", keyFileName)
 
 	var privKey crypto.PrivKey
 
 	// Check if the key file exists
 	if _, err := os.Stat(filePath); err == nil {
-		// File exists, load the private key
-		log.Printf("Loading private key for %s from file: %s", nodeType, filePath)
-		buff, err := os.ReadFile(filePath)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to load private key: %v", err)
-		}
-
-		privKey, err = crypto.UnmarshalPrivateKey(buff)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to unmarshal private key: %v", err)
-		}
-	} else if errors.Is(err, os.ErrNotExist) {
-		// File does not exist, generate a new private key
-		log.Printf("Generating new private key for %s", nodeType)
-		privKey, _, err = crypto.GenerateKeyPair(crypto.Ed25519, 0)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to generate private key: %v", err)
-		}
-
-		buff, err := crypto.MarshalPrivateKey(privKey)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to marshal private key: %v", err)
-		}
-
-		err = os.WriteFile(filePath, buff, 0644)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to write private key to file: %v", err)
-		}
+		log.Printf("Loading private key for %s from: %s", nodeType, filePath)
 	} else {
-		return nil, "", fmt.Errorf("error checking private key file: %v", err)
+		return nil, "", fmt.Errorf("private key file '%s' not found in 'static-key/' directory. Please generate peer ID using run_generator.sh (for leader) or run_regulargenerator.sh (for regular nodes)", keyFileName)
+	}
+
+	buff, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to load private key from '%s': %v", filePath, err)
+	}
+
+	privKey, err = crypto.UnmarshalPrivateKey(buff)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to unmarshal private key from '%s': %v", filePath, err)
 	}
 
 	// Generate the PeerID from the private key
@@ -90,20 +86,33 @@ func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID
 		return nil, "", err
 	}
 
+	if nodeType == "regular" {
+		envVarName := "REGULAR_PEER_ID"
+		regularPeerIDFromEnv := cfg.RegularPeerID
+
+		if regularPeerIDFromEnv == "" {
+			return nil, "", fmt.Errorf("%s is required for regular nodes. Please generate peer ID and add %s=%s to your .env file", envVarName, envVarName, peerID.String())
+		}
+		if regularPeerIDFromEnv != peerID.String() {
+			return nil, "", fmt.Errorf("%s from environment (%s) does not match peer ID from key file (%s). Please ensure %s matches the generated peer ID", envVarName, regularPeerIDFromEnv, peerID.String(), envVarName)
+		}
+		log.Printf("%s validated successfully: %s", envVarName, regularPeerIDFromEnv)
+	}
+
 	limits := rcmgr.DefaultLimits
-	limits.SystemBaseLimit.StreamsInbound = 512  
-	limits.SystemBaseLimit.StreamsOutbound = 512 
-	limits.SystemBaseLimit.ConnsInbound = 256    
-	limits.SystemBaseLimit.ConnsOutbound = 256  
+	limits.SystemBaseLimit.StreamsInbound = 512
+	limits.SystemBaseLimit.StreamsOutbound = 512
+	limits.SystemBaseLimit.ConnsInbound = 256
+	limits.SystemBaseLimit.ConnsOutbound = 256
 	limits.SystemBaseLimit.FD = 512
 
 	// per connection per peer limit
-	limits.ConnBaseLimit.StreamsInbound = 64  
-	limits.ConnBaseLimit.StreamsOutbound = 64 
+	limits.ConnBaseLimit.StreamsInbound = 64
+	limits.ConnBaseLimit.StreamsOutbound = 64
 
-	limits.SystemBaseLimit.Memory = 1 << 30 
+	limits.SystemBaseLimit.Memory = 1 << 30
 
-	scaledLimits := limits.Scale(256, 512)  
+	scaledLimits := limits.Scale(256, 512)
 
 	rm, err := rcmgr.NewResourceManager(
 		rcmgr.NewFixedLimiter(scaledLimits),
@@ -178,3 +187,12 @@ func (p *P2PClient) GetConnectedPeers(ctx context.Context) map[string]NodeInfo {
 
 	return finalNodes
 }
+
+
+
+/*
+create peer id for the regular node - manually
+set - env
+
+createHost
+*/

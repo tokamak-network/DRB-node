@@ -30,7 +30,9 @@ RUN apk add --no-cache netcat-openbsd
 
 # Copy the binary from the build stage
 COPY --from=build-env /build/main ./
-COPY --from=build-env /build/static-key/leadernode.bin ./static-key/leadernode.bin
+
+
+COPY test/static-key/ ./static-key/
 
 # Copy the migration file
 COPY database/migrations /app/migrations
@@ -43,3 +45,4 @@ RUN chmod +x ./main
 
 # Run the binary
 CMD ["./main"]
+

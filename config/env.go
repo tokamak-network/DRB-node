@@ -14,8 +14,10 @@ import (
 // EnvConfig captures the environment variables required by the node services.
 type EnvConfig struct {
 	// General node configuration
-	NodeType string
-	Port     string
+	NodeType          string
+	Port              string
+	RegularNodeNumber string
+	RegularPeerID     string // Regular node peer ID (REGULAR{N}_PEER_ID)
 
 	// Leader connection details for regular nodes
 	LeaderIP     string
@@ -127,10 +129,11 @@ func Reload() *EnvConfig {
 
 func loadEnv() *EnvConfig {
 	_ = godotenv.Load()
-
 	return &EnvConfig{
 		NodeType:                    os.Getenv("NODE_TYPE"),
 		Port:                        os.Getenv("PORT"),
+		RegularNodeNumber:           os.Getenv("REGULAR_NODE_NUMBER"),
+		RegularPeerID:               os.Getenv("REGULAR_PEER_ID"),
 		LeaderIP:                    os.Getenv("LEADER_IP"),
 		LeaderPort:                  os.Getenv("LEADER_PORT"),
 		LeaderPeerID:                os.Getenv("LEADER_PEER_ID"),

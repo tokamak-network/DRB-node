@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  regularpostgres:
+    image: postgres:14.13
+    container_name: regularpostgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file: ../../.env
+    ports:
+      - "5433:5432"
+    volumes:
+      - regularpostgres-data:/var/lib/postgresql/data
+    networks:
+      - drb-production-net
+    restart: unless-stopped
+
+  regularnode:
+    build:
+      context: ../..
+      dockerfile: deployment/regular/Dockerfile
+    container_name: regularnode
+    depends_on:
+      regularpostgres:
+        condition: service_healthy
+    env_file: ../../.env
+    environment:
+      LEADER_IP: leadernode
+      LEADER_PORT: ${LEADER_PORT}
+      PORT: ${PORT}
+      NODE_TYPE: regular
+      POSTGRES_HOST: "regularpostgres"
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./static-key:/app/static-key
+    ports:
+      - "${PORT}:${PORT}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - drb-production-net
+    restart: unless-stopped
+
+volumes:
+  regularpostgres-data:
+
+networks:
+  drb-production-net:
+    external: true

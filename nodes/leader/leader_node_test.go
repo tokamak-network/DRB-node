@@ -1130,7 +1130,7 @@ func TestLeaderNode_CreateHost_NetworkInterfaceFailures(t *testing.T) {
 			_, _, err := leaderNode.CreateHost("4001", nodeType)
 			if err != nil {
 				assert.True(t,
-					containsAny(err.Error(), []string{"failed to write", "failed to load", "no such file", "invalid", "permission"}),
+					containsAny(err.Error(), []string{"not found", "private key file", "static-key", "failed to load", "no such file"}),
 					"Error for nodeType '%s' should be file-related, got: %v", nodeType, err)
 			}
 		}
@@ -1156,7 +1156,7 @@ func TestLeaderNode_CreateHost_NetworkInterfaceFailures(t *testing.T) {
 		_, _, err := leaderNode.CreateHost("4001", longNodeType)
 		if err != nil {
 			assert.True(t,
-				containsAny(err.Error(), []string{"failed to write", "failed to load", "no such file", "invalid", "too long", "file name"}),
+				containsAny(err.Error(), []string{"not found", "private key file", "static-key", "failed to load", "no such file"}),
 				"Error for very long nodeType should be file-related, got: %v", err)
 		}
 	})
@@ -1181,9 +1181,8 @@ func TestLeaderNode_CreateHost_NetworkInterfaceFailures(t *testing.T) {
 		for _, nodeType := range testCases {
 			_, _, err := leaderNode.CreateHost("4001", nodeType)
 			if err != nil {
-
 				assert.True(t,
-					containsAny(err.Error(), []string{"failed to write", "failed to load", "permission", "invalid", "no such file"}),
+					containsAny(err.Error(), []string{"not found", "private key file", "static-key", "failed to load", "no such file"}),
 					"Path traversal attempt '%s' should cause file-related error, got: %v", nodeType, err)
 			} else {
 				t.Logf(" Path traversal '%s' did not cause error", nodeType)
