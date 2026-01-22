@@ -3,8 +3,8 @@ package utils
 import (
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -43,10 +43,11 @@ func LoadContractABI(filename string) (abi.ABI, error) {
 	return parsedABI, nil
 }
 
-func NewLeaderClient(abiPath string) (*Client, error) {
+// NewClient creates a new Client with the given ABI path and private key.
+func NewClient(abiPath string, privateKeyHex string) (*Client, error) {
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
+		return nil, errors.New("CONTRACT_ADDRESS is not set in environment variables")
 	}
 	contractAddress := common.HexToAddress(contractAddressStr)
 
@@ -55,14 +56,13 @@ func NewLeaderClient(abiPath string) (*Client, error) {
 		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
 	}
 
-	privateKeyHex := appconfig.Get().LeaderPrivateKey
 	if privateKeyHex == "" {
-		log.Fatal("LEADER_PRIVATE_KEY is not set in environment variables.")
+		return nil, errors.New("private key is not provided")
 	}
 
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode leader private key: %v", err)
+		return nil, fmt.Errorf("failed to decode private key: %v", err)
 	}
 
 	return &Client{
@@ -72,31 +72,20 @@ func NewLeaderClient(abiPath string) (*Client, error) {
 	}, nil
 }
 
+// NewLeaderClient creates a new Client using the leader's private key.
+func NewLeaderClient(abiPath string) (*Client, error) {
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
+	if privateKeyHex == "" {
+		return nil, errors.New("LEADER_PRIVATE_KEY is not set in environment variables")
+	}
+	return NewClient(abiPath, privateKeyHex)
+}
+
+// NewEOAClient creates a new Client using the EOA's private key.
 func NewEOAClient(abiPath string) (*Client, error) {
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	parsedABI, err := LoadContractABI(abiPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
-	}
-
 	privateKeyHex := appconfig.Get().EOAPrivateKey
 	if privateKeyHex == "" {
-		log.Fatal("EOA_PRIVATE_KEY is not set in the environment variables")
+		return nil, errors.New("EOA_PRIVATE_KEY is not set in environment variables")
 	}
-
-	privateKey, err := crypto.HexToECDSA(privateKeyHex)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode leader private key: %v", err)
-	}
-
-	return &Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
-	}, nil
+	return NewClient(abiPath, privateKeyHex)
 }
