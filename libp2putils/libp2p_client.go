@@ -54,9 +54,11 @@ func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID
 		} else {
 			keyFileName = fmt.Sprintf("regularnode%s.bin", cfg.RegularNodeNumber)
 		}
-	} else {
-		keyFileName = fmt.Sprintf("%snode.bin", nodeType)
-	}
+	} else if nodeType == "leader" {
+        keyFileName = "leadernode.bin"
+    } else {
+        return nil, "", fmt.Errorf("invalid nodeType: %s. nodeType must be 'leader' or 'regular'", nodeType)
+    }
 
 	filePath := fmt.Sprintf("static-key/%s", keyFileName)
 
@@ -187,12 +189,3 @@ func (p *P2PClient) GetConnectedPeers(ctx context.Context) map[string]NodeInfo {
 
 	return finalNodes
 }
-
-
-
-/*
-create peer id for the regular node - manually
-set - env
-
-createHost
-*/

@@ -144,7 +144,7 @@ func TestCreateHost(t *testing.T) {
 		mockRepo := new(MockNodeInfoRepository)
 		client := NewP2PClient(mockRepo)
 
-		nodeType := "test-new-key"
+		nodeType := "leader"
 		_, _, err := client.CreateHost("0", nodeType)
 
 		if err != nil {
@@ -163,7 +163,7 @@ func TestCreateHost(t *testing.T) {
 		mockRepo := new(MockNodeInfoRepository)
 		client := NewP2PClient(mockRepo)
 
-		_, _, err := client.CreateHost("invalid", "test")
+		_, _, err := client.CreateHost("invalid", "leader")
 		assert.Error(t, err)
 	})
 
@@ -171,7 +171,7 @@ func TestCreateHost(t *testing.T) {
 		mockRepo := new(MockNodeInfoRepository)
 		client := NewP2PClient(mockRepo)
 
-		_, _, err := client.CreateHost("", "test")
+		_, _, err := client.CreateHost("", "leader")
 		assert.Error(t, err)
 	})
 
@@ -179,7 +179,7 @@ func TestCreateHost(t *testing.T) {
 		mockRepo := new(MockNodeInfoRepository)
 		client := NewP2PClient(mockRepo)
 
-		_, _, err := client.CreateHost("99999", "test")
+		_, _, err := client.CreateHost("99999", "leader")
 		assert.Error(t, err)
 	})
 
@@ -187,26 +187,15 @@ func TestCreateHost(t *testing.T) {
 		mockRepo := new(MockNodeInfoRepository)
 		client := NewP2PClient(mockRepo)
 
-		_, _, err := client.CreateHost("-1", "test")
+		_, _, err := client.CreateHost("-1", "leader")
 		assert.Error(t, err)
-	})
-
-	t.Run("Create host with different node types", func(t *testing.T) {
-		mockRepo := new(MockNodeInfoRepository)
-		client := NewP2PClient(mockRepo)
-
-		nodeTypes := []string{"leader", "regular", "test"}
-		for _, nodeType := range nodeTypes {
-			_, _, err := client.CreateHost("0", nodeType)
-			_ = err
-		}
 	})
 
 	t.Run("Create host successfully - generates new key and creates host", func(t *testing.T) {
 		mockRepo := new(MockNodeInfoRepository)
 		client := NewP2PClient(mockRepo)
 
-		nodeType := "test-success-" + t.Name()
+		nodeType := "leader"
 
 		host, peerID, err := client.CreateHost("0", nodeType)
 
@@ -231,44 +220,46 @@ func TestCreateHost(t *testing.T) {
 		}
 	})
 
-	t.Run("Create host - error when libp2p.New fails with invalid port format", func(t *testing.T) {
-		mockRepo := new(MockNodeInfoRepository)
-		client := NewP2PClient(mockRepo)
-
-		nodeType := "test-libp2p-error-" + t.Name()
-
-		invalidPorts := []string{"99999", "abc", "-1"}
-
-		for _, invalidPort := range invalidPorts {
-			_, _, err := client.CreateHost(invalidPort, nodeType)
-			assert.Error(t, err)
-			assert.True(t,
-				strings.Contains(err.Error(), "failed to create libp2p host") ||
-					strings.Contains(err.Error(), "invalid port") ||
-					strings.Contains(err.Error(), "failed to write") ||
-					strings.Contains(err.Error(), "no such file") ||
-					strings.Contains(err.Error(), "not found") ||
-					strings.Contains(err.Error(), "private key file"),
-				"Expected libp2p or file error, got: %v", err)
-		}
-	})
-
-	t.Run("Create host - error", func(t *testing.T) {
-
+	t.Run("Create host - error with invalid nodeType", func(t *testing.T) {
 		mockRepo := new(MockNodeInfoRepository)
 		client := NewP2PClient(mockRepo)
 
 		nodeType := "../../../etc/passwd"
 
 		_, _, err := client.CreateHost("0", nodeType)
-		if err != nil {
-			if strings.Contains(err.Error(), "error checking private key file") {
-				assert.Error(t, err)
-				return
+		assert.Error(t, err)
+		assert.True(t,
+			strings.Contains(err.Error(), "invalid nodeType") ||
+				strings.Contains(err.Error(), "must be 'leader' or 'regular'"),
+			"Error should mention invalid nodeType, got: %v", err)
+	})
+
+	t.Run("Create host with different node types", func(t *testing.T) {
+		mockRepo := new(MockNodeInfoRepository)
+		client := NewP2PClient(mockRepo)
+
+		// Test valid node types - should not error on validation (may error on file operations)
+		validNodeTypes := []string{"leader", "regular"}
+		for _, nodeType := range validNodeTypes {
+			_, _, err := client.CreateHost("0", nodeType)
+			// Should not error on nodeType validation
+			if err != nil {
+				// Error should not be about invalid nodeType
+				assert.False(t, strings.Contains(err.Error(), "invalid nodeType") || strings.Contains(err.Error(), "must be 'leader' or 'regular'"),
+					"Valid nodeType '%s' should not fail validation, got: %v", nodeType, err)
 			}
-			_ = err
 		}
 
+		// Test invalid node types - should error on validation
+		invalidNodeTypes := []string{"test", "invalid", "other", "node", ""}
+		for _, nodeType := range invalidNodeTypes {
+			_, _, err := client.CreateHost("0", nodeType)
+			assert.Error(t, err, "Invalid nodeType '%s' should return an error", nodeType)
+			assert.True(t,
+				strings.Contains(err.Error(), "invalid nodeType") ||
+					strings.Contains(err.Error(), "must be 'leader' or 'regular'"),
+				"Error should mention invalid nodeType, got: %v", err)
+		}
 	})
 
 	t.Run("Create host with regular node type - missing REGULAR_NODE_NUMBER (uses regularnode.bin)", func(t *testing.T) {
@@ -451,7 +442,6 @@ func TestCreateHost(t *testing.T) {
 			}
 			t.Fatalf("Unexpected error: %v", err)
 		}
-
 		assert.NotNil(t, host)
 		assert.Equal(t, peerID, returnedPeerID)
 		assert.Equal(t, peerID.String(), os.Getenv("REGULAR_PEER_ID"))
@@ -709,7 +699,6 @@ func TestConnectToPeer(t *testing.T) {
 
 		assert.Error(t, err)
 		_ = addrInfo
-		// ./build.sh
 	})
 
 	t.Run("DNS resolution - uses hardcoded DNS name", func(t *testing.T) {
