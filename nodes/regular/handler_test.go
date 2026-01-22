@@ -1985,7 +1985,7 @@ func TestRegularNodeHandler_activateOnChain_InvalidPrivateKey(t *testing.T) {
 	err := handler.activateOnChain(context.Background(), abiFilePath)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to decode leader private key")
+	assert.Contains(t, err.Error(), "failed to decode private key")
 }
 
 func TestRegularNodeHandler_activateOnChain_TransactionError(t *testing.T) {
