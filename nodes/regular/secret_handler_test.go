@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/eapache/queue"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p"
@@ -28,7 +29,17 @@ func createTestNodeForSecretHandler() *RegularNode {
 	mockRevealRepo := new(MockRevealOrderRepository)
 	mockCommitRepo := new(MockRegularCommitRepository)
 
+	// Create a test client with generated private key
+	testPrivateKey, _ := crypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	node := &RegularNode{
+		client:                        testClient,
 		peerCommitDataRepository:      mockPeerRepo,
 		revealOrderRepository:         mockRevealRepo,
 		regularCommitRepository:       mockCommitRepo,

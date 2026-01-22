@@ -512,14 +512,9 @@ func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string) (b
 		}
 
 		// Create and send deposit transaction
-		clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
-		if err != nil {
-			return false, fmt.Errorf("failed to create EOA client: %v", err)
-		}
-
 		_, _, err = eth.Service.ExecuteTransaction(
 			ctx,
-			clientUtils,
+			rh.regularNode.client,
 			rh.fallbackEthClient,
 			"deposit",
 			remaining,
@@ -650,14 +645,9 @@ func (rh *RegularNodeHandler) sendCommitToLeader(ctx context.Context, h core.Hos
 }
 
 func (rh *RegularNodeHandler) activateOnChain(ctx context.Context, abiFilePath string) error {
-	clientUtils, err := utils.NewEOAClient(abiFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to create EOA client: %v", err)
-	}
-
-	_, _, err = eth.Service.ExecuteTransaction(
+	_, _, err := eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		rh.regularNode.client,
 		rh.fallbackEthClient,
 		"activate",
 		big.NewInt(0),

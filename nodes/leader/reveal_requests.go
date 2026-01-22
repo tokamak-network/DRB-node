@@ -131,21 +131,12 @@ func (n *LeaderNode) sendSecretValueRequestToNode(ctx context.Context, h host.Ho
 
 func (n *LeaderNode) requestToSubmitS(ctx context.Context, round string, trialNum string) {
 	n.SetSecretRequestSentForWhichRound(n.GetCurrentRound())
-	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders, err := n.prepareArgumentsForRequestToSubmitS(ctx, round, trialNum)
-	if err != nil {
-		log.Printf("Failed to prepare arguments for requestToSubmitS: %v", err)
-		return
-	}
 
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to create leader client: %v", err)
-		return
-	}
+	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders, err := n.prepareArgumentsForRequestToSubmitS(ctx, round, trialNum)
 
 	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"requestToSubmitS",
 		big.NewInt(0),
@@ -396,16 +387,10 @@ func (n *LeaderNode) UpdateLastSubmitSTimestamp(ctx context.Context, newTimestam
 func (n *LeaderNode) callFailToSubmitS(ctx context.Context, round string, trialNum string) {
 	log.Printf("Calling failToSubmitS for round %s with trial %s", round, trialNum)
 
-	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to create EOA client: %v", err)
-		return
-	}
-
 	// Execute the transaction
-	_, _, err = eth.Service.ExecuteTransaction(
+	_, _, err := eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"failToSubmitS",
 		big.NewInt(0),

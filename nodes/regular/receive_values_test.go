@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"sync"
 	"testing"
 
-	"os"
-
 	"github.com/eapache/queue"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p"
@@ -55,7 +55,17 @@ func (m *MockPeerCommitRepository) GetAllPeerCommitData(ctx context.Context, rou
 func createTestNodeForReceiveValues() *RegularNode {
 	mockPeerRepo := new(MockPeerCommitRepository)
 
+	// Create a test client with generated private key
+	testPrivateKey, _ := crypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	node := &RegularNode{
+		client:                        testClient,
 		peerCommitDataRepository:      mockPeerRepo,
 		submittedCvIndices:            make(map[string]map[string]bool),
 		cleanupQueue:                  queue.New(),
