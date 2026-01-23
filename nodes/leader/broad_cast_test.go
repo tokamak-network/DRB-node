@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	ic "github.com/libp2p/go-libp2p/core/crypto"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -1239,13 +1240,15 @@ func TestPerformReliableBroadcast_WithNetworkAttempt(t *testing.T) {
 
 	// Create operator addresses
 	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
-	peerID, _ := peer.Decode("QmTest123456789012345678901234567890123456789012")
+
+	privKey, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID, _ := peer.IDFromPrivateKey(privKey)
 
 	// Create a mock node repo that returns specific node info
 	mockNodeRepo := new(MockNodeInfoRepository)
 	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
 		{
-			PeerID:     string(peerID), // Convert peer.ID to string
+			PeerID:     peerID.String(), 
 			IP:         "127.0.0.1",
 			Port:       "8080",
 			EOAAddress: opAddr1.Hex(),
@@ -1305,13 +1308,15 @@ func TestPerformReliableBroadcast_WithSuccessfulStream(t *testing.T) {
 
 	// Create operator addresses
 	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
-	peerID, _ := peer.Decode("QmTest123456789012345678901234567890123456789012")
+
+	privKey, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID, _ := peer.IDFromPrivateKey(privKey)
 
 	// Create a mock node repo that returns specific node info
 	mockNodeRepo := new(MockNodeInfoRepository)
 	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
 		{
-			PeerID:     string(peerID), // Convert peer.ID to string
+			PeerID:     peerID.String(), 
 			IP:         "127.0.0.1",
 			Port:       "8080",
 			EOAAddress: opAddr1.Hex(),
@@ -1379,13 +1384,15 @@ func TestPerformReliableBroadcastSync_WithNetworkAttempt(t *testing.T) {
 
 	// Create operator addresses
 	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
-	peerID, _ := peer.Decode("QmTest123456789012345678901234567890123456789012")
+
+	privKey, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID, _ := peer.IDFromPrivateKey(privKey)
 
 	// Create a mock node repo that returns specific node info
 	mockNodeRepo := new(MockNodeInfoRepository)
 	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
 		{
-			PeerID:     string(peerID), // Convert peer.ID to string
+			PeerID:     peerID.String(), 
 			IP:         "127.0.0.1",
 			Port:       "8080",
 			EOAAddress: opAddr1.Hex(),
@@ -1445,13 +1452,15 @@ func TestPerformReliableBroadcastSync_WithSuccessfulStream(t *testing.T) {
 
 	// Create operator addresses
 	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
-	peerID, _ := peer.Decode("QmTest123456789012345678901234567890123456789012")
+
+	privKey, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID, _ := peer.IDFromPrivateKey(privKey)
 
 	// Create a mock node repo that returns specific node info
 	mockNodeRepo := new(MockNodeInfoRepository)
 	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
 		{
-			PeerID:     string(peerID), // Convert peer.ID to string
+			PeerID:     peerID.String(), 
 			IP:         "127.0.0.1",
 			Port:       "8080",
 			EOAAddress: opAddr1.Hex(),
@@ -1517,13 +1526,15 @@ func TestPerformReliableBroadcastSync_WithEncodingError(t *testing.T) {
 
 	// Create operator addresses
 	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
-	peerID, _ := peer.Decode("QmTest123456789012345678901234567890123456789012")
+
+	privKey, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID, _ := peer.IDFromPrivateKey(privKey)
 
 	// Create a mock node repo that returns specific node info
 	mockNodeRepo := new(MockNodeInfoRepository)
 	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
 		{
-			PeerID:     string(peerID),
+			PeerID:     peerID.String(),
 			IP:         "127.0.0.1",
 			Port:       "8080",
 			EOAAddress: opAddr1.Hex(),
@@ -1588,12 +1599,14 @@ func TestPerformReliableBroadcast_SecretBroadcastType(t *testing.T) {
 	defer os.Unsetenv("LEADER_PRIVATE_KEY")
 
 	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
-	peerID, _ := peer.Decode("QmTest123456789012345678901234567890123456789012")
+
+	privKey, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID, _ := peer.IDFromPrivateKey(privKey)
 
 	mockNodeRepo := new(MockNodeInfoRepository)
 	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
 		{
-			PeerID:     string(peerID),
+			PeerID:     peerID.String(),
 			IP:         "127.0.0.1",
 			Port:       "8080",
 			EOAAddress: opAddr1.Hex(),
@@ -1651,12 +1664,14 @@ func TestPerformReliableBroadcastSync_CvsBroadcastType(t *testing.T) {
 	defer os.Unsetenv("LEADER_PRIVATE_KEY")
 
 	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
-	peerID, _ := peer.Decode("QmTest123456789012345678901234567890123456789012")
+
+	privKey, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID, _ := peer.IDFromPrivateKey(privKey)
 
 	mockNodeRepo := new(MockNodeInfoRepository)
 	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
 		{
-			PeerID:     string(peerID),
+			PeerID:     peerID.String(),
 			IP:         "127.0.0.1",
 			Port:       "8080",
 			EOAAddress: opAddr1.Hex(),
@@ -1712,12 +1727,14 @@ func TestPerformReliableBroadcastSync_CosBroadcastType(t *testing.T) {
 	defer os.Unsetenv("LEADER_PRIVATE_KEY")
 
 	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
-	peerID, _ := peer.Decode("QmTest123456789012345678901234567890123456789012")
+
+	privKey, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID, _ := peer.IDFromPrivateKey(privKey)
 
 	mockNodeRepo := new(MockNodeInfoRepository)
 	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
 		{
-			PeerID:     string(peerID),
+			PeerID:     peerID.String(),
 			IP:         "127.0.0.1",
 			Port:       "8080",
 			EOAAddress: opAddr1.Hex(),
@@ -1759,4 +1776,710 @@ func TestPerformReliableBroadcastSync_CosBroadcastType(t *testing.T) {
 	mockRepo.AssertExpectations(t)
 	mockHost.AssertExpectations(t)
 	mockStream.AssertExpectations(t)
+}
+
+func TestPerformReliableBroadcast_MixedSuccessFailureInSingleAttempt(t *testing.T) {
+	node := createTestNodeForBroadcast()
+	mockRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockRepo
+
+	pk, _ := crypto.GenerateKey()
+	pkHex := hex.EncodeToString(crypto.FromECDSA(pk))
+	os.Setenv("LEADER_PRIVATE_KEY", pkHex)
+	defer os.Unsetenv("LEADER_PRIVATE_KEY")
+
+
+	opAddr1 := common.HexToAddress("0x1111111111111111111111111111111111111111")
+	opAddr2 := common.HexToAddress("0x2222222222222222222222222222222222222222")
+	opAddr3 := common.HexToAddress("0x3333333333333333333333333333333333333333")
+
+	
+	privKey1, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	privKey2, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	privKey3, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID1, _ := peer.IDFromPrivateKey(privKey1)
+	peerID2, _ := peer.IDFromPrivateKey(privKey2)
+	peerID3, _ := peer.IDFromPrivateKey(privKey3)
+
+
+	mockNodeRepo := new(MockNodeInfoRepository)
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
+		{PeerID: peerID1.String(), IP: "127.0.0.1", Port: "8081", EOAAddress: opAddr1.Hex()},
+		{PeerID: peerID2.String(), IP: "127.0.0.1", Port: "8082", EOAAddress: opAddr2.Hex()},
+		{PeerID: peerID3.String(), IP: "127.0.0.1", Port: "8083", EOAAddress: opAddr3.Hex()},
+	}, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeRepo)
+
+
+	mockHost := new(MockHost)
+	mockPeerstore := new(MockPeerstore)
+	mockStream1 := new(MockStreamForBroadcast) 
+	mockStream3 := new(MockStreamForBroadcast) 
+
+	mockHost.On("Peerstore").Return(mockPeerstore)
+	mockPeerstore.On("AddAddr", mock.Anything, mock.Anything, mock.Anything).Return()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream1, nil).Maybe()                      
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("connection refused")).Maybe() // Node 2 fail
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream3, nil).Maybe()                
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream1, nil).Maybe()                      // Node 2 retry
+
+	mockStream1.On("Write", mock.Anything).Return(100, nil)
+	mockStream1.On("Close").Return(nil)
+	mockStream3.On("Write", mock.Anything).Return(100, nil)
+	mockStream3.On("Close").Return(nil)
+
+	tracker := &utils.BroadcastTracker{
+		MessageID:   "test-mixed-success-failure",
+		Round:       "100",
+		TrialNum:    "1",
+		EOAAddress:  opAddr1.Hex(),
+		Type:        "cvs",
+		Attempts:    0,
+		MaxAttempts: 2,
+		Timeout:     0, // No sleep for fast test
+		Acknowledged: map[string]bool{
+			opAddr1.Hex(): false,
+			opAddr2.Hex(): false, // This one will fail
+			opAddr3.Hex(): false,
+		},
+	}
+	node.SetActiveBroadcast(tracker.MessageID, tracker)
+
+
+	acknowledgeNodes := func() {
+		time.Sleep(10 * time.Millisecond)
+		tracker.Acknowledged[opAddr1.Hex()] = true
+		tracker.Acknowledged[opAddr3.Hex()] = true
+	}
+	go acknowledgeNodes()
+
+	mockRepo.On("UpdateBroadcastTracker", mock.Anything, tracker).Return(nil).Maybe()
+
+	node.performReliableBroadcast(context.Background(), mockHost, tracker, "cvs", []common.Address{opAddr1, opAddr2, opAddr3})
+
+	assert.Equal(t, 2, tracker.Attempts)
+	
+	_, exists := node.GetActiveBroadcast(tracker.MessageID)
+	assert.False(t, exists)
+
+	mockRepo.AssertExpectations(t)
+
+}
+
+func TestPerformReliableBroadcast_StreamClosesMidTransmission(t *testing.T) {
+	node := createTestNodeForBroadcast()
+	mockRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockRepo
+
+	pk, _ := crypto.GenerateKey()
+	pkHex := hex.EncodeToString(crypto.FromECDSA(pk))
+	os.Setenv("LEADER_PRIVATE_KEY", pkHex)
+	defer os.Unsetenv("LEADER_PRIVATE_KEY")
+
+	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	privKey1, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID1, _ := peer.IDFromPrivateKey(privKey1)
+
+	mockNodeRepo := new(MockNodeInfoRepository)
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
+		{PeerID: peerID1.String(), IP: "127.0.0.1", Port: "8080", EOAAddress: opAddr1.Hex()},
+	}, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeRepo)
+
+	mockHost := new(MockHost)
+	mockPeerstore := new(MockPeerstore)
+	mockStream := new(MockStreamForBroadcast)
+
+	mockHost.On("Peerstore").Return(mockPeerstore)
+	mockPeerstore.On("AddAddr", mock.Anything, mock.Anything, mock.Anything).Return()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream, nil).Maybe()
+
+	mockStream.On("Write", mock.Anything).Return(50, nil).Maybe()
+	mockStream.On("Write", mock.Anything).Return(0, errors.New("stream closed")).Maybe()
+	mockStream.On("Close").Return(nil).Maybe()
+
+	tracker := &utils.BroadcastTracker{
+		MessageID:   "test-stream-closes-mid",
+		Round:       "100",
+		TrialNum:    "1",
+		EOAAddress:  opAddr1.Hex(),
+		Type:        "secret",
+		Attempts:    0,
+		MaxAttempts: 2,
+		Timeout:     0,
+		Acknowledged: map[string]bool{
+			opAddr1.Hex(): false,
+		},
+	}
+	node.SetActiveBroadcast(tracker.MessageID, tracker)
+
+	mockRepo.On("UpdateBroadcastTracker", mock.Anything, tracker).Return(nil).Maybe()
+
+	// Second attempt should retry
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream, nil).Maybe()
+	mockStream.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream.On("Close").Return(nil).Maybe()
+
+	node.performReliableBroadcast(context.Background(), mockHost, tracker, "secret", []common.Address{opAddr1})
+
+	assert.Equal(t, 2, tracker.Attempts)
+	_, exists := node.GetActiveBroadcast(tracker.MessageID)
+	assert.False(t, exists)
+
+	mockRepo.AssertExpectations(t)
+	mockHost.AssertExpectations(t)
+	mockStream.AssertExpectations(t)
+}
+
+func TestPerformReliableBroadcast_LateAcknowledgmentDuringRetry(t *testing.T) {
+	node := createTestNodeForBroadcast()
+	mockRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockRepo
+
+	pk, _ := crypto.GenerateKey()
+	pkHex := hex.EncodeToString(crypto.FromECDSA(pk))
+	os.Setenv("LEADER_PRIVATE_KEY", pkHex)
+	defer os.Unsetenv("LEADER_PRIVATE_KEY")
+
+	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	opAddr2 := common.HexToAddress("0xAbC1234567890123456789012345678901234567")
+
+
+	privKey1, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	privKey2, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID1, _ := peer.IDFromPrivateKey(privKey1)
+	peerID2, _ := peer.IDFromPrivateKey(privKey2)
+
+	mockNodeRepo := new(MockNodeInfoRepository)
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
+		{PeerID: peerID1.String(), IP: "127.0.0.1", Port: "8081", EOAAddress: opAddr1.Hex()},
+		{PeerID: peerID2.String(), IP: "127.0.0.1", Port: "8082", EOAAddress: opAddr2.Hex()},
+	}, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeRepo)
+
+	mockHost := new(MockHost)
+	mockPeerstore := new(MockPeerstore)
+	mockStream1 := new(MockStreamForBroadcast)
+	mockStream2 := new(MockStreamForBroadcast)
+
+	mockHost.On("Peerstore").Return(mockPeerstore)
+	mockPeerstore.On("AddAddr", mock.Anything, mock.Anything, mock.Anything).Return()
+
+	// Both nodes succeed in first attempt
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream1, nil).Maybe()
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream2, nil).Maybe()
+	mockStream1.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream1.On("Close").Return(nil).Maybe()
+	mockStream2.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream2.On("Close").Return(nil).Maybe()
+
+	tracker := &utils.BroadcastTracker{
+		MessageID:   "test-late-ack",
+		Round:       "100",
+		TrialNum:    "1",
+		EOAAddress:  opAddr1.Hex(),
+		Type:        "cos",
+		Attempts:    0,
+		MaxAttempts: 3,
+		Timeout:     10, 
+		Acknowledged: map[string]bool{
+			opAddr1.Hex(): false,
+			opAddr2.Hex(): false,
+		},
+	}
+	node.SetActiveBroadcast(tracker.MessageID, tracker)
+
+	go func() {
+		time.Sleep(15 * time.Millisecond) 
+		tracker.Acknowledged[opAddr1.Hex()] = true
+	}()
+
+	mockRepo.On("UpdateBroadcastTracker", mock.Anything, tracker).Return(nil).Maybe()
+
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	node.performReliableBroadcast(ctx, mockHost, tracker, "cos", []common.Address{opAddr1, opAddr2})
+
+	time.Sleep(50 * time.Millisecond)
+
+	assert.True(t, tracker.Acknowledged[opAddr1.Hex()])
+	_, exists := node.GetActiveBroadcast(tracker.MessageID)
+	assert.False(t, exists)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestPerformReliableBroadcast_RaceConditionAcknowledgment(t *testing.T) {
+	node := createTestNodeForBroadcast()
+	mockRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockRepo
+
+	pk, _ := crypto.GenerateKey()
+	pkHex := hex.EncodeToString(crypto.FromECDSA(pk))
+	os.Setenv("LEADER_PRIVATE_KEY", pkHex)
+	defer os.Unsetenv("LEADER_PRIVATE_KEY")
+
+	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	// Generate valid peer ID
+	privKey1, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID1, _ := peer.IDFromPrivateKey(privKey1)
+
+	mockNodeRepo := new(MockNodeInfoRepository)
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
+		{PeerID: peerID1.String(), IP: "127.0.0.1", Port: "8080", EOAAddress: opAddr1.Hex()},
+	}, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeRepo)
+
+	mockHost := new(MockHost)
+	mockPeerstore := new(MockPeerstore)
+	mockStream := new(MockStreamForBroadcast)
+
+	mockHost.On("Peerstore").Return(mockPeerstore)
+	mockPeerstore.On("AddAddr", mock.Anything, mock.Anything, mock.Anything).Return()
+
+	// First attempt succeeds
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream, nil).Maybe()
+	mockStream.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream.On("Close").Return(nil).Maybe()
+
+	tracker := &utils.BroadcastTracker{
+		MessageID:   "test-race-condition",
+		Round:       "100",
+		TrialNum:    "1",
+		EOAAddress:  opAddr1.Hex(),
+		Type:        "cvs",
+		Attempts:    0,
+		MaxAttempts: 2,
+		Timeout:     0, // No timeout for fast test
+		Acknowledged: map[string]bool{
+			opAddr1.Hex(): false,
+		},
+	}
+	node.SetActiveBroadcast(tracker.MessageID, tracker)
+
+	go func() {
+		time.Sleep(5 * time.Millisecond)
+		tracker.Acknowledged[opAddr1.Hex()] = true
+	}()
+
+	mockRepo.On("UpdateBroadcastTracker", mock.Anything, tracker).Return(nil).Maybe()
+
+	node.performReliableBroadcast(context.Background(), mockHost, tracker, "cvs", []common.Address{opAddr1})
+
+	// Should break early if acknowledgment received
+	time.Sleep(20 * time.Millisecond)
+	assert.True(t, tracker.Acknowledged[opAddr1.Hex()])
+	_, exists := node.GetActiveBroadcast(tracker.MessageID)
+	assert.False(t, exists)
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestPerformReliableBroadcast_MultipleNodesMixedNetworkConditions(t *testing.T) {
+	node := createTestNodeForBroadcast()
+	mockRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockRepo
+
+	pk, _ := crypto.GenerateKey()
+	pkHex := hex.EncodeToString(crypto.FromECDSA(pk))
+	os.Setenv("LEADER_PRIVATE_KEY", pkHex)
+	defer os.Unsetenv("LEADER_PRIVATE_KEY")
+
+	// Create 4 operator addresses
+	opAddr1 := common.HexToAddress("0x1111111111111111111111111111111111111111")
+	opAddr2 := common.HexToAddress("0x2222222222222222222222222222222222222222")
+	opAddr3 := common.HexToAddress("0x3333333333333333333333333333333333333333")
+	opAddr4 := common.HexToAddress("0x4444444444444444444444444444444444444444")
+
+	// Generate valid peer IDs
+	privKey1, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	privKey2, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	privKey3, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	privKey4, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID1, _ := peer.IDFromPrivateKey(privKey1)
+	peerID2, _ := peer.IDFromPrivateKey(privKey2)
+	peerID3, _ := peer.IDFromPrivateKey(privKey3)
+	peerID4, _ := peer.IDFromPrivateKey(privKey4)
+
+	mockNodeRepo := new(MockNodeInfoRepository)
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
+		{PeerID: peerID1.String(), IP: "127.0.0.1", Port: "8081", EOAAddress: opAddr1.Hex()},
+		{PeerID: peerID2.String(), IP: "127.0.0.1", Port: "8082", EOAAddress: opAddr2.Hex()},
+		{PeerID: peerID3.String(), IP: "127.0.0.1", Port: "8083", EOAAddress: opAddr3.Hex()},
+		{PeerID: peerID4.String(), IP: "127.0.0.1", Port: "8084", EOAAddress: opAddr4.Hex()},
+	}, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeRepo)
+
+	mockHost := new(MockHost)
+	mockPeerstore := new(MockPeerstore)
+	mockStream1 := new(MockStreamForBroadcast) // Success
+	mockStream3 := new(MockStreamForBroadcast) // Success
+	mockStream4 := new(MockStreamForBroadcast) // Success
+
+	mockHost.On("Peerstore").Return(mockPeerstore)
+	mockPeerstore.On("AddAddr", mock.Anything, mock.Anything, mock.Anything).Return()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream1, nil).Maybe()
+	mockStream1.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream1.On("Close").Return(nil).Maybe()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("connection refused")).Maybe()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream3, nil).Maybe()
+	mockStream3.On("Write", mock.Anything).Return(0, errors.New("write failed")).Maybe()
+	mockStream3.On("Close").Return(nil).Maybe()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream4, nil).Maybe()
+	mockStream4.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream4.On("Close").Return(nil).Maybe()
+
+	tracker := &utils.BroadcastTracker{
+		MessageID:   "test-mixed-network",
+		Round:       "100",
+		TrialNum:    "1",
+		EOAAddress:  opAddr1.Hex(),
+		Type:        "secret",
+		Attempts:    0,
+		MaxAttempts: 3,
+		Timeout:     0,
+		Acknowledged: map[string]bool{
+			opAddr1.Hex(): false,
+			opAddr2.Hex(): false, 
+			opAddr3.Hex(): false, 
+			opAddr4.Hex(): false,
+		},
+	}
+	node.SetActiveBroadcast(tracker.MessageID, tracker)
+
+
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		tracker.Acknowledged[opAddr1.Hex()] = true
+		tracker.Acknowledged[opAddr4.Hex()] = true
+	}()
+
+	mockRepo.On("UpdateBroadcastTracker", mock.Anything, tracker).Return(nil).Maybe()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream1, nil).Maybe()
+	mockStream1.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream1.On("Close").Return(nil).Maybe()
+
+	
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream3, nil).Maybe()
+	mockStream3.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream3.On("Close").Return(nil).Maybe()
+
+	
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		tracker.Acknowledged[opAddr2.Hex()] = true
+		tracker.Acknowledged[opAddr3.Hex()] = true
+	}()
+
+	node.performReliableBroadcast(context.Background(), mockHost, tracker, "secret", []common.Address{opAddr1, opAddr2, opAddr3, opAddr4})
+
+	time.Sleep(50 * time.Millisecond)
+
+	assert.GreaterOrEqual(t, tracker.Attempts, 2)               
+	assert.LessOrEqual(t, tracker.Attempts, tracker.MaxAttempts) 
+	_, exists := node.GetActiveBroadcast(tracker.MessageID)
+	assert.False(t, exists)
+
+	mockRepo.AssertExpectations(t)
+}
+
+// TestPerformReliableBroadcast_PartialStreamWrite tests handling of partial stream writes
+func TestPerformReliableBroadcast_PartialStreamWrite(t *testing.T) {
+	node := createTestNodeForBroadcast()
+	mockRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockRepo
+
+	pk, _ := crypto.GenerateKey()
+	pkHex := hex.EncodeToString(crypto.FromECDSA(pk))
+	os.Setenv("LEADER_PRIVATE_KEY", pkHex)
+	defer os.Unsetenv("LEADER_PRIVATE_KEY")
+
+	opAddr1 := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	// Generate valid peer ID
+	privKey1, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID1, _ := peer.IDFromPrivateKey(privKey1)
+
+	mockNodeRepo := new(MockNodeInfoRepository)
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
+		{PeerID: peerID1.String(), IP: "127.0.0.1", Port: "8080", EOAAddress: opAddr1.Hex()},
+	}, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeRepo)
+
+	mockHost := new(MockHost)
+	mockPeerstore := new(MockPeerstore)
+	mockStream := new(MockStreamForBroadcast)
+
+	mockHost.On("Peerstore").Return(mockPeerstore)
+	mockPeerstore.On("AddAddr", mock.Anything, mock.Anything, mock.Anything).Return()
+
+	
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream, nil).Maybe()
+	
+	mockStream.On("Write", mock.Anything).Return(30, nil).Maybe()
+
+	mockStream.On("Write", mock.Anything).Return(0, errors.New("connection reset")).Maybe()
+	mockStream.On("Close").Return(nil).Maybe()
+
+	tracker := &utils.BroadcastTracker{
+		MessageID:   "test-partial-write",
+		Round:       "100",
+		TrialNum:    "1",
+		EOAAddress:  opAddr1.Hex(),
+		Type:        "cvs",
+		Attempts:    0,
+		MaxAttempts: 2,
+		Timeout:     0,
+		Acknowledged: map[string]bool{
+			opAddr1.Hex(): false,
+		},
+	}
+	node.SetActiveBroadcast(tracker.MessageID, tracker)
+
+	mockRepo.On("UpdateBroadcastTracker", mock.Anything, tracker).Return(nil).Maybe()
+
+	
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream, nil).Maybe()
+	mockStream.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream.On("Close").Return(nil).Maybe()
+
+	node.performReliableBroadcast(context.Background(), mockHost, tracker, "cvs", []common.Address{opAddr1})
+
+	assert.Equal(t, 2, tracker.Attempts)
+	_, exists := node.GetActiveBroadcast(tracker.MessageID)
+	assert.False(t, exists)
+
+	mockRepo.AssertExpectations(t)
+	mockHost.AssertExpectations(t)
+	mockStream.AssertExpectations(t)
+}
+
+
+func TestPerformReliableBroadcastSync_MixedSuccessFailureInSingleAttempt(t *testing.T) {
+	node := createTestNodeForBroadcast()
+	mockRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockRepo
+
+	pk, _ := crypto.GenerateKey()
+	pkHex := hex.EncodeToString(crypto.FromECDSA(pk))
+	os.Setenv("LEADER_PRIVATE_KEY", pkHex)
+	defer os.Unsetenv("LEADER_PRIVATE_KEY")
+
+	opAddr1 := common.HexToAddress("0x1111111111111111111111111111111111111111")
+	opAddr2 := common.HexToAddress("0x2222222222222222222222222222222222222222")
+	opAddr3 := common.HexToAddress("0x3333333333333333333333333333333333333333")
+
+	
+	privKey1, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	privKey2, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	privKey3, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID1, _ := peer.IDFromPrivateKey(privKey1)
+	peerID2, _ := peer.IDFromPrivateKey(privKey2)
+	peerID3, _ := peer.IDFromPrivateKey(privKey3)
+
+	mockNodeRepo := new(MockNodeInfoRepository)
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
+		{PeerID: peerID1.String(), IP: "127.0.0.1", Port: "8081", EOAAddress: opAddr1.Hex()},
+		{PeerID: peerID2.String(), IP: "127.0.0.1", Port: "8082", EOAAddress: opAddr2.Hex()},
+		{PeerID: peerID3.String(), IP: "127.0.0.1", Port: "8083", EOAAddress: opAddr3.Hex()},
+	}, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeRepo)
+
+	mockHost := new(MockHost)
+	mockPeerstore := new(MockPeerstore)
+	mockStream1 := new(MockStreamForBroadcast)
+	mockStream3 := new(MockStreamForBroadcast)
+
+	mockHost.On("Peerstore").Return(mockPeerstore)
+	mockPeerstore.On("AddAddr", mock.Anything, mock.Anything, mock.Anything).Return()
+
+	
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream1, nil).Maybe()
+	mockStream1.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream1.On("Close").Return(nil).Maybe()
+
+	
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("connection refused")).Maybe()
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream3, nil).Maybe()
+	mockStream3.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream3.On("Close").Return(nil).Maybe()
+
+	tracker := &utils.BroadcastTracker{
+		MessageID:   "test-sync-mixed",
+		Round:       "100",
+		TrialNum:    "1",
+		EOAAddress:  opAddr1.Hex(),
+		Type:        "secret",
+		Attempts:    0,
+		MaxAttempts: 2,
+		Timeout:     0,
+		Acknowledged: map[string]bool{
+			opAddr1.Hex(): false,
+			opAddr2.Hex(): false,
+			opAddr3.Hex(): false,
+		},
+	}
+
+	
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		tracker.Acknowledged[opAddr1.Hex()] = true
+		tracker.Acknowledged[opAddr3.Hex()] = true
+	}()
+
+	mockRepo.On("UpdateBroadcastTracker", mock.Anything, tracker).Return(nil).Maybe()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream1, nil).Maybe()
+	mockStream1.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream1.On("Close").Return(nil).Maybe()
+
+	result := node.performReliableBroadcastSync(context.Background(), mockHost, tracker, "secret", []common.Address{opAddr1, opAddr2, opAddr3})
+
+	time.Sleep(20 * time.Millisecond)
+
+	assert.Equal(t, 2, tracker.Attempts)
+	assert.False(t, result) 
+
+	mockRepo.AssertExpectations(t)
+	mockHost.AssertExpectations(t)
+}
+
+func TestHandleAcknowledgment_AfterPartialDeliveryFailure(t *testing.T) {
+	node := createTestNodeForBroadcast()
+	mockRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockRepo
+
+	messageID := "test-partial-delivery-ack"
+	opAddr1 := common.HexToAddress("0x1111111111111111111111111111111111111111")
+	opAddr2 := common.HexToAddress("0x2222222222222222222222222222222222222222")
+
+	tracker := &utils.BroadcastTracker{
+		MessageID: messageID,
+		Round:     "100",
+		TrialNum:  "1",
+		Type:      "cvs",
+		Acknowledged: map[string]bool{
+			opAddr1.Hex(): false, 
+			opAddr2.Hex(): true,  
+		},
+	}
+	node.SetActiveBroadcast(messageID, tracker)
+
+	mockRepo.On("UpdateBroadcastTracker", mock.Anything, tracker).Return(nil)
+
+
+	ack := utils.AcknowledgmentMessage{
+		MessageID:  messageID,
+		EOAAddress: opAddr1.Hex(),
+		Status:     "received",
+		Type:       "cvs",
+	}
+
+	node.HandleAcknowledgment(context.Background(), ack)
+
+	updatedTracker, _ := node.GetActiveBroadcast(messageID)
+	assert.True(t, updatedTracker.Acknowledged[opAddr1.Hex()])
+	assert.True(t, updatedTracker.Acknowledged[opAddr2.Hex()])
+
+	mockRepo.AssertExpectations(t)
+}
+
+func TestPerformReliableBroadcast_EncodingFailureAfterStreamCreation(t *testing.T) {
+	node := createTestNodeForBroadcast()
+	mockRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockRepo
+
+	pk, _ := crypto.GenerateKey()
+	pkHex := hex.EncodeToString(crypto.FromECDSA(pk))
+	os.Setenv("LEADER_PRIVATE_KEY", pkHex)
+	defer os.Unsetenv("LEADER_PRIVATE_KEY")
+
+	opAddr1 := common.HexToAddress("0x1111111111111111111111111111111111111111")
+	opAddr2 := common.HexToAddress("0x2222222222222222222222222222222222222222")
+
+	// Generate valid peer IDs
+	privKey1, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	privKey2, _, _ := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+	peerID1, _ := peer.IDFromPrivateKey(privKey1)
+	peerID2, _ := peer.IDFromPrivateKey(privKey2)
+
+	mockNodeRepo := new(MockNodeInfoRepository)
+	mockNodeRepo.On("GetNodeInfos", mock.Anything).Return([]*utils.NodeInfo{
+		{PeerID: peerID1.String(), IP: "127.0.0.1", Port: "8081", EOAAddress: opAddr1.Hex()},
+		{PeerID: peerID2.String(), IP: "127.0.0.1", Port: "8082", EOAAddress: opAddr2.Hex()},
+	}, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeRepo)
+
+	mockHost := new(MockHost)
+	mockPeerstore := new(MockPeerstore)
+	mockStream1 := new(MockStreamForBroadcast)
+	mockStream2 := new(MockStreamForBroadcast)
+
+	mockHost.On("Peerstore").Return(mockPeerstore)
+	mockPeerstore.On("AddAddr", mock.Anything, mock.Anything, mock.Anything).Return()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream1, nil).Maybe()
+	mockStream1.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream1.On("Close").Return(nil).Maybe()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream2, nil).Maybe()
+	mockStream2.On("Write", mock.Anything).Return(0, errors.New("encoding error")).Maybe()
+	mockStream2.On("Close").Return(nil).Maybe()
+
+	tracker := &utils.BroadcastTracker{
+		MessageID:   "test-encoding-failure",
+		Round:       "100",
+		TrialNum:    "1",
+		EOAAddress:  opAddr1.Hex(),
+		Type:        "cos",
+		Attempts:    0,
+		MaxAttempts: 2,
+		Timeout:     0,
+		Acknowledged: map[string]bool{
+			opAddr1.Hex(): false,
+			opAddr2.Hex(): false,
+		},
+	}
+	node.SetActiveBroadcast(tracker.MessageID, tracker)
+
+
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		tracker.Acknowledged[opAddr1.Hex()] = true
+	}()
+
+	mockRepo.On("UpdateBroadcastTracker", mock.Anything, tracker).Return(nil).Maybe()
+
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream2, nil).Maybe()
+	mockStream2.On("Write", mock.Anything).Return(100, nil).Maybe()
+	mockStream2.On("Close").Return(nil).Maybe()
+
+	node.performReliableBroadcast(context.Background(), mockHost, tracker, "cos", []common.Address{opAddr1, opAddr2})
+
+	assert.Equal(t, 2, tracker.Attempts)
+	_, exists := node.GetActiveBroadcast(tracker.MessageID)
+	assert.False(t, exists)
+
+	mockRepo.AssertExpectations(t)
+
 }

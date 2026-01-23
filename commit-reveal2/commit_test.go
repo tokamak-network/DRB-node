@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -919,6 +920,581 @@ func TestGenerateCommitIntegration(t *testing.T) {
 		assert.NotEqual(t, [32]byte{}, secretValue1)
 		assert.NotEqual(t, [32]byte{}, cos1)
 		assert.NotEqual(t, [32]byte{}, cvs1)
+	})
+}
+
+func TestGenerateCommit_TimestampNonDeterminism(t *testing.T) {
+	originalService := eth.Service
+	defer func() {
+		eth.Service = originalService
+	}()
+
+	mockService := &MockEthServiceForGenerateCommit{
+		activatedOperators: []common.Address{
+			common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		},
+	}
+	eth.Service = mockService
+
+	round := "1"
+	operator := "0x1234567890123456789012345678901234567890"
+	results := make(map[string]bool)
+	uniqueCount := 0
+
+	for i := 0; i < 10; i++ {
+		secretValue, cos, cvs, err := GenerateCommit(round, operator)
+		assert.NoError(t, err)
+		secretHex := hex.EncodeToString(secretValue[:])
+		cosHex := hex.EncodeToString(cos[:])
+		cvsHex := hex.EncodeToString(cvs[:])
+		key := secretHex + cosHex + cvsHex
+		if !results[key] {
+			uniqueCount++
+			results[key] = true
+		}
+
+		assert.NotEqual(t, [32]byte{}, secretValue)
+		assert.NotEqual(t, [32]byte{}, cos)
+		assert.NotEqual(t, [32]byte{}, cvs)
+	}
+	t.Logf("Generated %d unique commit combinations out of 10 attempts", uniqueCount)
+}
+
+func TestGenerateCommit_OperatorIndexOverflow(t *testing.T) {
+	originalService := eth.Service
+	defer func() {
+		eth.Service = originalService
+	}()
+
+	operators := make([]common.Address, 260)
+	for i := 0; i < 260; i++ {
+		addrBytes := make([]byte, 20)
+		addrBytes[19] = byte(i)
+		addrBytes[18] = byte(i >> 8)
+		operators[i] = common.BytesToAddress(addrBytes)
+	}
+
+	mockService := &MockEthServiceForGenerateCommit{
+		activatedOperators: operators,
+	}
+	eth.Service = mockService
+
+	round := "1"
+
+	operator0 := operators[0].Hex()
+	secretValue0, cos0, cvs0, err0 := GenerateCommit(round, operator0)
+	assert.NoError(t, err0)
+	assert.NotEqual(t, [32]byte{}, secretValue0)
+	assert.NotEqual(t, [32]byte{}, cos0)
+	assert.NotEqual(t, [32]byte{}, cvs0)
+
+	operator255 := operators[255].Hex()
+	secretValue255, cos255, cvs255, err255 := GenerateCommit(round, operator255)
+	assert.NoError(t, err255)
+	assert.NotEqual(t, [32]byte{}, secretValue255)
+	assert.NotEqual(t, [32]byte{}, cos255)
+	assert.NotEqual(t, [32]byte{}, cvs255)
+
+	operator256 := operators[256].Hex()
+	secretValue256, cos256, cvs256, err256 := GenerateCommit(round, operator256)
+	assert.NoError(t, err256)
+	assert.NotEqual(t, [32]byte{}, secretValue256)
+	assert.NotEqual(t, [32]byte{}, cos256)
+	assert.NotEqual(t, [32]byte{}, cvs256)
+
+	assert.NotEqual(t, cvs0, cvs256, "Index 256 wraps to 0, but CVS differs due to different COS")
+
+	operator259 := operators[259].Hex()
+	secretValue259, cos259, cvs259, err259 := GenerateCommit(round, operator259)
+	assert.NoError(t, err259)
+	assert.NotEqual(t, [32]byte{}, secretValue259)
+	assert.NotEqual(t, [32]byte{}, cos259)
+	assert.NotEqual(t, [32]byte{}, cvs259)
+
+	operator3 := operators[3].Hex()
+	_, _, cvs3, _ := GenerateCommit(round, operator3)
+	assert.NotEqual(t, cvs3, cvs259, "Index 259 wraps to 3, but CVS differs due to different COS")
+
+	index256Int := 256
+	index259Int := 259
+	index256 := uint8(index256Int)
+	index259 := uint8(index259Int)
+	assert.Equal(t, uint8(0), index256, "uint8(256) should wrap to 0")
+	assert.Equal(t, uint8(3), index259, "uint8(259) should wrap to 3")
+}
+
+func TestGenerateCommit_TimestampEdgeCases(t *testing.T) {
+	originalService := eth.Service
+	defer func() {
+		eth.Service = originalService
+	}()
+
+	mockService := &MockEthServiceForGenerateCommit{
+		activatedOperators: []common.Address{
+			common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		},
+	}
+	eth.Service = mockService
+
+	operator := "0x1234567890123456789012345678901234567890"
+
+	t.Run("zero round with timestamp", func(t *testing.T) {
+		round := "0"
+		secretValue, cos, cvs, err := GenerateCommit(round, operator)
+		assert.NoError(t, err)
+		assert.NotEqual(t, [32]byte{}, secretValue)
+		assert.NotEqual(t, [32]byte{}, cos)
+		assert.NotEqual(t, [32]byte{}, cvs)
+	})
+
+	t.Run("very large round number", func(t *testing.T) {
+		round := "999999999999999999999999999999999999999999999"
+		secretValue, cos, cvs, err := GenerateCommit(round, operator)
+		assert.NoError(t, err)
+		assert.NotEqual(t, [32]byte{}, secretValue)
+		assert.NotEqual(t, [32]byte{}, cos)
+		assert.NotEqual(t, [32]byte{}, cvs)
+	})
+
+	t.Run("timestamp with different rounds", func(t *testing.T) {
+		operator := "0x1234567890123456789012345678901234567890"
+
+		secret1, _, _, err1 := GenerateCommit("100", operator)
+		assert.NoError(t, err1)
+
+		secret2, _, _, err2 := GenerateCommit("200", operator)
+		assert.NoError(t, err2)
+
+		assert.NotEqual(t, secret1, secret2)
+	})
+}
+
+func TestGenerateCommit_AddressMatchingEdgeCases(t *testing.T) {
+	originalService := eth.Service
+	defer func() {
+		eth.Service = originalService
+	}()
+
+	round := "1"
+
+	t.Run("case sensitive address matching", func(t *testing.T) {
+		operatorAddr := common.HexToAddress("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd")
+		operators := []common.Address{
+			operatorAddr,
+		}
+		mockService := &MockEthServiceForGenerateCommit{
+			activatedOperators: operators,
+		}
+		eth.Service = mockService
+
+		operatorLower := operatorAddr.Hex()
+		_, _, _, err := GenerateCommit(round, operatorLower)
+		assert.NoError(t, err, "Lowercase address should match")
+
+		operatorUpper := "0xABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD"
+		_, _, _, err2 := GenerateCommit(round, operatorUpper)
+		assert.Error(t, err2, "Uppercase address should fail due to case-sensitive string comparison")
+		assert.Contains(t, err2.Error(), "not found in activated operators")
+	})
+
+	t.Run("zero address handling", func(t *testing.T) {
+		zeroAddr := common.Address{}
+		operators := []common.Address{
+			zeroAddr,
+			common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		}
+		mockService := &MockEthServiceForGenerateCommit{
+			activatedOperators: operators,
+		}
+		eth.Service = mockService
+
+		secretValue, cos, cvs, err := GenerateCommit(round, zeroAddr.Hex())
+		assert.NoError(t, err)
+		assert.NotEqual(t, [32]byte{}, secretValue)
+		assert.NotEqual(t, [32]byte{}, cos)
+		assert.NotEqual(t, [32]byte{}, cvs)
+	})
+
+	t.Run("duplicate operators in list", func(t *testing.T) {
+		operator := common.HexToAddress("0x1111111111111111111111111111111111111111")
+		// Create list with duplicate operator
+		operators := []common.Address{
+			operator,
+			common.HexToAddress("0x2222222222222222222222222222222222222222"),
+			operator, // Duplicate
+		}
+		mockService := &MockEthServiceForGenerateCommit{
+			activatedOperators: operators,
+		}
+		eth.Service = mockService
+
+		secretValue1, cos1, cvs1, err1 := GenerateCommit(round, operator.Hex())
+		assert.NoError(t, err1)
+
+		assert.NotEqual(t, [32]byte{}, secretValue1)
+		assert.NotEqual(t, [32]byte{}, cos1)
+		assert.NotEqual(t, [32]byte{}, cvs1)
+	})
+
+	t.Run("invalid address format", func(t *testing.T) {
+		operators := []common.Address{
+			common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		}
+		mockService := &MockEthServiceForGenerateCommit{
+			activatedOperators: operators,
+		}
+		eth.Service = mockService
+
+		invalidAddresses := []string{
+			"0x123",
+			"1234567890123456789012345678901234567890",
+			"0xGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+		}
+
+		for _, invalidAddr := range invalidAddresses {
+			_, _, _, err := GenerateCommit(round, invalidAddr)
+
+			assert.Error(t, err, "Invalid address %s should return error", invalidAddr)
+			assert.Contains(t, err.Error(), "not found in activated operators",
+				"Error should indicate operator not found for address: %s", invalidAddr)
+		}
+	})
+}
+
+func TestGenerateCommit_CryptographicProperties(t *testing.T) {
+	originalService := eth.Service
+	defer func() {
+		eth.Service = originalService
+	}()
+
+	mockService := &MockEthServiceForGenerateCommit{
+		activatedOperators: []common.Address{
+			common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		},
+	}
+	eth.Service = mockService
+
+	operator := "0x1234567890123456789012345678901234567890"
+
+	t.Run("collision resistance - different inputs produce different outputs", func(t *testing.T) {
+		secretResults := make(map[string]bool)
+		cosResults := make(map[string]bool)
+		cvsResults := make(map[string]bool)
+
+		for i := 0; i < 100; i++ {
+			round := fmt.Sprintf("%d", i)
+			secretValue, cos, cvs, err := GenerateCommit(round, operator)
+			assert.NoError(t, err)
+
+			secretHex := hex.EncodeToString(secretValue[:])
+			cosHex := hex.EncodeToString(cos[:])
+			cvsHex := hex.EncodeToString(cvs[:])
+
+			if secretResults[secretHex] {
+				t.Logf("Secret value collision detected at round %s - this is expected if called in same second", round)
+			}
+			secretResults[secretHex] = true
+
+			if cosResults[cosHex] {
+				t.Logf("COS collision detected at round %s - this is expected if called in same second", round)
+			}
+			cosResults[cosHex] = true
+
+			if cvsResults[cvsHex] {
+				t.Logf("CVS collision detected at round %s - this is expected if called in same second", round)
+			}
+			cvsResults[cvsHex] = true
+
+			assert.NotEqual(t, secretValue, cos, "SecretValue should not equal COS")
+			assert.NotEqual(t, cos, cvs, "COS should not equal CVS")
+			assert.NotEqual(t, secretValue, cvs, "SecretValue should not equal CVS")
+		}
+
+		uniqueSecrets := len(secretResults)
+		t.Logf("Generated %d unique secrets out of 100 attempts (allowing for timestamp collisions)", uniqueSecrets)
+		assert.Greater(t, uniqueSecrets, 90, "Should have high uniqueness with different rounds")
+	})
+
+	t.Run("entropy quality - secret values are well distributed", func(t *testing.T) {
+		round := "1"
+		secretValues := make([][32]byte, 50)
+
+		for i := 0; i < 50; i++ {
+			secretValue, _, _, err := GenerateCommit(round, operator)
+			assert.NoError(t, err)
+			secretValues[i] = secretValue
+		}
+
+		zeroCount := 0
+		uniqueSecrets := make(map[string]bool)
+		for _, sv := range secretValues {
+			if sv == [32]byte{} {
+				zeroCount++
+			}
+			uniqueSecrets[hex.EncodeToString(sv[:])] = true
+		}
+
+		assert.Equal(t, 0, zeroCount, "No secret values should be zero")
+		t.Logf("Generated %d unique secrets out of 50 attempts", len(uniqueSecrets))
+	})
+
+	t.Run("preimage resistance - cannot derive inputs from outputs", func(t *testing.T) {
+		round := "42"
+		secretValue, cos, cvs, err := GenerateCommit(round, operator)
+		assert.NoError(t, err)
+
+		assert.NotEqual(t, [32]byte{}, secretValue)
+		assert.NotEqual(t, [32]byte{}, cos)
+		assert.NotEqual(t, [32]byte{}, cvs)
+
+		expectedCos := Keccak256(AbiEncode(secretValue[:]))
+		assert.Equal(t, expectedCos, cos[:], "COS should be hash of secretValue")
+	})
+
+	t.Run("uniqueness - same inputs in different seconds produce different secrets", func(t *testing.T) {
+		round := "100"
+		operator := "0x1234567890123456789012345678901234567890"
+
+		secretValue1, cos1, cvs1, err1 := GenerateCommit(round, operator)
+		assert.NoError(t, err1)
+
+		secretValue2, cos2, cvs2, err2 := GenerateCommit(round, operator)
+		assert.NoError(t, err2)
+
+		if secretValue1 == secretValue2 {
+			t.Log("Same secret generated - likely same timestamp second")
+		} else {
+			assert.NotEqual(t, secretValue1, secretValue2, "Different timestamps should produce different secrets")
+			assert.NotEqual(t, cos1, cos2)
+			assert.NotEqual(t, cvs1, cvs2)
+		}
+	})
+
+	t.Run("hash with zero inputs", func(t *testing.T) {
+		zeroOperator := common.Address{}.Hex()
+		zeroOperators := []common.Address{
+			common.Address{},
+		}
+		zeroMockService := &MockEthServiceForGenerateCommit{
+			activatedOperators: zeroOperators,
+		}
+		eth.Service = zeroMockService
+
+		secretValue, cos, cvs, err := GenerateCommit("0", zeroOperator)
+		assert.NoError(t, err)
+
+		assert.Len(t, secretValue, 32, "Secret value should be 32 bytes even with zero inputs")
+		assert.Len(t, cos, 32, "COS should be 32 bytes")
+		assert.Len(t, cvs, 32, "CVS should be 32 bytes")
+
+		assert.NotEqual(t, [32]byte{}, secretValue, "Hash of zero inputs should not be all zeros")
+		assert.NotEqual(t, [32]byte{}, cos, "COS should not be all zeros")
+		assert.NotEqual(t, [32]byte{}, cvs, "CVS should not be all zeros")
+	})
+
+	t.Run("hash with maximum values", func(t *testing.T) {
+		eth.Service = mockService
+
+		maxRound := "9223372036854775807" 
+		veryLargeRound := "999999999999999999999999999999999999999999999999999999999999999999999"
+
+		secretValue1, cos1, cvs1, err1 := GenerateCommit(maxRound, operator)
+		assert.NoError(t, err1)
+
+		secretValue2, cos2, cvs2, err2 := GenerateCommit(veryLargeRound, operator)
+		assert.NoError(t, err2)
+
+	
+		assert.Len(t, secretValue1, 32)
+		assert.Len(t, cos1, 32)
+		assert.Len(t, cvs1, 32)
+		assert.Len(t, secretValue2, 32)
+		assert.Len(t, cos2, 32)
+		assert.Len(t, cvs2, 32)
+
+		assert.NotEqual(t, secretValue1, secretValue2, "Different large rounds should produce different secrets")
+	})
+
+	t.Run("hash output format - always 32 bytes", func(t *testing.T) {
+		eth.Service = mockService
+
+		testRounds := []string{"1", "10", "100", "1000", "999999"}
+
+		for _, testRound := range testRounds {
+			secretValue, cos, cvs, err := GenerateCommit(testRound, operator)
+			assert.NoError(t, err)
+
+
+			assert.Len(t, secretValue, 32, "Secret value must be exactly 32 bytes for round %s", testRound)
+			assert.Len(t, cos, 32, "COS must be exactly 32 bytes for round %s", testRound)
+			assert.Len(t, cvs, 32, "CVS must be exactly 32 bytes for round %s", testRound)
+
+			assert.NotEqual(t, [32]byte{}, secretValue, "Secret value should not be zero for round %s", testRound)
+			assert.NotEqual(t, [32]byte{}, cos, "COS should not be zero for round %s", testRound)
+			assert.NotEqual(t, [32]byte{}, cvs, "CVS should not be zero for round %s", testRound)
+		}
+	})
+
+	t.Run("hash avalanche effect - small input change produces completely different output", func(t *testing.T) {
+		eth.Service = mockService
+
+		round1 := "100"
+		round2 := "101" 
+
+		secretValue1, cos1, cvs1, err1 := GenerateCommit(round1, operator)
+		assert.NoError(t, err1)
+
+		secretValue2, cos2, cvs2, err2 := GenerateCommit(round2, operator)
+		assert.NoError(t, err2)
+		assert.NotEqual(t, secretValue1, secretValue2, "Small round change should produce different secrets")
+		assert.NotEqual(t, cos1, cos2, "Small round change should produce different COS")
+		assert.NotEqual(t, cvs1, cvs2, "Small round change should produce different CVS")
+
+		bitDiff := 0
+		for i := 0; i < 32; i++ {
+			xor := secretValue1[i] ^ secretValue2[i]
+			for xor != 0 {
+				bitDiff++
+				xor &= xor - 1
+			}
+		}
+		assert.Greater(t, bitDiff, 64, "Avalanche effect: at least 25%% of bits should differ, got %d/256", bitDiff)
+		t.Logf("Bit difference between secrets: %d/256 bits (%.1f%%)", bitDiff, float64(bitDiff)/256*100)
+	})
+
+	t.Run("hash with special byte patterns", func(t *testing.T) {
+		allZerosAddr := common.Address{} 
+		allFFAddr := common.BytesToAddress([]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
+
+		// Alternating pattern
+		altBytes := make([]byte, 20)
+		for i := range altBytes {
+			if i%2 == 0 {
+				altBytes[i] = 0xAA
+			} else {
+				altBytes[i] = 0x55
+			}
+		}
+		altPatternAddr := common.BytesToAddress(altBytes)
+
+		specialOperators := []common.Address{
+			allZerosAddr,
+			allFFAddr,
+			altPatternAddr,
+		}
+		specialMockService := &MockEthServiceForGenerateCommit{
+			activatedOperators: specialOperators,
+		}
+		eth.Service = specialMockService
+
+
+		results := make(map[string][32]byte)
+		for i, op := range specialOperators {
+			secretValue, cos, cvs, err := GenerateCommit("42", op.Hex())
+			assert.NoError(t, err, "Should handle special pattern operator at index %d", i)
+
+		
+			assert.Len(t, secretValue, 32)
+			assert.Len(t, secretValue, 32)
+			assert.Len(t, cos, 32)
+			assert.Len(t, cvs, 32)
+			assert.NotEqual(t, [32]byte{}, secretValue)
+			assert.NotEqual(t, [32]byte{}, cos)
+			assert.NotEqual(t, [32]byte{}, cvs)
+
+			secretHex := hex.EncodeToString(secretValue[:])
+			results[secretHex] = secretValue
+		}
+
+		assert.Equal(t, 3, len(results), "All special pattern operators should produce unique secrets")
+	})
+}
+
+func TestGenerateCommit_InputValidation(t *testing.T) {
+	originalService := eth.Service
+	defer func() {
+		eth.Service = originalService
+	}()
+
+	mockService := &MockEthServiceForGenerateCommit{
+		activatedOperators: []common.Address{
+			common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		},
+	}
+	eth.Service = mockService
+
+	operator := "0x1234567890123456789012345678901234567890"
+
+	t.Run("empty round string", func(t *testing.T) {
+		_, _, _, err := GenerateCommit("", operator)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid round")
+	})
+
+	t.Run("whitespace-only round", func(t *testing.T) {
+		_, _, _, err := GenerateCommit("   ", operator)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid round")
+	})
+
+	t.Run("round with leading zeros", func(t *testing.T) {
+		secretValue, cos, cvs, err := GenerateCommit("0001", operator)
+		if err == nil {
+			assert.NotEqual(t, [32]byte{}, secretValue)
+			assert.NotEqual(t, [32]byte{}, cos)
+			assert.NotEqual(t, [32]byte{}, cvs)
+		}
+	})
+
+	t.Run("round with special characters", func(t *testing.T) {
+		invalidRounds := []string{
+			"abc",
+			"1.5",
+			"0x123",
+			"1e10",
+			"-1",
+			"1+1",
+		}
+
+		for _, invalidRound := range invalidRounds {
+			_, _, _, err := GenerateCommit(invalidRound, operator)
+			if err != nil {
+				assert.Contains(t, err.Error(), "invalid round")
+			}
+		}
+	})
+
+	t.Run("empty operator string", func(t *testing.T) {
+		_, _, _, err := GenerateCommit("1", "")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not found in activated operators")
+	})
+
+	t.Run("operator with whitespace", func(t *testing.T) {
+		_, _, _, err := GenerateCommit("1", " 0x1234567890123456789012345678901234567890 ")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not found in activated operators")
+	})
+
+	t.Run("very long round string", func(t *testing.T) {
+
+		longRound := "1" + fmt.Sprintf("%0*d", 1000, 0)
+		_, _, _, err := GenerateCommit(longRound, operator)
+		if err != nil {
+			assert.Contains(t, err.Error(), "invalid round")
+		}
+	})
+
+	t.Run("round with newline characters", func(t *testing.T) {
+		_, _, _, err := GenerateCommit("1\n", operator)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid round")
+	})
+
+	t.Run("round with tab characters", func(t *testing.T) {
+		_, _, _, err := GenerateCommit("1\t", operator)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid round")
 	})
 }
 

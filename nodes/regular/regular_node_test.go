@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	// "github.com/go-pg/pg/v10"
-
 	"github.com/eapache/queue"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -375,7 +373,7 @@ func TestRegularNode_CreateHost_PortBindingFailures(t *testing.T) {
 	})
 	t.Run("CreateHost with nil p2pClient", func(t *testing.T) {
 		regularNode := &RegularNode{
-			p2pClient:                     nil, 
+			p2pClient:                     nil,
 			submittedCvIndices:            make(map[string]map[string]bool),
 			strictOrderWhileSecretRequest: make(map[string][]string),
 			roundsData:                    make(map[string]RoundData),
@@ -465,7 +463,7 @@ func TestRegularNode_ConnectToLeader_TimeoutScenarios(t *testing.T) {
 
 		addrInfo, err := regularNode.ConnectToLeader(ctx, "127.0.0.1", "8081", validPeerID)
 
-		assert.Error(t, err, "Connection should fail with any error (cancellation or other)")
+		assert.Error(t, err, "Connection should fail with any error ")
 		_ = addrInfo
 	})
 
@@ -490,6 +488,18 @@ func TestRegularNode_ConnectToLeader_TimeoutScenarios(t *testing.T) {
 		assert.True(t, strings.Contains(err.Error(), "failed to parse") ||
 			strings.Contains(err.Error(), "failed to create peer info") ||
 			strings.Contains(err.Error(), "multiaddress"))
+	})
+
+	t.Run("DNS resolution failure - DNS name", func(t *testing.T) {
+		_, validPeerID := setupHostForConnectionTests(t)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		addrInfo, err := regularNode.ConnectToLeader(ctx, "nonexistent.example.com", "8081", validPeerID)
+
+		assert.Error(t, err)
+		_ = addrInfo
 	})
 
 	t.Run("Very short timeout - immediate timeout", func(t *testing.T) {
@@ -1203,7 +1213,7 @@ func TestNewRegularNode_InvalidDependencyStates(t *testing.T) {
 			p2pClient,
 			peerRepo,
 			revealRepo,
-			repo, 
+			repo,
 			batchRepo,
 			nodeInfoRepo,
 		)
@@ -1253,7 +1263,7 @@ func TestNewRegularNode_InvalidDependencyStates(t *testing.T) {
 			p2pClient,
 			peerRepo,
 			revealRepo,
-			repo, 
+			repo,
 			batchRepo,
 			nodeInfoRepo,
 		)
@@ -1295,7 +1305,7 @@ func TestNewRegularNode_InvalidDependencyStates(t *testing.T) {
 			revealRepo,
 			commitRepo,
 			batchRepo,
-			repo, 
+			repo,
 		)
 		require.NoError(t, err)
 
@@ -1345,7 +1355,7 @@ func TestNewRegularNode_InvalidDependencyStates(t *testing.T) {
 			revealRepo,
 			commitRepo,
 			batchRepo,
-			repo, 
+			repo,
 		)
 		require.NoError(t, err)
 
@@ -1381,7 +1391,7 @@ func TestNewRegularNode_InvalidDependencyStates(t *testing.T) {
 			mockFallbackClient,
 			revealOrderService,
 			p2pClient,
-			repo, 
+			repo,
 			revealRepo,
 			commitRepo,
 			batchRepo,
@@ -1460,7 +1470,7 @@ func TestNewRegularNode_InvalidDependencyStates(t *testing.T) {
 			peerRepo,
 			revealRepo,
 			commitRepo,
-			repo, 
+			repo,
 			nodeInfoRepo,
 		)
 		require.NoError(t, err)
@@ -1720,7 +1730,7 @@ func TestNewRegularNode_ConstructorNilValidation(t *testing.T) {
 		_, err := NewRegularNode(
 			mockFallbackClient,
 			revealOrderService,
-			nil, 
+			nil,
 			peerRepo,
 			revealRepo,
 			commitRepo,
@@ -1751,11 +1761,11 @@ func TestNewRegularNode_ConstructorNilValidation(t *testing.T) {
 			mockFallbackClient,
 			revealOrderService,
 			p2pClient,
-			nil, 
-			nil, 
-			nil, 
-			nil, 
-			nil, 
+			nil,
+			nil,
+			nil,
+			nil,
+			nil,
 		)
 
 		assert.Error(t, err, "Expected error when repositories are nil")

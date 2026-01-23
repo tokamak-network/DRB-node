@@ -206,15 +206,25 @@ func (n *LeaderNode) performReliableBroadcast(ctx context.Context, h host.Host, 
 		n.broadcastMutex.Unlock()
 
 		for _, op := range operatorsToSend {
-			// Add peer info into peer store
-			peerID := nodeInfo[op.Hex()].PeerID
-			peerAddrStr := fmt.Sprintf("/ip4/%s/tcp/%s", nodeInfo[op.Hex()].IP, nodeInfo[op.Hex()].Port)
-			peerAddr, _ := multiaddr.NewMultiaddr(peerAddrStr)
+			nodeInfoEntry, exists := nodeInfo[op.Hex()]
+			if !exists {
+				log.Printf("Operator %s is activated but not registered in nodeInfo", op.Hex())
+				continue
+			}
+
+			peerID := nodeInfoEntry.PeerID
+			peerAddrStr := fmt.Sprintf("/ip4/%s/tcp/%s", nodeInfoEntry.IP, nodeInfoEntry.Port)
+
+			peerAddr, err := multiaddr.NewMultiaddr(peerAddrStr)
+			if err != nil {
+				log.Printf("Failed to parse multiaddr for operator %s: %v. Skipping broadcast.", op.Hex(), err)
+				continue
+			}
 			h.Peerstore().AddAddr(peerID, peerAddr, peerstore.PermanentAddrTTL)
 
-			stream, err := h.NewStream(ctx, nodeInfo[op.Hex()].PeerID, streamProtocol)
+			stream, err := h.NewStream(ctx, nodeInfoEntry.PeerID, streamProtocol)
 			if err != nil {
-				log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
+				log.Printf("Failed to create stream to peer %s: %v", nodeInfoEntry.PeerID, err)
 				continue
 			}
 			defer stream.Close()
@@ -333,15 +343,25 @@ func (n *LeaderNode) performReliableBroadcastSync(ctx context.Context, h host.Ho
 		n.broadcastMutex.Unlock()
 
 		for _, op := range operatorsToSend {
-			// Add peer info into peer store
-			peerID := nodeInfo[op.Hex()].PeerID
-			peerAddrStr := fmt.Sprintf("/ip4/%s/tcp/%s", nodeInfo[op.Hex()].IP, nodeInfo[op.Hex()].Port)
-			peerAddr, _ := multiaddr.NewMultiaddr(peerAddrStr)
+			nodeInfoEntry, exists := nodeInfo[op.Hex()]
+			if !exists {
+				log.Printf("Operator %s is activated but not registered in nodeInfo", op.Hex())
+				continue
+			}
+
+			peerID := nodeInfoEntry.PeerID
+			peerAddrStr := fmt.Sprintf("/ip4/%s/tcp/%s", nodeInfoEntry.IP, nodeInfoEntry.Port)
+
+			peerAddr, err := multiaddr.NewMultiaddr(peerAddrStr)
+			if err != nil {
+				log.Printf("Failed to parse multiaddr for operator %s: %v. Skipping broadcast.", op.Hex(), err)
+				continue
+			}
 			h.Peerstore().AddAddr(peerID, peerAddr, peerstore.PermanentAddrTTL)
 
-			stream, err := h.NewStream(ctx, nodeInfo[op.Hex()].PeerID, streamProtocol)
+			stream, err := h.NewStream(ctx, nodeInfoEntry.PeerID, streamProtocol)
 			if err != nil {
-				log.Printf("Failed to create stream to peer %s: %v", nodeInfo[op.Hex()].PeerID, err)
+				log.Printf("Failed to create stream to peer %s: %v", nodeInfoEntry.PeerID, err)
 				continue
 			}
 			defer stream.Close()
@@ -412,7 +432,6 @@ func (n *LeaderNode) HandleAcknowledgment(ctx context.Context, ack utils.Acknowl
 	}
 
 	if ack.Status == "received" {
-		// Mark acknowledgment from the sender (regular node that sent the ack)
 		tracker.Acknowledged[ack.EOAAddress] = true
 
 		// Check if all nodes have acknowledged

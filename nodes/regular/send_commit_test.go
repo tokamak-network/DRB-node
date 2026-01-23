@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,7 +25,6 @@ import (
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
 	"github.com/tokamak-network/DRB-node/utils"
 )
-
 
 func TestRegularNode_RoundData_Structure(t *testing.T) {
 	roundData := RoundData{
@@ -898,6 +898,61 @@ func TestRegularNode_processSecretRequest_NotMyEOA(t *testing.T) {
 	mockRevealRepo.AssertExpectations(t)
 }
 
+func TestRegularNode_processSecretRequest_MyEOA_GetCommitByRoundFails(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	mockRevealRepo := node.revealOrderRepository.(*MockRevealOrderRepository)
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	node.SetHalted(false)
+
+	testOp := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	node.SetRegularNodeEOA(testOp.Hex())
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	index := big.NewInt(0)
+
+	
+	revealOrder := &utils.RevealOrderData{
+		Round:        "100",
+		TrialNum:     "1",
+		OrderedNodes: []string{testOp.Hex()}, // Node's own EOA
+		RevealOrder:  []int{0},
+	}
+
+	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
+		Return(revealOrder, nil)
+
+	
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(nil, errors.New("database error: commit not found"))
+
+	
+	panicked := false
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+			t.Errorf("PANIC occurred unexpectedly: %v", r)
+		}
+	}()
+
+
+	node.processSecretRequest(context.Background(), round, trialNum, index)
+
+
+	assert.False(t, panicked, "Function should handle error gracefully without panic")
+
+
+	mockRevealRepo.AssertExpectations(t)
+	mockCommitRepo.AssertExpectations(t)
+}
+
 func TestRegularNode_processSubmittedSecretRequest_Halted(t *testing.T) {
 	node := createTestNodeForSendCommit()
 	node.SetHalted(true)
@@ -958,6 +1013,60 @@ func TestRegularNode_processSubmittedSecretRequest_NotNextInOrder(t *testing.T) 
 	node.processSubmittedSecretRequest(context.Background(), round, trialNum, index)
 
 	mockRevealRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processSubmittedSecretRequest_MyEOA_GetCommitByRoundFails(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	mockRevealRepo := node.revealOrderRepository.(*MockRevealOrderRepository)
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	node.SetHalted(false)
+
+	testOp := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	node.SetRegularNodeEOA(testOp.Hex())
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	index := big.NewInt(0) 
+
+
+	revealOrder := &utils.RevealOrderData{
+		Round:        "100",
+		TrialNum:     "1",
+		OrderedNodes: []string{"0xNode0", testOp.Hex()}, 
+		RevealOrder:  []int{0, 1},                      
+	}
+
+	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
+		Return(revealOrder, nil)
+
+
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(nil, errors.New("database error: commit not found"))
+
+
+	panicked := false
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+			t.Errorf("PANIC occurred unexpectedly: %v", r)
+		}
+	}()
+
+	node.processSubmittedSecretRequest(context.Background(), round, trialNum, index)
+
+	
+	assert.False(t, panicked, "Function should handle error gracefully without panic")
+
+	
+	mockRevealRepo.AssertExpectations(t)
+	mockCommitRepo.AssertExpectations(t)
 }
 
 func TestRegularNode_allCosReceivedUnlockedRegular_AllReceived(t *testing.T) {
@@ -1448,6 +1557,354 @@ func TestRegularNode_processCommitRequest_ABILoadError(t *testing.T) {
 	_ = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 }
 
+func TestRegularNode_processCommitRequest_ExecuteTransactionNetworkFailure(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	// Mock commit repository
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	networkError := errors.New("network error: connection refused")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, networkError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	assert.Contains(t, err.Error(), "network error")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_ExecuteTransactionContextTimeout(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	ctxTimeoutError := context.DeadlineExceeded
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, ctxTimeoutError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0) 
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_ExecuteTransactionAllRetriesExhausted(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+	retryExhaustedError := errors.New("transaction failed after 3 retries: all RPCs failed")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, retryExhaustedError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_GetCommitByRoundError(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	dbError := errors.New("database error: connection pool exhausted")
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(nil, dbError)
+
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get commit by round")
+	assert.Contains(t, err.Error(), "database error")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_ExecuteTransactionConnectionTimeout(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	timeoutError := errors.New("network error: i/o timeout")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, timeoutError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0) // Index 0
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	assert.Contains(t, err.Error(), "i/o timeout")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_ExecuteTransactionEOFError(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	eofError := errors.New("unexpected EOF")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, eofError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	assert.Contains(t, err.Error(), "unexpected EOF")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_ExecuteTransactionIntermittentFailure(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	callCount := 0
+	networkError := errors.New("network error: connection refused")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				callCount++
+
+				return nil, nil, networkError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
 func TestRegularNode_processCosRequest_Halted(t *testing.T) {
 	node := createTestNodeForSendCommit()
 	node.SetHalted(true)
@@ -1487,12 +1944,1131 @@ func TestRegularNode_processCosRequest_EOANotInIndices(t *testing.T) {
 
 	round := big.NewInt(100)
 	trialNum := big.NewInt(1)
-	packedIndices := big.NewInt(1) // Only index 1
+	packedIndices := big.NewInt(1)
 	indicesLength := big.NewInt(1)
 
 	err := node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
 
 	assert.NoError(t, err)
+}
+
+func TestRegularNode_processCosRequest_ExecuteTransactionNetworkFailure(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cos:      [32]byte{1, 2, 3},
+		}, nil)
+
+	// Mock ExecuteTransaction to return network error
+	networkError := errors.New("network error: connection refused")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCo" {
+				return nil, nil, networkError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+	indicesLength := big.NewInt(1)
+
+	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
+	assert.Contains(t, err.Error(), "network error")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCosRequest_ExecuteTransactionContextTimeout(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	// Mock commit repository
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cos:      [32]byte{1, 2, 3},
+		}, nil)
+
+	ctxTimeoutError := context.DeadlineExceeded
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCo" {
+				return nil, nil, ctxTimeoutError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+	indicesLength := big.NewInt(1)
+
+	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCosRequest_ExecuteTransactionAllRetriesExhausted(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	// Mock commit repository
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cos:      [32]byte{1, 2, 3},
+		}, nil)
+
+	retryExhaustedError := errors.New("transaction failed after 3 retries: all RPCs failed")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCo" {
+				return nil, nil, retryExhaustedError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+	indicesLength := big.NewInt(1)
+
+	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
+
+	
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCosRequest_GetCommitByRoundError(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	dbError := errors.New("database error: connection pool exhausted")
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(nil, dbError)
+
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+	indicesLength := big.NewInt(1)
+
+	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get commit by round")
+	assert.Contains(t, err.Error(), "database error")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCosRequest_ExecuteTransactionConnectionTimeout(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cos:      [32]byte{1, 2, 3},
+		}, nil)
+
+	timeoutError := errors.New("network error: i/o timeout")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCo" {
+				return nil, nil, timeoutError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+	indicesLength := big.NewInt(1)
+
+	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
+	assert.Contains(t, err.Error(), "i/o timeout")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCosRequest_ExecuteTransactionEOFError(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cos:      [32]byte{1, 2, 3},
+		}, nil)
+
+	eofError := errors.New("unexpected EOF")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCo" {
+				return nil, nil, eofError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+	indicesLength := big.NewInt(1)
+
+	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
+	assert.Contains(t, err.Error(), "unexpected EOF")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCosRequest_ExecuteTransactionIntermittentFailure(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cos:      [32]byte{1, 2, 3},
+		}, nil)
+
+	networkError := errors.New("network error: connection refused")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCo" {
+				return nil, nil, networkError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0) // Index 0
+	indicesLength := big.NewInt(1)
+
+	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
+
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_submitS_ExecuteTransactionNetworkFailure(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	// Mock commit repository
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:       "100",
+			TrialNum:    "1",
+			SecretValue: [32]byte{1, 2, 3, 4, 5},
+		}, nil)
+
+	// Mock ExecuteTransaction to return network error
+	networkError := errors.New("network error: connection refused")
+	mockEth := &MockEthService{
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitS" {
+				return nil, nil, networkError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	node.submitS(context.Background(), "100", "1")
+
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_submitS_ExecuteTransactionContextTimeout(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	// Mock commit repository
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:       "100",
+			TrialNum:    "1",
+			SecretValue: [32]byte{1, 2, 3, 4, 5},
+		}, nil)
+
+	ctxTimeoutError := context.DeadlineExceeded
+	mockEth := &MockEthService{
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitS" {
+				return nil, nil, ctxTimeoutError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	node.submitS(context.Background(), "100", "1")
+
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_submitS_ExecuteTransactionAllRetriesExhausted(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	// Mock commit repository
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:       "100",
+			TrialNum:    "1",
+			SecretValue: [32]byte{1, 2, 3, 4, 5},
+		}, nil)
+
+	retryExhaustedError := errors.New("transaction failed after 3 retries: all RPCs failed")
+	mockEth := &MockEthService{
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitS" {
+				return nil, nil, retryExhaustedError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	node.submitS(context.Background(), "100", "1")
+
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_submitS_GetCommitByRoundReturnsNil_GracefulHandling(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(nil, errors.New("database error: commit not found"))
+
+	panicked := false
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+			t.Errorf("PANIC occurred unexpectedly: %v", r)
+		}
+	}()
+
+	node.submitS(context.Background(), "100", "1")
+
+	assert.False(t, panicked, "Function should handle error gracefully without panic")
+
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_TransactionSentButReceiptWaitFails(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	receiptTimeoutError := errors.New("transaction 0x123 stuck in mempool after 5s")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, receiptTimeoutError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_DuplicateTransactionPrevention(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	duplicateTxError := errors.New("replacement transaction underpriced")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, duplicateTxError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_ContextCancelledDuringReceiptWait(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	ctxCancelledError := context.DeadlineExceeded
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+
+				select {
+				case <-ctx.Done():
+					return nil, nil, ctxCancelledError
+				default:
+					return nil, nil, ctxCancelledError
+				}
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(ctx, round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_ConcurrentSubmissions(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").Return(&utils.CommitData{
+		Round:    "100",
+		TrialNum: "1",
+		Cvs:      [32]byte{1, 2, 3},
+	}, nil).Times(3) 
+
+	callCount := int32(0)
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				atomic.AddInt32(&callCount, 1)
+				return nil, nil, nil
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	var wg sync.WaitGroup
+	errors := make([]error, 3)
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			errors[idx] = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+		}(i)
+	}
+
+	wg.Wait()
+
+	
+	assert.Equal(t, int32(3), callCount, "All concurrent calls should execute")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_GasEstimationFailure(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	// Simulate gas estimation failure
+	gasEstimationError := errors.New("gas estimation failed after 3 attempts, submitCv transaction will revert")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, gasEstimationError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	// Should return error when gas estimation fails
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_ChainIDFetchFailure(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	chainIDError := errors.New("failed to fetch chain ID after 3 attempts for submitCv. Errors: Attempt 1: connection refused; Attempt 2: connection refused; Attempt 3: connection refused")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, chainIDError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_TransactionSigningFailure(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	signingError := errors.New("failed to sign tx after 3 retries: invalid private key")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, signingError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	// Should return error when signing fails
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_PartialSuccess_TransactionSentButReceiptTimeout(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+
+	partialSuccessError := errors.New("transaction 0xabc123 stuck in mempool after 5s")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, partialSuccessError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	assert.Error(t, err)
+
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_AllFallbackClientsFail(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	allClientsFailedError := errors.New("all RPCs failed: connection refused")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, allClientsFailedError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_processCommitRequest_NonceMismatchError(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil)
+
+	nonceError := errors.New("nonce too low")
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitCv" {
+				return nil, nil, nonceError
+			}
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
+
+	// Should handle nonce error
+	assert.Error(t, err)
+	mockCommitRepo.AssertExpectations(t)
+}
+
+func TestRegularNode_receiveCommitRequest_MultipleEvents_OneFails_OthersContinue(t *testing.T) {
+	node := createTestNodeForReceiveCommitRequest()
+	mockClient := new(MockFallbackEthClient)
+	mockCommitRepo := new(MockRegularCommitRepository)
+	mockBatchRepo := new(MockBatchRepository)
+	node.fallbackEthClient = mockClient
+	node.regularCommitRepository = mockCommitRepo
+	node.batchRepository = mockBatchRepo
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	require.NoError(t, err)
+
+	requestedToSubmitCvSig := parsedABI.Events["RequestedToSubmitCv"].ID
+	statusSig := parsedABI.Events["Status"].ID
+
+	mockSub := &MockSubscription{
+		errChan: make(chan error),
+	}
+	mockSub.On("Unsubscribe").Return()
+
+	eventCount := int32(0)
+	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			logs := args.Get(2).(chan<- types.Log)
+
+			go func() {
+				// First event - will fail
+				time.Sleep(50 * time.Millisecond)
+				round1 := big.NewInt(100)
+				trialNum1 := big.NewInt(1)
+				packedIndices1 := big.NewInt(0)
+				eventData1, _ := parsedABI.Events["RequestedToSubmitCv"].Inputs.Pack(round1, trialNum1, packedIndices1)
+				logs <- types.Log{
+					Topics:      []common.Hash{requestedToSubmitCvSig},
+					Data:        eventData1,
+					BlockNumber: 12345,
+					Removed:     false,
+				}
+				atomic.AddInt32(&eventCount, 1)
+
+				// Second event - should still process
+				time.Sleep(100 * time.Millisecond)
+				round2 := big.NewInt(100)
+				trialNum2 := big.NewInt(1)
+				state := big.NewInt(1)
+				eventData2, _ := parsedABI.Events["Status"].Inputs.Pack(round2, trialNum2, state)
+				logs <- types.Log{
+					Topics:      []common.Hash{statusSig},
+					Data:        eventData2,
+					BlockNumber: 12346,
+					Removed:     false,
+				}
+				atomic.AddInt32(&eventCount, 1)
+			}()
+		}).Return(mockSub, nil)
+
+	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
+		Return(uint64(time.Now().Unix()), nil)
+
+
+	mockBatchRepo.On("DeleteOldRoundDataForRegularNode", mock.Anything, "100").
+		Return(nil).Maybe()
+
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(nil, errors.New("database error")).Once()
+
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	go node.receiveCommitRequest(ctx)
+
+	<-ctx.Done()
+	time.Sleep(100 * time.Millisecond)
+
+	assert.GreaterOrEqual(t, atomic.LoadInt32(&eventCount), int32(1), "Events should be processed even if one fails")
+	mockClient.AssertExpectations(t)
+	mockCommitRepo.AssertExpectations(t)
+	mockBatchRepo.AssertExpectations(t)
 }
 
 func TestRegularNode_unpackIndices_EdgeCases(t *testing.T) {
@@ -2139,6 +3715,178 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_BlockTimestampErro
 	time.Sleep(50 * time.Millisecond) // Give goroutine time to cleanup and call Unsubscribe
 
 	mockClient.AssertExpectations(t)
+	mockSub.AssertExpectations(t)
+}
+
+func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_ProcessCommitRequestErrorHandling(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	mockClient := new(MockFallbackEthClient)
+	mockCommitRepo := new(MockRegularCommitRepository)
+	node.fallbackEthClient = mockClient
+	node.regularCommitRepository = mockCommitRepo
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	require.NoError(t, err)
+
+	requestedToSubmitCvSig := parsedABI.Events["RequestedToSubmitCv"].ID
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	eventData, err := parsedABI.Events["RequestedToSubmitCv"].Inputs.Pack(round, trialNum, packedIndices)
+	require.NoError(t, err)
+
+	mockSub := &MockSubscription{
+		errChan: make(chan error),
+	}
+	mockSub.On("Unsubscribe").Return()
+
+	eventSent := false
+	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			if !eventSent {
+				logs := args.Get(2).(chan<- types.Log)
+
+				go func() {
+					time.Sleep(50 * time.Millisecond)
+					logs <- types.Log{
+						Topics:      []common.Hash{requestedToSubmitCvSig},
+						Data:        eventData,
+						BlockNumber: 12345,
+						Removed:     false,
+					}
+				}()
+				eventSent = true
+			}
+		}).Return(mockSub, nil)
+
+	mockClient.On("BlockTimestamp", mock.Anything, big.NewInt(12345)).
+		Return(uint64(time.Now().Unix()), nil)
+
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(nil, errors.New("database error: commit not found"))
+
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	go node.receiveCommitRequest(ctx)
+
+	<-ctx.Done()
+
+	// Give the goroutine time to process error and log it
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify that error was handled gracefully 
+	mockClient.AssertExpectations(t)
+	mockCommitRepo.AssertExpectations(t)
+	mockSub.AssertExpectations(t)
+}
+
+func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_ProcessCosRequestErrorHandling(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	mockClient := new(MockFallbackEthClient)
+	mockCommitRepo := new(MockRegularCommitRepository)
+	node.fallbackEthClient = mockClient
+	node.regularCommitRepository = mockCommitRepo
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	require.NoError(t, err)
+
+	requestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
+
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	indicesLength := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+
+	eventData, err := parsedABI.Events["RequestedToSubmitCo"].Inputs.Pack(round, trialNum, indicesLength, packedIndices)
+	require.NoError(t, err)
+
+	mockSub := &MockSubscription{
+		errChan: make(chan error),
+	}
+	mockSub.On("Unsubscribe").Return()
+
+	eventSent := false
+	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			if !eventSent {
+				logs := args.Get(2).(chan<- types.Log)
+
+				go func() {
+					time.Sleep(50 * time.Millisecond)
+					logs <- types.Log{
+						Topics:      []common.Hash{requestedToSubmitCoSig},
+						Data:        eventData,
+						BlockNumber: 12345,
+						Removed:     false,
+					}
+				}()
+				eventSent = true
+			}
+		}).Return(mockSub, nil)
+
+	mockClient.On("BlockTimestamp", mock.Anything, big.NewInt(12345)).
+		Return(uint64(time.Now().Unix()), nil)
+
+	// Mock GetCommitByRound to return error, which will cause processCosRequest to fail
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(nil, errors.New("database error: commit not found"))
+
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	go node.receiveCommitRequest(ctx)
+
+	<-ctx.Done()
+
+	
+	time.Sleep(100 * time.Millisecond)
+
+
+	mockClient.AssertExpectations(t)
+	mockCommitRepo.AssertExpectations(t)
 	mockSub.AssertExpectations(t)
 }
 

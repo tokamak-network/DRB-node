@@ -2,9 +2,15 @@ package leader_node
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
+	"log"
 	"math/big"
 	"os"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,12 +19,17 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/go-pg/pg/v10"
+	_ "github.com/lib/pq"
 	"github.com/libp2p/go-libp2p"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
@@ -200,6 +211,22 @@ func (m *MockEthServiceForAcceptCommit) GetTrialNumFromContract(ctx context.Cont
 	return nil, nil
 }
 
+func createMockHostForBroadcast() host.Host {
+	mockHost := new(MockHost)
+	mockPeerstore := new(MockPeerstore)
+	mockStream := new(MockStreamForBroadcast)
+
+	// Mock peerstore that accepts any address
+	mockPeerstore.On("AddAddr", mock.Anything, mock.Anything, mock.Anything).Return()
+	mockHost.On("Peerstore").Return(mockPeerstore)
+
+	mockHost.On("NewStream", mock.Anything, mock.Anything, mock.Anything).Return(mockStream, nil)
+	mockStream.On("Write", mock.Anything).Return(100, nil)
+	mockStream.On("Close").Return(nil)
+
+	return mockHost
+}
+
 func createTestNodeForAcceptCommit() *LeaderNode {
 	node := createTestNodeForBroadcast()
 	mockLeaderCommitRepo := new(MockLeaderCommitRepository)
@@ -308,6 +335,7 @@ func TestProcessCOS_Success(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCOS(context.Background(), round, trialNum, cos, index)
 	assert.NoError(t, err)
@@ -377,6 +405,7 @@ func TestProcessCVS_Success(t *testing.T) {
 		Return(existingCommit, nil)
 	mockLeaderRepo.On("UpdateLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
 	assert.NoError(t, err)
@@ -431,6 +460,9 @@ func TestProcessRequestedToSubmitCo_Success(t *testing.T) {
 	node.processRequestedToSubmitCo(context.Background(), blockTimestamp, round, trialNum)
 
 	assert.True(t, node.GetRequestedToSubmitCoMonitoringActive())
+
+	// Clean up timer to prevent it from firing after test completes
+	node.stopFailToSubmitCoMonitoring()
 }
 
 // TestProcessRequestedToSubmitCv_Success tests successful processing
@@ -444,6 +476,9 @@ func TestProcessRequestedToSubmitCv_Success(t *testing.T) {
 	node.processRequestedToSubmitCv(context.Background(), blockTimestamp, round, trialNum)
 
 	assert.True(t, node.GetRequestedToSubmitCvMonitoringActive())
+
+	// Clean up timer to prevent it from firing after test completes
+	node.stopFailToSubmitCvMonitoring()
 }
 
 // TestStartFailToSubmitCoMonitoring_NilTimestamp tests with nil timestamp
@@ -540,6 +575,9 @@ func TestProcessRequestedToSubmitCv_StopsExistingMonitoring(t *testing.T) {
 	node.processRequestedToSubmitCv(context.Background(), blockTimestamp, round, trialNum)
 
 	assert.True(t, node.GetRequestedToSubmitCvMonitoringActive())
+
+	// Clean up timer to prevent it from firing after test completes
+	node.stopFailToSubmitCvMonitoring()
 }
 
 // TestUpdateCommitDataAfterSubmit tests commit data update
@@ -644,6 +682,7 @@ func TestProcessCOS_UpdateExisting(t *testing.T) {
 		Return(existingCommit, nil)
 	mockLeaderRepo.On("UpdateLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCOS(context.Background(), round, trialNum, cos, index)
 	assert.NoError(t, err)
@@ -676,6 +715,7 @@ func TestProcessCVS_UpdateExisting(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
 	assert.NoError(t, err)
@@ -708,6 +748,7 @@ func TestProcessCOS_AddCommitError(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(errors.New("db error"))
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCOS(context.Background(), round, trialNum, cos, index)
 	assert.Error(t, err)
@@ -750,6 +791,7 @@ func TestProcessCOS_UpdateError(t *testing.T) {
 		Return(existingCommit, nil)
 	mockLeaderRepo.On("UpdateLeaderCommit", mock.Anything, mock.Anything).Return(errors.New("update error"))
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCOS(ctx, round, trialNum, cos, index)
 	assert.Error(t, err)
@@ -784,6 +826,7 @@ func TestProcessCVS_AddCommitError(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(errors.New("db error"))
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
 	assert.Error(t, err)
@@ -823,6 +866,7 @@ func TestProcessCVS_UpdateError(t *testing.T) {
 		Return(existingCommit, nil)
 	mockLeaderRepo.On("UpdateLeaderCommit", mock.Anything, mock.Anything).Return(errors.New("update error"))
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
 	assert.Error(t, err)
@@ -987,6 +1031,7 @@ func TestProcessSubmittedSecretRequest_Success(t *testing.T) {
 	node.broadcastTrackerRepository = mockBroadcastRepo
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	node.processSubmittedSecretRequest(context.Background(), round, trialNum, secret, index)
 
@@ -1051,6 +1096,7 @@ func TestProcessSubmittedSecretRequest_UpdateError(t *testing.T) {
 	mockBroadcastRepo := new(MockBroadcastTrackerRepository)
 	node.broadcastTrackerRepository = mockBroadcastRepo
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	node.processSubmittedSecretRequest(context.Background(), round, trialNum, secret, index)
@@ -1408,6 +1454,7 @@ func TestProcessSubmittedSecretRequest_WithMockEthService(t *testing.T) {
 	mockLeaderRepo.On("UpdateLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	node.processSubmittedSecretRequest(context.Background(), round, trialNum, secret, index)
 
@@ -1441,6 +1488,7 @@ func TestProcessCOS_WithMockEthService(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCOS(context.Background(), round, trialNum, cos, index)
 	assert.NoError(t, err)
@@ -1475,6 +1523,7 @@ func TestProcessCVS_WithMockEthService(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
 	assert.NoError(t, err)
@@ -1857,6 +1906,9 @@ func TestProcessRequestedToSubmitCo_NotHalted(t *testing.T) {
 	node.processRequestedToSubmitCo(context.Background(), blockTimestamp, round, trialNum)
 
 	assert.True(t, node.GetRequestedToSubmitCoMonitoringActive())
+
+	// Clean up timer to prevent it from firing after test completes
+	node.stopFailToSubmitCoMonitoring()
 }
 
 // TestProcessRequestedToSubmitCv_NotHalted tests processing event
@@ -1870,6 +1922,9 @@ func TestProcessRequestedToSubmitCv_NotHalted(t *testing.T) {
 	node.processRequestedToSubmitCv(context.Background(), blockTimestamp, round, trialNum)
 
 	assert.True(t, node.GetRequestedToSubmitCvMonitoringActive())
+
+	// Clean up timer to prevent it from firing after test completes
+	node.stopFailToSubmitCvMonitoring()
 }
 
 // TestStartFailToSubmitCoMonitoring_ValidTimestamp tests normal monitoring start
@@ -2002,6 +2057,9 @@ func TestProcessRandomRequestNumber_StateOne(t *testing.T) {
 	assert.True(t, node.GetExecution())
 	assert.False(t, node.GetHalted())
 
+	// Clean up timer to prevent it from firing after test completes
+	node.stopRequestToSubmitCvMonitoring()
+
 	mockBatchRepo.AssertExpectations(t)
 }
 
@@ -2116,6 +2174,7 @@ func TestProcessCOS_StoresDataCorrectly(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	err := node.processCOS(context.Background(), round, trialNum, cos, index)
 	assert.NoError(t, err)
@@ -2156,6 +2215,7 @@ func TestProcessCVS_AllCvsReceivedTrigger(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// This should trigger GenerateMerkleRoot since all CVS received (only 1 operator)
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
@@ -2474,6 +2534,9 @@ func TestProcessRandomRequestNumber_StateOneWithDeleteError(t *testing.T) {
 
 	// Should still set execution even with delete error
 	assert.True(t, node.GetExecution())
+
+	// Clean up timer to prevent it from firing after test completes
+	node.stopRequestToSubmitCvMonitoring()
 
 	mockBatchRepo.AssertExpectations(t)
 }
@@ -2999,6 +3062,7 @@ func TestProcessCOS_CheckStopMonitoring(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Process COS for first operator - should NOT stop monitoring since not all COS received
 	err := node.processCOS(context.Background(), round, trialNum, cos, index)
@@ -3044,6 +3108,7 @@ func TestProcessCVS_CheckStopMonitoring(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Process CVS for first operator - should NOT stop monitoring since not all CVS received
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
@@ -3352,6 +3417,7 @@ func TestLeaderNode_receiveCommit_CvSubmitted_Success(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -3424,6 +3490,7 @@ func TestLeaderNode_receiveCommit_CoSubmitted_Success(t *testing.T) {
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -3624,6 +3691,9 @@ func TestLeaderNode_receiveCommit_RequestedToSubmitCo_Success(t *testing.T) {
 	// Verify monitoring was started
 	assert.True(t, node.GetRequestedToSubmitCoMonitoringActive())
 
+	// Clean up timer to prevent it from firing after test completes
+	node.stopFailToSubmitCoMonitoring()
+
 	mockClient.AssertExpectations(t)
 }
 
@@ -3682,6 +3752,9 @@ func TestLeaderNode_receiveCommit_RequestedToSubmitCv_Success(t *testing.T) {
 
 	// Verify monitoring was started
 	assert.True(t, node.GetRequestedToSubmitCvMonitoringActive())
+
+	// Clean up timer to prevent it from firing after test completes
+	node.stopFailToSubmitCvMonitoring()
 
 	mockClient.AssertExpectations(t)
 }
@@ -4354,7 +4427,6 @@ func TestLeaderNode_processDeactivated_ConnectionCleanup_NoConnection(t *testing
 	require.NoError(t, err)
 	defer testHost.Close()
 
-
 	peerHost, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	require.NoError(t, err)
 	defer peerHost.Close()
@@ -4400,7 +4472,6 @@ func TestLeaderNode_processDeactivated_ConnectionCleanup_InvalidPeerID(t *testin
 
 	mockEth := &MockEthServiceForAcceptCommit{
 		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
-			// No-op
 		},
 	}
 
@@ -4426,12 +4497,11 @@ func TestLeaderNode_processDeactivated_ConnectionCleanup_InvalidPeerID(t *testin
 	mockNodeRepo.AssertExpectations(t)
 }
 
-
 func TestLeaderNode_processDeactivated_ConnectionCleanup_NilP2PClient(t *testing.T) {
 	node := createTestNodeForAcceptCommit()
 	mockNodeRepo := new(MockNodeInfoRepositoryForAcceptCommit)
 	node.nodeInfoRepository = mockNodeRepo
-	node.p2pClient = nil 
+	node.p2pClient = nil
 
 	testOp := common.HexToAddress("0x6666666666666666666666666666666666666666")
 
@@ -4460,8 +4530,6 @@ func TestLeaderNode_processDeactivated_ConnectionCleanup_NilHostInstance(t *test
 	node := createTestNodeForAcceptCommit()
 	mockNodeRepo := new(MockNodeInfoRepositoryForAcceptCommit)
 	node.nodeInfoRepository = mockNodeRepo
-
-	// Don't set host - HostInstance will be nil
 	testOp := common.HexToAddress("0x7777777777777777777777777777777777777777")
 
 	mockEth := &MockEthServiceForAcceptCommit{
@@ -5053,6 +5121,7 @@ func TestLeaderNode_receiveCommit_SSubmitted_Success(t *testing.T) {
 	mockLeaderRepo.On("UpdateLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -5181,6 +5250,7 @@ func TestLeaderNode_receiveCommit_SSubmitted_BlockTimestampError(t *testing.T) {
 		Return(existingCommit, nil)
 	mockLeaderRepo.On("UpdateLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -6390,4 +6460,886 @@ func TestLeaderNode_resuming_CallSmartContractError(t *testing.T) {
 
 	// Should handle error gracefully
 	assert.True(t, true)
+}
+
+type ConcurrentMockLeaderCommitRepository struct {
+	mock.Mock
+	mu              sync.Mutex
+	commits         map[string]*utils.LeaderCommitData
+	addCallCount    int
+	updateCallCount int
+}
+
+func NewConcurrentMockLeaderCommitRepository() *ConcurrentMockLeaderCommitRepository {
+	return &ConcurrentMockLeaderCommitRepository{
+		commits: make(map[string]*utils.LeaderCommitData),
+	}
+}
+
+func (m *ConcurrentMockLeaderCommitRepository) GetLeaderCommitByRoundAndEoaAddr(ctx context.Context, round, trialNum, eoaAddr string) (*utils.LeaderCommitData, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := round + "-" + trialNum + "-" + eoaAddr
+	if commit, exists := m.commits[key]; exists {
+		return commit, nil
+	}
+	return nil, errors.New("not found")
+}
+
+func (m *ConcurrentMockLeaderCommitRepository) UpdateLeaderCommit(ctx context.Context, commitData *utils.LeaderCommitData) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := commitData.Round + "-" + commitData.TrialNum + "-" + commitData.EOAAddress
+	m.commits[key] = commitData
+	m.updateCallCount++
+	return nil
+}
+
+func (m *ConcurrentMockLeaderCommitRepository) AddLeaderCommit(ctx context.Context, commitData *utils.LeaderCommitData) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	key := commitData.Round + "-" + commitData.TrialNum + "-" + commitData.EOAAddress
+	if _, exists := m.commits[key]; exists {
+		return errors.New("duplicate key")
+	}
+	m.commits[key] = commitData
+	m.addCallCount++
+	return nil
+}
+
+func (m *ConcurrentMockLeaderCommitRepository) GetAllLeaderCommits(ctx context.Context) ([]*utils.LeaderCommitData, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := make([]*utils.LeaderCommitData, 0, len(m.commits))
+	for _, commit := range m.commits {
+		result = append(result, commit)
+	}
+	return result, nil
+}
+
+func (m *ConcurrentMockLeaderCommitRepository) GetLeaderCommitsByRoundAndTrialNum(ctx context.Context, round, trialNum string) ([]*utils.LeaderCommitData, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := make([]*utils.LeaderCommitData, 0)
+	for _, commit := range m.commits {
+		if commit.Round == round && commit.TrialNum == trialNum {
+			result = append(result, commit)
+		}
+	}
+	return result, nil
+}
+
+func (m *ConcurrentMockLeaderCommitRepository) UpdateLeaderCommitRandomNumberGenerated(ctx context.Context, round, trialNum string) error {
+	return nil
+}
+
+func TestProcessCVS_ConcurrentSameOperator(t *testing.T) {
+	node := createTestNodeForAcceptCommit()
+	mockRepo := NewConcurrentMockLeaderCommitRepository()
+	node.leaderCommitRepository = mockRepo
+	mockBroadcastRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockBroadcastRepo
+
+	activatedOps := []common.Address{
+		common.HexToAddress("0x1111111111111111111111111111111111111111"),
+	}
+	eth.SetActivatedOperatorsCached(activatedOps)
+	defer eth.SetActivatedOperatorsCached([]common.Address{})
+
+	round := big.NewInt(5000)
+	trialNum := big.NewInt(1)
+	var cvs1, cvs2 [32]byte
+	copy(cvs1[:], []byte("cvs-concurrent-1"))
+	copy(cvs2[:], []byte("cvs-concurrent-2"))
+	index := big.NewInt(0)
+
+	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+	errors := make([]error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			if idx%2 == 0 {
+				errors[idx] = node.processCVS(context.Background(), round, trialNum, cvs1, index)
+			} else {
+				errors[idx] = node.processCVS(context.Background(), round, trialNum, cvs2, index)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	errorCount := 0
+	for _, err := range errors {
+		if err != nil {
+			errorCount++
+		}
+	}
+
+	t.Logf("Error count: %d out of %d goroutines", errorCount, numGoroutines)
+	fmt.Printf("Error count: %d out of %d goroutines\n", errorCount, numGoroutines)
+
+	assert.LessOrEqual(t, errorCount, numGoroutines-1, "At least one operation should succeed")
+
+	commit, err := mockRepo.GetLeaderCommitByRoundAndEoaAddr(context.Background(), round.String(), trialNum.String(), activatedOps[0].Hex())
+	assert.NoError(t, err)
+	assert.NotNil(t, commit)
+	assert.Equal(t, round.String(), commit.Round)
+	assert.Equal(t, trialNum.String(), commit.TrialNum)
+}
+
+func TestProcessCVS_ConcurrentDifferentOperators(t *testing.T) {
+	// Setup real database connection
+	const (
+		postgresHost     = "localhost"
+		postgresUser     = "postgres"
+		postgresPassword = "123"
+		postgresDB       = "testdb"
+		postgresPort     = "5433"
+	)
+
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		postgresUser, postgresPassword, postgresHost, postgresPort, postgresDB)
+
+	sqlDB, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Skipf("Skipping test: PostgreSQL database not available: %v", err)
+		return
+	}
+	defer sqlDB.Close()
+
+	err = sqlDB.Ping()
+	if err != nil {
+		t.Skipf("Skipping test: PostgreSQL database not available: %v", err)
+		return
+	}
+
+	// Run migrations
+	err = database.MigrationsUp(sqlDB)
+	require.NoError(t, err, "Failed to run migrations")
+
+	// Connect using go-pg
+	testDB := pg.Connect(&pg.Options{
+		Addr:     fmt.Sprintf("%s:%s", postgresHost, postgresPort),
+		User:     postgresUser,
+		Password: postgresPassword,
+		Database: postgresDB,
+	})
+
+	err = testDB.Ping(context.Background())
+	require.NoError(t, err, "Failed to connect to test database")
+
+	// Create real database repositories
+	realRepo := database.NewLeaderCommitRepository(testDB)
+	realBroadcastRepo := database.NewBroadcastTrackerRepository(testDB)
+
+	// Setup test node
+	node := createTestNodeForAcceptCommit()
+	node.leaderCommitRepository = realRepo
+	node.broadcastTrackerRepository = realBroadcastRepo
+
+	activatedOps := make([]common.Address, 32)
+	for i := 0; i < 32; i++ {
+		addrBytes := make([]byte, 20)
+		addrBytes[0] = byte(i + 1)
+		addrBytes[1] = byte(i + 1)
+		addrBytes[2] = byte(i + 1)
+		for j := 3; j < 20; j++ {
+			addrBytes[j] = byte(i + j)
+		}
+		activatedOps[i] = common.BytesToAddress(addrBytes)
+	}
+	eth.SetActivatedOperatorsCached(activatedOps)
+	defer eth.SetActivatedOperatorsCached([]common.Address{})
+
+	// Register all operators in nodeInfo to avoid log warnings
+	mockNodeInfoRepo := new(MockNodeInfoRepository)
+	nodeInfos := make([]*utils.NodeInfo, len(activatedOps))
+	for i, op := range activatedOps {
+		// Generate valid PeerID for each operator
+		privKey, _, err := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+		var peerIDStr string
+		if err == nil {
+			peerID, err := peer.IDFromPrivateKey(privKey)
+			if err == nil {
+				peerIDStr = peerID.String()
+			} else {
+				// Fallback to a simple format if generation fails
+				peerIDStr = fmt.Sprintf("12D3KooW%032d", i)
+			}
+		} else {
+			// Fallback to a simple format if generation fails
+			peerIDStr = fmt.Sprintf("12D3KooW%032d", i)
+		}
+
+		nodeInfos[i] = &utils.NodeInfo{
+			EOAAddress: op.Hex(),
+			IP:         fmt.Sprintf("192.168.1.%d", i+1),
+			Port:       fmt.Sprintf("400%d", i+1),
+			PeerID:     peerIDStr,
+		}
+	}
+	// Setup mock to return nodeInfos for all GetNodeInfos calls (unlimited calls)
+	mockNodeInfoRepo.On("GetNodeInfos", mock.Anything).Return(nodeInfos, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeInfoRepo)
+
+	round := big.NewInt(5001)
+	trialNum := big.NewInt(1)
+	roundStr := round.String()
+	trialNumStr := trialNum.String()
+
+	// Create a cancellable context for the test operations
+	testCtx, testCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer testCancel()
+
+	// Cleanup test data before test
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, op := range activatedOps {
+		testDB.Model(&database.LeaderCommitScheme{}).
+			Where("round = ? AND trial_num = ? AND eoa_address = ?", roundStr, trialNumStr, op.Hex()).
+			Context(ctx).
+			Delete()
+	}
+
+	// Cleanup test data after test
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cleanupCancel()
+
+		for _, op := range activatedOps {
+			testDB.Model(&database.LeaderCommitScheme{}).
+				Where("round = ? AND trial_num = ? AND eoa_address = ?", roundStr, trialNumStr, op.Hex()).
+				Context(cleanupCtx).
+				Delete()
+		}
+		testDB.Close()
+	}()
+
+	// Mock ethService to handle GenerateMerkleRoot submission
+	mockEth := &MockEthServiceForAcceptCommit{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return activatedOps
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			// Mock successful submission
+			return nil, nil, nil
+		},
+	}
+	node.ethService = mockEth
+
+	// Use mock host to prevent actual network operations and avoid "context canceled" errors
+	if node.p2pClient != nil && node.p2pClient.GetHostInstance() == nil {
+		mockHost := createMockHostForBroadcast()
+		node.p2pClient.SetHost(mockHost)
+	}
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
+
+	var wg sync.WaitGroup
+	errors := make([]error, len(activatedOps))
+
+	for i, op := range activatedOps {
+		wg.Add(1)
+		go func(idx int, operator common.Address) {
+			defer wg.Done()
+			var cvs [32]byte
+			copy(cvs[:], []byte{byte(idx), byte(idx + 1), byte(idx + 2)})
+			errors[idx] = node.processCVS(testCtx, round, trialNum, cvs, big.NewInt(int64(idx)))
+		}(i, op)
+	}
+
+	wg.Wait()
+
+	// Give broadcast goroutines some time to finish or be cancelled
+	time.Sleep(2 * time.Second)
+
+	// Cancel context to stop all broadcast goroutines
+	testCancel()
+
+	// Wait a bit more for goroutines to clean up
+	time.Sleep(1 * time.Second)
+
+	for i, err := range errors {
+		assert.NoError(t, err, "Operator %d should process successfully", i)
+	}
+
+	// Verify data in real database
+	for i, op := range activatedOps {
+		commit, err := realRepo.GetLeaderCommitByRoundAndEoaAddr(ctx, roundStr, trialNumStr, op.Hex())
+		assert.NoError(t, err, "Operator %d should have commit stored", i)
+		assert.NotNil(t, commit)
+		assert.Equal(t, roundStr, commit.Round)
+		assert.Equal(t, trialNumStr, commit.TrialNum)
+		assert.NotEqual(t, [32]byte{}, commit.Cvs, "CVS should be stored")
+	}
+}
+
+func TestProcessCOS_ConcurrentSubmissions(t *testing.T) {
+	// Setup real database connection
+	const (
+		postgresHost     = "localhost"
+		postgresUser     = "postgres"
+		postgresPassword = "123"
+		postgresDB       = "testdb"
+		postgresPort     = "5433"
+	)
+
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		postgresUser, postgresPassword, postgresHost, postgresPort, postgresDB)
+
+	sqlDB, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Skipf("Skipping test: PostgreSQL database not available: %v", err)
+		return
+	}
+	defer sqlDB.Close()
+
+	err = sqlDB.Ping()
+	if err != nil {
+		t.Skipf("Skipping test: PostgreSQL database not available: %v", err)
+		return
+	}
+
+	// Run migrations
+	err = database.MigrationsUp(sqlDB)
+	require.NoError(t, err, "Failed to run migrations")
+
+	// Connect using go-pg
+	testDB := pg.Connect(&pg.Options{
+		Addr:     fmt.Sprintf("%s:%s", postgresHost, postgresPort),
+		User:     postgresUser,
+		Password: postgresPassword,
+		Database: postgresDB,
+	})
+
+	err = testDB.Ping(context.Background())
+	require.NoError(t, err, "Failed to connect to test database")
+
+	// Create real database repositories
+	realRepo := database.NewLeaderCommitRepository(testDB)
+	realBroadcastRepo := database.NewBroadcastTrackerRepository(testDB)
+
+	// Setup test node
+	node := createTestNodeForAcceptCommit()
+	node.leaderCommitRepository = realRepo
+	node.broadcastTrackerRepository = realBroadcastRepo
+
+	activatedOps := make([]common.Address, 32)
+	for i := 0; i < 32; i++ {
+		addrBytes := make([]byte, 20)
+		addrBytes[0] = byte(i + 1)
+		addrBytes[1] = byte(i + 1)
+		addrBytes[2] = byte(i + 1)
+		for j := 3; j < 20; j++ {
+			addrBytes[j] = byte(i + j)
+		}
+		activatedOps[i] = common.BytesToAddress(addrBytes)
+	}
+	eth.SetActivatedOperatorsCached(activatedOps)
+	defer eth.SetActivatedOperatorsCached([]common.Address{})
+
+	// Register all operators in nodeInfo to avoid log warnings
+	mockNodeInfoRepo := new(MockNodeInfoRepository)
+	nodeInfos := make([]*utils.NodeInfo, len(activatedOps))
+	for i, op := range activatedOps {
+		// Generate valid PeerID for each operator
+		privKey, _, err := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+		var peerIDStr string
+		if err == nil {
+			peerID, err := peer.IDFromPrivateKey(privKey)
+			if err == nil {
+				peerIDStr = peerID.String()
+			} else {
+				// Fallback to a simple format if generation fails
+				peerIDStr = fmt.Sprintf("12D3KooW%032d", i)
+			}
+		} else {
+			// Fallback to a simple format if generation fails
+			peerIDStr = fmt.Sprintf("12D3KooW%032d", i)
+		}
+
+		nodeInfos[i] = &utils.NodeInfo{
+			EOAAddress: op.Hex(),
+			IP:         fmt.Sprintf("192.168.1.%d", i+1),
+			Port:       fmt.Sprintf("400%d", i+1),
+			PeerID:     peerIDStr,
+		}
+	}
+	// Setup mock to return nodeInfos for all GetNodeInfos calls (unlimited calls)
+	mockNodeInfoRepo.On("GetNodeInfos", mock.Anything).Return(nodeInfos, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeInfoRepo)
+
+	round := big.NewInt(5002)
+	trialNum := big.NewInt(1)
+	roundStr := round.String()
+	trialNumStr := trialNum.String()
+
+	// Create a cancellable context for the test operations
+	testCtx, testCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer testCancel()
+
+	// Cleanup test data before test
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, op := range activatedOps {
+		testDB.Model(&database.LeaderCommitScheme{}).
+			Where("round = ? AND trial_num = ? AND eoa_address = ?", roundStr, trialNumStr, op.Hex()).
+			Context(ctx).
+			Delete()
+	}
+
+	// Cleanup test data after test
+	defer func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cleanupCancel()
+
+		for _, op := range activatedOps {
+			testDB.Model(&database.LeaderCommitScheme{}).
+				Where("round = ? AND trial_num = ? AND eoa_address = ?", roundStr, trialNumStr, op.Hex()).
+				Context(cleanupCtx).
+				Delete()
+		}
+		testDB.Close()
+	}()
+
+	mockRevealOrderService := new(MockRevealOrderService)
+	mockRevealOrderService.On("DetermineRevealOrder", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(false, errors.New("test error")).Maybe()
+	node.revealOrderService = mockRevealOrderService
+
+	// Use mock host to prevent actual network operations and avoid "context canceled" errors
+	if node.p2pClient != nil && node.p2pClient.GetHostInstance() == nil {
+		mockHost := createMockHostForBroadcast()
+		node.p2pClient.SetHost(mockHost)
+	}
+
+	// Run concurrent processCOS calls
+	var wg sync.WaitGroup
+	errors := make([]error, len(activatedOps))
+
+	for i, op := range activatedOps {
+		wg.Add(1)
+		go func(idx int, operator common.Address) {
+			defer wg.Done()
+			var cos [32]byte
+			copy(cos[:], []byte{byte(idx + 10), byte(idx + 11), byte(idx + 12)})
+			errors[idx] = node.processCOS(testCtx, round, trialNum, cos, big.NewInt(int64(idx)))
+		}(i, op)
+	}
+
+	wg.Wait()
+
+	// Give broadcast goroutines some time to finish or be cancelled
+	time.Sleep(2 * time.Second)
+
+	// Cancel context to stop all broadcast goroutines
+	testCancel()
+
+	// Wait a bit more for goroutines to clean up
+	time.Sleep(1 * time.Second)
+
+	// All operations should succeed
+	for i, err := range errors {
+		assert.NoError(t, err, "Operator %d should process COS successfully", i)
+	}
+
+	// Verify data in memory
+	uniqueKey := utils.GetUniqueKey(roundStr, trialNumStr)
+	for i, op := range activatedOps {
+		commitData, exists := utils.GetCommittedNodeData(uniqueKey, op)
+		assert.True(t, exists, "Operator %d should have commit data in memory", i)
+		assert.NotEqual(t, [32]byte{}, commitData.Cos, "COS should be stored in memory for operator %d", i)
+	}
+
+	// Verify data in real database
+	for i, op := range activatedOps {
+		commit, err := realRepo.GetLeaderCommitByRoundAndEoaAddr(context.Background(), roundStr, trialNumStr, op.Hex())
+		assert.NoError(t, err, "Operator %d should have commit stored in database", i)
+		assert.NotNil(t, commit)
+		assert.Equal(t, roundStr, commit.Round)
+		assert.Equal(t, trialNumStr, commit.TrialNum)
+		assert.NotEqual(t, [32]byte{}, commit.Cos, "COS should be stored in database for operator %d", i)
+	}
+}
+
+// TestProcessCVS_RaceConditionAllCvsReceived tests race condition where multiple goroutines check AllCvsReceivedUnlocked simultaneously
+func TestProcessCVS_RaceConditionAllCvsReceived(t *testing.T) {
+	node := createTestNodeForAcceptCommit()
+	mockRepo := NewConcurrentMockLeaderCommitRepository()
+	node.leaderCommitRepository = mockRepo
+	mockBroadcastRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockBroadcastRepo
+
+	activatedOps := []common.Address{
+		common.HexToAddress("0x1111111111111111111111111111111111111111"),
+		common.HexToAddress("0x2222222222222222222222222222222222222222"),
+	}
+	eth.SetActivatedOperatorsCached(activatedOps)
+	defer eth.SetActivatedOperatorsCached([]common.Address{})
+
+	round := big.NewInt(5003)
+	trialNum := big.NewInt(1)
+	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
+
+	// Create a cancellable context for the test operations
+	testCtx, testCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer testCancel()
+
+	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	mockEth := &MockEthServiceForAcceptCommit{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return activatedOps
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			return nil, nil, nil
+		},
+	}
+	node.ethService = mockEth
+
+	// Use mock host to prevent actual network operations and avoid "context canceled" errors
+	if node.p2pClient != nil && node.p2pClient.GetHostInstance() == nil {
+		mockHost := createMockHostForBroadcast()
+		node.p2pClient.SetHost(mockHost)
+	}
+
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
+
+	var wg sync.WaitGroup
+	for i, op := range activatedOps {
+		wg.Add(1)
+		go func(idx int, operator common.Address) {
+			defer wg.Done()
+			var cvs [32]byte
+			copy(cvs[:], []byte{byte(idx), byte(idx + 1)})
+			_ = node.processCVS(testCtx, round, trialNum, cvs, big.NewInt(int64(idx)))
+		}(i, op)
+	}
+
+	wg.Wait()
+
+	// Give broadcast goroutines some time to finish or be cancelled
+	time.Sleep(2 * time.Second)
+
+	// Cancel context to stop all broadcast goroutines
+	testCancel()
+
+	// Wait a bit more for goroutines to clean up
+	time.Sleep(1 * time.Second)
+
+	time.Sleep(100 * time.Millisecond)
+
+	for _, op := range activatedOps {
+		commit, err := mockRepo.GetLeaderCommitByRoundAndEoaAddr(context.Background(), round.String(), trialNum.String(), op.Hex())
+		assert.NoError(t, err)
+		assert.NotNil(t, commit)
+		assert.NotEqual(t, [32]byte{}, commit.Cvs)
+	}
+
+	assert.True(t, node.AllCvsReceivedUnlocked(uniqueKey), "All CVS should be received")
+}
+
+func TestProcessCVS_RaceConditionAllCvsReceived_WithTracking(t *testing.T) {
+	node := createTestNodeForAcceptCommit()
+	mockRepo := NewConcurrentMockLeaderCommitRepository()
+	node.leaderCommitRepository = mockRepo
+	mockBroadcastRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockBroadcastRepo
+
+	activatedOps := make([]common.Address, 32)
+	for i := 0; i < 32; i++ {
+		addrBytes := make([]byte, 20)
+		addrBytes[0] = byte(i + 1)
+		addrBytes[1] = byte(i + 1)
+		addrBytes[2] = byte(i + 1)
+		for j := 3; j < 20; j++ {
+			addrBytes[j] = byte(i + j)
+		}
+		activatedOps[i] = common.BytesToAddress(addrBytes)
+	}
+	eth.SetActivatedOperatorsCached(activatedOps)
+	defer eth.SetActivatedOperatorsCached([]common.Address{})
+
+	// Register all operators in nodeInfo to avoid log warnings
+	mockNodeInfoRepo := new(MockNodeInfoRepository)
+	nodeInfos := make([]*utils.NodeInfo, len(activatedOps))
+	for i, op := range activatedOps {
+		// Generate valid PeerID for each operator
+		privKey, _, err := libp2pcrypto.GenerateKeyPair(libp2pcrypto.Ed25519, 256)
+		var peerIDStr string
+		if err == nil {
+			peerID, err := peer.IDFromPrivateKey(privKey)
+			if err == nil {
+				peerIDStr = peerID.String()
+			} else {
+				// Fallback to a simple format if generation fails
+				peerIDStr = fmt.Sprintf("12D3KooW%032d", i)
+			}
+		} else {
+			// Fallback to a simple format if generation fails
+			peerIDStr = fmt.Sprintf("12D3KooW%032d", i)
+		}
+
+		nodeInfos[i] = &utils.NodeInfo{
+			EOAAddress: op.Hex(),
+			IP:         fmt.Sprintf("192.168.1.%d", i+1),
+			Port:       fmt.Sprintf("400%d", i+1),
+			PeerID:     peerIDStr,
+		}
+	}
+
+	mockNodeInfoRepo.On("GetNodeInfos", mock.Anything).Return(nodeInfos, nil)
+	node.p2pClient = libp2putils.NewP2PClient(mockNodeInfoRepo)
+
+	round := big.NewInt(5010)
+	trialNum := big.NewInt(1)
+	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
+
+	testCtx, testCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer testCancel()
+
+	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	var logOutput strings.Builder
+	originalLogWriter := log.Writer()
+	log.SetOutput(&logOutput)
+	defer func() {
+		log.SetOutput(originalLogWriter)
+	}()
+
+	submitMerkleRootCallCount := int32(0)
+
+	mockEth := &MockEthServiceForAcceptCommit{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return activatedOps
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitMerkleRoot" {
+				atomic.AddInt32(&submitMerkleRootCallCount, 1)
+			}
+			return nil, nil, nil
+		},
+	}
+	node.ethService = mockEth
+
+	if node.p2pClient != nil && node.p2pClient.GetHostInstance() == nil {
+		mockHost := createMockHostForBroadcast()
+		node.p2pClient.SetHost(mockHost)
+	}
+
+	// Set environment variables
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
+
+	var wg sync.WaitGroup
+	for i, op := range activatedOps {
+		wg.Add(1)
+		go func(idx int, operator common.Address) {
+			defer wg.Done()
+			if idx < 2 {
+				time.Sleep(10 * time.Millisecond)
+			}
+			var cvs [32]byte
+			copy(cvs[:], []byte{byte(idx), byte(idx + 1), byte(idx + 2)})
+			_ = node.processCVS(testCtx, round, trialNum, cvs, big.NewInt(int64(idx)))
+		}(i, op)
+	}
+
+	wg.Wait()
+
+	// Give broadcast goroutines some time to finish or be cancelled
+	time.Sleep(2 * time.Second)
+
+	// Cancel context to stop all broadcast goroutines
+	testCancel()
+
+	// Wait a bit more for goroutines to clean up
+	time.Sleep(1 * time.Second)
+
+	time.Sleep(500 * time.Millisecond)
+
+	logStr := logOutput.String()
+	generateMerkleRootCallCount := strings.Count(logStr, "Generating Merkle root")
+
+	submitCount := atomic.LoadInt32(&submitMerkleRootCallCount)
+
+	assert.Equal(t, 1, generateMerkleRootCallCount,
+		"GenerateMerkleRoot should be called exactly once")
+
+	assert.Equal(t, int32(1), submitCount, "SubmitMerkleRoot should be called exactly once")
+
+	if generateMerkleRootCallCount == 1 {
+		t.Logf("Result: Only one goroutine can proceed, eliminating the race condition")
+	} else {
+		t.Errorf("RACE CONDITION EXISTS: GenerateMerkleRoot called %d times instead of 1", generateMerkleRootCallCount)
+	}
+
+	// Verify all CVS values were stored
+	for _, op := range activatedOps {
+		commit, err := mockRepo.GetLeaderCommitByRoundAndEoaAddr(context.Background(), round.String(), trialNum.String(), op.Hex())
+		assert.NoError(t, err)
+		assert.NotNil(t, commit)
+		assert.NotEqual(t, [32]byte{}, commit.Cvs)
+	}
+
+	assert.True(t, node.AllCvsReceivedUnlocked(uniqueKey), "All CVS should be received")
+
+	data, exists := node.GetRoundData(uniqueKey)
+	if exists {
+		assert.True(t, data.MerkleRoot, "Merkle root should be marked as submitted")
+	}
+}
+
+// TestGenerateMerkleRoot_ConcurrentCalls tests concurrent GenerateMerkleRoot calls
+func TestGenerateMerkleRoot_ConcurrentCalls(t *testing.T) {
+	node := createTestNodeForAcceptCommit()
+
+	// Use a mock repository that handles UpdateLeaderCommit
+	mockRepo := new(MockLeaderCommitRepository)
+	mockRepo.On("UpdateLeaderCommit", mock.Anything, mock.Anything).Return(nil).Maybe()
+	node.leaderCommitRepository = mockRepo
+
+	testOp1 := common.HexToAddress("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+	testOp2 := common.HexToAddress("0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB")
+
+	// Track submission calls by mocking the ethService ExecuteTransaction
+	submitCallCount := int32(0)
+	mockEth := &MockEthServiceForAcceptCommit{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{testOp1, testOp2}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			if method == "submitMerkleRoot" {
+				atomic.AddInt32(&submitCallCount, 1)
+			}
+			return nil, nil, nil
+		},
+	}
+	node.ethService = mockEth
+
+	// Set environment variables for merkle root submission
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+	}()
+
+	round := "5004"
+	trialNum := "1"
+	uniqueKey := utils.GetUniqueKey(round, trialNum)
+
+	utils.SetCommittedNodeData(uniqueKey, testOp1, utils.LeaderCommitData{Cvs: [32]byte{1}})
+	utils.SetCommittedNodeData(uniqueKey, testOp2, utils.LeaderCommitData{Cvs: [32]byte{2}})
+
+	// Run concurrent GenerateMerkleRoot calls
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			node.GenerateMerkleRoot(context.Background(), round, trialNum)
+		}()
+	}
+
+	wg.Wait()
+
+	// Wait a bit for any pending SubmitMerkleRoot calls
+	time.Sleep(200 * time.Millisecond)
+
+	callCount := atomic.LoadInt32(&submitCallCount)
+	assert.Equal(t, int32(1), callCount,
+		"SubmitMerkleRoot should be called exactly once")
+
+	data, exists := node.GetRoundData(uniqueKey)
+	if exists {
+		assert.True(t, data.MerkleRoot, "Merkle root should be marked as submitted")
+	}
+}
+
+// TestProcessCVS_ConcurrentDatabaseOperations tests concurrent database operations
+func TestProcessCVS_ConcurrentDatabaseOperations(t *testing.T) {
+	node := createTestNodeForAcceptCommit()
+	mockRepo := NewConcurrentMockLeaderCommitRepository()
+	node.leaderCommitRepository = mockRepo
+	mockBroadcastRepo := new(MockBroadcastTrackerRepository)
+	node.broadcastTrackerRepository = mockBroadcastRepo
+
+	activatedOps := []common.Address{
+		common.HexToAddress("0x7777777777777777777777777777777777777777"),
+	}
+	eth.SetActivatedOperatorsCached(activatedOps)
+	defer eth.SetActivatedOperatorsCached([]common.Address{})
+
+	round := big.NewInt(5006)
+	trialNum := big.NewInt(1)
+
+	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// First, add a commit
+	var initialCvs [32]byte
+	copy(initialCvs[:], []byte("initial-cvs"))
+	err := node.processCVS(context.Background(), round, trialNum, initialCvs, big.NewInt(0))
+	assert.NoError(t, err)
+
+	// Now run concurrent updates
+	var wg sync.WaitGroup
+	numGoroutines := 5
+	errors := make([]error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			var cvs [32]byte
+			copy(cvs[:], []byte{byte(idx), byte(idx + 1)})
+			errors[idx] = node.processCVS(context.Background(), round, trialNum, cvs, big.NewInt(0))
+		}(i)
+	}
+
+	wg.Wait()
+
+	successCount := 0
+	for _, err := range errors {
+		if err == nil {
+			successCount++
+		}
+	}
+	assert.Greater(t, successCount, 0, "At least one update should succeed")
+
+	commit, err := mockRepo.GetLeaderCommitByRoundAndEoaAddr(context.Background(), round.String(), trialNum.String(), activatedOps[0].Hex())
+	assert.NoError(t, err)
+	assert.NotNil(t, commit)
+	assert.NotEqual(t, [32]byte{}, commit.Cvs, "CVS should be stored")
 }

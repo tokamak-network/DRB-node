@@ -437,6 +437,7 @@ func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string
 	roundData, err := n.regularCommitRepository.GetCommitByRound(ctx, round, trialNum)
 	if err != nil {
 		log.Printf("Failed to get regular commit for round %s with : %v", round, err)
+		return
 	}
 
 	secretValueBytes := roundData.SecretValue
