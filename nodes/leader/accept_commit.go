@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -805,7 +806,21 @@ func (n *LeaderNode) startFailToSubmitCoMonitoring(ctx context.Context, round st
 		return
 	}
 
-	n.SetRequestedToSubmitCoMonitoringActive(true)
+	// Use atomic compare-and-swap to prevent double start
+	if !atomic.CompareAndSwapInt32(&n.requestedToSubmitCoMonitoringActive, 0, 1) {
+		log.Printf("FailToSubmitCo monitoring already active for round %s with trail %s", round, trialNum)
+		return
+	}
+
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
+
+	// Stop existing timer if present
+	if n.requestedToSubmitCoMonitoringTimer != nil {
+		n.requestedToSubmitCoMonitoringTimer.Stop()
+		n.requestedToSubmitCoMonitoringTimer = nil
+	}
 
 	// Calculate deadline: requestedToSubmitCoTimestamp + s_onChainSubmissionPeriod
 	deadline := new(big.Int).Add(requestedToSubmitCoTimestamp, appconfig.GetContractPeriods().OnChainSubmissionPeriod)
@@ -817,6 +832,7 @@ func (n *LeaderNode) startFailToSubmitCoMonitoring(ctx context.Context, round st
 
 	if duration <= 0 {
 		log.Printf("Deadline has already passed for round %s with trail %s, calling failToSubmitCo immediately", round, trialNum)
+		atomic.StoreInt32(&n.requestedToSubmitCoMonitoringActive, 0)
 		n.callFailToSubmitCo(ctx, round, trialNum)
 		return
 	}
@@ -827,17 +843,21 @@ func (n *LeaderNode) startFailToSubmitCoMonitoring(ctx context.Context, round st
 	n.requestedToSubmitCoMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToSubmitCo", round)
 		n.callFailToSubmitCo(ctx, round, trialNum)
-		n.SetRequestedToSubmitCoMonitoringActive(false)
+		atomic.StoreInt32(&n.requestedToSubmitCoMonitoringActive, 0)
 	})
 }
 
 // Add function to stop failToSubmitCo monitoring
 func (n *LeaderNode) stopFailToSubmitCoMonitoring() {
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
+
 	if n.requestedToSubmitCoMonitoringTimer != nil {
 		n.requestedToSubmitCoMonitoringTimer.Stop()
 		n.requestedToSubmitCoMonitoringTimer = nil
 	}
-	n.SetRequestedToSubmitCoMonitoringActive(false)
+	atomic.StoreInt32(&n.requestedToSubmitCoMonitoringActive, 0)
 	log.Printf("Stopped failToSubmitCo monitoring")
 }
 
@@ -899,7 +919,21 @@ func (n *LeaderNode) startFailToSubmitCvMonitoring(ctx context.Context, round st
 		return
 	}
 
-	n.SetRequestedToSubmitCvMonitoringActive(true)
+	// Use atomic compare-and-swap to prevent double start
+	if !atomic.CompareAndSwapInt32(&n.requestedToSubmitCvMonitoringActive, 0, 1) {
+		log.Printf("FailToSubmitCv monitoring already active for round %s with trail %s", round, trialNum)
+		return
+	}
+
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
+
+	// Stop existing timer if present
+	if n.requestedToSubmitCvMonitoringTimer != nil {
+		n.requestedToSubmitCvMonitoringTimer.Stop()
+		n.requestedToSubmitCvMonitoringTimer = nil
+	}
 
 	// Get timing parameters from config
 	periods := appconfig.GetContractPeriods()
@@ -918,17 +952,21 @@ func (n *LeaderNode) startFailToSubmitCvMonitoring(ctx context.Context, round st
 	n.requestedToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("⚠️ Deadline reached for round %s, calling failToSubmitCv", round)
 		n.callFailToSubmitCv(ctx, round, trialNum)
-		n.SetRequestedToSubmitCvMonitoringActive(false)
+		atomic.StoreInt32(&n.requestedToSubmitCvMonitoringActive, 0)
 	})
 }
 
 // Add function to stop failToSubmitCv monitoring
 func (n *LeaderNode) stopFailToSubmitCvMonitoring() {
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
+
 	if n.requestedToSubmitCvMonitoringTimer != nil {
 		n.requestedToSubmitCvMonitoringTimer.Stop()
 		n.requestedToSubmitCvMonitoringTimer = nil
 	}
-	n.SetRequestedToSubmitCvMonitoringActive(false)
+	atomic.StoreInt32(&n.requestedToSubmitCvMonitoringActive, 0)
 	log.Printf("Stopped failToSubmitCv monitoring")
 }
 
@@ -957,38 +995,17 @@ func (n *LeaderNode) callFailToSubmitCv(ctx context.Context, round string, trial
 
 // ResetCosAndCvsMonitoringState resets COS and CVS monitoring variables
 func (n *LeaderNode) ResetCosAndCvsMonitoringState(round string, trialNum string) {
-	// Stop COS monitoring
+	// Stop COS monitoring (this uses proper synchronization)
 	n.stopFailToSubmitCoMonitoring()
 
-	// Stop CVS monitoring (failToSubmitCv)
+	// Stop CVS monitoring (failToSubmitCv) (this uses proper synchronization)
 	n.stopFailToSubmitCvMonitoring()
 
-	// Stop requestToSubmitCv monitoring
+	// Stop requestToSubmitCv monitoring (this uses proper synchronization)
 	n.stopRequestToSubmitCvMonitoring()
 
-	// Reset COS monitoring variables
-	n.SetRequestedToSubmitCoMonitoringActive(false)
-	if n.requestedToSubmitCoMonitoringTimer != nil {
-		n.requestedToSubmitCoMonitoringTimer.Stop()
-		n.requestedToSubmitCoMonitoringTimer = nil
-	}
-
-	// Reset CVS monitoring variables (failToSubmitCv)
-	n.SetRequestedToSubmitCvMonitoringActive(false)
-	if n.requestedToSubmitCvMonitoringTimer != nil {
-		n.requestedToSubmitCvMonitoringTimer.Stop()
-		n.requestedToSubmitCvMonitoringTimer = nil
-	}
-
-	// Reset requestToSubmitCv monitoring variables
-	n.SetRequestToSubmitCvMonitoringActive(false)
-	if n.requestToSubmitCvMonitoringTimer != nil {
-		n.requestToSubmitCvMonitoringTimer.Stop()
-		n.requestToSubmitCvMonitoringTimer = nil
-	}
-
-	// Reset secret request tracking variable
-	n.SetSecretRequestSentForWhichRound("")
+	// The individual stop functions already handle proper timer cleanup with mutex protection
+	// No need for duplicate timer operations here since they're handled in the stop functions
 
 	log.Printf("Reset COS and CVS monitoring state for round %s", round)
 }
@@ -1040,7 +1057,21 @@ func (n *LeaderNode) startRequestToSubmitCvMonitoring(ctx context.Context, round
 		return
 	}
 
-	n.SetRequestToSubmitCvMonitoringActive(true)
+	// Use atomic compare-and-swap to prevent double start
+	if !atomic.CompareAndSwapInt32(&n.requestToSubmitCvMonitoringActive, 0, 1) {
+		log.Printf("RequestToSubmitCv monitoring already active for round %s with trail %s", round, trialNum)
+		return
+	}
+
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
+
+	// Stop existing timer if present
+	if n.requestToSubmitCvMonitoringTimer != nil {
+		n.requestToSubmitCvMonitoringTimer.Stop()
+		n.requestToSubmitCvMonitoringTimer = nil
+	}
 
 	// Get timing parameters from config
 	periods := appconfig.GetContractPeriods()
@@ -1063,17 +1094,23 @@ func (n *LeaderNode) startRequestToSubmitCvMonitoring(ctx context.Context, round
 	n.requestToSubmitCvMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("⚠️ Deadline reached for round %s, calling requestToSubmitCv", round)
 		n.callRequestToSubmitCv(ctx, round, trialNum)
-		n.SetRequestToSubmitCvMonitoringActive(false)
+		// Use atomic store to safely set to false
+		atomic.StoreInt32(&n.requestToSubmitCvMonitoringActive, 0)
 	})
 }
 
 // Add function to stop requestToSubmitCv monitoring
 func (n *LeaderNode) stopRequestToSubmitCvMonitoring() {
+	// Protect timer operations with mutex
+	n.timerMutex.Lock()
+	defer n.timerMutex.Unlock()
+
 	if n.requestToSubmitCvMonitoringTimer != nil {
 		n.requestToSubmitCvMonitoringTimer.Stop()
 		n.requestToSubmitCvMonitoringTimer = nil
 	}
-	n.SetRequestToSubmitCvMonitoringActive(false)
+	// Use atomic store to safely set to false
+	atomic.StoreInt32(&n.requestToSubmitCvMonitoringActive, 0)
 	log.Printf("Stopped requestToSubmitCv monitoring")
 }
 

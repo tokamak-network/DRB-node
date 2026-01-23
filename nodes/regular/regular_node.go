@@ -39,6 +39,7 @@ type RegularNode struct {
 	merkleRootSubmittedEventEmitted                       int32 // 0 = false, 1 = true
 	merkleRootMonitoringTimer                             *time.Timer
 	requestToSubmitSOrGenerateRandomNumberMonitoringTimer *time.Timer
+	timerMutex                                            sync.RWMutex // Protect timer operations for race condition safety
 	submitSMonitoringReferenceTime                        *big.Int
 	submitSMonitoringReferenceTimeMu                      sync.RWMutex // Protect big.Int pointer
 
