@@ -37,17 +37,34 @@
 | `BenchmarkStateRead` | Single read throughput |
 | `BenchmarkConcurrentStateRead` | Parallel read throughput |
 
+## Prerequisites
+
+Before running integration tests, ensure the following:
+
+1. **Generate leader node key file** (required for Docker build):
+   ```bash
+   ./run_generator.sh
+   ```
+   This creates `static-key/leaderNode.bin`. The Docker build will fail if this file doesn't exist.
+
+2. **Start geth 1.14+**:
+   ```bash
+   geth --dev --dev.period 1 --ws --ws.port 8546 --ws.origins "*"
+   ```
+
 ## Running Tests
 
 ```bash
-# Start geth 1.14+ first
-geth --dev --dev.period 1 --ws --ws.port 8546 --ws.origins "*"
-
-# Run all
+# Run all integration tests
 go test -v -timeout 60m ./integration_test/...
 
 # Run by category
 go test -v -timeout 30m ./integration_test/... -run "NodeCrash|LeaderNode|MultipleNode|Recovery"
 go test -v -timeout 30m ./integration_test/... -run "Consecutive|Stability|Cleanup"
 go test -v -timeout 30m ./integration_test/... -run "Latency|Concurrent|Rapid|UnderLoad"
+```
+
+**Note**: Use `-count=1` to disable test caching for fresh runs:
+```bash
+go test -v -count=1 -timeout 30m ./integration_test/... -run "TestName"
 ```

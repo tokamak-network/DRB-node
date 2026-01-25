@@ -151,15 +151,18 @@ func SetupTestEnvironment(ctx context.Context, logger interface{}) (*TestEnviron
 }
 
 // testingTLogger wraps *testing.T to implement Logger interface
+// Uses fmt.Printf for immediate output instead of t.Log (which is buffered)
 type testingTLogger struct {
 	t *testing.T
 }
 
 func (l *testingTLogger) Log(args ...interface{}) {
+	fmt.Println(args...)
 	l.t.Log(args...)
 }
 
 func (l *testingTLogger) Logf(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
 	l.t.Logf(format, args...)
 }
 

@@ -13,6 +13,21 @@ import (
 	"github.com/tokamak-network/DRB-node/integration_test/setup"
 )
 
+// logNow prints immediately to stdout AND records in test log
+// Use this instead of t.Log for real-time output during long-running tests
+func logNow(t *testing.T, args ...interface{}) {
+	t.Helper()
+	fmt.Println(args...)
+	t.Log(args...)
+}
+
+// logNowf prints immediately to stdout AND records in test log (formatted)
+func logNowf(t *testing.T, format string, args ...interface{}) {
+	t.Helper()
+	fmt.Printf(format+"\n", args...)
+	t.Logf(format, args...)
+}
+
 // Contract states
 const (
 	StateIDLE       = 0
