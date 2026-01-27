@@ -793,6 +793,48 @@ func TestFallbackRPCClient_EstimateGas(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, uint64(21000), gas)
 	})
+
+	t.Run("all servers fail", func(t *testing.T) {
+		server1 := createMockRPCServer(t, func(req *jsonRPCRequest) *jsonRPCResponse {
+			if req.Method == "eth_estimateGas" {
+				return &jsonRPCResponse{
+					JSONRPC: "2.0",
+					Error: &rpcError{
+						Code:    -32000,
+						Message: "gas estimation failed",
+					},
+					ID: req.ID,
+				}
+			}
+			return &jsonRPCResponse{JSONRPC: "2.0", Result: "0x1", ID: req.ID}
+		})
+		defer server1.Close()
+
+		server2 := createMockRPCServer(t, func(req *jsonRPCRequest) *jsonRPCResponse {
+			if req.Method == "eth_estimateGas" {
+				return &jsonRPCResponse{
+					JSONRPC: "2.0",
+					Error: &rpcError{
+						Code:    -32000,
+						Message: "execution reverted",
+					},
+					ID: req.ID,
+				}
+			}
+			return &jsonRPCResponse{JSONRPC: "2.0", Result: "0x1", ID: req.ID}
+		})
+		defer server2.Close()
+
+		client, err := NewFallbackRPCClient([]string{server1.URL, server2.URL})
+		require.NoError(t, err)
+		defer client.Close()
+
+		gas, err := client.EstimateGas(context.Background(), ethereum.CallMsg{})
+		assert.Error(t, err)
+		assert.Equal(t, uint64(0), gas)
+		// Returns the last error after all fallbacks exhausted
+		assert.Contains(t, err.Error(), "execution reverted")
+	})
 }
 
 func TestFallbackRPCClient_ChainID(t *testing.T) {
