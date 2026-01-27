@@ -157,24 +157,8 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 		log.Fatalf("Error connecting to leader: %v", err)
 	}
 
-	contractAddressStr := envCfg.ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		log.Fatalf("Failed to load contract ABI: %v", err)
-	}
-
-	clientUtils := &utils.Client{
-		ContractAddress: contractAddress,
-		PrivateKey:      privateKey,
-		ContractABI:     parsedABI,
-	}
-	// Check if the node is activated
-	IsNetworkError, isActivated := rh.checkActivationStatus(ctx, clientUtils, eoaAddress)
+	// Check if the node is activated (use cached client from regularNode)
+	IsNetworkError, isActivated := rh.checkActivationStatus(ctx, rh.regularNode.client, eoaAddress)
 	if IsNetworkError {
 		log.Println("Network error. Skipping activation check.")
 		select {
@@ -202,7 +186,7 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 		}
 
 		// Check activation status
-		IsNetworkError, isActivated := rh.checkActivationStatus(ctx, clientUtils, eoaAddress)
+		IsNetworkError, isActivated := rh.checkActivationStatus(ctx, rh.regularNode.client, eoaAddress)
 		if IsNetworkError {
 			log.Println("Network error. Skipping activation check.")
 			select {
@@ -220,7 +204,7 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 		} else {
 			log.Println("Node is not activated. Checking deposit amount...")
 			if !depositCalledInThisRun {
-				depositSufficient, err := rh.checkDepositAmount(ctx, clientUtils, eoaAddress)
+				depositSufficient, err := rh.checkDepositAmount(ctx, rh.regularNode.client, eoaAddress)
 				if err != nil {
 					log.Printf("Error checking deposit amount: %v", err)
 					time.Sleep(30 * time.Second)
@@ -469,17 +453,9 @@ func (rh *RegularNodeHandler) sendRegistrationRequestToLeader(ctx context.Contex
 }
 
 func (rh *RegularNodeHandler) deposit(ctx context.Context, eoaAddress string) (bool, error) {
-	contractAddressStr := appconfig.Get().ContractAddress
-	if contractAddressStr == "" {
-		log.Fatal("CONTRACT_ADDRESS is not set in environment variables.")
-	}
-
-	contractAddress := common.HexToAddress(contractAddressStr)
-
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		return false, fmt.Errorf("failed to load contract ABI: %v", err)
-	}
+	// Use cached ABI and address from client
+	parsedABI := rh.regularNode.client.ContractABI
+	contractAddress := rh.regularNode.client.ContractAddress
 
 	// Fetch deposit amount
 	depositAmountResult, err := eth.Service.CallSmartContract(ctx, rh.fallbackEthClient, parsedABI, "s_depositAmount", contractAddress, common.HexToAddress(eoaAddress))

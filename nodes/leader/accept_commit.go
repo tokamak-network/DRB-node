@@ -58,10 +58,8 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 	contractAddress := appconfig.Get().ContractAddress
 	contractAddr := common.HexToAddress(contractAddress)
 
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Fatalf("Failed to parse contract ABI: %v", err)
-	}
+	// Use cached ABI from client
+	parsedABI := n.client.ContractABI
 
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddr},
@@ -1015,12 +1013,8 @@ func (n *LeaderNode) ResetCosAndCvsMonitoringState(round string, trialNum string
 }
 
 func (n *LeaderNode) CheckHaltedState(ctx context.Context) {
-	// Load contract ABI and address
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
-		return
-	}
+	// Use cached ABI from client
+	parsedABI := n.client.ContractABI
 
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {

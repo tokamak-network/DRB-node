@@ -54,10 +54,8 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 	contractAddress := appconfig.Get().ContractAddress
 	contractAddr := common.HexToAddress(contractAddress)
 
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Fatalf("Failed to parse contract ABI: %v", err)
-	}
+	// Use cached ABI from client
+	parsedABI := n.client.ContractABI
 
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddr},
