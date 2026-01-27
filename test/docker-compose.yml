@@ -9,7 +9,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    env_file: ./.env
+    env_file: ../.env
     ports:
       - "5432:5432"
     volumes:
@@ -18,24 +18,25 @@ services:
       - anvil-net
   leadernode:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: test/Dockerfile
     container_name: leadernode
     depends_on:
       leaderpostgres:
         condition: service_healthy
-    env_file: ./.env
+    env_file: ../.env
     environment:
-      LEADER_PORT: 61280
+      LEADER_PORT: ${LEADER_PORT}
       NODE_TYPE: leader
       POSTGRES_HOST: "leaderpostgres"
       POSTGRES_PORT: 5432
+      REGULAR_PEER_ID: ${REGULAR1_PEER_ID}
     volumes:
-      - leadernode-key:/app/static-key
+      - ./static-key:/app/static-key
     ports:
-      - "61280:61280"
+      - "${LEADER_PORT}:${LEADER_PORT}"
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 61280"]
+      test: ["CMD-SHELL", "nc -z localhost ${LEADER_PORT}"]
       interval: 15s
       timeout: 3s
       retries: 5
@@ -53,7 +54,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    env_file: ./.env
+    env_file: ../.env
     ports:
       - "5433:5432"
     volumes:
@@ -68,7 +69,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    env_file: ./.env
+    env_file: ../.env
     ports:
       - "5434:5432"
     volumes:
@@ -83,7 +84,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    env_file: ./.env
+    env_file: ../.env
     ports:
       - "5435:5432"
     volumes:
@@ -92,8 +93,8 @@ services:
       - anvil-net
   regularnode1:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: test/Dockerfile
     container_name: regularnode1
     depends_on:
       leadernode:
@@ -101,18 +102,21 @@ services:
       regular1postgres:
         condition: service_healthy
     ports:
-      - "61281:61281"
-    env_file: ./.env
+      - "${REGULAR1_PORT}:${REGULAR1_PORT}"
+    env_file: ../.env
     environment:
       LEADER_IP: leadernode
-      LEADER_PORT: 61280
-      PORT: 61281
+      LEADER_PORT: ${LEADER_PORT}
+      LEADER_PEER_ID: ${LEADER_PEER_ID}
+      PORT: ${REGULAR1_PORT}
+      REGULAR_NODE_NUMBER: "1"
+      REGULAR_PEER_ID: ${REGULAR1_PEER_ID}
       EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_1
       NODE_TYPE: regular
       POSTGRES_HOST: "regular1postgres"
       POSTGRES_PORT: 5432
     volumes:
-      - regularnode1-key:/app/static-key
+      - ./static-key:/app/static-key
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -120,8 +124,8 @@ services:
     restart: on-failure
   regularnode2:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: test/Dockerfile
     container_name: regularnode2
     depends_on:
       leadernode:
@@ -129,18 +133,21 @@ services:
       regular2postgres:
         condition: service_healthy
     ports:
-      - "61282:61282"
-    env_file: ./.env
+      - "${REGULAR2_PORT}:${REGULAR2_PORT}"
+    env_file: ../.env
     environment:
       LEADER_IP: leadernode
-      LEADER_PORT: 61280
-      PORT: 61282
+      LEADER_PORT: ${LEADER_PORT}
+      LEADER_PEER_ID: ${LEADER_PEER_ID}
+      PORT: ${REGULAR2_PORT}
+      REGULAR_NODE_NUMBER: "2"
+      REGULAR_PEER_ID: ${REGULAR2_PEER_ID}
       EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_2
       NODE_TYPE: regular
       POSTGRES_HOST: "regular2postgres"
       POSTGRES_PORT: 5432
     volumes:
-      - regularnode2-key:/app/static-key
+      - ./static-key:/app/static-key
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -148,8 +155,8 @@ services:
     restart: on-failure
   regularnode3:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: test/Dockerfile
     container_name: regularnode3
     depends_on:
       leadernode:
@@ -157,18 +164,21 @@ services:
       regular3postgres:
         condition: service_healthy
     ports:
-      - "61283:61283"
-    env_file: ./.env
+      - "${REGULAR3_PORT}:${REGULAR3_PORT}"
+    env_file: ../.env
     environment:
       LEADER_IP: leadernode
-      LEADER_PORT: 61280
-      PORT: 61283
+      LEADER_PORT: ${LEADER_PORT}
+      LEADER_PEER_ID: ${LEADER_PEER_ID}
+      PORT: ${REGULAR3_PORT}
+      REGULAR_NODE_NUMBER: "3"
+      REGULAR_PEER_ID: ${REGULAR3_PEER_ID}
       EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_3
       NODE_TYPE: regular
       POSTGRES_HOST: "regular3postgres"
       POSTGRES_PORT: 5432
     volumes:
-      - regularnode3-key:/app/static-key
+      - ./static-key:/app/static-key
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -180,10 +190,6 @@ volumes:
   regular1postgres-data:
   regular2postgres-data:
   regular3postgres-data:
-  leadernode-key:
-  regularnode1-key:
-  regularnode2-key:
-  regularnode3-key:
 
 networks:
   anvil-net:

@@ -257,7 +257,36 @@ func setupTestEnvironmentWithLogger(ctx context.Context, t Logger) (*TestEnviron
 	t.Logf("Commit2RevealDRB: %s", geth.ContractAddress.Hex())
 	t.Logf("ConsumerExampleV2: %s", geth.ConsumerAddress.Hex())
 
-	t.Log("\nSTEP 2: Configuring Docker environment...")
+	t.Log("\nSTEP 2: Generating node peer IDs...")
+	// Get project root directory (parent of integration_test)
+	projectRoot := filepath.Join(integrationTestDir, "..")
+	projectRootAbs, err := filepath.Abs(projectRoot)
+	if err != nil {
+		geth.Cleanup()
+		return nil, fmt.Errorf("failed to get project root: %w", err)
+	}
+
+	// Generate leader peer ID
+	leaderPeerID, err := generateLeaderPeerIDForTest(projectRootAbs)
+	if err != nil {
+		geth.Cleanup()
+		return nil, fmt.Errorf("failed to generate leader peer ID: %w", err)
+	}
+	t.Logf("Generated LEADER_PEER_ID: %s", leaderPeerID)
+
+	// Generate peer IDs for regular nodes 1, 2, 3
+	regularPeerIDs := make([]string, 3)
+	for i := 1; i <= 3; i++ {
+		peerID, err := generateRegularPeerIDForTest(projectRootAbs, i)
+		if err != nil {
+			geth.Cleanup()
+			return nil, fmt.Errorf("failed to generate peer ID for regular node %d: %w", i, err)
+		}
+		regularPeerIDs[i-1] = peerID
+		t.Logf("Generated REGULAR%d_PEER_ID: %s", i, peerID)
+	}
+
+	t.Log("\nSTEP 3: Configuring Docker environment...")
 	wslHostIP := getHostIP()
 	ethRPCURL := fmt.Sprintf("ws://%s:8546", wslHostIP)
 	t.Logf("Detected host IP: %s", wslHostIP)
@@ -269,18 +298,36 @@ ETH_RPC_URLS=%s
 CHAIN_ID=%s
 LEADER_PRIVATE_KEY=ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 LEADER_EOA=%s
+LEADER_PORT=61280
+LEADER_PEER_ID=%s
 REGULAR1_PRIVATE_KEY=59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+REGULAR1_PEER_ID=%s
+REGULAR1_PORT=61281
 REGULAR2_PRIVATE_KEY=5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
+REGULAR2_PEER_ID=%s
+REGULAR2_PORT=61282
 REGULAR3_PRIVATE_KEY=7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
+REGULAR3_PEER_ID=%s
+REGULAR3_PORT=61283
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
-LEADER_PORT=61280
+MOCK_SEND_COMMIT_TO_LEADER=false
+MOCK_SEND_COS_TO_LEADER=false
+MOCK_SEND_SECRET_TO_LEADER=false
+DISABLE_COS_SUBMISSION=false
+DISABLE_SECRET_SUBMISSION=false
+DISABLE_MERKLE_ROOT_SUBMISSION=false
+MOCK_GENERATE_RANDOM_NUMBER=false
 `,
 		geth.ContractAddress.Hex(),
 		geth.ConsumerAddress.Hex(),
 		ethRPCURL,
 		geth.ChainID.String(),
 		geth.LeaderAccount.Address.Hex(),
+		leaderPeerID,
+		regularPeerIDs[0],
+		regularPeerIDs[1],
+		regularPeerIDs[2],
 	)
 
 	envFile := filepath.Join(integrationTestDir, ".env.docker-test")
@@ -294,7 +341,7 @@ LEADER_PORT=61280
 	// Cleanup first
 	cleanupDocker(t, integrationTestDir)
 
-	t.Log("\n STEP 3: Starting Docker services...")
+	t.Log("\n STEP 4: Starting Docker services...")
 	dockerComposeCmd = getDockerComposeCmd()
 	upCmd := exec.CommandContext(ctx, dockerComposeCmd[0],
 		append(dockerComposeCmd[1:],
@@ -312,32 +359,11 @@ LEADER_PORT=61280
 
 	t.Log("Docker services started")
 
-	t.Log("\n STEP 4: Waiting for nodes to activate...")
+	t.Log("\n STEP 5: Waiting for nodes to activate...")
 	time.Sleep(10 * time.Second)
 
-	// Extract Leader PeerID
-	var leaderPeerID string
-	maxRetries := 7
-	for i := 0; i < maxRetries; i++ {
-		leaderPeerID = extractLeaderPeerID("test-leadernode")
-		if leaderPeerID != "" {
-			break
-		}
-		time.Sleep(2 * time.Second)
-	}
-	if leaderPeerID == "" {
-		geth.Cleanup()
-		return nil, fmt.Errorf("failed to extract leader PeerID")
-	}
+	// Leader PeerID is already set from generation step
 	env.LeaderPeerID = leaderPeerID
-
-	// Update env file with LEADER_PEER_ID
-	envContent += fmt.Sprintf("LEADER_PEER_ID=%s\n", leaderPeerID)
-	err = os.WriteFile(envFile, []byte(envContent), 0644)
-	if err != nil {
-		geth.Cleanup()
-		return nil, fmt.Errorf("failed to update env file with PeerID: %w", err)
-	}
 
 	// Restart regular nodes with LEADER_PEER_ID
 	dockerComposeCmd = getDockerComposeCmd()
@@ -407,6 +433,124 @@ func getActivatedOps(ctx context.Context, env *GethTestEnv) ([]common.Address, e
 	var ops []common.Address
 	env.ContractABI.UnpackIntoInterface(&ops, "getActivatedOperators", result)
 	return ops, nil
+}
+
+// generateLeaderPeerIDForTest generates a peer ID for the leader node in test environment
+func generateLeaderPeerIDForTest(projectRoot string) (string, error) {
+	fileName := filepath.Join(projectRoot, "test/static-key/leadernode.bin")
+	dir := filepath.Dir(fileName)
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create directory: %v", err)
+	}
+
+	var privKey crypto.PrivKey
+	var peerID peer.ID
+
+	// Check if the key file exists
+	if _, err := os.Stat(fileName); err == nil {
+		// File exists, load it
+		buff, err := os.ReadFile(fileName)
+		if err != nil {
+			return "", fmt.Errorf("failed to read existing key file '%s': %v", fileName, err)
+		}
+
+		privKey, err = crypto.UnmarshalPrivateKey(buff)
+		if err != nil {
+			return "", fmt.Errorf("failed to unmarshal private key from '%s': %v", fileName, err)
+		}
+
+		peerID, err = peer.IDFromPrivateKey(privKey)
+		if err != nil {
+			return "", fmt.Errorf("failed to generate PeerID from private key in '%s': %v", fileName, err)
+		}
+
+		return peerID.String(), nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("error checking for file '%s': %v", fileName, err)
+	}
+
+	// File does not exist, generate a new private key
+	privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate private key for Leader Node: %v", err)
+	}
+
+	buff, err := crypto.MarshalPrivateKey(privKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal private key for Leader Node: %v", err)
+	}
+
+	err = os.WriteFile(fileName, buff, 0644)
+	if err != nil {
+		return "", fmt.Errorf("failed to write private key to file '%s': %v", fileName, err)
+	}
+
+	peerID, err = peer.IDFromPrivateKey(privKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate PeerID from private key for Leader Node: %v", err)
+	}
+
+	return peerID.String(), nil
+}
+
+// generateRegularPeerIDForTest generates a peer ID for a regular node in test environment
+func generateRegularPeerIDForTest(projectRoot string, nodeNumber int) (string, error) {
+	fileName := filepath.Join(projectRoot, fmt.Sprintf("test/static-key/regularnode%d.bin", nodeNumber))
+	dir := filepath.Dir(fileName)
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create directory: %v", err)
+	}
+
+	var privKey crypto.PrivKey
+	var peerID peer.ID
+
+	// Check if the key file exists
+	if _, err := os.Stat(fileName); err == nil {
+		// File exists, load it
+		buff, err := os.ReadFile(fileName)
+		if err != nil {
+			return "", fmt.Errorf("failed to read existing key file '%s': %v", fileName, err)
+		}
+
+		privKey, err = crypto.UnmarshalPrivateKey(buff)
+		if err != nil {
+			return "", fmt.Errorf("failed to unmarshal private key from '%s': %v", fileName, err)
+		}
+
+		peerID, err = peer.IDFromPrivateKey(privKey)
+		if err != nil {
+			return "", fmt.Errorf("failed to generate PeerID from private key in '%s': %v", fileName, err)
+		}
+
+		return peerID.String(), nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("error checking for file '%s': %v", fileName, err)
+	}
+
+	// File does not exist, generate a new private key
+	privKey, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate private key for Regular Node %d: %v", nodeNumber, err)
+	}
+
+	buff, err := crypto.MarshalPrivateKey(privKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal private key for Regular Node %d: %v", nodeNumber, err)
+	}
+
+	err = os.WriteFile(fileName, buff, 0644)
+	if err != nil {
+		return "", fmt.Errorf("failed to write private key to file '%s': %v", fileName, err)
+	}
+
+	peerID, err = peer.IDFromPrivateKey(privKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate PeerID from private key for Regular Node %d: %v", nodeNumber, err)
+	}
+
+	return peerID.String(), nil
 }
 
 // extractLeaderPeerID extracts the PeerID from the leader node container

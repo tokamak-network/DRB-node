@@ -1,8 +1,11 @@
 #!/bin/bash
 
+# Change to project root directory
+cd "$(dirname "$0")/.." || exit 1
+
 # Start the test database
 echo "Starting test database..."
-docker compose -f docker-compose.test.yml up -d
+docker compose -f test/docker-compose.test.yml up -d
 
 # Wait for database to be ready
 echo "Waiting for database to be ready..."
@@ -22,4 +25,4 @@ go test -race -v ./nodes/regular/...
 
 # Cleanup
 echo "Cleaning up..."
-docker compose -f docker-compose.test.yml down -v
+docker compose -f test/docker-compose.test.yml down -v

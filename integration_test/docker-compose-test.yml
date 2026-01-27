@@ -85,7 +85,7 @@ services:
   leadernode:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: test/Dockerfile
     container_name: test-leadernode
     depends_on:
       leaderpostgres:
@@ -94,7 +94,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       NODE_TYPE: leader
-      LEADER_PORT: 61280
+      LEADER_PORT: ${LEADER_PORT}
       ETH_RPC_URLS: ${ETH_RPC_URLS}
       CONTRACT_ADDRESS: ${CONTRACT_ADDRESS}
       CHAIN_ID: 1337
@@ -113,12 +113,14 @@ services:
       ON_CHAIN_SUBMISSION_PERIOD: 60
       OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR: 20
       ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR: 30
+    volumes:
+      - ../test/static-key:/app/static-key
     ports:
-      - "61280:61280"
+      - "${LEADER_PORT}:${LEADER_PORT}"
     networks:
       - test-net
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 61280 || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost ${LEADER_PORT} || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -129,7 +131,7 @@ services:
   regularnode1:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: test/Dockerfile
     container_name: test-regularnode1
     depends_on:
       regular1postgres:
@@ -140,10 +142,12 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       NODE_TYPE: regular
+      REGULAR_NODE_NUMBER: "1"
+      REGULAR_PEER_ID: ${REGULAR1_PEER_ID}
       LEADER_IP: leadernode
-      LEADER_PORT: 61280
+      LEADER_PORT: ${LEADER_PORT}
       LEADER_PEER_ID: ${LEADER_PEER_ID}
-      PORT: 61281
+      PORT: ${REGULAR1_PORT}
       ETH_RPC_URLS: ${ETH_RPC_URLS}
       CONTRACT_ADDRESS: ${CONTRACT_ADDRESS}
       CHAIN_ID: 1337
@@ -164,8 +168,10 @@ services:
       ON_CHAIN_SUBMISSION_PERIOD: 60
       OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR: 20
       ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR: 30
+    volumes:
+      - ../test/static-key:/app/static-key
     ports:
-      - "61281:61281"
+      - "${REGULAR1_PORT}:${REGULAR1_PORT}"
     networks:
       - test-net
     restart: on-failure
@@ -174,7 +180,7 @@ services:
   regularnode2:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: test/Dockerfile
     container_name: test-regularnode2
     depends_on:
       regular2postgres:
@@ -185,10 +191,12 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       NODE_TYPE: regular
+      REGULAR_NODE_NUMBER: "2"
+      REGULAR_PEER_ID: ${REGULAR2_PEER_ID}
       LEADER_IP: leadernode
-      LEADER_PORT: 61280
+      LEADER_PORT: ${LEADER_PORT}
       LEADER_PEER_ID: ${LEADER_PEER_ID}
-      PORT: 61282
+      PORT: ${REGULAR2_PORT}
       ETH_RPC_URLS: ${ETH_RPC_URLS}
       CONTRACT_ADDRESS: ${CONTRACT_ADDRESS}
       CHAIN_ID: 1337
@@ -206,8 +214,10 @@ services:
       ON_CHAIN_SUBMISSION_PERIOD: 60
       OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR: 20
       ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR: 30
+    volumes:
+      - ../test/static-key:/app/static-key
     ports:
-      - "61282:61282"
+      - "${REGULAR2_PORT}:${REGULAR2_PORT}"
     networks:
       - test-net
     restart: on-failure
@@ -216,7 +226,7 @@ services:
   regularnode3:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: test/Dockerfile
     container_name: test-regularnode3
     depends_on:
       regular3postgres:
@@ -227,10 +237,12 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       NODE_TYPE: regular
+      REGULAR_NODE_NUMBER: "3"
+      REGULAR_PEER_ID: ${REGULAR3_PEER_ID}
       LEADER_IP: leadernode
-      LEADER_PORT: 61280
+      LEADER_PORT: ${LEADER_PORT}
       LEADER_PEER_ID: ${LEADER_PEER_ID}
-      PORT: 61283
+      PORT: ${REGULAR3_PORT}
       ETH_RPC_URLS: ${ETH_RPC_URLS}
       CONTRACT_ADDRESS: ${CONTRACT_ADDRESS}
       CHAIN_ID: 1337
@@ -248,8 +260,10 @@ services:
       ON_CHAIN_SUBMISSION_PERIOD: 60
       OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR: 20
       ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR: 30
+    volumes:
+      - ../test/static-key:/app/static-key
     ports:
-      - "61283:61283"
+      - "${REGULAR3_PORT}:${REGULAR3_PORT}"
     networks:
       - test-net
     restart: on-failure
