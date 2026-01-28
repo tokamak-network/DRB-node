@@ -443,6 +443,7 @@ func TestAcceptSecretValueWhenHalted(t *testing.T) {
 	node.SetHalted(true)
 
 	mockStream := new(MockStream)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
@@ -456,6 +457,7 @@ func TestAcceptSecretValueInvalidJSON(t *testing.T) {
 
 	mockStream := new(MockStream)
 	mockStream.reader = bytes.NewReader([]byte("invalid json"))
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
@@ -477,6 +479,7 @@ func TestAcceptSecretValueInvalidSignature(t *testing.T) {
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
 	mockStream.reader = bytes.NewReader(reqBytes)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
@@ -511,6 +514,7 @@ func TestAcceptSecretValueNoCOSFound(t *testing.T) {
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
 	mockStream.reader = bytes.NewReader(reqBytes)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
@@ -564,6 +568,7 @@ func TestAcceptSecretValueHashMismatch(t *testing.T) {
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
 	mockStream.reader = bytes.NewReader(reqBytes)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
@@ -622,6 +627,7 @@ func TestAcceptSecretValueSuccess(t *testing.T) {
 	})
 
 	mockStream := new(MockStream)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	// Cleanup
@@ -686,6 +692,7 @@ func TestAcceptSecretValueUpdateCommitError(t *testing.T) {
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
 	mockStream.reader = bytes.NewReader(reqBytes)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
@@ -785,6 +792,7 @@ func TestAcceptSecretValueSuccessfulSave(t *testing.T) {
 	})
 
 	mockStream := new(MockStream)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 	assert.False(t, updateCalled, "Update not yet called (test documents expected flow)")
 
@@ -837,6 +845,7 @@ func TestSetRoundSecretValueAfterSave(t *testing.T) {
 		Return(nil)
 
 	mockStream := new(MockStream)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	roundSecretBefore, _ := node.GetRoundSecretValue(uniqueKey, eoaAddressHex)
@@ -891,6 +900,7 @@ func TestAcceptSecretValueAppendToRoundSecrets(t *testing.T) {
 		Return(nil)
 
 	mockStream := new(MockStream)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	// Verify that secrets are appended to round secrets
@@ -956,6 +966,7 @@ func TestAcceptSecretValueSecretValueHexFormat(t *testing.T) {
 	})
 
 	mockStream := new(MockStream)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	actualHex := hex.EncodeToString(secretValue[:])
@@ -1019,6 +1030,7 @@ func TestAcceptSecretValueDatabaseSaveFlow(t *testing.T) {
 	})
 
 	mockStream := new(MockStream)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	assert.Equal(t, 0, updateCallCount, "Update call count before execution")
@@ -1085,6 +1097,7 @@ func TestAcceptSecretValueBroadcastPreparation(t *testing.T) {
 		Return(nil)
 
 	mockStream := new(MockStream)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	assert.Equal(t, [32]byte{}, savedSecretValue, "Secret value not yet saved")
@@ -1210,6 +1223,7 @@ func TestAcceptSecretValueStopsWhenUpdateFails(t *testing.T) {
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
 	mockStream.reader = bytes.NewReader(reqBytes)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	// Execute - should return early due to update failure
@@ -1275,6 +1289,7 @@ func TestSecretValueBroadcastLogging(t *testing.T) {
 	})
 
 	mockStream := new(MockStream)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	// Document the expected flow
@@ -1366,6 +1381,7 @@ func TestBroadcastCompletedBranch(t *testing.T) {
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
 	mockStream.reader = bytes.NewReader(reqBytes)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 
 	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
@@ -1461,6 +1477,7 @@ func TestBroadcastIncompleteBranch(t *testing.T) {
 	reqBytes, _ := json.Marshal(req)
 	mockStream := new(MockStream)
 	mockStream.reader = bytes.NewReader(reqBytes)
+	mockStream.On("SetReadDeadline", mock.Anything).Return(nil)
 	mockStream.On("Close").Return(nil)
 	node.AcceptSecretValue(context.Background(), nil, mockStream, nil)
 
