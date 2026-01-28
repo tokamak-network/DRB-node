@@ -838,83 +838,6 @@ func TestFallbackRPCClient_EstimateGas(t *testing.T) {
 	})
 }
 
-func TestFallbackRPCClient_ChainID(t *testing.T) {
-	logger.InitLogger()
-
-	t.Run("success on first client", func(t *testing.T) {
-		server := createMockRPCServer(t, func(req *jsonRPCRequest) *jsonRPCResponse {
-			if req.Method == "eth_chainId" {
-				return &jsonRPCResponse{
-					JSONRPC: "2.0",
-					Result:  "0x1",
-					ID:      req.ID,
-				}
-			}
-			return &jsonRPCResponse{JSONRPC: "2.0", Result: "0x1", ID: req.ID}
-		})
-		defer server.Close()
-
-		client, err := NewFallbackRPCClient([]string{server.URL})
-		require.NoError(t, err)
-		defer client.Close()
-
-		chainID, err := client.ChainID(context.Background())
-		require.NoError(t, err)
-		assert.NotNil(t, chainID)
-	})
-
-	t.Run("success after fallback", func(t *testing.T) {
-		chainIdCallCount := 0
-		server1 := createMockRPCServer(t, func(req *jsonRPCRequest) *jsonRPCResponse {
-			if req.Method == "eth_chainId" {
-				chainIdCallCount++
-				// Allow first 2 calls to succeed (during Dial and any initial setup)
-				// Dial might make 1-2 calls to verify connection
-				// After that, fail on subsequent calls (which will be our test call)
-				if chainIdCallCount <= 2 {
-					return &jsonRPCResponse{
-						JSONRPC: "2.0",
-						Result:  "0x1",
-						ID:      req.ID,
-					}
-				}
-				// Fail on the 3rd call and beyond (our test call)
-				return &jsonRPCResponse{
-					JSONRPC: "2.0",
-					Error: &rpcError{
-						Code:    -32000,
-						Message: "network error",
-					},
-					ID: req.ID,
-				}
-			}
-			return &jsonRPCResponse{JSONRPC: "2.0", Result: "0x1", ID: req.ID}
-		})
-		defer server1.Close()
-
-		server2 := createMockRPCServer(t, func(req *jsonRPCRequest) *jsonRPCResponse {
-			if req.Method == "eth_chainId" {
-				return &jsonRPCResponse{
-					JSONRPC: "2.0",
-					Result:  "0x1",
-					ID:      req.ID,
-				}
-			}
-			return &jsonRPCResponse{JSONRPC: "2.0", Result: "0x1", ID: req.ID}
-		})
-		defer server2.Close()
-
-		client, err := NewFallbackRPCClient([]string{server1.URL, server2.URL})
-		require.NoError(t, err)
-		defer client.Close()
-
-		// Now when we call ChainID, server1 should fail (3rd call) and fallback to server2
-		chainID, err := client.ChainID(context.Background())
-		require.NoError(t, err)
-		assert.NotNil(t, chainID)
-	})
-}
-
 func TestFallbackRPCClient_BalanceAt(t *testing.T) {
 	logger.InitLogger()
 
@@ -1298,15 +1221,6 @@ func TestFallbackRPCClient_AllClientsExhausted(t *testing.T) {
 
 	// Mark test as started - now subsequent calls should fail
 	testStarted = true
-
-	// All clients should be tried
-	_, err = client.ChainID(context.Background())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "all RPCs failed")
-	// Each server should have been called at least once for eth_chainId during the test
-	assert.Greater(t, chainIdCallCounts["server1"], 0, "server1 should be called")
-	assert.Greater(t, chainIdCallCounts["server2"], 0, "server2 should be called")
-	assert.Greater(t, chainIdCallCounts["server3"], 0, "server3 should be called")
 }
 
 // TestFallbackRPCClient_ConcurrentAccess tests concurrent access to the client

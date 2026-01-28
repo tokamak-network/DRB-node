@@ -126,7 +126,7 @@ func (n *LeaderNode) processDeactivated(ctx context.Context, operator common.Add
 	var peerIDStr string
 	nodeInfos, err := n.nodeInfoRepository.GetNodeInfos(ctx)
 	if err != nil {
-		log.Printf("Database connection error while getting node infos for operator %s: %v", operator.Hex(), err)
+		return fmt.Errorf("failed to get node info, %v", err)
 	} else if len(nodeInfos) == 0 {
 		log.Printf("No node info found for operator %s.", operator.Hex())
 	} else {
@@ -136,8 +136,6 @@ func (n *LeaderNode) processDeactivated(ctx context.Context, operator common.Add
 				break
 			}
 		}
-	} else {
-		return fmt.Errorf("failed to get node info, %v", err)
 	}
 
 	if peerIDStr != "" {
@@ -187,10 +185,10 @@ func (n *LeaderNode) processSubmittedSecretRequest(ctx context.Context, round *b
 	if err != nil {
 		if err == pg.ErrNoRows {
 			log.Printf("Leader commit data not found for round %s, trial %s, EOA %s. Cannot process submitted secret.", n.GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex())
-			return
+			return nil
 		}
 		log.Printf("Database connection error while getting leader commit data for round %s, trial %s, EOA %s: %v", n.GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex(), err)
-		return
+		return fmt.Errorf("failed to get leader commit data: %v", err)
 	}
 
 	// Update leader commit data with secretValue
@@ -691,12 +689,7 @@ func (n *LeaderNode) stopFailToSubmitCoMonitoring() {
 
 // Add function to call failToSubmitCo on chain
 func (n *LeaderNode) callFailToSubmitCo(ctx context.Context, round string, trialNum string) error {
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to create leader client: %v", err)
-	}
-
-	_, _, err = n.ethService.ExecuteTransaction(
+	_, _, err := n.ethService.ExecuteTransaction(
 		ctx,
 		n.client,
 		n.fallbackEthClient,
@@ -810,12 +803,7 @@ func (n *LeaderNode) stopFailToSubmitCvMonitoring() {
 
 // Add function to call failToSubmitCv on chain
 func (n *LeaderNode) callFailToSubmitCv(ctx context.Context, round string, trialNum string) error {
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to create leader client: %v", err)
-	}
-
-	_, _, err = n.ethService.ExecuteTransaction(
+	_, _, err := n.ethService.ExecuteTransaction(
 		ctx,
 		n.client,
 		n.fallbackEthClient,
@@ -1004,12 +992,7 @@ func (n *LeaderNode) callRequestToSubmitCv(ctx context.Context, round string, tr
 
 	packedIndices := PackIndices(indices)
 
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to create leader client: %v", err)
-	}
-
-	_, _, err = n.ethService.ExecuteTransaction(
+	_, _, err := n.ethService.ExecuteTransaction(
 		ctx,
 		n.client,
 		n.fallbackEthClient,
@@ -1136,13 +1119,7 @@ func (n *LeaderNode) SubmitMerkleRoot(ctx context.Context, roundNum string, tria
 	var merkleRootBytes32 [32]byte
 	copy(merkleRootBytes32[:], merkleRoot)
 
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		n.SetSubmittingMerkleRoot(false) // Reset flag on failure
-		return fmt.Errorf("failed to create leader client: %v", err)
-	}
-
-	_, _, err = n.ethService.ExecuteTransaction(
+	_, _, err := n.ethService.ExecuteTransaction(
 		ctx,
 		n.client,
 		n.fallbackEthClient,

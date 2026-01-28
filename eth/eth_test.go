@@ -78,14 +78,6 @@ func (m *MockFallbackEthClient) SubscribeFilterLogs(ctx context.Context, q ether
 	return args.Get(0).(ethereum.Subscription), args.Error(1)
 }
 
-func (m *MockFallbackEthClient) ChainID(ctx context.Context) (*big.Int, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*big.Int), args.Error(1)
-}
-
 func (m *MockFallbackEthClient) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 	args := m.Called(ctx, msg)
 	return args.Get(0).(uint64), args.Error(1)
@@ -350,6 +342,9 @@ func TestCallSmartContract_UnpackError(t *testing.T) {
 
 // Test ExecuteTransaction
 func TestExecuteTransaction_ChainIDError(t *testing.T) {
+	// Unset CHAIN_ID to test error handling
+	os.Unsetenv("CHAIN_ID")
+
 	mockClient := new(MockFallbackEthClient)
 	ctx := context.Background()
 
@@ -366,19 +361,17 @@ func TestExecuteTransaction_ChainIDError(t *testing.T) {
 		PrivateKey:      privateKey,
 	}
 
-	// ChainID should be called 3 times (maxRetries) before giving up
-	mockClient.On("ChainID", ctx).Return(nil, errors.New("chain ID error")).Times(3)
-
 	tx, auth, err := ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
 	assert.Error(t, err)
 	assert.Nil(t, tx)
 	assert.Nil(t, auth)
-	assert.Contains(t, err.Error(), "failed to fetch chain ID")
-
-	mockClient.AssertExpectations(t)
+	assert.Contains(t, err.Error(), "CHAIN_ID environment variable is not set or invalid")
 }
 
-func TestExecuteTransaction_PackError(t *testing.T) {
+func TestExecuteTransaction_NonceError(t *testing.T) {
+	os.Setenv("CHAIN_ID", "1337")
+	defer os.Unsetenv("CHAIN_ID")
+
 	mockClient := new(MockFallbackEthClient)
 	ctx := context.Background()
 
@@ -386,8 +379,43 @@ func TestExecuteTransaction_PackError(t *testing.T) {
 	require.NoError(t, err)
 
 	chainID := big.NewInt(1337)
-	mockClient.On("ChainID", ctx).Return(chainID, nil).Once()
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
+	require.NoError(t, err)
 
+	abiJSON := `[{"constant":false,"inputs":[],"name":"testMethod","outputs":[],"type":"function"}]`
+	parsedABI, err := abi.JSON(strings.NewReader(abiJSON))
+	require.NoError(t, err)
+
+	client := &utils.Client{
+		ContractABI:     parsedABI,
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
+	// SuggestGasTipCap and SuggestGasPrice are called before PendingNonceAt in sendWithRetry
+	mockClient.On("SuggestGasTipCap", ctx).Return(big.NewInt(1000000000), nil)
+	mockClient.On("SuggestGasPrice", ctx).Return(big.NewInt(1000000000), nil)
+	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), errors.New("nonce error"))
+
+	tx, auth, err := ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
+	assert.Error(t, err)
+	assert.Nil(t, tx)
+	assert.Nil(t, auth)
+	assert.Contains(t, err.Error(), "failed to get nonce")
+
+	mockClient.AssertExpectations(t)
+}
+
+func TestExecuteTransaction_PackError(t *testing.T) {
+	os.Setenv("CHAIN_ID", "1337")
+	defer os.Unsetenv("CHAIN_ID")
+
+	mockClient := new(MockFallbackEthClient)
+	ctx := context.Background()
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+
+	chainID := big.NewInt(1337)
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	require.NoError(t, err)
 
@@ -406,6 +434,56 @@ func TestExecuteTransaction_PackError(t *testing.T) {
 	assert.Nil(t, tx)
 	assert.Nil(t, auth)
 	assert.Contains(t, err.Error(), "failed to pack data")
+
+	mockClient.AssertExpectations(t)
+}
+
+func TestExecuteTransaction_GasEstimationError(t *testing.T) {
+	os.Setenv("CHAIN_ID", "1337")
+	defer os.Unsetenv("CHAIN_ID")
+
+	mockClient := new(MockFallbackEthClient)
+	ctx := context.Background()
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+
+	chainID := big.NewInt(1337)
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
+	require.NoError(t, err)
+
+	abiJSON := `[{"constant":false,"inputs":[],"name":"testMethod","outputs":[],"type":"function"}]`
+	parsedABI, err := abi.JSON(strings.NewReader(abiJSON))
+	require.NoError(t, err)
+
+	client := &utils.Client{
+		ContractABI:     parsedABI,
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
+	// SuggestGasTipCap and SuggestGasPrice are called before PendingNonceAt in sendWithRetry
+	mockClient.On("SuggestGasTipCap", ctx).Return(big.NewInt(1000000000), nil)
+	mockClient.On("SuggestGasPrice", ctx).Return(big.NewInt(1000000000), nil)
+	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil).Once()
+
+	packedData, err := client.ContractABI.Pack("testMethod")
+	require.NoError(t, err)
+
+	callMsg := ethereum.CallMsg{
+		From:  auth.From,
+		To:    &client.ContractAddress,
+		Data:  packedData,
+		Value: big.NewInt(0),
+	}
+
+	// Gas estimation fails 5 times (maxRetries in sendWithRetry)
+	mockClient.On("EstimateGas", ctx, callMsg).Return(uint64(0), errors.New("gas estimation failed")).Times(5)
+
+	tx, auth, err := ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
+	assert.Error(t, err)
+	assert.Nil(t, tx)
+	assert.Nil(t, auth)
+	assert.Contains(t, err.Error(), "failed to estimate gas after")
 
 	mockClient.AssertExpectations(t)
 }

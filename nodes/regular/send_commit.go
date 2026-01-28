@@ -257,11 +257,6 @@ func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string
 
 	fmt.Printf("Extracted secret_value as bytes32: %x\n", secretValueBytes)
 
-	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("Failed to create EOA client: %v", err)
-	}
-
 	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		n.client,
@@ -666,12 +661,7 @@ func (n *RegularNode) ResetMonitoringState(round string, trialNum string) {
 
 // callFailToRequestSubmitCVOrSubmitMerkleRoot calls the contract function to fail the leader
 func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx context.Context, round string, trialNum string) error {
-	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to create EOA client: %v", err)
-	}
-
-	_, _, err = eth.Service.ExecuteTransaction(
+	_, _, err := eth.Service.ExecuteTransaction(
 		ctx,
 		n.client,
 		n.fallbackEthClient,
@@ -750,12 +740,7 @@ func (n *RegularNode) StopFailToSubmitMerkleRootAfterDisputeMonitoring(round str
 
 // callFailToSubmitMerkleRootAfterDispute calls the contract function to fail the leader for not submitting merkle root
 func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(ctx context.Context, round string, trialNum string) error {
-	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to create EOA client: %v", err)
-	}
-
-	_, _, err = eth.Service.ExecuteTransaction(
+	_, _, err := eth.Service.ExecuteTransaction(
 		ctx,
 		n.client,
 		n.fallbackEthClient,
@@ -871,11 +856,6 @@ func (n *RegularNode) StopRequestToSubmitSOrGenerateRandomNumberMonitoring(round
 // callFailToRequestSOrGenerateRandomNumber calls the contract function to fail
 func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(ctx context.Context, round string, trialNum string) error {
 	log.Printf("Calling failToRequestSOrGenerateRandomNumber for round %s with trial %s", round, trialNum)
-
-	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to create EOA client: %v", err)
-	}
 
 	// Execute the transaction
 	_, _, err := eth.Service.ExecuteTransaction(

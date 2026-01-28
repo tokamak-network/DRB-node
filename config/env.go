@@ -227,3 +227,18 @@ func getEnvAsBigIntOrDefault(key string, defaultValue int64) *big.Int {
 	}
 	return parsed
 }
+
+// GetChainIDAsBigInt returns the ChainID from environment config as *big.Int.
+// Returns nil if CHAIN_ID is not set or invalid.
+func GetChainIDAsBigInt() *big.Int {
+	cfg := Get()
+	if cfg.ChainID == "" {
+		return nil
+	}
+	chainID := new(big.Int)
+	chainID, ok := chainID.SetString(cfg.ChainID, 10)
+	if !ok {
+		return nil
+	}
+	return chainID
+}
