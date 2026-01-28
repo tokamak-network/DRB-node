@@ -201,32 +201,6 @@ func ExecuteTransaction(
 		return nil, nil, fmt.Errorf("failed to pack data for %s: %v", functionName, err)
 	}
 
-	callMsg := ethereum.CallMsg{
-		From:  auth.From,
-		To:    &client.ContractAddress,
-		Data:  packedData,
-		Value: amount,
-	}
-
-	var estimateGas uint64
-	maxAttempt := 3
-	attempt := 0
-
-	for attempt < maxAttempt {
-		estimateGas, err = fallbackEthClient.EstimateGas(ctx, callMsg)
-		if err != nil {
-			attempt++
-			log.Errorf("Gas estimation failed for %s, attempt %d: %v", functionName, attempt, err)
-			if attempt == maxAttempt {
-				return nil, nil, fmt.Errorf("gas estimation failed after %d attempts, %v transaction will revert", maxAttempt, functionName)
-			}
-			time.Sleep(10 * time.Second)
-			continue
-		}
-		break
-	}
-	log.Infof("Transaction simulation successful, estimated gas: %d", estimateGas)
-
 	receipt, signedTx, err := sendWithRetry(ctx, fallbackEthClient, chainID, auth, client.ContractAddress, amount, packedData)
 	if err != nil {
 		log.Errorf("Failed to send the signed transaction: %v", err)
