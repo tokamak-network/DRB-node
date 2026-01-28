@@ -246,8 +246,15 @@ func TestRegularNode_HandleSecretValueRequest_NotInOrder(t *testing.T) {
 	mockRevealRepo := node.revealOrderRepository.(*MockRevealOrderRepository)
 	node.SetHalted(false)
 
+	leaderPrivateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	leaderEOA := crypto.PubkeyToAddress(leaderPrivateKey.PublicKey).Hex()
+
 	h := createTestHostForSecret(t)
 	defer h.Close()
+
+	os.Setenv("LEADER_EOA", leaderEOA)
+	defer os.Unsetenv("LEADER_EOA")
 
 	orderedNodes := []string{
 		"0xNode1",
@@ -259,10 +266,13 @@ func TestRegularNode_HandleSecretValueRequest_NotInOrder(t *testing.T) {
 		Round:             "100",
 		TrialNum:          "1",
 		RegularEoaAddress: "0xWrongNode", // Not in the order
-		LeaderEoaAddress:  "0xLeader",
+		LeaderEoaAddress:  leaderEOA,
 		Order:             0,
-		Signature:         []byte("signature"),
 	}
+	// Sign the request with valid signature
+	signature, err := utils.SignSecretValueRequestContent(req, leaderPrivateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
@@ -288,8 +298,15 @@ func TestRegularNode_HandleSecretValueRequest_OrderOutOfBounds(t *testing.T) {
 	mockRevealRepo := node.revealOrderRepository.(*MockRevealOrderRepository)
 	node.SetHalted(false)
 
+	leaderPrivateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	leaderEOA := crypto.PubkeyToAddress(leaderPrivateKey.PublicKey).Hex()
+
 	h := createTestHostForSecret(t)
 	defer h.Close()
+
+	os.Setenv("LEADER_EOA", leaderEOA)
+	defer os.Unsetenv("LEADER_EOA")
 
 	orderedNodes := []string{
 		"0xNode1",
@@ -300,10 +317,13 @@ func TestRegularNode_HandleSecretValueRequest_OrderOutOfBounds(t *testing.T) {
 		Round:             "100",
 		TrialNum:          "1",
 		RegularEoaAddress: "0xNode1",
-		LeaderEoaAddress:  "0xLeader",
+		LeaderEoaAddress:  leaderEOA,
 		Order:             5, // Out of bounds
-		Signature:         []byte("signature"),
 	}
+	// Sign the request with valid signature
+	signature, err := utils.SignSecretValueRequestContent(req, leaderPrivateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
@@ -330,8 +350,15 @@ func TestRegularNode_HandleSecretValueRequest_PreviousSecretNotReceived(t *testi
 	mockPeerRepo := node.peerCommitDataRepository.(*MockPeerCommitRepository)
 	node.SetHalted(false)
 
+	leaderPrivateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	leaderEOA := crypto.PubkeyToAddress(leaderPrivateKey.PublicKey).Hex()
+
 	h := createTestHostForSecret(t)
 	defer h.Close()
+
+	os.Setenv("LEADER_EOA", leaderEOA)
+	defer os.Unsetenv("LEADER_EOA")
 
 	orderedNodes := []string{
 		"0xNode1",
@@ -342,10 +369,13 @@ func TestRegularNode_HandleSecretValueRequest_PreviousSecretNotReceived(t *testi
 		Round:             "100",
 		TrialNum:          "1",
 		RegularEoaAddress: "0xNode2", // Second in order
-		LeaderEoaAddress:  "0xLeader",
+		LeaderEoaAddress:  leaderEOA,
 		Order:             1,
-		Signature:         []byte("signature"),
 	}
+	// Sign the request with valid signature
+	signature, err := utils.SignSecretValueRequestContent(req, leaderPrivateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
@@ -380,10 +410,6 @@ func TestRegularNode_HandleSecretValueRequest_FirstInOrder_MissingLeaderEOA(t *t
 
 	os.Unsetenv("LEADER_EOA")
 
-	orderedNodes := []string{
-		"0xNode1",
-	}
-
 	req := utils.SecretValueRequest{
 		Round:             "100",
 		TrialNum:          "1",
@@ -393,14 +419,7 @@ func TestRegularNode_HandleSecretValueRequest_FirstInOrder_MissingLeaderEOA(t *t
 		Signature:         []byte("signature"),
 	}
 
-	revealOrder := &utils.RevealOrderData{
-		Round:        "100",
-		TrialNum:     "1",
-		OrderedNodes: orderedNodes,
-	}
 
-	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
-		Return(revealOrder, nil)
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(req)
@@ -423,10 +442,6 @@ func TestRegularNode_HandleSecretValueRequest_SignatureVerificationFailed(t *tes
 	os.Setenv("LEADER_EOA", "0xLeaderAddress")
 	defer os.Unsetenv("LEADER_EOA")
 
-	orderedNodes := []string{
-		"0xNode1",
-	}
-
 	req := utils.SecretValueRequest{
 		Round:             "100",
 		TrialNum:          "1",
@@ -436,14 +451,7 @@ func TestRegularNode_HandleSecretValueRequest_SignatureVerificationFailed(t *tes
 		Signature:         []byte("invalid-signature"),
 	}
 
-	revealOrder := &utils.RevealOrderData{
-		Round:        "100",
-		TrialNum:     "1",
-		OrderedNodes: orderedNodes,
-	}
 
-	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
-		Return(revealOrder, nil)
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(req)
@@ -1164,17 +1172,27 @@ func TestRegularNode_HandleSecretValueRequest_EmptyOrderedNodes(t *testing.T) {
 	mockRevealRepo := node.revealOrderRepository.(*MockRevealOrderRepository)
 	node.SetHalted(false)
 
+	leaderPrivateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	leaderEOA := crypto.PubkeyToAddress(leaderPrivateKey.PublicKey).Hex()
+
 	h := createTestHostForSecret(t)
 	defer h.Close()
+
+	os.Setenv("LEADER_EOA", leaderEOA)
+	defer os.Unsetenv("LEADER_EOA")
 
 	req := utils.SecretValueRequest{
 		Round:             "100",
 		TrialNum:          "1",
 		RegularEoaAddress: "0xNode1",
-		LeaderEoaAddress:  "0xLeader",
+		LeaderEoaAddress:  leaderEOA,
 		Order:             0,
-		Signature:         []byte("signature"),
 	}
+	// Sign the request with valid signature
+	signature, err := utils.SignSecretValueRequestContent(req, leaderPrivateKey)
+	require.NoError(t, err)
+	req.Signature = signature
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
