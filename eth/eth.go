@@ -28,6 +28,7 @@ var Service IEthService = NewDefaultEthService()
 
 var (
 	ErrTransactionFailed = errors.New("transaction failed")
+	txMu                 sync.Mutex // Mutex to serialize transaction sending
 )
 
 var ActivatedOperators = make([]common.Address, 0)
@@ -94,6 +95,10 @@ func ExecuteTransaction(
 	amount *big.Int,
 	params ...interface{},
 ) (*types.Transaction, *bind.TransactOpts, error) {
+	// Serialize transaction sending to simplify nonce management
+	txMu.Lock()
+	defer txMu.Unlock()
+
 	log := logger.Log.WithFields(logrus.Fields{
 		"function": functionName,
 	})
