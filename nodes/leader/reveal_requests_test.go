@@ -123,6 +123,22 @@ func (m *MockFallbackEthClient) CallContract(ctx context.Context, msg ethereum.C
 	return args.Get(0).([]byte), args.Error(1)
 }
 
+func (m *MockFallbackEthClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]types.Log, error) {
+	args := m.Called(ctx, q)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]types.Log), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error) {
+	args := m.Called(ctx, blockNumber)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.Header), args.Error(1)
+}
+
 type RevealRequestsTestSuite struct {
 	suite.Suite
 	db                   *pg.DB
@@ -214,6 +230,8 @@ func (suite *RevealRequestsTestSuite) SetupTest() {
 	mockFallbackClient := new(MockFallbackEthClient)
 	mockFallbackClient.On("NetworkID", mock.Anything).Return(big.NewInt(1), nil).Maybe()
 	mockFallbackClient.On("PendingNonceAt", mock.Anything, mock.Anything).Return(uint64(0), nil).Maybe()
+	// ChainID is called by ExecuteTransaction when timers fire, so ensure it's always mocked
+	// Use Maybe() to allow multiple calls from different timers
 	mockFallbackClient.On("ChainID", mock.Anything).Return(big.NewInt(1), nil).Maybe()
 	mockFallbackClient.On("EstimateGas", mock.Anything, mock.Anything).Return(uint64(21000), nil).Maybe()
 	mockFallbackClient.On("SuggestGasPrice", mock.Anything).Return(big.NewInt(1000000000), nil).Maybe()
@@ -239,6 +257,12 @@ func (suite *RevealRequestsTestSuite) SetupTest() {
 		ethService:                 eth.Service,
 	}
 
+	// Stop any active monitoring timers from previous tests to prevent interference
+	// This prevents timers from other tests firing and causing panics
+	suite.leaderNode.stopRequestToSubmitCvMonitoring()
+	suite.leaderNode.stopFailToSubmitCvMonitoring()
+	suite.leaderNode.stopFailToSubmitCoMonitoring()
+
 	// Create a test libp2p host
 	var err error
 	suite.host, err = libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
@@ -247,6 +271,13 @@ func (suite *RevealRequestsTestSuite) SetupTest() {
 
 // TearDownTest runs after each test
 func (suite *RevealRequestsTestSuite) TearDownTest() {
+	// Clean up any active monitoring timers to prevent them from firing after test completes
+	// This prevents panics from unmocked method calls when timers fire
+	if suite.leaderNode != nil {
+		suite.leaderNode.stopRequestToSubmitCvMonitoring()
+		suite.leaderNode.stopFailToSubmitCvMonitoring()
+		suite.leaderNode.stopFailToSubmitCoMonitoring()
+	}
 	if suite.host != nil {
 		suite.host.Close()
 	}
@@ -1436,6 +1467,13 @@ func (suite *RevealRequestsTestSuite) TestStartSecretValueRequests_MultipleNodes
 	}()
 
 	suite.leaderNode.SetHalted(false)
+	
+	// Stop any active monitoring timers from previous tests BEFORE starting this test
+	// This prevents timers from other tests firing and causing panics
+	suite.leaderNode.stopRequestToSubmitCvMonitoring()
+	suite.leaderNode.stopFailToSubmitCvMonitoring()
+	suite.leaderNode.stopFailToSubmitCoMonitoring()
+	
 	testRound := "first_match_46"
 	testTrial := "1"
 	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
@@ -1500,6 +1538,14 @@ func (suite *RevealRequestsTestSuite) TestStartSecretValueRequests_MultipleNodes
 	assert.True(suite.T(), exists)
 	assert.NotNil(suite.T(), status)
 
+	// Clean up any active monitoring timers immediately to prevent them from firing
+	// This prevents panics from unmocked ChainID calls when timers fire
+	suite.leaderNode.stopRequestToSubmitCvMonitoring()
+	suite.leaderNode.stopFailToSubmitCvMonitoring()
+	suite.leaderNode.stopFailToSubmitCoMonitoring()
+
+	// Give any running goroutines a moment to complete
+	time.Sleep(100 * time.Millisecond)
 }
 
 // TestTimestamp_SequentialUpdates tests sequential timestamp updates
@@ -1695,13 +1741,16 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_Success() {
 	// Set up activated operators for requestToSubmitS
 	eth.SetActivatedOperatorsCached([]common.Address{testOp})
 
+	suite.leaderNode.SetIndices([]*big.Int{big.NewInt(0)})
+
 	// Create leader commit data for requestToSubmitS
 	commitData := &utils.LeaderCommitData{
-		Round:      testRound,
-		TrialNum:   testTrial,
-		EOAAddress: testOp.Hex(),
-		Cos:        [32]byte{1, 2, 3},
-		Cvs:        [32]byte{4, 5, 6},
+		Round:       testRound,
+		TrialNum:    testTrial,
+		EOAAddress:  testOp.Hex(),
+		Cos:         [32]byte{1, 2, 3},
+		Cvs:         [32]byte{4, 5, 6},
+		SecretValue: [32]byte{7, 8, 9}, // Add SecretValue for LoadNodeData
 		Sign: utils.SignInfo{
 			R: "100",
 			S: "200",
@@ -1910,7 +1959,6 @@ func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_SecretReceivedB
 
 	fmt.Println(" TestSendSecretValueRequest_SecretReceivedBeforeTimeout completed successfully")
 }
-
 
 // TestSendSecretValueRequest_InvalidPrivateKey tests when LEADER_PRIVATE_KEY is invalid
 func (suite *RevealRequestsTestSuite) TestSendSecretValueRequest_InvalidPrivateKey() {

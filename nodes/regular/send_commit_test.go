@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/eapache/queue"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -918,7 +919,6 @@ func TestRegularNode_processSecretRequest_MyEOA_GetCommitByRoundFails(t *testing
 	trialNum := big.NewInt(1)
 	index := big.NewInt(0)
 
-	
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
 		TrialNum:     "1",
@@ -929,11 +929,9 @@ func TestRegularNode_processSecretRequest_MyEOA_GetCommitByRoundFails(t *testing
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
 		Return(revealOrder, nil)
 
-	
 	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
 		Return(nil, errors.New("database error: commit not found"))
 
-	
 	panicked := false
 	defer func() {
 		if r := recover(); r != nil {
@@ -942,12 +940,9 @@ func TestRegularNode_processSecretRequest_MyEOA_GetCommitByRoundFails(t *testing
 		}
 	}()
 
-
 	node.processSecretRequest(context.Background(), round, trialNum, index)
 
-
 	assert.False(t, panicked, "Function should handle error gracefully without panic")
-
 
 	mockRevealRepo.AssertExpectations(t)
 	mockCommitRepo.AssertExpectations(t)
@@ -1033,23 +1028,20 @@ func TestRegularNode_processSubmittedSecretRequest_MyEOA_GetCommitByRoundFails(t
 
 	round := big.NewInt(100)
 	trialNum := big.NewInt(1)
-	index := big.NewInt(0) 
-
+	index := big.NewInt(0)
 
 	revealOrder := &utils.RevealOrderData{
 		Round:        "100",
 		TrialNum:     "1",
-		OrderedNodes: []string{"0xNode0", testOp.Hex()}, 
-		RevealOrder:  []int{0, 1},                      
+		OrderedNodes: []string{"0xNode0", testOp.Hex()},
+		RevealOrder:  []int{0, 1},
 	}
 
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
 		Return(revealOrder, nil)
 
-
 	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
 		Return(nil, errors.New("database error: commit not found"))
-
 
 	panicked := false
 	defer func() {
@@ -1061,10 +1053,8 @@ func TestRegularNode_processSubmittedSecretRequest_MyEOA_GetCommitByRoundFails(t
 
 	node.processSubmittedSecretRequest(context.Background(), round, trialNum, index)
 
-	
 	assert.False(t, panicked, "Function should handle error gracefully without panic")
 
-	
 	mockRevealRepo.AssertExpectations(t)
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -1650,11 +1640,10 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionContextTimeout(t *te
 
 	round := big.NewInt(100)
 	trialNum := big.NewInt(1)
-	packedIndices := big.NewInt(0) 
+	packedIndices := big.NewInt(0)
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	mockCommitRepo.AssertExpectations(t)
@@ -2104,7 +2093,6 @@ func TestRegularNode_processCosRequest_ExecuteTransactionAllRetriesExhausted(t *
 
 	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
 
-	
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
 	mockCommitRepo.AssertExpectations(t)
@@ -2302,7 +2290,6 @@ func TestRegularNode_processCosRequest_ExecuteTransactionIntermittentFailure(t *
 
 	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
 
-
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
 	mockCommitRepo.AssertExpectations(t)
@@ -2429,7 +2416,6 @@ func TestRegularNode_submitS_GetCommitByRoundReturnsNil_GracefulHandling(t *test
 		os.Unsetenv("EOA_PRIVATE_KEY")
 		os.Unsetenv("CONTRACT_ADDRESS")
 	}()
-
 
 	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
 	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
@@ -2628,7 +2614,7 @@ func TestRegularNode_processCommitRequest_ConcurrentSubmissions(t *testing.T) {
 		Round:    "100",
 		TrialNum: "1",
 		Cvs:      [32]byte{1, 2, 3},
-	}, nil).Times(3) 
+	}, nil).Times(3)
 
 	callCount := int32(0)
 	mockEth := &MockEthService{
@@ -2663,7 +2649,6 @@ func TestRegularNode_processCommitRequest_ConcurrentSubmissions(t *testing.T) {
 
 	wg.Wait()
 
-	
 	assert.Equal(t, int32(3), callCount, "All concurrent calls should execute")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -2843,7 +2828,6 @@ func TestRegularNode_processCommitRequest_PartialSuccess_TransactionSentButRecei
 			TrialNum: "1",
 			Cvs:      [32]byte{1, 2, 3},
 		}, nil)
-
 
 	partialSuccessError := errors.New("transaction 0xabc123 stuck in mempool after 5s")
 	mockEth := &MockEthService{
@@ -3040,7 +3024,6 @@ func TestRegularNode_receiveCommitRequest_MultipleEvents_OneFails_OthersContinue
 
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
 		Return(uint64(time.Now().Unix()), nil)
-
 
 	mockBatchRepo.On("DeleteOldRoundDataForRegularNode", mock.Anything, "100").
 		Return(nil).Maybe()
@@ -3797,7 +3780,7 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_ProcessCommitReque
 	// Give the goroutine time to process error and log it
 	time.Sleep(100 * time.Millisecond)
 
-	// Verify that error was handled gracefully 
+	// Verify that error was handled gracefully
 	mockClient.AssertExpectations(t)
 	mockCommitRepo.AssertExpectations(t)
 	mockSub.AssertExpectations(t)
@@ -3881,9 +3864,7 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_ProcessCosRequestE
 
 	<-ctx.Done()
 
-	
 	time.Sleep(100 * time.Millisecond)
-
 
 	mockClient.AssertExpectations(t)
 	mockCommitRepo.AssertExpectations(t)
@@ -4032,6 +4013,8 @@ func TestRegularNode_receiveCommitRequest_SSubmitted_Success(t *testing.T) {
 
 	testOp := common.HexToAddress("0x1234567890123456789012345678901234567890")
 	node.SetRegularNodeEOA(testOp.Hex())
+	eth.SetActivatedOperatorsCached([]common.Address{testOp})
+	defer eth.SetActivatedOperatorsCached([]common.Address{})
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	defer os.Unsetenv("CONTRACT_ADDRESS")
@@ -5763,4 +5746,404 @@ func TestRegularNode_StartMerkleRootMonitoring_LogsElseBranch(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	assert.True(t, true, "Else branch executed and logged")
+}
+
+// Test cases for catchUpMissedEvents function
+
+func TestRegularNode_catchUpMissedEvents_FirstTime_NoCatchUpNeeded(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	mockClient := new(MockFallbackEthClient)
+	node.fallbackEthClient = mockClient
+
+	contractAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	require.NoError(t, err)
+
+	// lastProcessedBlock is 0 by default
+	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
+
+	assert.NoError(t, err)
+	// Verify no calls were made to HeaderByNumber or FilterLogs
+	mockClient.AssertNotCalled(t, "HeaderByNumber")
+	mockClient.AssertNotCalled(t, "FilterLogs")
+}
+
+func TestRegularNode_catchUpMissedEvents_NoNewBlocks(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	mockClient := new(MockFallbackEthClient)
+	node.fallbackEthClient = mockClient
+
+	// Mock HeaderByNumber to return block 100 (same as lastProcessedBlock)
+	mockHeader := &types.Header{
+		Number: big.NewInt(100),
+	}
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(mockHeader, nil).Once()
+
+	contractAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	require.NoError(t, err)
+
+	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
+
+	assert.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	// Verify FilterLogs was not called since currentBlock <= lastProcessedBlock
+	mockClient.AssertNotCalled(t, "FilterLogs")
+}
+
+func TestRegularNode_catchUpMissedEvents_HeaderByNumberError(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	mockClient := new(MockFallbackEthClient)
+	node.fallbackEthClient = mockClient
+
+	// Mock HeaderByNumber to return error
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(nil, errors.New("RPC error")).Once()
+
+	contractAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	require.NoError(t, err)
+
+	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get current block header")
+	mockClient.AssertExpectations(t)
+	mockClient.AssertNotCalled(t, "FilterLogs")
+}
+
+func TestRegularNode_catchUpMissedEvents_NoMissedLogs(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	mockClient := new(MockFallbackEthClient)
+	node.fallbackEthClient = mockClient
+
+	// Mock HeaderByNumber to return block 150
+	mockHeader := &types.Header{
+		Number: big.NewInt(150),
+	}
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(mockHeader, nil).Once()
+
+	// Mock FilterLogs to return empty logs
+	contractAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
+		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
+			q.FromBlock.Uint64() == 100 && q.ToBlock.Uint64() == 150
+	})).Return([]types.Log{}, nil).Once()
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	require.NoError(t, err)
+
+	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
+
+	assert.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	blockNum, _, _ := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(100), blockNum)
+}
+
+func TestRegularNode_catchUpMissedEvents_FilterLogsError(t *testing.T) {
+	node := createTestNodeForSendCommit()
+	mockClient := new(MockFallbackEthClient)
+	node.fallbackEthClient = mockClient
+
+	// Mock HeaderByNumber to return block 150
+	mockHeader := &types.Header{
+		Number: big.NewInt(150),
+	}
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(mockHeader, nil).Once()
+
+	// Mock FilterLogs to return error
+	contractAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	mockClient.On("FilterLogs", mock.Anything, mock.Anything).
+		Return(nil, errors.New("filter logs error")).Once()
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	require.NoError(t, err)
+
+	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to fetch missed logs")
+	mockClient.AssertExpectations(t)
+}
+
+func TestRegularNode_catchUpMissedEvents_ProcessMissedLogs_Sorted(t *testing.T) {
+	node := createTestNodeForReceiveCommitRequest()
+	mockClient := new(MockFallbackEthClient)
+	node.fallbackEthClient = mockClient
+
+	// Mock HeaderByNumber to return block 103
+	mockHeader := &types.Header{
+		Number: big.NewInt(103),
+	}
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(mockHeader, nil).Once()
+
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	require.NoError(t, err)
+
+	// Create test events in unsorted order (block 102, then 101)
+	requestedToSubmitCvSig := parsedABI.Events["RequestedToSubmitCv"].ID
+	round := big.NewInt(100)
+	trialNum := big.NewInt(1)
+	packedIndices := big.NewInt(0)
+	eventData, _ := parsedABI.Events["RequestedToSubmitCv"].Inputs.Pack(round, trialNum, packedIndices)
+
+	txHash1 := common.HexToHash("0x1111111111111111111111111111111111111111111111111111111111111111")
+	txHash2 := common.HexToHash("0x2222222222222222222222222222222222222222222222222222222222222222")
+
+	// Events in reverse order
+	missedLogs := []types.Log{
+		{
+			BlockNumber: 102,
+			TxIndex:     1,
+			Index:       0,
+			TxHash:      txHash2,
+			Topics:      []common.Hash{requestedToSubmitCvSig},
+			Data:        eventData,
+		},
+		{
+			BlockNumber: 101,
+			TxIndex:     0,
+			Index:       0,
+			TxHash:      txHash1,
+			Topics:      []common.Hash{requestedToSubmitCvSig},
+			Data:        eventData,
+		},
+	}
+
+	contractAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	mockClient.On("FilterLogs", mock.Anything, mock.Anything).
+		Return(missedLogs, nil).Once()
+
+	// Track the order of block numbers processed to verify sorting
+	processedBlockOrder := make([]uint64, 0)
+	processedBlockOrderMu := sync.Mutex{}
+
+	// Mock BlockTimestamp calls for processEventLog - track order
+	mockClient.On("BlockTimestamp", mock.Anything, big.NewInt(101)).
+		Run(func(args mock.Arguments) {
+			processedBlockOrderMu.Lock()
+			processedBlockOrder = append(processedBlockOrder, 101)
+			processedBlockOrderMu.Unlock()
+		}).
+		Return(uint64(time.Now().Unix()), nil).Once()
+	mockClient.On("BlockTimestamp", mock.Anything, big.NewInt(102)).
+		Run(func(args mock.Arguments) {
+			processedBlockOrderMu.Lock()
+			processedBlockOrder = append(processedBlockOrder, 102)
+			processedBlockOrderMu.Unlock()
+		}).
+		Return(uint64(time.Now().Unix()), nil).Once()
+
+	// Mock repository calls for processCommitRequest
+	mockCommitRepo := node.regularCommitRepository.(*MockRegularCommitRepository)
+	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
+		Return(&utils.CommitData{
+			Round:    "100",
+			TrialNum: "1",
+			Cvs:      [32]byte{1, 2, 3},
+		}, nil).Times(2)
+
+	// Mock eth service for ExecuteTransaction
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	os.Setenv("CONTRACT_ADDRESS", contractAddr.Hex())
+	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
+	defer func() {
+		os.Unsetenv("CONTRACT_ADDRESS")
+		os.Unsetenv("EOA_PRIVATE_KEY")
+	}()
+
+	mockEth := &MockEthService{
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{eoaAddress}
+		},
+		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
+			return nil, nil, nil
+		},
+	}
+	originalService := eth.Service
+	eth.Service = mockEth
+	defer func() { eth.Service = originalService }()
+
+	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
+
+	assert.NoError(t, err)
+	mockClient.AssertExpectations(t)
+	mockCommitRepo.AssertExpectations(t)
+	blockNum, _, _ := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(102), blockNum)
+
+	// Verify events were processed in sorted order (block 101 before block 102)
+	processedBlockOrderMu.Lock()
+	defer processedBlockOrderMu.Unlock()
+	require.Len(t, processedBlockOrder, 2, "Should have processed 2 events")
+	assert.Equal(t, uint64(101), processedBlockOrder[0], "Block 101 should be processed first")
+	assert.Equal(t, uint64(102), processedBlockOrder[1], "Block 102 should be processed second")
+}
+
+// TestRegularNode_updateLastProcessedCoords_NewBlock tests updating when blockNumber > currentBlock
+func TestRegularNode_updateLastProcessedCoords_NewBlock(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	// Set initial coordinates
+	node.updateLastProcessedCoords(100, 5, 10)
+
+	// Update with new block number
+	node.updateLastProcessedCoords(200, 0, 0)
+
+	block, txIndex, logIndex := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(200), block)
+	assert.Equal(t, uint(0), txIndex)
+	assert.Equal(t, uint(0), logIndex)
+}
+
+// TestRegularNode_updateLastProcessedCoords_SameBlockNewTxIndex tests updating when same block but txIndex > currentTxIndex
+func TestRegularNode_updateLastProcessedCoords_SameBlockNewTxIndex(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	// Set initial coordinates
+	node.updateLastProcessedCoords(100, 5, 10)
+
+	// Update with same block but higher txIndex
+	node.updateLastProcessedCoords(100, 10, 5)
+
+	block, txIndex, logIndex := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(100), block)
+	assert.Equal(t, uint(10), txIndex)
+	assert.Equal(t, uint(5), logIndex)
+}
+
+// TestRegularNode_updateLastProcessedCoords_SameBlockSameTxNewLogIndex tests updating when same block and txIndex but logIndex > currentLogIndex
+func TestRegularNode_updateLastProcessedCoords_SameBlockSameTxNewLogIndex(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	// Set initial coordinates
+	node.updateLastProcessedCoords(100, 5, 10)
+
+	// Update with same block and txIndex but higher logIndex
+	node.updateLastProcessedCoords(100, 5, 20)
+
+	block, txIndex, logIndex := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(100), block)
+	assert.Equal(t, uint(5), txIndex)
+	assert.Equal(t, uint(20), logIndex)
+}
+
+// TestRegularNode_updateLastProcessedCoords_OlderBlock_NoUpdate tests that older block does not update
+func TestRegularNode_updateLastProcessedCoords_OlderBlock_NoUpdate(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	// Set initial coordinates
+	node.updateLastProcessedCoords(100, 5, 10)
+
+	// Try to update with older block
+	node.updateLastProcessedCoords(50, 10, 20)
+
+	block, txIndex, logIndex := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(100), block)
+	assert.Equal(t, uint(5), txIndex)
+	assert.Equal(t, uint(10), logIndex)
+}
+
+// TestRegularNode_updateLastProcessedCoords_SameBlockOlderTxIndex_NoUpdate tests that older txIndex does not update
+func TestRegularNode_updateLastProcessedCoords_SameBlockOlderTxIndex_NoUpdate(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	// Set initial coordinates
+	node.updateLastProcessedCoords(100, 10, 20)
+
+	// Try to update with same block but older txIndex
+	node.updateLastProcessedCoords(100, 5, 30)
+
+	block, txIndex, logIndex := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(100), block)
+	assert.Equal(t, uint(10), txIndex)
+	assert.Equal(t, uint(20), logIndex)
+}
+
+// TestRegularNode_updateLastProcessedCoords_SameBlockSameTxOlderLogIndex_NoUpdate tests that older logIndex does not update
+func TestRegularNode_updateLastProcessedCoords_SameBlockSameTxOlderLogIndex_NoUpdate(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	// Set initial coordinates
+	node.updateLastProcessedCoords(100, 10, 20)
+
+	// Try to update with same block and txIndex but older logIndex
+	node.updateLastProcessedCoords(100, 10, 15)
+
+	block, txIndex, logIndex := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(100), block)
+	assert.Equal(t, uint(10), txIndex)
+	assert.Equal(t, uint(20), logIndex)
+}
+
+// TestRegularNode_updateLastProcessedCoords_SameCoordinates_NoUpdate tests that same coordinates do not update
+func TestRegularNode_updateLastProcessedCoords_SameCoordinates_NoUpdate(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	// Set initial coordinates
+	node.updateLastProcessedCoords(100, 10, 20)
+
+	// Try to update with same coordinates
+	node.updateLastProcessedCoords(100, 10, 20)
+
+	block, txIndex, logIndex := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(100), block)
+	assert.Equal(t, uint(10), txIndex)
+	assert.Equal(t, uint(20), logIndex)
+}
+
+// TestRegularNode_updateLastProcessedCoords_InitialState tests initial state (all zeros)
+func TestRegularNode_updateLastProcessedCoords_InitialState(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	// Check initial state
+	block, txIndex, logIndex := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(0), block)
+	assert.Equal(t, uint(0), txIndex)
+	assert.Equal(t, uint(0), logIndex)
+
+	// Update from initial state
+	node.updateLastProcessedCoords(50, 5, 10)
+
+	block, txIndex, logIndex = node.getLastProcessedCoords()
+	assert.Equal(t, uint64(50), block)
+	assert.Equal(t, uint(5), txIndex)
+	assert.Equal(t, uint(10), logIndex)
+}
+
+// TestRegularNode_updateLastProcessedCoords_ConcurrentUpdates tests concurrent updates
+func TestRegularNode_updateLastProcessedCoords_ConcurrentUpdates(t *testing.T) {
+	node := createTestNodeForSendCommit()
+
+	var wg sync.WaitGroup
+	numGoroutines := 100
+
+	// Start multiple goroutines updating coordinates
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			// Each goroutine updates with different coordinates
+			node.updateLastProcessedCoords(uint64(100+idx), uint(idx%10), uint(idx%20))
+		}(i)
+	}
+
+	wg.Wait()
+
+	// After concurrent updates, coordinates should be set to one of the values
+	// (the highest one that was successfully written)
+	block, txIndex, logIndex := node.getLastProcessedCoords()
+
+	// Verify that coordinates are set (not zero)
+	assert.GreaterOrEqual(t, block, uint64(100))
+	assert.GreaterOrEqual(t, txIndex, uint(0))
+	assert.GreaterOrEqual(t, logIndex, uint(0))
 }

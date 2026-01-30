@@ -107,6 +107,11 @@ type LeaderNode struct {
 	lastSubmitSTimestamp          *big.Int
 	timestampMu                   sync.RWMutex // Protect big.Int pointers
 
+	lastProcessedBlock    uint64
+	lastProcessedTxIndex  uint
+	lastProcessedLogIndex uint
+	lastProcessedCoordsMu sync.RWMutex
+
 	// =========================================================================
 	// Cleanup queue for deferred round data cleanup
 	// =========================================================================

@@ -84,6 +84,11 @@ type RegularNode struct {
 	// Private key with mutex protection
 	regularNodePrivateKey *ecdsa.PrivateKey
 	privateKeyMu          sync.RWMutex
+	
+	lastProcessedBlock    uint64
+	lastProcessedTxIndex  uint
+	lastProcessedLogIndex uint
+	lastProcessedCoordsMu sync.RWMutex
 }
 
 func NewRegularNode(
