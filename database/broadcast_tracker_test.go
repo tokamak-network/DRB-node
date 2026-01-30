@@ -316,8 +316,11 @@ func TestBroadcastTrackerRepository_GetBroadcastTrackers_ErrorHandling(t *testin
 	assert.NoError(t, err, "Failed to drop table for test")
 
 	// Try to get trackers - should get an error because table doesn't exist
-	_, err = repo.GetBroadcastTrackers(ctx)
+	// Should return empty slice on error (not nil)
+	trackers, err := repo.GetBroadcastTrackers(ctx)
 	assert.Error(t, err, "Expected error when table is missing")
+	assert.NotNil(t, trackers, "Should return non-nil slice")
+	assert.Equal(t, 0, len(trackers), "Should return empty slice on error")
 
 	// Restore the schema
 	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
@@ -555,8 +558,11 @@ func TestBroadcastTrackerRepository_GetBroadcastTrackers_ContextTimeout(t *testi
 	repo := NewBroadcastTrackerRepository(GetDB())
 
 	// This call should block on the locked table and time out
-	_, err = repo.GetBroadcastTrackers(ctx)
+	// Should return empty slice on error (not nil)
+	trackers, err := repo.GetBroadcastTrackers(ctx)
 	assert.Error(t, err, "Expected an error due to context timeout")
+	assert.NotNil(t, trackers, "Should return non-nil slice")
+	assert.Equal(t, 0, len(trackers), "Should return empty slice on error")
 	assert.Contains(t, err.Error(), "i/o timeout", "Error should be related to i/o timeout")
 }
 

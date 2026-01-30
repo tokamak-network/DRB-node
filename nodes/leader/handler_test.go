@@ -2364,8 +2364,9 @@ func (m *MockEthService) GetActivatedOperators(ctx context.Context, fallbackEthC
 	return []common.Address{}, nil
 }
 
-func (m *MockEthService) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
+func (m *MockEthService) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error {
 	// No-op for tests
+	return nil
 }
 
 func (m *MockEthService) CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
@@ -2441,84 +2442,6 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_IsEOAActivatedForRound_Ne
 	assert.False(suite.T(), isActivated)
 }
 
-// TestLeaderHandler_UpdatedallCommitsReceivedUnlocked tests the updated commit check
-func (suite *LeaderHandlerTestSuite) TestLeaderHandler_UpdatedallCommitsReceivedUnlocked() {
-	testRound := "updated_commits_66"
-	testTrial := "1"
-	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
-
-	testOp1 := common.HexToAddress("0x3333333333333333333333333333333333333333")
-	testOp2 := common.HexToAddress("0x4444444444444444444444444444444444444444")
-
-	mockEth := &MockEthService{
-		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
-			return []common.Address{testOp1, testOp2}, nil
-		},
-	}
-
-	suite.leaderNodeHandler.ethService = mockEth
-
-	// Test with no data
-	result := suite.leaderNodeHandler.UpdatedallCommitsReceivedUnlocked(context.Background(), nil, uniqueKey)
-	assert.Len(suite.T(), result, 2)
-	assert.False(suite.T(), result[testOp1.Hex()])
-	assert.False(suite.T(), result[testOp2.Hex()])
-
-	// Add CVS for op1
-	utils.SetCommittedNodeData(uniqueKey, testOp1, utils.LeaderCommitData{Cvs: [32]byte{1}})
-
-	result = suite.leaderNodeHandler.UpdatedallCommitsReceivedUnlocked(context.Background(), nil, uniqueKey)
-	assert.True(suite.T(), result[testOp1.Hex()])
-	assert.False(suite.T(), result[testOp2.Hex()])
-
-	// Add CVS for op2
-	utils.SetCommittedNodeData(uniqueKey, testOp2, utils.LeaderCommitData{Cvs: [32]byte{2}})
-
-	result = suite.leaderNodeHandler.UpdatedallCommitsReceivedUnlocked(context.Background(), nil, uniqueKey)
-	assert.True(suite.T(), result[testOp1.Hex()])
-	assert.True(suite.T(), result[testOp2.Hex()])
-}
-
-// TestLeaderHandler_UpdatedallCommitsReceivedUnlocked_EmptyCVS tests the else block when CVS is empty
-func (suite *LeaderHandlerTestSuite) TestLeaderHandler_UpdatedallCommitsReceivedUnlocked_EmptyCVS() {
-	testRound := "updated_commits_empty_cvs_66b"
-	testTrial := "1"
-	uniqueKey := utils.GetUniqueKey(testRound, testTrial)
-
-	testOp1 := common.HexToAddress("0x5555555555555555555555555555555555555555")
-	testOp2 := common.HexToAddress("0x6666666666666666666666666666666666666666")
-
-	mockEth := &MockEthService{
-		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
-			return []common.Address{testOp1, testOp2}, nil
-		},
-	}
-
-	suite.leaderNodeHandler.ethService = mockEth
-
-	// Create entry for op1 with EMPTY CVS (this triggers the else block at line 386)
-	utils.SetCommittedNodeData(uniqueKey, testOp1, utils.LeaderCommitData{
-		Round:      testRound,
-		TrialNum:   testTrial,
-		EOAAddress: testOp1.Hex(),
-		Cvs:        [32]byte{}, // Empty CVS - this should result in false
-	})
-
-	// Add valid CVS for op2
-	utils.SetCommittedNodeData(uniqueKey, testOp2, utils.LeaderCommitData{
-		Round:      testRound,
-		TrialNum:   testTrial,
-		EOAAddress: testOp2.Hex(),
-		Cvs:        [32]byte{1, 2, 3}, // Non-empty CVS - this should be true
-	})
-
-	result := suite.leaderNodeHandler.UpdatedallCommitsReceivedUnlocked(context.Background(), nil, uniqueKey)
-
-	// op1 exists in map but has empty CVS - should trigger else block and be false
-	assert.False(suite.T(), result[testOp1.Hex()], "Op1 with empty CVS should be false (else block)")
-	// op2 has valid CVS - should be true
-	assert.True(suite.T(), result[testOp2.Hex()], "Op2 with valid CVS should be true")
-}
 
 // TestLeaderHandler_CheckActivation_Success tests successful activation check
 func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_Success() {

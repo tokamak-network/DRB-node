@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/go-pg/pg/v10"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/tokamak-network/DRB-node/database"
@@ -1295,7 +1296,7 @@ func TestGenerateCommit_CryptographicProperties(t *testing.T) {
 	t.Run("hash with maximum values", func(t *testing.T) {
 		eth.Service = mockService
 
-		maxRound := "9223372036854775807" 
+		maxRound := "9223372036854775807"
 		veryLargeRound := "999999999999999999999999999999999999999999999999999999999999999999999"
 
 		secretValue1, cos1, cvs1, err1 := GenerateCommit(maxRound, operator)
@@ -1304,7 +1305,6 @@ func TestGenerateCommit_CryptographicProperties(t *testing.T) {
 		secretValue2, cos2, cvs2, err2 := GenerateCommit(veryLargeRound, operator)
 		assert.NoError(t, err2)
 
-	
 		assert.Len(t, secretValue1, 32)
 		assert.Len(t, cos1, 32)
 		assert.Len(t, cvs1, 32)
@@ -1324,7 +1324,6 @@ func TestGenerateCommit_CryptographicProperties(t *testing.T) {
 			secretValue, cos, cvs, err := GenerateCommit(testRound, operator)
 			assert.NoError(t, err)
 
-
 			assert.Len(t, secretValue, 32, "Secret value must be exactly 32 bytes for round %s", testRound)
 			assert.Len(t, cos, 32, "COS must be exactly 32 bytes for round %s", testRound)
 			assert.Len(t, cvs, 32, "CVS must be exactly 32 bytes for round %s", testRound)
@@ -1339,7 +1338,7 @@ func TestGenerateCommit_CryptographicProperties(t *testing.T) {
 		eth.Service = mockService
 
 		round1 := "100"
-		round2 := "101" 
+		round2 := "101"
 
 		secretValue1, cos1, cvs1, err1 := GenerateCommit(round1, operator)
 		assert.NoError(t, err1)
@@ -1363,7 +1362,7 @@ func TestGenerateCommit_CryptographicProperties(t *testing.T) {
 	})
 
 	t.Run("hash with special byte patterns", func(t *testing.T) {
-		allZerosAddr := common.Address{} 
+		allZerosAddr := common.Address{}
 		allFFAddr := common.BytesToAddress([]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
 
 		// Alternating pattern
@@ -1387,13 +1386,11 @@ func TestGenerateCommit_CryptographicProperties(t *testing.T) {
 		}
 		eth.Service = specialMockService
 
-
 		results := make(map[string][32]byte)
 		for i, op := range specialOperators {
 			secretValue, cos, cvs, err := GenerateCommit("42", op.Hex())
 			assert.NoError(t, err, "Should handle special pattern operator at index %d", i)
 
-		
 			assert.Len(t, secretValue, 32)
 			assert.Len(t, secretValue, 32)
 			assert.Len(t, cos, 32)
@@ -1516,7 +1513,8 @@ func (m *MockEthServiceForGenerateCommit) GetActivatedOperatorsUnsafe() []common
 func (m *MockEthServiceForGenerateCommit) GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
 	return nil, nil
 }
-func (m *MockEthServiceForGenerateCommit) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
+func (m *MockEthServiceForGenerateCommit) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error {
+	return nil
 }
 func (m *MockEthServiceForGenerateCommit) CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
 	return nil, nil
@@ -1580,7 +1578,7 @@ func TestDetermineRevealOrder(t *testing.T) {
 
 		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
 
-		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, pg.ErrNoRows)
 
 		activatedOps := []common.Address{}
 		result, err := service.DetermineRevealOrder(ctx, roundNum, trialNum, activatedOps)
@@ -1598,12 +1596,12 @@ func TestDetermineRevealOrder(t *testing.T) {
 
 		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
 
-		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, pg.ErrNoRows)
 
 		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
 		activatedOps := []common.Address{operator}
 
-		mockLeaderCommitRepo.On("GetLeaderCommitByRoundAndEoaAddr", ctx, roundNum, trialNum, operator.Hex()).Return(nil, errors.New("commit not found"))
+		mockLeaderCommitRepo.On("GetLeaderCommitByRoundAndEoaAddr", ctx, roundNum, trialNum, operator.Hex()).Return(nil, pg.ErrNoRows)
 
 		result, err := service.DetermineRevealOrder(ctx, roundNum, trialNum, activatedOps)
 
@@ -1621,7 +1619,7 @@ func TestDetermineRevealOrder(t *testing.T) {
 
 		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
 
-		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, pg.ErrNoRows)
 
 		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
 		activatedOps := []common.Address{operator}
@@ -1647,7 +1645,7 @@ func TestDetermineRevealOrder(t *testing.T) {
 
 		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
 
-		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, pg.ErrNoRows)
 
 		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
 		activatedOps := []common.Address{operator}
@@ -1675,7 +1673,7 @@ func TestDetermineRevealOrder(t *testing.T) {
 
 		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
 
-		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, pg.ErrNoRows)
 
 		operators := []common.Address{
 			common.HexToAddress("0x1234567890123456789012345678901234567890"),
@@ -1739,7 +1737,7 @@ func TestDetermineRegularRevealOrder(t *testing.T) {
 
 		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
 
-		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, pg.ErrNoRows)
 
 		activatedOps := []common.Address{}
 		result, err := service.DetermineRegularRevealOrder(ctx, roundNum, trialNum, activatedOps)
@@ -1757,12 +1755,12 @@ func TestDetermineRegularRevealOrder(t *testing.T) {
 
 		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
 
-		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, pg.ErrNoRows)
 
 		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
 		activatedOps := []common.Address{operator}
 
-		mockPeerCommitRepo.On("GetPeerCommitData", ctx, roundNum, trialNum, operator.Hex()).Return(nil, errors.New("commit not found"))
+		mockPeerCommitRepo.On("GetPeerCommitData", ctx, roundNum, trialNum, operator.Hex()).Return(nil, pg.ErrNoRows)
 
 		result, err := service.DetermineRegularRevealOrder(ctx, roundNum, trialNum, activatedOps)
 
@@ -1780,7 +1778,7 @@ func TestDetermineRegularRevealOrder(t *testing.T) {
 
 		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
 
-		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, pg.ErrNoRows)
 
 		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
 		activatedOps := []common.Address{operator}
@@ -1806,7 +1804,7 @@ func TestDetermineRegularRevealOrder(t *testing.T) {
 
 		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
 
-		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, pg.ErrNoRows)
 
 		operator := common.HexToAddress("0x1234567890123456789012345678901234567890")
 		activatedOps := []common.Address{operator}
@@ -1834,7 +1832,7 @@ func TestDetermineRegularRevealOrder(t *testing.T) {
 
 		service := NewRevealOrderService(mockRevealOrderRepo, mockPeerCommitRepo, mockLeaderCommitRepo)
 
-		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, errors.New("not found"))
+		mockRevealOrderRepo.On("GetRevealOrder", ctx, roundNum, trialNum).Return(nil, pg.ErrNoRows)
 
 		operators := []common.Address{
 			common.HexToAddress("0x1234567890123456789012345678901234567890"),

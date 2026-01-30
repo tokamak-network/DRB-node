@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/go-pg/pg/v10"
 	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/pkg/fallback_ethclient"
@@ -52,17 +53,24 @@ func (n *LeaderNode) checkRoundsForCompletion(ctx context.Context) {
 
 	// Defensive check: skip if all random_number_generated are already true for this round
 	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(ctx, round, trialNum)
-	if err == nil && len(leaderCommits) > 0 {
-		allRandomNumberGenerated := true
-		for _, lc := range leaderCommits {
-			if !lc.RandomNumberGenerated {
-				allRandomNumberGenerated = false
-				break
-			}
+	if err != nil {
+		log.Printf("Database connection error while getting leader commits for round %s with trial %s: %v", round, trialNum, err)
+		return
+	}
+	if len(leaderCommits) == 0 {
+		log.Printf("No leader commits found for round %s with trial %s. Skipping check.", round, trialNum)
+		return
+	}
+
+	allRandomNumberGenerated := true
+	for _, lc := range leaderCommits {
+		if !lc.RandomNumberGenerated {
+			allRandomNumberGenerated = false
+			break
 		}
-		if allRandomNumberGenerated {
-			return
-		}
+	}
+	if allRandomNumberGenerated {
+		return
 	}
 
 	// Copy the activated operators from eth package
@@ -80,7 +88,11 @@ func (n *LeaderNode) checkRoundsForCompletion(ctx context.Context) {
 	for i, operator := range operatorAddresses {
 		commitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, round, trialNum, operator.Hex())
 		if err != nil {
-			log.Printf("Either Data not found or Error getting commit data for operator %s: %v", operator.Hex(), err)
+			if err == pg.ErrNoRows {
+				log.Printf("Leader commit data not found for operator %s in round %s with trial %s. Cannot process.", operator.Hex(), round, trialNum)
+			} else {
+				log.Printf("Database connection error while getting commit data for operator %s in round %s with trial %s: %v", operator.Hex(), round, trialNum, err)
+			}
 			return
 		} else {
 			if commitData.SecretValue == [32]byte{} {
@@ -162,11 +174,16 @@ func (n *LeaderNode) FetchActivatedOperators(ctx context.Context, fallbackEthCli
 	return strAddresses, nil
 }
 
-func (n *LeaderNode) LoadNodeData(ctx context.Context, round string, trialNum string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash) {
+func (n *LeaderNode) LoadNodeData(ctx context.Context, round string, trialNum string) ([][]byte, [][]byte, [][]byte, []uint8, []common.Hash, []common.Hash, error) {
 
 	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitsByRoundAndTrialNum(ctx, round, trialNum)
 	if err != nil {
-		log.Printf("Failed to load leader commits: %v", err)
+		log.Printf("Database connection error while loading leader commits for round %s with trial %s: %v", round, trialNum, err)
+		return nil, nil, nil, nil, nil, nil, err
+	}
+	if len(leaderCommits) == 0 {
+		log.Printf("No leader commits found for round %s with trial %s. Returning empty data.", round, trialNum)
+		return nil, nil, nil, nil, nil, nil, fmt.Errorf("no leader commits found for round %s with trial %s", round, trialNum)
 	}
 
 	// Sort leaderCommits based on ActivatedOperators order
@@ -215,7 +232,7 @@ func (n *LeaderNode) LoadNodeData(ctx context.Context, round string, trialNum st
 		}
 	}
 
-	return cvs, cos, secrets, vs, rs, ss
+	return cvs, cos, secrets, vs, rs, ss, nil
 }
 
 // Updated function to use utils.LeaderCommitData
@@ -289,7 +306,11 @@ func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round 
 
 	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(ctx, round, trialNum)
 	if err != nil {
-		log.Printf("Failed to load reveal order: %v", err)
+		if err == pg.ErrNoRows {
+			log.Printf("Reveal order not found for round %s with trial %s.", round, trialNum)
+		} else {
+			log.Printf("Database connection error while loading reveal order for round %s with trial %s: %v", round, trialNum, err)
+		}
 		return err
 	}
 
@@ -342,7 +363,11 @@ func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(ctx context.Co
 
 	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(ctx, round, trialNum)
 	if err != nil {
-		log.Printf("Failed to load reveal order: %v", err)
+		if err == pg.ErrNoRows {
+			log.Printf("Reveal order not found for round %s with trial %s. Cannot generate random number.", round, trialNum)
+		} else {
+			log.Printf("Database connection error while loading reveal order for round %s with trial %s: %v", round, trialNum, err)
+		}
 		return err
 	}
 

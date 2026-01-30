@@ -152,7 +152,7 @@ func (m *MockNodeInfoRepositoryForAcceptCommit) DeleteNodeInfoByEOA(ctx context.
 type MockEthServiceForAcceptCommit struct {
 	GetActivatedOperatorsCachedFunc func() []common.Address
 	GetActivatedOperatorsFunc       func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error)
-	UpdateActivatedOperatorsFunc    func(ctx context.Context, client fallback_ethclient.IFallbackEthClient)
+	UpdateActivatedOperatorsFunc    func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error
 	CallSmartContractFunc           func(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error)
 	ExecuteTransactionFunc          func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error)
 }
@@ -183,10 +183,11 @@ func (m *MockEthServiceForAcceptCommit) GetActivatedOperators(ctx context.Contex
 	return []common.Address{}, nil
 }
 
-func (m *MockEthServiceForAcceptCommit) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
+func (m *MockEthServiceForAcceptCommit) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error {
 	if m.UpdateActivatedOperatorsFunc != nil {
-		m.UpdateActivatedOperatorsFunc(ctx, fallbackEthClient)
+		return m.UpdateActivatedOperatorsFunc(ctx, fallbackEthClient)
 	}
+	return nil
 }
 
 func (m *MockEthServiceForAcceptCommit) CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
@@ -332,7 +333,7 @@ func TestProcessCOS_Success(t *testing.T) {
 
 	// Mock
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), activatedOps[0].Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -712,7 +713,7 @@ func TestProcessCVS_UpdateExisting(t *testing.T) {
 	index := big.NewInt(0)
 
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), activatedOps[0].Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -745,7 +746,7 @@ func TestProcessCOS_AddCommitError(t *testing.T) {
 
 	// Mock no existing commit and add error
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), activatedOps[0].Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(errors.New("db error"))
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -823,7 +824,7 @@ func TestProcessCVS_AddCommitError(t *testing.T) {
 
 	// Mock no existing commit with add error
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), activatedOps[0].Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(errors.New("db error"))
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -973,7 +974,8 @@ func TestPrepareArgumentsForRequestToSubmitCo(t *testing.T) {
 	missingIndices := []*big.Int{big.NewInt(0), big.NewInt(1)}
 
 	// Call prepare function
-	cvAndSigRS, packedVs, indicesLength, packedOrderedIndices := node.prepareArgumentsForRequestToSubmitCo(context.Background(), round, trialNum, missingIndices)
+	cvAndSigRS, packedVs, indicesLength, packedOrderedIndices, err := node.prepareArgumentsForRequestToSubmitCo(context.Background(), round, trialNum, missingIndices)
+	assert.NoError(t, err)
 
 	assert.NotNil(t, cvAndSigRS)
 	assert.NotNil(t, packedVs)
@@ -1135,7 +1137,8 @@ func TestPrepareArgumentsForRequestToSubmitCo_SingleIndex(t *testing.T) {
 
 	missingIndices := []*big.Int{big.NewInt(0)}
 
-	cvAndSigRS, packedVs, indicesLength, packedOrderedIndices := node.prepareArgumentsForRequestToSubmitCo(context.Background(), round, trialNum, missingIndices)
+	cvAndSigRS, packedVs, indicesLength, packedOrderedIndices, err := node.prepareArgumentsForRequestToSubmitCo(context.Background(), round, trialNum, missingIndices)
+	assert.NoError(t, err)
 
 	assert.NotNil(t, cvAndSigRS)
 	assert.NotNil(t, packedVs)
@@ -1204,7 +1207,8 @@ func TestPrepareArgumentsForRequestToSubmitCo_MultipleIndices(t *testing.T) {
 
 	missingIndices := []*big.Int{big.NewInt(0), big.NewInt(1), big.NewInt(2)}
 
-	cvAndSigRS, packedVs, indicesLength, packedOrderedIndices := node.prepareArgumentsForRequestToSubmitCo(context.Background(), round, trialNum, missingIndices)
+	cvAndSigRS, packedVs, indicesLength, packedOrderedIndices, err := node.prepareArgumentsForRequestToSubmitCo(context.Background(), round, trialNum, missingIndices)
+	assert.NoError(t, err)
 
 	assert.NotNil(t, cvAndSigRS)
 	assert.NotNil(t, packedVs)
@@ -1485,7 +1489,7 @@ func TestProcessCOS_WithMockEthService(t *testing.T) {
 	index := big.NewInt(0)
 
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), testOp1.Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -1520,7 +1524,7 @@ func TestProcessCVS_WithMockEthService(t *testing.T) {
 	index := big.NewInt(0)
 
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), testOp1.Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -2039,8 +2043,9 @@ func TestProcessRandomRequestNumber_StateOne(t *testing.T) {
 		GetActivatedOperatorsCachedFunc: func() []common.Address {
 			return []common.Address{testOp}
 		},
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
-			// No-op for test
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
+			// No-op
+			return nil
 		},
 	}
 	node.ethService = mockEth
@@ -2171,7 +2176,7 @@ func TestProcessCOS_StoresDataCorrectly(t *testing.T) {
 	index := big.NewInt(0)
 
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), testOp1.Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -2212,7 +2217,7 @@ func TestProcessCVS_AllCvsReceivedTrigger(t *testing.T) {
 	index := big.NewInt(0)
 
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), testOp.Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -2515,8 +2520,9 @@ func TestProcessRandomRequestNumber_StateOneWithDeleteError(t *testing.T) {
 		GetActivatedOperatorsCachedFunc: func() []common.Address {
 			return []common.Address{testOp}
 		},
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
 			// No-op
+			return nil
 		},
 	}
 	node.ethService = mockEth
@@ -3059,7 +3065,7 @@ func TestProcessCOS_CheckStopMonitoring(t *testing.T) {
 	node.startFailToSubmitCoMonitoring(context.Background(), round.String(), trialNum.String(), timestamp)
 
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), testOp1.Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -3105,7 +3111,7 @@ func TestProcessCVS_CheckStopMonitoring(t *testing.T) {
 	node.startFailToSubmitCvMonitoring(context.Background(), round.String(), trialNum.String(), timestamp)
 
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), testOp1.Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -3268,7 +3274,7 @@ func TestLeaderNode_receiveCommit_SubscriptionFailure(t *testing.T) {
 
 	// Verify subscription was attempted at least once (allowing for retry logic)
 	assert.True(t, mockClient.AssertExpectations(t), "Mock expectations should be met")
-	
+
 	// Get call count in a race-safe way by checking if any calls were made
 	called := false
 	for _, call := range mockClient.ExpectedCalls {
@@ -3333,8 +3339,9 @@ func TestLeaderNode_receiveCommit_StatusEvent_State1(t *testing.T) {
 		Return(nil)
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
 			// No-op
+			return nil
 		},
 	}
 	node.ethService = mockEth
@@ -3414,7 +3421,7 @@ func TestLeaderNode_receiveCommit_CvSubmitted_Success(t *testing.T) {
 		}).Return(mockSub, nil)
 
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, "100", "1", testOp.Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -3487,7 +3494,7 @@ func TestLeaderNode_receiveCommit_CoSubmitted_Success(t *testing.T) {
 		}).Return(mockSub, nil)
 
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, "100", "1", testOp1.Hex()).
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -4243,8 +4250,9 @@ func TestLeaderNode_processDeactivated_Success(t *testing.T) {
 	testOp := common.HexToAddress("0x1111111111111111111111111111111111111111")
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
 			// No-op
+			return nil
 		},
 	}
 
@@ -4271,8 +4279,9 @@ func TestLeaderNode_processDeactivated_DeleteError(t *testing.T) {
 	testOp := common.HexToAddress("0x2222222222222222222222222222222222222222")
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
 			// No-op
+			return nil
 		},
 	}
 
@@ -4388,7 +4397,8 @@ func TestLeaderNode_processDeactivated_ConnectionCleanup_Success(t *testing.T) {
 	require.Greater(t, len(conns), 0, "Connection should exist before deactivation")
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
+    return nil
 		},
 	}
 
@@ -4434,7 +4444,8 @@ func TestLeaderNode_processDeactivated_ConnectionCleanup_NoConnection(t *testing
 	node.p2pClient.SetHost(testHost)
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
+    return nil
 		},
 	}
 
@@ -4471,7 +4482,8 @@ func TestLeaderNode_processDeactivated_ConnectionCleanup_InvalidPeerID(t *testin
 	testOp := common.HexToAddress("0x5555555555555555555555555555555555555555")
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
+    return nil
 		},
 	}
 
@@ -4506,8 +4518,9 @@ func TestLeaderNode_processDeactivated_ConnectionCleanup_NilP2PClient(t *testing
 	testOp := common.HexToAddress("0x6666666666666666666666666666666666666666")
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
 			// No-op
+			return nil
 		},
 	}
 
@@ -4533,8 +4546,9 @@ func TestLeaderNode_processDeactivated_ConnectionCleanup_NilHostInstance(t *test
 	testOp := common.HexToAddress("0x7777777777777777777777777777777777777777")
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
 			// No-op
+			return nil
 		},
 	}
 
@@ -5289,8 +5303,9 @@ func TestLeaderNode_receiveCommit_DeActivated_Success(t *testing.T) {
 	}
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
 			// No-op
+			return nil
 		},
 	}
 
@@ -5406,8 +5421,9 @@ func TestLeaderNode_receiveCommit_DeActivated_DeleteNodeError(t *testing.T) {
 	}
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
 			// No-op
+			return nil
 		},
 	}
 
@@ -6484,7 +6500,7 @@ func (m *ConcurrentMockLeaderCommitRepository) GetLeaderCommitByRoundAndEoaAddr(
 	if commit, exists := m.commits[key]; exists {
 		return commit, nil
 	}
-	return nil, errors.New("not found")
+	return nil, pg.ErrNoRows
 }
 
 func (m *ConcurrentMockLeaderCommitRepository) UpdateLeaderCommit(ctx context.Context, commitData *utils.LeaderCommitData) error {

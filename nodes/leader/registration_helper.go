@@ -41,7 +41,9 @@ func (n *LeaderNode) registerNodeInternal(ctx context.Context, req utils.Registr
 
 	log.Printf("Verified registration for PeerID: %s", req.PeerID)
 	if n.fallbackEthClient != nil {
-		eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+		if err := eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient); err != nil {
+			log.Printf("Failed to update activated operators during registration: %v", err)
+		}
 	}
 	operators := eth.Service.GetActivatedOperatorsCached()
 

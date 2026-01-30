@@ -485,13 +485,14 @@ func GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethcl
 	return activatedOperators, nil
 }
 
-func UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
+func UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error {
 	operators, err := GetActivatedOperators(ctx, fallbackEthClient)
 	if err != nil {
 		log.Printf("Error updating ActivatedOperators: %v", err)
-		return
+		return err
 	}
 	SetActivatedOperatorsCached(operators)
+	return nil
 }
 
 // UpdateCurrentRoundFromContract fetches the current round from the contract

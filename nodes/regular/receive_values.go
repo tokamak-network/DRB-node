@@ -100,7 +100,7 @@ func (n *RegularNode) HandleCvs(ctx context.Context, h host.Host, s network.Stre
 				return
 			}
 		} else {
-			log.Printf("Failed to get peer commit data: %v", err)
+			log.Printf("Database connection error while getting peer commit data for round %s, trial %s, EOA %s: %v", message.Round, message.TrialNum, message.EOAAddress, err)
 			return
 		}
 	} else {
@@ -201,7 +201,7 @@ func (n *RegularNode) HandleCos(ctx context.Context, h host.Host, s network.Stre
 				return
 			}
 		} else {
-			log.Printf("Failed to get peer commit data: %v", err)
+			log.Printf("Database connection error while getting peer commit data for round %s, trial %s, EOA %s: %v", message.Round, message.TrialNum, message.EOAAddress, err)
 			return
 		}
 	} else {
@@ -298,7 +298,7 @@ func (n *RegularNode) HandleSecret(ctx context.Context, h host.Host, s network.S
 				return
 			}
 		} else {
-			log.Printf("Failed to get peer commit data: %v", err)
+			log.Printf("Database connection error while getting peer commit data for round %s, trial %s, EOA %s: %v", message.Round, message.TrialNum, message.EOAAddress, err)
 			return
 		}
 	} else {

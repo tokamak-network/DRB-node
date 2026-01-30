@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/go-pg/pg/v10"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/utils"
 )
@@ -90,7 +91,10 @@ func (s *RevealOrderService) determineOrder(rv [32]byte, cvsValues [][]byte) []i
 func (s *RevealOrderService) extractLeaderCommitData(ctx context.Context, roundNum, trialNum, eoaAddressStr string) ([]byte, []byte, error) {
 	commitData, err := s.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, roundNum, trialNum, eoaAddressStr)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load leader commit for operator %s in round %s with trial %s: %w", eoaAddressStr, roundNum, trialNum, err)
+		if err == pg.ErrNoRows {
+			return nil, nil, fmt.Errorf("leader commit data not found for operator %s in round %s with trial %s: %w", eoaAddressStr, roundNum, trialNum, err)
+		}
+		return nil, nil, fmt.Errorf("database connection error while loading leader commit for operator %s in round %s with trial %s: %w", eoaAddressStr, roundNum, trialNum, err)
 	}
 
 	if commitData.Cos == [32]byte{} {
@@ -104,7 +108,10 @@ func (s *RevealOrderService) extractLeaderCommitData(ctx context.Context, roundN
 func (s *RevealOrderService) extractPeerCommitData(ctx context.Context, roundNum, trialNum, eoaAddressStr string) ([]byte, []byte, error) {
 	commitData, err := s.peerCommitRepository.GetPeerCommitData(ctx, roundNum, trialNum, eoaAddressStr)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load peer commit for operator %s in round %s with trial %s: %w", eoaAddressStr, roundNum, trialNum, err)
+		if err == pg.ErrNoRows {
+			return nil, nil, fmt.Errorf("peer commit data not found for operator %s in round %s with trial %s: %w", eoaAddressStr, roundNum, trialNum, err)
+		}
+		return nil, nil, fmt.Errorf("database connection error while loading peer commit for operator %s in round %s with trial %s: %w", eoaAddressStr, roundNum, trialNum, err)
 	}
 
 	if utils.ConvertByteArray(commitData.Cos) == [32]byte{} {

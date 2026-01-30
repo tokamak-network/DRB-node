@@ -248,8 +248,11 @@ func TestNodeInfoRepository_GetNodeInfos_ErrorHandling(t *testing.T) {
 	assert.NoError(t, err, "Failed to drop table for test")
 
 	// Try to get node infos - should get an error because table doesn't exist
-	_, err = repo.GetNodeInfos(ctx)
+	// Should return empty slice on error (not nil)
+	nodeInfos, err := repo.GetNodeInfos(ctx)
 	assert.Error(t, err, "Expected error when table is missing")
+	assert.NotNil(t, nodeInfos, "Should return non-nil slice")
+	assert.Equal(t, 0, len(nodeInfos), "Should return empty slice on error")
 
 	// Restore the schema
 	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"
@@ -775,8 +778,11 @@ func TestNodeInfoRepository_GetNodeInfos_ContextTimeout(t *testing.T) {
 	repo := NewNodeInfoRepository(GetDB())
 
 	// This call should block on the locked table and time out
-	_, err = repo.GetNodeInfos(ctx)
+	// Should return empty slice on error (not nil)
+	nodeInfos, err := repo.GetNodeInfos(ctx)
 	assert.Error(t, err, "Expected an error due to context timeout")
+	assert.NotNil(t, nodeInfos, "Should return non-nil slice")
+	assert.Equal(t, 0, len(nodeInfos), "Should return empty slice on error")
 	// The error can be either "context deadline exceeded" or "i/o timeout" depending on the driver
 	assert.True(t, strings.Contains(err.Error(), "context deadline exceeded") ||
 		strings.Contains(err.Error(), "i/o timeout"),

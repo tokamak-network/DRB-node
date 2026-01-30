@@ -221,7 +221,8 @@ func (m *MockEthServiceForSecretHandler) ExecuteTransaction(ctx context.Context,
 	return tx, auth, nil
 }
 
-func (m *MockEthServiceForSecretHandler) UpdateActivatedOperators(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+func (m *MockEthServiceForSecretHandler) UpdateActivatedOperators(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
+	return nil
 }
 
 // MockRevealOrderRepository mocks the reveal order repository

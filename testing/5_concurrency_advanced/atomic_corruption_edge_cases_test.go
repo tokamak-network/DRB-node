@@ -371,5 +371,6 @@ func generateRandomString(length int) string {
 // Helper function to create test regular node (properly initialized)
 func createTestRegularNode() *regular_node.RegularNode {
 	// Properly initialize RegularNode with all atomic fields and maps initialized
-	return regular_node.NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	regularNode, _ := regular_node.NewRegularNode(nil, nil, nil, nil, nil, nil, nil, nil)
+	return regularNode
 }
