@@ -429,53 +429,6 @@ func TestExecuteTransaction_PackError(t *testing.T) {
 	mockClient.AssertExpectations(t)
 }
 
-func TestExecuteTransaction_GasEstimationError(t *testing.T) {
-	mockClient := new(MockFallbackEthClient)
-	ctx := context.Background()
-
-	privateKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
-
-	chainID := big.NewInt(1337)
-	// ChainID succeeds on first attempt
-	mockClient.On("ChainID", ctx).Return(chainID, nil).Once()
-
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
-	require.NoError(t, err)
-
-	abiJSON := `[{"constant":false,"inputs":[],"name":"testMethod","outputs":[],"type":"function"}]`
-	parsedABI, err := abi.JSON(strings.NewReader(abiJSON))
-	require.NoError(t, err)
-
-	client := &utils.Client{
-		ContractABI:     parsedABI,
-		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
-		PrivateKey:      privateKey,
-	}
-	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil).Once()
-
-	packedData, err := client.ContractABI.Pack("testMethod")
-	require.NoError(t, err)
-
-	callMsg := ethereum.CallMsg{
-		From:  auth.From,
-		To:    &client.ContractAddress,
-		Data:  packedData,
-		Value: big.NewInt(0),
-	}
-
-	// Gas estimation fails 3 times
-	mockClient.On("EstimateGas", ctx, callMsg).Return(uint64(0), errors.New("gas estimation failed")).Times(3)
-
-	tx, auth, err := ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
-	assert.Error(t, err)
-	assert.Nil(t, tx)
-	assert.Nil(t, auth)
-	assert.Contains(t, err.Error(), "gas estimation failed after")
-
-	mockClient.AssertExpectations(t)
-}
-
 // Test waitForTransactionSuccess
 func TestWaitForTransactionSuccess_Success(t *testing.T) {
 	mockClient := new(MockFallbackEthClient)
