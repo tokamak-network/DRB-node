@@ -496,7 +496,9 @@ func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimes
 	// Store the current round and trialNum from Status event
 	n.SetCurrentTrialNum(trialNum.String())
 
-	eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+	if err := eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient); err != nil {
+		log.Printf("Failed to update activated operators: %v", err)
+	}
 	n.SetCurrentRound(round.String())
 
 	if state.Cmp(big.NewInt(1)) == 0 {

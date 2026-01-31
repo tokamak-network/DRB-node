@@ -23,7 +23,6 @@ import (
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
-
 func createTestNodeForSecretHandler() *RegularNode {
 	mockPeerRepo := new(MockPeerCommitRepository)
 	mockRevealRepo := new(MockRevealOrderRepository)
@@ -222,7 +221,7 @@ func TestRegularNode_HandleSecretValueRequest_GetRevealOrderError(t *testing.T) 
 
 	// Mock reveal order to return error multiple times
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
-		Return(nil, errors.New("not found")).Maybe()
+		Return(nil, pg.ErrNoRows).Maybe()
 
 	// Set a short timeout context
 	ctx, cancel := context.WithTimeout(context.Background(), 100*1000000)
@@ -505,7 +504,7 @@ func TestRegularNode_HandleSecretValueRequest_CommitDataNotFound(t *testing.T) {
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
 		Return(revealOrder, nil)
 	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 
 	stream := newMockStream()
 	jsonData, _ := json.Marshal(req)
@@ -809,7 +808,7 @@ func TestRegularNode_SendSecretValue_CommitDataNotFound(t *testing.T) {
 	defer h.Close()
 
 	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
-		Return(nil, errors.New("not found"))
+		Return(nil, pg.ErrNoRows)
 
 	node.SendSecretValue(context.Background(), h, h.ID(), "100", "1")
 

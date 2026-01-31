@@ -21,7 +21,7 @@ type IEthService interface {
 	SetActivatedOperatorsCached(operators []common.Address)
 	GetActivatedOperatorsUnsafe() []common.Address
 	GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) ([]common.Address, error)
-	UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient)
+	UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error
 
 	// Contract interactions
 	CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error)
@@ -57,8 +57,8 @@ func (s *DefaultEthService) GetActivatedOperators(ctx context.Context, fallbackE
 	return GetActivatedOperators(ctx, fallbackEthClient)
 }
 
-func (s *DefaultEthService) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
-	UpdateActivatedOperators(ctx, fallbackEthClient)
+func (s *DefaultEthService) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error {
+	return UpdateActivatedOperators(ctx, fallbackEthClient)
 }
 
 func (s *DefaultEthService) CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {

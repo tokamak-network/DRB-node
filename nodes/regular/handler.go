@@ -299,9 +299,13 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 
 			// Check if this round has already been committed (store it locally)
 			commitData, err := rh.regularNode.GetCommitByRound(ctx, round, trialNum)
-			if err != nil && err.Error() != "pg: no rows in result set" {
-				log.Printf("Error loading commit data: %v", err)
-				continue
+			if err != nil {
+				if err == pg.ErrNoRows {
+					log.Printf("Commit data not found for round %s with trial %s. This is expected for new rounds.", round, trialNum)
+				} else {
+					log.Printf("Database connection error while loading commit data for round %s with trial %s: %v", round, trialNum, err)
+					continue
+				}
 			}
 
 			// If commitData exists, we should only skip the round if both MerkleRoot and RandomNumber are nil

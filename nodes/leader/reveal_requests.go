@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
 	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/eth"
@@ -26,14 +27,22 @@ func (n *LeaderNode) StartSecretValueRequests(ctx context.Context, h host.Host, 
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(ctx, round, trialNum)
 	if err != nil {
-		log.Printf("Failed to load reveal order: %v", err)
+		if err == pg.ErrNoRows {
+			log.Printf("Reveal order not found for round %s with trial %s. Cannot start secret value requests.", round, trialNum)
+		} else {
+			log.Printf("Database connection error while loading reveal order for round %s with trial %s: %v", round, trialNum, err)
+		}
 		return
 	}
 
 	// Load registered nodes
 	nodes, err := n.nodeInfoRepository.GetNodeInfos(ctx)
 	if err != nil {
-		log.Printf("Failed to load registered nodes: %v", err)
+		if len(nodes) == 0 {
+			log.Printf("No node infos found. Cannot start secret value requests.")
+		} else {
+			log.Printf("Database connection error while loading registered nodes: %v", err)
+		}
 		return
 	}
 
@@ -122,7 +131,12 @@ func (n *LeaderNode) sendSecretValueRequestToNode(ctx context.Context, h host.Ho
 
 func (n *LeaderNode) requestToSubmitS(ctx context.Context, round string, trialNum string) {
 	n.SetSecretRequestSentForWhichRound(n.GetCurrentRound())
-	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := n.prepareArgumentsForRequestToSubmitS(ctx, round, trialNum)
+	allCos, secretsReceivedOffchainInRevealOrder, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders, err := n.prepareArgumentsForRequestToSubmitS(ctx, round, trialNum)
+	if err != nil {
+		log.Printf("Failed to prepare arguments for requestToSubmitS: %v", err)
+		return
+	}
+
 	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
 	if err != nil {
 		log.Printf("Failed to create leader client: %v", err)
@@ -153,8 +167,11 @@ func (n *LeaderNode) requestToSubmitS(ctx context.Context, round string, trialNu
 	n.StartFailToSubmitSMonitoring(ctx, round, trialNum, requestTimestamp)
 }
 
-func (n *LeaderNode) prepareArgumentsForRequestToSubmitS(ctx context.Context, round string, trialNum string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int) {
-	_, cos, _, vs, rs, ss := n.LoadNodeData(ctx, round, trialNum)
+func (n *LeaderNode) prepareArgumentsForRequestToSubmitS(ctx context.Context, round string, trialNum string) ([][32]byte, [][32]byte, *big.Int, []SigRS, *big.Int, error) {
+	_, cos, _, vs, rs, ss, err := n.LoadNodeData(ctx, round, trialNum)
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("failed to load node data for round %s trial %s: %w", round, trialNum, err)
+	}
 	var notOnChainIndices []*big.Int
 	i := big.NewInt(0)
 	j := 0
@@ -194,7 +211,12 @@ func (n *LeaderNode) prepareArgumentsForRequestToSubmitS(ctx context.Context, ro
 	uniqueKey := utils.GetUniqueKey(round, trialNum)
 	revealOrders, err := n.reavealOrderRepository.GetRevealOrder(ctx, round, trialNum)
 	if err != nil {
-		log.Printf("Failed to load reveal order for round %s with trail %s: %v", round, trialNum, err)
+		if err == pg.ErrNoRows {
+			log.Printf("Reveal order not found for round %s with trail %s. Cannot prepare arguments for requestToSubmitS.", round, trialNum)
+		} else {
+			log.Printf("Database connection error while loading reveal order for round %s with trail %s: %v", round, trialNum, err)
+		}
+		return nil, nil, nil, nil, nil, err
 	}
 
 	order := revealOrders.RevealOrder
@@ -202,7 +224,7 @@ func (n *LeaderNode) prepareArgumentsForRequestToSubmitS(ctx context.Context, ro
 	packedVsForAllCvsNotOnChain := packVsValues(vsForNotOnChain)
 
 	roundSecrets, _ := n.GetRoundSecretsValue(uniqueKey)
-	return allCos, roundSecrets, packedVsForAllCvsNotOnChain, sigRSsForAllCvsNotOnChain, packedRevealOrders
+	return allCos, roundSecrets, packedVsForAllCvsNotOnChain, sigRSsForAllCvsNotOnChain, packedRevealOrders, nil
 }
 
 func PackIndices(indices []*big.Int) *big.Int {
@@ -224,14 +246,22 @@ func (n *LeaderNode) HandleSecretValueResponse(ctx context.Context, h host.Host,
 	// Load reveal order for the round
 	roundRevealData, err := n.reavealOrderRepository.GetRevealOrder(ctx, round, trialNum)
 	if err != nil {
-		log.Printf("Failed to load reveal order: %v", err)
+		if err == pg.ErrNoRows {
+			log.Printf("Reveal order not found for round %s with trial %s. Cannot handle secret value response.", round, trialNum)
+		} else {
+			log.Printf("Database connection error while loading reveal order for round %s with trial %s: %v", round, trialNum, err)
+		}
 		return
 	}
 
 	// Load registered nodes
 	nodes, err := n.nodeInfoRepository.GetNodeInfos(ctx)
 	if err != nil {
-		log.Printf("Failed to load registered nodes: %v", err)
+		if len(nodes) == 0 {
+			log.Printf("No node infos found. Cannot handle secret value response.")
+		} else {
+			log.Printf("Database connection error while loading registered nodes: %v", err)
+		}
 		return
 	}
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -20,7 +21,11 @@ func (n *RegularNode) checkPreviousSecretReceived(ctx context.Context, round, tr
 	// Check if we have the peer commit data (from broadcast) for the previous node
 	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(ctx, round, trialNum, previousNodeEOA)
 	if err != nil {
-		log.Printf("Failed to get peer commit data for previous node %s: %v", previousNodeEOA, err)
+		if err == pg.ErrNoRows {
+			log.Printf("Previous node %s secret not yet received (no data found)", previousNodeEOA)
+			return false
+		}
+		log.Printf("Database connection error while checking previous node %s secret: %v", previousNodeEOA, err)
 		return false
 	}
 
@@ -86,7 +91,12 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 	for {
 		roundData, err := n.revealOrderRepository.GetRevealOrder(ctx, req.Round, req.TrialNum)
 		if err != nil {
-			log.Printf("Failed to load reveal order with trail %s for round %s: %v", req.TrialNum, req.Round, err)
+			if err == pg.ErrNoRows {
+				log.Printf("Reveal order not yet calculated for round %s with trail %s. Waiting...", req.Round, req.TrialNum)
+			} else {
+				log.Printf("Database connection error while loading reveal order for round %s with trail %s: %v", req.Round, req.TrialNum, err)
+				return
+			}
 		} else if roundData != nil {
 			n.SetStrictOrder(uniqueKey, roundData.OrderedNodes)
 			break
@@ -123,7 +133,11 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 	// Fetch the secret value for the specified round
 	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, req.Round, req.TrialNum)
 	if err != nil {
-		log.Printf("Failed to load commit data for round %s with trail %s: %v", req.Round, req.TrialNum, err)
+		if err == pg.ErrNoRows {
+			log.Printf("Commit data not found for round %s with trail %s. Cannot send secret value.", req.Round, req.TrialNum)
+			return
+		}
+		log.Printf("Database connection error while loading commit data for round %s with trail %s: %v", req.Round, req.TrialNum, err)
 		return
 	}
 
@@ -158,7 +172,11 @@ func (n *RegularNode) SendSecretValue(ctx context.Context, h host.Host, leaderPe
 	// Load the commit data for the specified round
 	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, roundNum, trialNum)
 	if err != nil {
-		log.Printf("Failed to load commit data for round %s with trial %s: %v", roundNum, trialNum, err)
+		if err == pg.ErrNoRows {
+			log.Printf("Commit data not found for round %s with trial %s. Cannot send secret value.", roundNum, trialNum)
+			return
+		}
+		log.Printf("Database connection error while loading commit data for round %s with trial %s: %v", roundNum, trialNum, err)
 		return
 	}
 

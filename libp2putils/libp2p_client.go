@@ -55,10 +55,10 @@ func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID
 			keyFileName = fmt.Sprintf("regularnode%s.bin", cfg.RegularNodeNumber)
 		}
 	} else if nodeType == "leader" {
-        keyFileName = "leadernode.bin"
-    } else {
-        return nil, "", fmt.Errorf("invalid nodeType: %s. nodeType must be 'leader' or 'regular'", nodeType)
-    }
+		keyFileName = "leadernode.bin"
+	} else {
+		return nil, "", fmt.Errorf("invalid nodeType: %s. nodeType must be 'leader' or 'regular'", nodeType)
+	}
 
 	filePath := fmt.Sprintf("static-key/%s", keyFileName)
 
@@ -160,7 +160,11 @@ func (p *P2PClient) ConnectToPeer(ctx context.Context, leaderIP, leaderPort, lea
 func (p *P2PClient) GetConnectedPeers(ctx context.Context) map[string]NodeInfo {
 	nodes, err := p.nodeInfoRepository.GetNodeInfos(ctx)
 	if err != nil {
-		log.Printf("Failed to get node infos: %v", err)
+		log.Printf("Database connection error while getting node infos: %v", err)
+		return nil
+	}
+	if len(nodes) == 0 {
+		log.Printf("No node infos found.")
 		return nil
 	}
 
