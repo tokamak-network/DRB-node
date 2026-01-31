@@ -375,14 +375,9 @@ func sendWithRetry(
 			if utils.IsReplacementError(err) {
 				log.Printf("Transaction with nonce %d was already processed (nonce too low). Checking for receipt...", nonce)
 				// Try to find the receipt of the original transaction
-				receipt, receiptErr := client.TransactionReceipt(ctx, signedTx)
-				if receiptErr == nil && receipt != nil {
-					log.Printf("Found receipt for transaction %s that was already processed", signedTx.Hash().Hex())
-					if receipt.Status == types.ReceiptStatusSuccessful {
-						return receipt, signedTx, nil
-					} else if receipt.Status == types.ReceiptStatusFailed {
-						return receipt, signedTx, fmt.Errorf("%w: transaction %s reverted (gas used: %d)", ErrTransactionFailed, signedTx.Hash().Hex(), receipt.GasUsed)
-					}
+				receipt, tx, err, found := checkTransactionInclusion(ctx, client, signedTx)
+				if found {
+					return receipt, tx, err
 				}
 				// If we can't find the receipt, the transaction might still be pending
 				// Continue with retry logic but preserve the nonce
@@ -415,14 +410,9 @@ func sendWithRetry(
 			// Before retrying, check if the transaction was included after the timeout
 			// This handles the race condition where the transaction is processed right after timeout
 			log.Printf("Transaction %s timed out, checking if it was included after timeout...", signedTx.Hash().Hex())
-			receipt, receiptErr := client.TransactionReceipt(ctx, signedTx)
-			if receiptErr == nil && receipt != nil {
-				log.Printf("Transaction %s was included after timeout check", signedTx.Hash().Hex())
-				if receipt.Status == types.ReceiptStatusSuccessful {
-					return receipt, signedTx, nil
-				} else if receipt.Status == types.ReceiptStatusFailed {
-					return receipt, signedTx, fmt.Errorf("%w: transaction %s reverted (gas used: %d)", ErrTransactionFailed, signedTx.Hash().Hex(), receipt.GasUsed)
-				}
+			receipt, tx, err, found := checkTransactionInclusion(ctx, client, signedTx)
+			if found {
+				return receipt, tx, err
 			}
 
 			retryCount++
@@ -561,4 +551,20 @@ func GetTrialNumFromContract(ctx context.Context, fallbackEthClient fallback_eth
 
 	log.Printf("Fetched trialNum for round %s from contract: %s", round.String(), trialNum.String())
 	return trialNum, nil
+}
+
+// checkTransactionInclusion attempts to find a receipt for the given transaction.
+// It returns the receipt, the transaction, an error if the transaction failed, and a boolean indicating if a receipt was found.
+func checkTransactionInclusion(ctx context.Context, client fallback_ethclient.IFallbackEthClient, tx *types.Transaction) (*types.Receipt, *types.Transaction, error, bool) {
+	receipt, err := client.TransactionReceipt(ctx, tx)
+	if err == nil && receipt != nil {
+		if receipt.Status == types.ReceiptStatusSuccessful {
+			return receipt, tx, nil, true
+		}
+		// transaction reverted
+		revertErr := fmt.Errorf("%w: transaction %s reverted (gas used: %d)", ErrTransactionFailed, tx.Hash().Hex(), receipt.GasUsed)
+		return receipt, tx, revertErr, true
+	}
+	// NotFound or other errors are treated as "not found" for simplicity here.
+	return nil, nil, nil, false
 }
