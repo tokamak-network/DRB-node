@@ -70,6 +70,18 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 		}
 		return
 	}
+
+	leaderEOA := appconfig.Get().LeaderEOA
+	if leaderEOA == "" {
+		log.Println("LEADER_EOA is not set in the environment variables")
+		return
+	}
+
+	if !utils.VerifySecretValueRequestContentSignature(req, leaderEOA) {
+		log.Printf("Signature verification failed for secret value request from EOA: %s. Round, TrialNum, Order, LeaderEoaAddress, or RegularEoaAddress may have been tampered.", req.LeaderEoaAddress)
+		return
+	}
+
 	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)
 	for {
 		roundData, err := n.revealOrderRepository.GetRevealOrder(ctx, req.Round, req.TrialNum)
@@ -103,19 +115,6 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 		log.Printf("✅ Previous node's secret from %s confirmed received. Proceeding to send own secret.", previousNodeEOA)
 	} else {
 		log.Printf("🎯 First node in reveal order. No need to check previous secrets.")
-	}
-
-	// Fetch the leader's EOA address from the environment variables
-	leaderEOA := appconfig.Get().LeaderEOA
-	if leaderEOA == "" {
-		log.Println("LEADER_EOA is not set in the environment variables")
-		return
-	}
-
-	// Verify signature for ALL fields
-	if !utils.VerifySecretValueRequestContentSignature(req, leaderEOA) {
-		log.Printf("Signature verification failed for secret value request from EOA: %s. Round, TrialNum, Order, LeaderEoaAddress, or RegularEoaAddress may have been tampered.", req.LeaderEoaAddress)
-		return
 	}
 
 	// Log the request details
