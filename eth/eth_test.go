@@ -644,14 +644,15 @@ func TestSendWithRetry_PendingNonceAtError(t *testing.T) {
 
 	mockClient.On("SuggestGasTipCap", ctx).Return(big.NewInt(1000000000), nil)
 	mockClient.On("SuggestGasPrice", ctx).Return(big.NewInt(1000000000), nil)
-	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), errors.New("nonce error")).Times(5)
+	// Nonce is now fetched once before the retry loop to prevent race conditions
+	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), errors.New("nonce error")).Once()
 
 	receipt, tx, err := sendWithRetry(ctx, mockClient, chainID, auth, auth.From, big.NewInt(0), []byte{})
 	assert.Error(t, err)
 	assert.Nil(t, receipt)
 	assert.Nil(t, tx)
-	// Should return error after maxRetries
-	assert.Contains(t, err.Error(), "failed to get nonce after 5 retries")
+	// Should return error immediately if nonce fetch fails (not after retries)
+	assert.Contains(t, err.Error(), "failed to get nonce")
 	assert.Contains(t, err.Error(), "nonce error")
 
 	mockClient.AssertExpectations(t)
@@ -670,7 +671,8 @@ func TestSendWithRetry_EstimateGasError(t *testing.T) {
 
 	mockClient.On("SuggestGasTipCap", ctx).Return(big.NewInt(1000000000), nil)
 	mockClient.On("SuggestGasPrice", ctx).Return(big.NewInt(1000000000), nil)
-	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil).Times(5)
+	// Nonce is now fetched once before the retry loop to prevent race conditions
+	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil).Once()
 
 	callMsg := ethereum.CallMsg{
 		From:  auth.From,
@@ -678,6 +680,7 @@ func TestSendWithRetry_EstimateGasError(t *testing.T) {
 		Data:  []byte{},
 		Value: big.NewInt(0),
 	}
+	// EstimateGas is called in the retry loop, so it should be called maxRetries times (5)
 	mockClient.On("EstimateGas", ctx, callMsg).Return(uint64(0), errors.New("gas estimate error")).Times(5)
 
 	receipt, tx, err := sendWithRetry(ctx, mockClient, chainID, auth, auth.From, big.NewInt(0), []byte{})
@@ -689,7 +692,6 @@ func TestSendWithRetry_EstimateGasError(t *testing.T) {
 
 	mockClient.AssertExpectations(t)
 }
-
 
 func TestGetActivatedOperators_CallContractError(t *testing.T) {
 	// Test error when CallContract fails

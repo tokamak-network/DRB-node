@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
@@ -306,17 +307,15 @@ func sendWithRetry(
 		}
 	}
 
-	for retryCount < maxRetries {
-		nonce, err := client.PendingNonceAt(ctx, auth.From)
-		if err != nil {
-			log.Printf("Failed to get nonce: %v, continuing to next retry", err)
-			retryCount++
-			if retryCount >= maxRetries {
-				return nil, nil, fmt.Errorf("failed to get nonce after %d retries: %v", maxRetries, err)
-			}
-			continue
-		}
+	// Fetch nonce once before the retry loop to prevent race conditions
+	// If we retry with a new nonce, we might execute the same transaction twice
+	nonce, err := client.PendingNonceAt(ctx, auth.From)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get nonce: %v", err)
+	}
+	log.Printf("Using nonce %d for transaction", nonce)
 
+	for retryCount < maxRetries {
 		gasLimit, err := client.EstimateGas(ctx, callMsg)
 		if err != nil {
 			log.Printf("Failed to estimate gas: %v, continuing to next retry", err)
@@ -373,6 +372,23 @@ func sendWithRetry(
 		err = client.SendTransaction(ctx, signedTx)
 		if err != nil {
 			log.Printf("Failed to send tx %v, continuing to next retry", err)
+
+			if isReplacementError(err) {
+				log.Printf("Transaction with nonce %d was already processed (nonce too low). Checking for receipt...", nonce)
+				// Try to find the receipt of the original transaction
+				receipt, receiptErr := client.TransactionReceipt(ctx, signedTx)
+				if receiptErr == nil && receipt != nil {
+					log.Printf("Found receipt for transaction %s that was already processed", signedTx.Hash().Hex())
+					if receipt.Status == types.ReceiptStatusSuccessful {
+						return receipt, signedTx, nil
+					} else if receipt.Status == types.ReceiptStatusFailed {
+						return receipt, signedTx, fmt.Errorf("%w: transaction %s reverted (gas used: %d)", ErrTransactionFailed, signedTx.Hash().Hex(), receipt.GasUsed)
+					}
+				}
+				// If we can't find the receipt, the transaction might still be pending
+				// Continue with retry logic but preserve the nonce
+			}
+
 			retryCount++
 			if retryCount >= maxRetries {
 				return nil, nil, fmt.Errorf("failed to send tx after %d retries: %v", maxRetries, err)
@@ -397,12 +413,25 @@ func sendWithRetry(
 				return nil, nil, err
 			}
 
+			// Before retrying, check if the transaction was included after the timeout
+			// This handles the race condition where the transaction is processed right after timeout
+			log.Printf("Transaction %s timed out, checking if it was included after timeout...", signedTx.Hash().Hex())
+			receipt, receiptErr := client.TransactionReceipt(ctx, signedTx)
+			if receiptErr == nil && receipt != nil {
+				log.Printf("Transaction %s was included after timeout check", signedTx.Hash().Hex())
+				if receipt.Status == types.ReceiptStatusSuccessful {
+					return receipt, signedTx, nil
+				} else if receipt.Status == types.ReceiptStatusFailed {
+					return receipt, signedTx, fmt.Errorf("%w: transaction %s reverted (gas used: %d)", ErrTransactionFailed, signedTx.Hash().Hex(), receipt.GasUsed)
+				}
+			}
+
 			retryCount++
 			if retryCount >= maxRetries {
 				return nil, nil, fmt.Errorf("transaction failed after %d retries: %v", maxRetries, err)
 			}
-			// If failed or timeout -> bump gas and retry
-			log.Printf("Bumping gas and retrying... (attempt %d/%d)", retryCount, maxRetries)
+			// If failed or timeout -> bump gas and retry with same nonce
+			log.Printf("Bumping gas and retrying with same nonce %d... (attempt %d/%d)", nonce, retryCount, maxRetries)
 			newFee := new(big.Float).Mul(new(big.Float).SetInt(maxFeePerGas), big.NewFloat(bumpFactor))
 			maxFeePerGas, _ = newFee.Int(nil)
 			newPriorityFee := new(big.Float).Mul(new(big.Float).SetInt(priorityFee), big.NewFloat(bumpFactor))
@@ -533,4 +562,11 @@ func GetTrialNumFromContract(ctx context.Context, fallbackEthClient fallback_eth
 
 	log.Printf("Fetched trialNum for round %s from contract: %s", round.String(), trialNum.String())
 	return trialNum, nil
+}
+
+func isReplacementError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "nonce too low") || strings.Contains(err.Error(), "replacement transaction underpriced")
 }
