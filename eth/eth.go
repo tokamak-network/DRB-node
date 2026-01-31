@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"strings"
 	"sync"
 	"time"
 
@@ -373,7 +372,7 @@ func sendWithRetry(
 		if err != nil {
 			log.Printf("Failed to send tx %v, continuing to next retry", err)
 
-			if isReplacementError(err) {
+			if utils.IsReplacementError(err) {
 				log.Printf("Transaction with nonce %d was already processed (nonce too low). Checking for receipt...", nonce)
 				// Try to find the receipt of the original transaction
 				receipt, receiptErr := client.TransactionReceipt(ctx, signedTx)
@@ -562,11 +561,4 @@ func GetTrialNumFromContract(ctx context.Context, fallbackEthClient fallback_eth
 
 	log.Printf("Fetched trialNum for round %s from contract: %s", round.String(), trialNum.String())
 	return trialNum, nil
-}
-
-func isReplacementError(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(err.Error(), "nonce too low") || strings.Contains(err.Error(), "replacement transaction underpriced")
 }

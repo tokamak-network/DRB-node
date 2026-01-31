@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // FallbackRPCClient implements a fallback mechanism for Ethereum RPC calls
@@ -122,7 +122,7 @@ func (f *FallbackRPCClient) SendTransaction(ctx context.Context, tx *types.Trans
 		lastErr = err
 
 		// Don't switch RPC for replacement transaction errors as these are client-side issues
-		if isReplacementError(err) {
+		if utils.IsReplacementError(err) {
 			f.logger.WithError(err).Warn("Replacement transaction error - not switching RPC")
 			return err
 		}
@@ -131,18 +131,6 @@ func (f *FallbackRPCClient) SendTransaction(ctx context.Context, tx *types.Trans
 		f.switchToNextClient()
 	}
 	return fmt.Errorf("all RPCs failed: %v", lastErr)
-}
-
-// isReplacementError checks if the error is related to replacement transaction underpricing
-func isReplacementError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := err.Error()
-	return strings.Contains(errStr, "replacement transaction underpriced") ||
-		strings.Contains(errStr, "nonce too low") ||
-		strings.Contains(errStr, "already known")
 }
 
 // TransactionReceipt implements the ethereum.ContractTransactor interface
