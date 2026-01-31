@@ -38,33 +38,43 @@ func NewFallbackRPCClient(urls []string) (*FallbackRPCClient, error) {
 		return nil, fmt.Errorf("at least one RPC URL is required")
 	}
 
-	clients := make([]*ethclient.Client, len(urls))
-	for i, url := range urls {
-		client, err := ethclient.Dial(url)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to RPC %s: %v", url, err)
-		}
-		_, err = client.ChainID(context.Background())
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to RPC %s: %v", url, err)
-		}
-
-		clients[i] = client
-	}
-
 	l := logger.Log
 
 	if l == nil {
 		return nil, errors.New("logger not found")
 	}
 
+	validURLs := make([]string, 0, len(urls))
+	validClients := make([]*ethclient.Client, 0, len(urls))
+	for _, url := range urls {
+		client, err := ethclient.Dial(url)
+		if err != nil {
+			l.WithError(err).Error("failed to connect to RPC", "url", url)
+			continue
+		}
+
+		// Test if the RPC is reachable
+		_, err = client.ChainID(context.Background())
+		if err != nil {
+			l.WithError(err).Error("failed to connect to RPC", "url", url)
+			continue
+		}
+
+		validClients = append(validClients, client)
+		validURLs = append(validURLs, url)
+	}
+
+	if len(validClients) == 0 {
+		return nil, errors.New("failed to connect to any RPC")
+	}
+
 	return &FallbackRPCClient{
-		clients:    clients,
-		urls:       urls,
+		clients:    validClients,
+		urls:       validURLs,
 		currentIdx: 0,
 		maxRetries: 3,
 		retryDelay: time.Second * 2,
-		logger:     logger.Log,
+		logger:     l,
 	}, nil
 }
 

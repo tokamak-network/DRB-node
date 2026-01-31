@@ -156,7 +156,7 @@ func TestNewFallbackRPCClient(t *testing.T) {
 		client, err := NewFallbackRPCClient([]string{"http://invalid-url-that-does-not-exist:8545"})
 		require.Error(t, err)
 		require.Nil(t, client)
-		assert.Contains(t, err.Error(), "failed to connect to RPC")
+		assert.Contains(t, err.Error(), "failed to connect to any RPC")
 	})
 
 	t.Run("error with logger nil", func(t *testing.T) {
