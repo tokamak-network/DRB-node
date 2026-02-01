@@ -35,6 +35,9 @@ type LeaderNode struct {
 	p2pClient          *libp2putils.P2PClient
 	ethService         eth.IEthService // Injected eth service for testability
 
+	// Cached client for transactions (uses LEADER_PRIVATE_KEY)
+	client *utils.Client
+
 	// Internal variables to manage leader node data on memory
 	commitMu sync.Mutex
 
@@ -149,7 +152,14 @@ func NewLeaderNode(
 		return nil, errors.New("nodeInfoRepository cannot be nil")
 	}
 
+	// Create cached client for transactions
+	client, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return nil, err
+	}
+
 	return &LeaderNode{
+		client:                     client,
 		fallbackEthClient:          fallbackEthClient,
 		leaderCommitRepository:     leaderCommitRepository,
 		revealOrderService:         revealOrderService,

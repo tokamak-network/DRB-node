@@ -58,10 +58,8 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 	contractAddress := appconfig.Get().ContractAddress
 	contractAddr := common.HexToAddress(contractAddress)
 
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Fatalf("Failed to parse contract ABI: %v", err)
-	}
+	// Use cached ABI from client
+	parsedABI := n.client.ContractABI
 
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddr},
@@ -477,15 +475,10 @@ func (n *LeaderNode) processRandomRequestNumber(ctx context.Context, blockTimest
 }
 
 func (n *LeaderNode) resuming(ctx context.Context) {
-	// Load contract client (address, ABI, and leader private key)
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to create leader client: %v", err)
-		return
-	}
-	contractAddress := clientUtils.ContractAddress
-	parsedABI := clientUtils.ContractABI
-	privateKey := clientUtils.PrivateKey
+	// Use cached client (address, ABI, and leader private key)
+	contractAddress := n.client.ContractAddress
+	parsedABI := n.client.ContractABI
+	privateKey := n.client.PrivateKey
 	leaderEOA := crypto.PubkeyToAddress(privateKey.PublicKey)
 
 	// Check deposit amount
@@ -503,14 +496,9 @@ func (n *LeaderNode) resuming(ctx context.Context) {
 	if depositAmount.Cmp(minDeposit) < 0 {
 		// Need to top up
 		amountToDeposit := new(big.Int).Sub(minDeposit, depositAmount)
-		clientUtils := &utils.Client{
-			ContractAddress: contractAddress,
-			PrivateKey:      privateKey,
-			ContractABI:     parsedABI,
-		}
 		_, _, err := n.ethService.ExecuteTransaction(
 			ctx,
-			clientUtils,
+			n.client,
 			n.fallbackEthClient,
 			"deposit",
 			amountToDeposit,
@@ -538,14 +526,9 @@ func (n *LeaderNode) resuming(ctx context.Context) {
 		}
 		if opsLen.Cmp(big.NewInt(2)) >= 0 {
 			// Call resume
-			clientUtils := &utils.Client{
-				ContractAddress: contractAddress,
-				PrivateKey:      privateKey,
-				ContractABI:     parsedABI,
-			}
 			_, _, err := n.ethService.ExecuteTransaction(
 				ctx,
-				clientUtils,
+				n.client,
 				n.fallbackEthClient,
 				"resume",
 				big.NewInt(0),
@@ -894,15 +877,9 @@ func (n *LeaderNode) stopFailToSubmitCoMonitoring() {
 
 // Add function to call failToSubmitCo on chain
 func (n *LeaderNode) callFailToSubmitCo(ctx context.Context, round string, trialNum string) {
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to create leader client: %v", err)
-		return
-	}
-
-	_, _, err = n.ethService.ExecuteTransaction(
+	_, _, err := n.ethService.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"failToSubmitCo",
 		big.NewInt(0),
@@ -1003,15 +980,9 @@ func (n *LeaderNode) stopFailToSubmitCvMonitoring() {
 
 // Add function to call failToSubmitCv on chain
 func (n *LeaderNode) callFailToSubmitCv(ctx context.Context, round string, trialNum string) {
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to create leader client: %v", err)
-		return
-	}
-
-	_, _, err = n.ethService.ExecuteTransaction(
+	_, _, err := n.ethService.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"failToSubmitCv",
 		big.NewInt(0),
@@ -1042,12 +1013,8 @@ func (n *LeaderNode) ResetCosAndCvsMonitoringState(round string, trialNum string
 }
 
 func (n *LeaderNode) CheckHaltedState(ctx context.Context) {
-	// Load contract ABI and address
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
-		return
-	}
+	// Use cached ABI from client
+	parsedABI := n.client.ContractABI
 
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
@@ -1189,15 +1156,9 @@ func (n *LeaderNode) callRequestToSubmitCv(ctx context.Context, round string, tr
 
 	packedIndices := PackIndices(indices)
 
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to create leader client: %v", err)
-		return
-	}
-
-	_, _, err = n.ethService.ExecuteTransaction(
+	_, _, err := n.ethService.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"requestToSubmitCv",
 		big.NewInt(0),
@@ -1322,16 +1283,9 @@ func (n *LeaderNode) SubmitMerkleRoot(ctx context.Context, roundNum string, tria
 	var merkleRootBytes32 [32]byte
 	copy(merkleRootBytes32[:], merkleRoot)
 
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to create leader client: %v", err)
-		n.SetSubmittingMerkleRoot(false) // Reset flag on failure
-		return
-	}
-
-	_, _, err = n.ethService.ExecuteTransaction(
+	_, _, err := n.ethService.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"submitMerkleRoot",
 		big.NewInt(0),
@@ -1519,16 +1473,9 @@ func (n *LeaderNode) requestToSubmitCo(ctx context.Context, roundNum string, tri
 		log.Printf("Failed to prepare arguments for requestToSubmitCo for round %s with trial %s: %v", roundNum, trialNum, err)
 		return
 	}
-
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to create leader client: %v", err)
-		return
-	}
-
 	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"requestToSubmitCo",
 		big.NewInt(0),

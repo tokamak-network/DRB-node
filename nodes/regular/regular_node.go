@@ -33,6 +33,9 @@ type RegularNode struct {
 	revealOrderService *commitreveal2.RevealOrderService
 	p2pClient          *libp2putils.P2PClient
 
+	// Cached client for transactions (uses EOA_PRIVATE_KEY)
+	client *utils.Client
+
 	// Add new variables for monitoring with atomic protection
 	leaderMonitoringActive                                int32 // 0 = false, 1 = true
 	monitoringTimer                                       *time.Timer
@@ -121,7 +124,14 @@ func NewRegularNode(
 		return nil, errors.New("nodeInfoRepository cannot be nil")
 	}
 
+	// Create cached client for transactions
+	client, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return nil, err
+	}
+
 	return &RegularNode{
+		client:                        client,
 		fallbackEthClient:             fallbackEthClient,
 		revealOrderService:            revealOrderService,
 		p2pClient:                     p2pClient,

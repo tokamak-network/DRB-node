@@ -1199,45 +1199,28 @@ func TestLeaderNode_generateRandomNumberTransaction_Success(t *testing.T) {
 	assert.Equal(t, "generateRandomNumber", mockEth.execLastMethod)
 }
 
-func TestLeaderNode_generateRandomNumberTransaction_InvalidPrivateKey(t *testing.T) {
-	logger.InitLogger()
-
-	os.Setenv("LEADER_PRIVATE_KEY", "invalid-key")
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	defer func() {
-		os.Unsetenv("LEADER_PRIVATE_KEY")
-		os.Unsetenv("CONTRACT_ADDRESS")
-	}()
-
-	ln := &LeaderNode{}
-
-	secrets := [][]byte{{1, 2, 3}}
-	vs := []uint8{27}
-	rs := []common.Hash{common.BigToHash(big.NewInt(1))}
-	ss := []common.Hash{common.BigToHash(big.NewInt(2))}
-
-	err := ln.generateRandomNumberTransaction(context.Background(), "1", "1", secrets, vs, rs, ss)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create leader client")
-}
+// TestLeaderNode_generateRandomNumberTransaction_InvalidPrivateKey is removed because
+// the client is now created at node initialization, not per-call. Invalid private key
+// errors would be caught during NewLeaderNode(), not during generateRandomNumberTransaction().
 
 func TestLeaderNode_generateRandomNumberTransaction_RevealOrderError(t *testing.T) {
 	logger.InitLogger()
-
-	pk, _ := ethcrypto.GenerateKey()
-	os.Setenv("LEADER_PRIVATE_KEY", hex.EncodeToString(ethcrypto.FromECDSA(pk)))
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	defer func() {
-		os.Unsetenv("LEADER_PRIVATE_KEY")
-		os.Unsetenv("CONTRACT_ADDRESS")
-	}()
 
 	mockRevealRepo := &mockRevealOrderRepo{
 		err: pg.ErrNoRows,
 	}
 
+	// Create a test client with generated private key
+	testPrivateKey, _ := ethcrypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	ln := &LeaderNode{
+		client:                 testClient,
 		reavealOrderRepository: mockRevealRepo,
 	}
 
@@ -1333,45 +1316,28 @@ func TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_Success(t *test
 	assert.Equal(t, "generateRandomNumberWhenSomeCvsAreOnChain", mockEth.execLastMethod)
 }
 
-func TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_InvalidPrivateKey(t *testing.T) {
-	logger.InitLogger()
-
-	os.Setenv("LEADER_PRIVATE_KEY", "invalid-key")
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	defer func() {
-		os.Unsetenv("LEADER_PRIVATE_KEY")
-		os.Unsetenv("CONTRACT_ADDRESS")
-	}()
-
-	ln := &LeaderNode{}
-
-	secrets := [][]byte{{1, 2, 3}}
-	vs := []uint8{27}
-	rs := []common.Hash{common.BigToHash(big.NewInt(1))}
-	ss := []common.Hash{common.BigToHash(big.NewInt(2))}
-
-	err := ln.generateRandomNumberTransactionSomeCvOnChain(context.Background(), "1", "1", secrets, vs, rs, ss)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create leader client")
-}
+// TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_InvalidPrivateKey is removed because
+// the client is now created at node initialization, not per-call. Invalid private key
+// errors would be caught during NewLeaderNode(), not during generateRandomNumberTransactionSomeCvOnChain().
 
 func TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_RevealOrderError(t *testing.T) {
 	logger.InitLogger()
-
-	pk, _ := ethcrypto.GenerateKey()
-	os.Setenv("LEADER_PRIVATE_KEY", hex.EncodeToString(ethcrypto.FromECDSA(pk)))
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	defer func() {
-		os.Unsetenv("LEADER_PRIVATE_KEY")
-		os.Unsetenv("CONTRACT_ADDRESS")
-	}()
 
 	mockRevealRepo := &mockRevealOrderRepo{
 		err: pg.ErrNoRows,
 	}
 
+	// Create a test client with generated private key
+	testPrivateKey, _ := ethcrypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	ln := &LeaderNode{
+		client:                 testClient,
 		reavealOrderRepository: mockRevealRepo,
 	}
 

@@ -33,6 +33,24 @@ var (
 var ActivatedOperators = make([]common.Address, 0)
 var ActivatedOperatorsMu sync.RWMutex
 
+// Cached contract ABI - loaded once and reused
+var (
+	cachedABI     abi.ABI
+	cachedABIOnce sync.Once
+)
+
+// getCachedABI returns the cached contract ABI, loading it once on first call
+func getCachedABI() abi.ABI {
+	cachedABIOnce.Do(func() {
+		var err error
+		cachedABI, err = utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+		if err != nil {
+			log.Fatalf("Failed to load contract ABI: %v", err)
+		}
+	})
+	return cachedABI
+}
+
 // ActivatedOperators thread-safe access functions
 func GetActivatedOperatorsCached() []common.Address {
 	ActivatedOperatorsMu.RLock()
@@ -437,11 +455,7 @@ func waitForTransactionSuccess(ctx context.Context, client fallback_ethclient.IF
 
 func GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
 	var activatedOperators []common.Address
-	abiFilePath := "contract/abi/Commit2RevealDRB.json"
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		log.Fatalf("Failed to load contract ABI: %v", err)
-	}
+	parsedABI := getCachedABI()
 
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
@@ -471,11 +485,7 @@ func UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_et
 
 // UpdateCurrentRoundFromContract fetches the current round from the contract
 func UpdateCurrentRoundFromContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) (*big.Int, error) {
-	abiFilePath := "contract/abi/Commit2RevealDRB.json"
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
-	}
+	parsedABI := getCachedABI()
 
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
@@ -502,11 +512,7 @@ func UpdateCurrentRoundFromContract(ctx context.Context, fallbackEthClient fallb
 
 // GetTrialNumFromContract fetches the trial number for a given round from the smart contract
 func GetTrialNumFromContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, round *big.Int) (*big.Int, error) {
-	abiFilePath := "contract/abi/Commit2RevealDRB.json"
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
-	}
+	parsedABI := getCachedABI()
 
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {

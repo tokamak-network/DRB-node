@@ -275,11 +275,6 @@ func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round 
 	}
 	log.Printf("Preparing to execute generateRandomNumber...")
 
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to create leader client: %v", err)
-	}
-
 	type SigRS struct {
 		R [32]byte
 		S [32]byte
@@ -320,7 +315,7 @@ func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round 
 
 	tx, _, err := eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"generateRandomNumber",
 		big.NewInt(0),
@@ -338,10 +333,6 @@ func (n *LeaderNode) generateRandomNumberTransaction(ctx context.Context, round 
 
 func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(ctx context.Context, round string, trialNum string, secrets [][]byte, vs []uint8, rs []common.Hash, ss []common.Hash) error {
 	log.Printf("Preparing to execute generateRandomNumberTransactionSomeCvOnChain...")
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to create leader client: %v", err)
-	}
 
 	type SigRS struct {
 		R [32]byte
@@ -376,7 +367,7 @@ func (n *LeaderNode) generateRandomNumberTransactionSomeCvOnChain(ctx context.Co
 	packedVs := packVsValues(vsArray)
 	tx, _, err := eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"generateRandomNumberWhenSomeCvsAreOnChain",
 		big.NewInt(0),

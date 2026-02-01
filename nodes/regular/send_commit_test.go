@@ -82,7 +82,17 @@ func createTestNodeForSendCommit() *RegularNode {
 	mockCommitRepo := new(MockRegularCommitRepository)
 	mockRevealRepo := new(MockRevealOrderRepository)
 
+	// Create a test client with generated private key
+	testPrivateKey, _ := crypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	node := &RegularNode{
+		client:                        testClient,
 		regularCommitRepository:       mockCommitRepo,
 		revealOrderRepository:         mockRevealRepo,
 		submittedCvIndices:            make(map[string]map[string]bool),
@@ -108,7 +118,17 @@ func createTestNodeForReceiveCommitRequest() *RegularNode {
 		mockLeaderCommitRepo,
 	)
 
+	// Create a test client with generated private key
+	testPrivateKey, _ := crypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	node := &RegularNode{
+		client:                        testClient,
 		regularCommitRepository:       mockCommitRepo,
 		revealOrderRepository:         mockRevealRepo,
 		peerCommitDataRepository:      mockPeerRepo,
@@ -136,7 +156,17 @@ func createTestNodeWithRevealOrderService() *RegularNode {
 		mockLeaderCommitRepo,
 	)
 
+	// Create a test client with generated private key
+	testPrivateKey, _ := crypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	node := &RegularNode{
+		client:                        testClient,
 		regularCommitRepository:       mockCommitRepo,
 		revealOrderRepository:         mockRevealRepo,
 		peerCommitDataRepository:      mockPeerRepo,
@@ -1374,20 +1404,9 @@ func TestRegularNode_StopRequestToSubmitSOrGenerateRandomNumberMonitoring_WithTi
 	assert.Nil(t, node.requestToSubmitSOrGenerateRandomNumberMonitoringTimer)
 }
 
-func TestRegularNode_callFailToRequestSubmitCVOrSubmitMerkleRoot_InvalidPrivateKey(t *testing.T) {
-	node := createTestNodeForSendCommit()
-
-	os.Setenv("EOA_PRIVATE_KEY", "invalid-key")
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	defer func() {
-		os.Unsetenv("EOA_PRIVATE_KEY")
-		os.Unsetenv("CONTRACT_ADDRESS")
-	}()
-
-	node.callFailToRequestSubmitCVOrSubmitMerkleRoot(context.Background(), "100", "1")
-
-	assert.True(t, true)
-}
+// TestRegularNode_callFailToRequestSubmitCVOrSubmitMerkleRoot_InvalidPrivateKey is removed because
+// the client is now created at node initialization, not per-call. Invalid private key
+// errors would be caught during NewRegularNode(), not during callFailToRequestSubmitCVOrSubmitMerkleRoot().
 func TestRegularNode_callFailToRequestSubmitCVOrSubmitMerkleRoot_ABILoadError(t *testing.T) {
 	node := createTestNodeForSendCommit()
 
@@ -1407,20 +1426,9 @@ func TestRegularNode_callFailToRequestSubmitCVOrSubmitMerkleRoot_ABILoadError(t 
 	node.callFailToRequestSubmitCVOrSubmitMerkleRoot(context.Background(), "100", "1")
 }
 
-func TestRegularNode_callFailToSubmitMerkleRootAfterDispute_InvalidPrivateKey(t *testing.T) {
-	node := createTestNodeForSendCommit()
-
-	os.Setenv("EOA_PRIVATE_KEY", "invalid")
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	defer func() {
-		os.Unsetenv("EOA_PRIVATE_KEY")
-		os.Unsetenv("CONTRACT_ADDRESS")
-	}()
-
-	node.callFailToSubmitMerkleRootAfterDispute(context.Background(), "100", "1")
-
-	assert.True(t, true, "Should handle invalid private key gracefully")
-}
+// TestRegularNode_callFailToSubmitMerkleRootAfterDispute_InvalidPrivateKey is removed because
+// the client is now created at node initialization, not per-call. Invalid private key
+// errors would be caught during NewRegularNode(), not during callFailToSubmitMerkleRootAfterDispute().
 
 func TestRegularNode_callFailToSubmitMerkleRootAfterDispute_ABILoadError(t *testing.T) {
 	node := createTestNodeForSendCommit()
@@ -1460,20 +1468,9 @@ func TestRegularNode_callFailToRequestSOrGenerateRandomNumber_ABILoadError(t *te
 	node.callFailToRequestSOrGenerateRandomNumber(context.Background(), "100", "1")
 }
 
-func TestRegularNode_callFailToRequestSOrGenerateRandomNumber_InvalidPrivateKey(t *testing.T) {
-	node := createTestNodeForSendCommit()
-
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("EOA_PRIVATE_KEY", "invalid-key")
-	defer func() {
-		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("EOA_PRIVATE_KEY")
-	}()
-
-	node.callFailToRequestSOrGenerateRandomNumber(context.Background(), "100", "1")
-
-	assert.True(t, true, "Should handle invalid private key")
-}
+// TestRegularNode_callFailToRequestSOrGenerateRandomNumber_InvalidPrivateKey is removed because
+// the client is now created at node initialization, not per-call. Invalid private key
+// errors would be caught during NewRegularNode(), not during callFailToRequestSOrGenerateRandomNumber().
 
 func TestRegularNode_processCommitRequest_Halted(t *testing.T) {
 	node := createTestNodeForSendCommit()
