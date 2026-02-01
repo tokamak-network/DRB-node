@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -881,8 +880,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_NotActiva
 	testOp := common.HexToAddress("0xTestOp")
 
 	mockEth := &MockEthService{
-		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
-			return []common.Address{}, nil // Empty list
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{} // Empty list
 		},
 	}
 
@@ -2390,8 +2389,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_IsEOAActivatedForRound_Su
 
 	// Create mock eth service
 	mockEth := &MockEthService{
-		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
-			return []common.Address{testOp}, nil
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{testOp}
 		},
 	}
 
@@ -2410,8 +2409,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_IsEOAActivatedForRound_No
 	otherOp := common.HexToAddress("0x2222222222222222222222222222222222222222")
 
 	mockEth := &MockEthService{
-		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
-			return []common.Address{otherOp}, nil // Different operator
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{otherOp} // Different operator
 		},
 	}
 
@@ -2423,13 +2422,13 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_IsEOAActivatedForRound_No
 	assert.False(suite.T(), isActivated)
 }
 
-// TestLeaderHandler_IsEOAActivatedForRound_NetworkError tests network error
-func (suite *LeaderHandlerTestSuite) TestLeaderHandler_IsEOAActivatedForRound_NetworkError() {
+// TestLeaderHandler_IsEOAActivatedForRound_EmptyCache tests empty cache
+func (suite *LeaderHandlerTestSuite) TestLeaderHandler_IsEOAActivatedForRound_EmptyCache() {
 	testOp := common.HexToAddress("0xTestOp")
 
 	mockEth := &MockEthService{
-		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
-			return nil, errors.New("network error")
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{}
 		},
 	}
 
@@ -2437,7 +2436,7 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_IsEOAActivatedForRound_Ne
 
 	isNetworkErr, isActivated := suite.leaderNodeHandler.isEOAActivatedForRound(context.Background(), testOp)
 
-	assert.True(suite.T(), isNetworkErr)
+	assert.False(suite.T(), isNetworkErr)
 	assert.False(suite.T(), isActivated)
 }
 
@@ -2451,8 +2450,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_UpdatedallCommitsReceived
 	testOp2 := common.HexToAddress("0x4444444444444444444444444444444444444444")
 
 	mockEth := &MockEthService{
-		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
-			return []common.Address{testOp1, testOp2}, nil
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{testOp1, testOp2}
 		},
 	}
 
@@ -2489,8 +2488,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_UpdatedallCommitsReceived
 	testOp2 := common.HexToAddress("0x6666666666666666666666666666666666666666")
 
 	mockEth := &MockEthService{
-		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
-			return []common.Address{testOp1, testOp2}, nil
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{testOp1, testOp2}
 		},
 	}
 
@@ -2529,8 +2528,8 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_Success()
 	testOp := common.HexToAddress(eoaAddress)
 
 	mockEth := &MockEthService{
-		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
-			return []common.Address{testOp}, nil
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{testOp}
 		},
 	}
 
@@ -2540,16 +2539,16 @@ func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_Success()
 	assert.True(suite.T(), result)
 }
 
-// TestLeaderHandler_CheckActivation_NetworkError tests network error case
-func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_NetworkError() {
+// TestLeaderHandler_CheckActivation_NotActivated tests not activated case
+func (suite *LeaderHandlerTestSuite) TestLeaderHandler_CheckActivation_NotActivatedCached() {
 	privateKey, eoaAddress := createTestKeyPair()
 	require.NotNil(suite.T(), privateKey)
 
 	testOp := common.HexToAddress(eoaAddress)
 
 	mockEth := &MockEthService{
-		GetActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
-			return nil, errors.New("network error")
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{}
 		},
 	}
 

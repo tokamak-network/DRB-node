@@ -386,7 +386,7 @@ func (lh *LeaderNodeHandler) allCosReceivedUnlocked(uniqueKey string) bool {
 
 func (lh *LeaderNodeHandler) UpdatedallCommitsReceivedUnlocked(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, uniqueKey string) map[string]bool {
 	result := make(map[string]bool)
-	ops, _ := lh.ethService.GetActivatedOperators(ctx, fallbackEthClient)
+	ops := lh.ethService.GetActivatedOperatorsCached()
 
 	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
 	if !roundExists || len(roundCommits) == 0 {
@@ -417,13 +417,7 @@ func (lh *LeaderNodeHandler) updateInMemoryData(uniqueKey string, eoaAddress com
 }
 
 func (lh *LeaderNodeHandler) isEOAActivatedForRound(ctx context.Context, eoaAddress common.Address) (bool, bool) {
-	activatedOperators, err := lh.ethService.GetActivatedOperators(ctx, lh.fallbackEthClient)
-	if err != nil {
-		log.Printf("Error fetching the activated operators %v", err)
-		// Return true for network error flag, false for activation status
-		return true, false
-	}
-
+	activatedOperators := lh.ethService.GetActivatedOperatorsCached()
 	for _, operator := range activatedOperators {
 		if operator == eoaAddress {
 			log.Printf("EOA address %s is activated", eoaAddress.Hex())
