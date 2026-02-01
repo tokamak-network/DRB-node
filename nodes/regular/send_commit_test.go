@@ -439,8 +439,9 @@ func TestRegularNode_processRandomRequestNumber_State2(t *testing.T) {
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
 	roundData, _ := node.GetRoundData(uniqueKey)
 
-	assert.False(t, roundData.RandomNumber, "RandomNumber is overwritten to false by final SetRoundData")
-	assert.False(t, roundData.MerkleRoot, "MerkleRoot should also be false")
+	// State 2 sets RandomNumber = true when round completes
+	assert.True(t, roundData.RandomNumber, "RandomNumber should be true for state 2")
+	assert.False(t, roundData.MerkleRoot, "MerkleRoot should be false")
 
 	mockBatchRepo.AssertExpectations(t)
 }
@@ -4015,6 +4016,8 @@ func TestRegularNode_receiveCommitRequest_SSubmitted_Success(t *testing.T) {
 	node.SetRegularNodeEOA(testOp.Hex())
 	eth.SetActivatedOperatorsCached([]common.Address{testOp})
 	defer eth.SetActivatedOperatorsCached([]common.Address{})
+	eth.SetActivatedOperatorsCached([]common.Address{testOp})
+	defer eth.SetActivatedOperatorsCached([]common.Address{})
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	defer os.Unsetenv("CONTRACT_ADDRESS")
@@ -5773,6 +5776,9 @@ func TestRegularNode_catchUpMissedEvents_NoNewBlocks(t *testing.T) {
 	mockClient := new(MockFallbackEthClient)
 	node.fallbackEthClient = mockClient
 
+	// Set lastProcessedBlock so catchUpMissedEvents proceeds to call HeaderByNumber (skips early return when 0)
+	node.updateLastProcessedCoords(100, 0, 0)
+
 	// Mock HeaderByNumber to return block 100 (same as lastProcessedBlock)
 	mockHeader := &types.Header{
 		Number: big.NewInt(100),
@@ -5797,6 +5803,9 @@ func TestRegularNode_catchUpMissedEvents_HeaderByNumberError(t *testing.T) {
 	mockClient := new(MockFallbackEthClient)
 	node.fallbackEthClient = mockClient
 
+	// Set lastProcessedBlock so catchUpMissedEvents proceeds to call HeaderByNumber (skips early return when 0)
+	node.updateLastProcessedCoords(100, 0, 0)
+
 	// Mock HeaderByNumber to return error
 	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
 		Return(nil, errors.New("RPC error")).Once()
@@ -5807,7 +5816,7 @@ func TestRegularNode_catchUpMissedEvents_HeaderByNumberError(t *testing.T) {
 
 	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get current block header")
 	mockClient.AssertExpectations(t)
 	mockClient.AssertNotCalled(t, "FilterLogs")
@@ -5817,6 +5826,9 @@ func TestRegularNode_catchUpMissedEvents_NoMissedLogs(t *testing.T) {
 	node := createTestNodeForSendCommit()
 	mockClient := new(MockFallbackEthClient)
 	node.fallbackEthClient = mockClient
+
+	// Set lastProcessedBlock so catchUpMissedEvents proceeds to call HeaderByNumber and FilterLogs
+	node.updateLastProcessedCoords(100, 0, 0)
 
 	// Mock HeaderByNumber to return block 150
 	mockHeader := &types.Header{
@@ -5848,6 +5860,9 @@ func TestRegularNode_catchUpMissedEvents_FilterLogsError(t *testing.T) {
 	mockClient := new(MockFallbackEthClient)
 	node.fallbackEthClient = mockClient
 
+	// Set lastProcessedBlock so catchUpMissedEvents proceeds to call HeaderByNumber and FilterLogs
+	node.updateLastProcessedCoords(100, 0, 0)
+
 	// Mock HeaderByNumber to return block 150
 	mockHeader := &types.Header{
 		Number: big.NewInt(150),
@@ -5865,7 +5880,7 @@ func TestRegularNode_catchUpMissedEvents_FilterLogsError(t *testing.T) {
 
 	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to fetch missed logs")
 	mockClient.AssertExpectations(t)
 }
@@ -5874,6 +5889,9 @@ func TestRegularNode_catchUpMissedEvents_ProcessMissedLogs_Sorted(t *testing.T) 
 	node := createTestNodeForReceiveCommitRequest()
 	mockClient := new(MockFallbackEthClient)
 	node.fallbackEthClient = mockClient
+
+	// Set lastProcessedBlock so catchUpMissedEvents fetches and processes logs (otherwise returns early when 0)
+	node.updateLastProcessedCoords(100, 0, 0)
 
 	// Mock HeaderByNumber to return block 103
 	mockHeader := &types.Header{

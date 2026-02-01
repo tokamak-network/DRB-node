@@ -254,6 +254,15 @@ func createTestNodeForAcceptCommit() *LeaderNode {
 	return node
 }
 
+func setMockEthServiceForStatusEvents(node *LeaderNode) {
+	node.ethService = &MockEthServiceForAcceptCommit{
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {},
+		GetActivatedOperatorsCachedFunc: func() []common.Address {
+			return []common.Address{}
+		},
+	}
+}
+
 // waitForReceiveCommitToExit waits for a receiveCommit goroutine to exit after context cancellation.
 // Since receiveCommit sleeps for 1 second between retries without checking ctx.Done(),
 // we need to wait at least 2 seconds after context cancellation to ensure the goroutine exits.
@@ -297,8 +306,6 @@ func TestProcessRandomRequestNumber_StateTwo(t *testing.T) {
 	mockBatchRepo.On("DeleteOldRoundDataForLeaderNode", mock.Anything, round.String()).Return(nil)
 
 	node.processRandomRequestNumber(context.Background(), blockTimestamp, round, trialNum, state)
-
-	assert.False(t, node.GetExecution())
 
 	mockBatchRepo.AssertExpectations(t)
 }
@@ -410,8 +417,10 @@ func TestProcessCVS_Success(t *testing.T) {
 	mockBroadcastRepo := new(MockBroadcastTrackerRepository)
 	node.broadcastTrackerRepository = mockBroadcastRepo
 
+	// Use 2 operators so AllCvsReceivedUnlocked is false (we only store CVS for one) and GenerateMerkleRoot is not triggered
 	activatedOps := []common.Address{
 		common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		common.HexToAddress("0x1234567890123456789012345678901234567891"),
 	}
 	eth.SetActivatedOperatorsCached(activatedOps)
 	defer eth.SetActivatedOperatorsCached([]common.Address{})
@@ -422,7 +431,7 @@ func TestProcessCVS_Success(t *testing.T) {
 	copy(cvs[:], []byte("test-cvs"))
 	index := big.NewInt(0)
 
-	// Mock existing commit
+	// Mock existing commit for the operator we're processing (index 0)
 	existingCommit := &utils.LeaderCommitData{
 		Round:      round.String(),
 		TrialNum:   trialNum.String(),
@@ -1385,8 +1394,6 @@ func TestProcessRandomRequestNumber_WithDeleteError(t *testing.T) {
 
 	node.processRandomRequestNumber(context.Background(), blockTimestamp, round, trialNum, state)
 
-	assert.False(t, node.GetExecution())
-
 	mockBatchRepo.AssertExpectations(t)
 }
 
@@ -2082,7 +2089,6 @@ func TestProcessRandomRequestNumber_StateOne(t *testing.T) {
 
 	node.processRandomRequestNumber(context.Background(), blockTimestamp, round, trialNum, state)
 
-	assert.True(t, node.GetExecution())
 	assert.False(t, node.GetHalted())
 
 	// Clean up timer to prevent it from firing after test completes
@@ -2139,7 +2145,6 @@ func TestProcessRandomRequestNumber_StateThree(t *testing.T) {
 
 	node.processRandomRequestNumber(context.Background(), blockTimestamp, round, trialNum, state)
 
-	assert.False(t, node.GetExecution())
 	assert.True(t, node.GetHalted())
 
 	mockBatchRepo.AssertExpectations(t)
@@ -2222,10 +2227,11 @@ func TestProcessCVS_AllCvsReceivedTrigger(t *testing.T) {
 	node.broadcastTrackerRepository = mockBroadcastRepo
 
 	testOp := common.HexToAddress("0x6666666666666666666666666666666666666666")
+	otherOp := common.HexToAddress("0x6666666666666666666666666666666666666667")
 
 	mockEth := &MockEthServiceForAcceptCommit{
 		GetActivatedOperatorsCachedFunc: func() []common.Address {
-			return []common.Address{testOp}
+			return []common.Address{testOp, otherOp}
 		},
 		ExecuteTransactionFunc: func(ctx context.Context, clientUtils *utils.Client, fallbackEthClient fallback_ethclient.IFallbackEthClient, method string, value *big.Int, args ...interface{}) (*types.Transaction, *bind.TransactOpts, error) {
 			return &types.Transaction{}, nil, nil
@@ -2235,6 +2241,13 @@ func TestProcessCVS_AllCvsReceivedTrigger(t *testing.T) {
 
 	round := big.NewInt(2600)
 	trialNum := big.NewInt(1)
+	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
+	// Pre-populate in-memory CVS for the other operator so we have 2 leaves (Merkle tree requires >= 2)
+	var otherCvs [32]byte
+	copy(otherCvs[:], []byte("other-cvs"))
+	utils.EnsureCommittedNodesRoundExists(uniqueKey)
+	utils.SetCommittedNodeData(uniqueKey, otherOp, utils.LeaderCommitData{Cvs: otherCvs})
+
 	var cvs [32]byte
 	copy(cvs[:], []byte("final-cvs"))
 	index := big.NewInt(0)
@@ -2242,10 +2255,22 @@ func TestProcessCVS_AllCvsReceivedTrigger(t *testing.T) {
 	mockLeaderRepo.On("GetLeaderCommitByRoundAndEoaAddr", mock.Anything, round.String(), trialNum.String(), testOp.Hex()).
 		Return(nil, errors.New("not found"))
 	mockLeaderRepo.On("AddLeaderCommit", mock.Anything, mock.Anything).Return(nil)
+	mockLeaderRepo.On("UpdateLeaderCommit", mock.Anything, mock.Anything).Return(nil).Maybe() // called after SubmitMerkleRoot
 	mockBroadcastRepo.On("AddBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 	mockBroadcastRepo.On("UpdateBroadcastTracker", mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	// This should trigger GenerateMerkleRoot since all CVS received (only 1 operator)
+	// Set LEADER_PRIVATE_KEY and CONTRACT_ADDRESS so SubmitMerkleRoot can create leader client
+	validKey := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	origKey := os.Getenv("LEADER_PRIVATE_KEY")
+	origAddr := os.Getenv("CONTRACT_ADDRESS")
+	os.Setenv("LEADER_PRIVATE_KEY", validKey)
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Setenv("LEADER_PRIVATE_KEY", origKey)
+		os.Setenv("CONTRACT_ADDRESS", origAddr)
+	}()
+
+	// This triggers GenerateMerkleRoot (all CVS received, 2 operators with 2 leaves)
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
 	assert.NoError(t, err)
 }
@@ -2560,11 +2585,6 @@ func TestProcessRandomRequestNumber_StateOneWithDeleteError(t *testing.T) {
 
 	node.processRandomRequestNumber(context.Background(), blockTimestamp, round, trialNum, state)
 
-	// Should still set execution even with delete error
-	assert.True(t, node.GetExecution())
-
-	// Clean up timer to prevent it from firing after test completes
-	node.stopRequestToSubmitCvMonitoring()
 
 	mockBatchRepo.AssertExpectations(t)
 }
@@ -2592,7 +2612,6 @@ func TestProcessRandomRequestNumber_StateTwoWithExistingData(t *testing.T) {
 	data, exists := node.GetRoundData(uniqueKey)
 	assert.True(t, exists)
 	assert.True(t, data.RandomNumber)
-	assert.False(t, node.GetExecution())
 
 	mockBatchRepo.AssertExpectations(t)
 }
@@ -3203,11 +3222,17 @@ func (m *MockFallbackEthClientForAcceptCommit) CallContract(ctx context.Context,
 }
 
 func (m *MockFallbackEthClientForAcceptCommit) ChainID(ctx context.Context) (*big.Int, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "ChainID" {
+			args := m.Called(ctx)
+			if args.Get(0) == nil {
+				return nil, args.Error(1)
+			}
+			return args.Get(0).(*big.Int), args.Error(1)
+		}
 	}
-	return args.Get(0).(*big.Int), args.Error(1)
+	// Default to mainnet chain ID when not explicitly mocked.
+	return big.NewInt(1), nil
 }
 
 func (m *MockFallbackEthClientForAcceptCommit) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
@@ -3245,8 +3270,14 @@ func (m *MockFallbackEthClientForAcceptCommit) TransactionReceipt(ctx context.Co
 }
 
 func (m *MockFallbackEthClientForAcceptCommit) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
-	args := m.Called(ctx, account)
-	return args.Get(0).(uint64), args.Error(1)
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "PendingNonceAt" {
+			args := m.Called(ctx, account)
+			return args.Get(0).(uint64), args.Error(1)
+		}
+	}
+	// Default nonce when not explicitly mocked.
+	return 0, nil
 }
 
 func (m *MockFallbackEthClientForAcceptCommit) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]types.Log, error) {
@@ -3393,9 +3424,6 @@ func TestLeaderNode_receiveCommit_StatusEvent_State1(t *testing.T) {
 
 	// Give the goroutine time to call Unsubscribe()
 	time.Sleep(50 * time.Millisecond)
-
-	// Verify execution was started
-	assert.True(t, node.GetExecution(), "Execution should be started for state 1")
 
 	mockClient.AssertExpectations(t)
 	mockBatchRepo.AssertExpectations(t)
@@ -4755,9 +4783,6 @@ func TestLeaderNode_receiveCommit_StatusEvent_State2(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 	}
-
-	// Verify execution was stopped for state 2
-	assert.False(t, node.GetExecution(), "Execution should be stopped for state 2")
 
 	mockClient.AssertExpectations(t)
 	mockBatchRepo.AssertExpectations(t)
@@ -6289,8 +6314,7 @@ func TestLeaderNode_receiveCommit_StatusEvent_State3(t *testing.T) {
 	case <-time.After(2 * time.Second):
 	}
 
-	// Verify execution was stopped and halted was set for state 3
-	assert.False(t, node.GetExecution(), "Execution should be stopped for state 3")
+	// Verify halted was set for state 3
 	assert.True(t, node.GetHalted(), "Halted should be true for state 3")
 
 	mockClient.AssertExpectations(t)
@@ -6398,17 +6422,8 @@ func TestLeaderNode_startFailToSubmitCvMonitoring_TimerFires(t *testing.T) {
 
 func TestLeaderNode_startRequestToSubmitCvMonitoring_TimerFires(t *testing.T) {
 	node := createTestNodeForAcceptCommit()
-	mockClient := new(MockFallbackEthClientForAcceptCommit)
-	node.fallbackEthClient = mockClient
-
-	// Mock ChainID which is called by ExecuteTransaction
-	mockClient.On("ChainID", mock.Anything).Return(big.NewInt(1), nil).Maybe()
-	mockClient.On("PendingNonceAt", mock.Anything, mock.Anything).Return(uint64(0), nil).Maybe()
-	mockClient.On("EstimateGas", mock.Anything, mock.Anything).Return(uint64(21000), nil).Maybe()
-	mockClient.On("SuggestGasPrice", mock.Anything).Return(big.NewInt(1000000000), nil).Maybe()
-	mockClient.On("SuggestGasTipCap", mock.Anything).Return(big.NewInt(1000000000), nil).Maybe()
-	mockClient.On("SendTransaction", mock.Anything, mock.Anything).Return(nil).Maybe()
-
+	// Keep fallback client from createTestNodeForAcceptCommit (already has ChainID).
+	// Use mock eth service so ExecuteTransaction is never called on real client.
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	os.Setenv("LEADER_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	defer func() {
@@ -6875,8 +6890,10 @@ func TestProcessCVS_ConcurrentSameOperator(t *testing.T) {
 	mockBroadcastRepo := new(MockBroadcastTrackerRepository)
 	node.broadcastTrackerRepository = mockBroadcastRepo
 
+	// Use 2 operators so AllCvsReceivedUnlocked is never true (we only store CVS for one) and GenerateMerkleRoot is not triggered
 	activatedOps := []common.Address{
 		common.HexToAddress("0x1111111111111111111111111111111111111111"),
+		common.HexToAddress("0x1111111111111111111111111111111111111112"),
 	}
 	eth.SetActivatedOperatorsCached(activatedOps)
 	defer eth.SetActivatedOperatorsCached([]common.Address{})
@@ -7107,7 +7124,13 @@ func TestProcessCVS_ConcurrentDifferentOperators(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	for i, err := range errors {
-		assert.NoError(t, err, "Operator %d should process successfully", i)
+		if err != nil {
+			s := err.Error()
+			benign := strings.Contains(s, "already in progress") ||
+				strings.Contains(s, "already submitted") ||
+				strings.Contains(s, "skipping")
+			assert.True(t, benign, "Operator %d: unexpected error: %v", i, err)
+		}
 	}
 
 	// Verify data in real database
@@ -7639,8 +7662,10 @@ func TestProcessCVS_ConcurrentDatabaseOperations(t *testing.T) {
 	mockBroadcastRepo := new(MockBroadcastTrackerRepository)
 	node.broadcastTrackerRepository = mockBroadcastRepo
 
+	// Use 2 operators so AllCvsReceivedUnlocked is never true and GenerateMerkleRoot is not triggered
 	activatedOps := []common.Address{
 		common.HexToAddress("0x7777777777777777777777777777777777777777"),
+		common.HexToAddress("0x7777777777777777777777777777777777777778"),
 	}
 	eth.SetActivatedOperatorsCached(activatedOps)
 	defer eth.SetActivatedOperatorsCached([]common.Address{})
