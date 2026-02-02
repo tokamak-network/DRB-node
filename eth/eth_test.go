@@ -362,40 +362,6 @@ func TestExecuteTransaction_ChainIDError(t *testing.T) {
 	mockClient.AssertExpectations(t)
 }
 
-func TestExecuteTransaction_NonceError(t *testing.T) {
-	mockClient := new(MockFallbackEthClient)
-	ctx := context.Background()
-
-	privateKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
-
-	chainID := big.NewInt(1337)
-	// ChainID succeeds on first attempt
-	mockClient.On("ChainID", ctx).Return(chainID, nil).Once()
-
-	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
-	require.NoError(t, err)
-
-	abiJSON := `[{"constant":false,"inputs":[],"name":"testMethod","outputs":[],"type":"function"}]`
-	parsedABI, err := abi.JSON(strings.NewReader(abiJSON))
-	require.NoError(t, err)
-
-	client := &utils.Client{
-		ContractABI:     parsedABI,
-		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
-		PrivateKey:      privateKey,
-	}
-	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), errors.New("nonce error")).Times(3)
-
-	tx, auth, err := ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
-	assert.Error(t, err)
-	assert.Nil(t, tx)
-	assert.Nil(t, auth)
-	assert.Contains(t, err.Error(), "failed to fetch nonce")
-
-	mockClient.AssertExpectations(t)
-}
-
 func TestExecuteTransaction_PackError(t *testing.T) {
 	mockClient := new(MockFallbackEthClient)
 	ctx := context.Background()
@@ -418,7 +384,6 @@ func TestExecuteTransaction_PackError(t *testing.T) {
 		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
 		PrivateKey:      privateKey,
 	}
-	mockClient.On("PendingNonceAt", ctx, auth.From).Return(uint64(0), nil).Once()
 
 	tx, auth, err := ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
 	assert.Error(t, err)

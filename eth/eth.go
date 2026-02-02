@@ -168,51 +168,6 @@ func ExecuteTransaction(
 		return nil, nil, fmt.Errorf("failed to create authorized transactor: %v", err)
 	}
 
-	var nonce uint64
-	var nonceErrors []error
-
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		nonce, err = fallbackEthClient.PendingNonceAt(ctx, auth.From)
-		if err == nil {
-			if attempt > 1 {
-				log.Infof("Successfully fetched nonce after %d retries for %s", attempt-1, functionName)
-			}
-			break
-		}
-
-		nonceErrors = append(nonceErrors, fmt.Errorf("attempt %d: %v", attempt, err))
-		log.Errorf("Failed to fetch nonce for %s, attempt %d/%d: %v", functionName, attempt, maxRetries, err)
-
-		if attempt < maxRetries {
-			log.Printf("Waiting %v before retry %d/%d for nonce", retryDelay, attempt+1, maxRetries)
-			select {
-			case <-ctx.Done():
-				errorDetails := fmt.Sprintf("failed to fetch nonce after %d attempts for %s. Errors: ", attempt, functionName)
-				for i, e := range nonceErrors {
-					if i > 0 {
-						errorDetails += "; "
-					}
-					errorDetails += fmt.Sprintf("Attempt %d: %v", i+1, e)
-				}
-				return nil, nil, errors.New(errorDetails)
-			case <-time.After(retryDelay):
-			}
-			continue
-		}
-
-		// All retries exhausted
-		errorDetails := fmt.Sprintf("failed to fetch nonce after %d attempts for %s. Errors: ", maxRetries, functionName)
-		for i, e := range nonceErrors {
-			if i > 0 {
-				errorDetails += "; "
-			}
-			errorDetails += fmt.Sprintf("Attempt %d: %v", i+1, e)
-		}
-		return nil, nil, errors.New(errorDetails)
-	}
-
-	auth.Nonce = big.NewInt(int64(nonce))
-
 	packedData, err := client.ContractABI.Pack(functionName, params...)
 	if err != nil {
 		log.Errorf("Failed to pack data for %s: %v", functionName, err)
