@@ -87,7 +87,7 @@ func TestGetDB_ConnectionPool(t *testing.T) {
 
 	// Verify connection pool settings
 	opts := db.Options()
-	assert.Equal(t, 10, opts.PoolSize, "Pool size should be 10")
+	assert.Equal(t, 45, opts.PoolSize, "Pool size should be 45")
 	assert.Equal(t, 10, opts.MinIdleConns, "MinIdleConns should be 10")
 }
 
