@@ -3373,6 +3373,10 @@ func TestLeaderNode_receiveCommit_StatusEvent_State1(t *testing.T) {
 	}
 	mockSub.On("Unsubscribe").Return()
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -3467,6 +3471,10 @@ func TestLeaderNode_receiveCommit_CvSubmitted_Success(t *testing.T) {
 	}
 	node.ethService = mockEth
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -3550,6 +3558,10 @@ func TestLeaderNode_receiveCommit_CoSubmitted_Success(t *testing.T) {
 	}
 	node.ethService = mockEth
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -3607,6 +3619,10 @@ func TestLeaderNode_receiveCommit_ReorgDetection(t *testing.T) {
 		errChan: make(chan error),
 	}
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -3651,6 +3667,10 @@ func TestLeaderNode_receiveCommit_WebsocketReconnection(t *testing.T) {
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	defer os.Unsetenv("CONTRACT_ADDRESS")
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	// First subscription fails with websocket error
 	mockSub1 := &MockSubscription{
@@ -3712,6 +3732,10 @@ func TestLeaderNode_receiveCommit_MerkleRootSubmitted_Success(t *testing.T) {
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -3781,6 +3805,10 @@ func TestLeaderNode_receiveCommit_RequestedToSubmitCo_Success(t *testing.T) {
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -3854,6 +3882,10 @@ func TestLeaderNode_receiveCommit_RequestedToSubmitCv_Success(t *testing.T) {
 		errChan: make(chan error),
 	}
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -3918,6 +3950,10 @@ func TestLeaderNode_receiveCommit_InvalidEventData(t *testing.T) {
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -4739,6 +4775,10 @@ func TestLeaderNode_receiveCommit_StatusEvent_State2(t *testing.T) {
 		errChan: make(chan error),
 	}
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -5134,6 +5174,10 @@ func TestLeaderNode_receiveCommit_RequestedToSubmitSFromIndexK_Success(t *testin
 	node.SetRequestedToSubmitCoMonitoringActive(true)
 	node.requestedToSubmitCoMonitoringTimer = time.AfterFunc(10*time.Second, func() {})
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -5189,6 +5233,10 @@ func TestLeaderNode_receiveCommit_RequestedToSubmitSFromIndexK_DecodeError(t *te
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -5269,6 +5317,10 @@ func TestLeaderNode_receiveCommit_SSubmitted_Success(t *testing.T) {
 	// Set secret request sent for which round
 	node.SetSecretRequestSentForWhichRound("100")
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -5339,6 +5391,10 @@ func TestLeaderNode_receiveCommit_SSubmitted_DecodeError(t *testing.T) {
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -5417,6 +5473,10 @@ func TestLeaderNode_receiveCommit_SSubmitted_BlockTimestampError(t *testing.T) {
 	node.ethService = mockEth
 
 	node.SetSecretRequestSentForWhichRound("100")
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -5571,6 +5631,10 @@ func TestLeaderNode_receiveCommit_DeActivated_DecodeError(t *testing.T) {
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -5806,6 +5870,10 @@ func TestLeaderNode_receiveCommit_MerkleRootSubmitted_BlockTimestampError(t *tes
 		errChan: make(chan error),
 	}
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -5873,6 +5941,10 @@ func TestLeaderNode_receiveCommit_RequestedToSubmitCo_BlockTimestampError(t *tes
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -5943,6 +6015,10 @@ func TestLeaderNode_receiveCommit_RequestedToSubmitCv_BlockTimestampError(t *tes
 		errChan: make(chan error),
 	}
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -6005,6 +6081,10 @@ func TestLeaderNode_receiveCommit_RequestedToSubmitCo_DecodeError(t *testing.T) 
 		errChan: make(chan error),
 	}
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -6061,6 +6141,10 @@ func TestLeaderNode_receiveCommit_RequestedToSubmitCv_DecodeError(t *testing.T) 
 		errChan: make(chan error),
 	}
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -6116,6 +6200,10 @@ func TestLeaderNode_receiveCommit_StatusEvent_DecodeError(t *testing.T) {
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -6179,6 +6267,10 @@ func TestLeaderNode_receiveCommit_StatusEvent_BlockTimestampError(t *testing.T) 
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -6255,6 +6347,10 @@ func TestLeaderNode_receiveCommit_StatusEvent_State3(t *testing.T) {
 	mockSub := &MockSubscription{
 		errChan: make(chan error),
 	}
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -8203,7 +8299,7 @@ func TestLeaderNode_updateLastProcessedCoords_ConcurrentUpdates(t *testing.T) {
 	assert.GreaterOrEqual(t, logIndex, uint(0))
 }
 
-// TestLeaderNode_catchUpMissedEvents_InitialState tests when lastProcessedBlock is 0 (should return early)
+// TestLeaderNode_catchUpMissedEvents_InitialState tests when lastProcessedBlock is 0 (should initialize to current block)
 func TestLeaderNode_catchUpMissedEvents_InitialState(t *testing.T) {
 	node := createTestNodeForAcceptCommit()
 	mockClient := new(MockFallbackEthClientForAcceptCommit)
@@ -8214,12 +8310,23 @@ func TestLeaderNode_catchUpMissedEvents_InitialState(t *testing.T) {
 
 	contractAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
 
-	// Should return early without calling HeaderByNumber
+	// Mock HeaderByNumber to return current block 200
+	mockHeader := &types.Header{
+		Number: big.NewInt(200),
+	}
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(mockHeader, nil).Once()
+
+	// Should initialize lastProcessedBlock to current block
 	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
 	assert.NoError(t, err)
 
-	// Verify HeaderByNumber was not called
-	mockClient.AssertNotCalled(t, "HeaderByNumber", mock.Anything, mock.Anything)
+	// Verify HeaderByNumber was called
+	mockClient.AssertExpectations(t)
+
+	// Verify lastProcessedBlock was initialized
+	lastBlock, _, _ := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(200), lastBlock, "lastProcessedBlock should be initialized to current block")
 }
 
 // TestLeaderNode_catchUpMissedEvents_HeaderByNumberError tests when HeaderByNumber fails
@@ -8293,10 +8400,10 @@ func TestLeaderNode_catchUpMissedEvents_FilterLogsError(t *testing.T) {
 	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
 		Return(mockHeader, nil)
 
-	// Mock FilterLogs to return error
+	// Mock FilterLogs to return error (FromBlock is lastProcessedBlock + 1)
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock.Uint64() == 100 && q.ToBlock.Uint64() == 105
+			q.FromBlock.Uint64() == 101 && q.ToBlock.Uint64() == 105
 	})).Return(nil, errors.New("failed to fetch logs"))
 
 	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
@@ -8325,10 +8432,10 @@ func TestLeaderNode_catchUpMissedEvents_NoMissedLogs(t *testing.T) {
 	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
 		Return(mockHeader, nil)
 
-	// Mock FilterLogs to return empty logs
+	// Mock FilterLogs to return empty logs (FromBlock is lastProcessedBlock + 1)
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock.Uint64() == 100 && q.ToBlock.Uint64() == 105
+			q.FromBlock.Uint64() == 101 && q.ToBlock.Uint64() == 105
 	})).Return([]types.Log{}, nil)
 
 	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
@@ -8388,7 +8495,7 @@ func TestLeaderNode_catchUpMissedEvents_SuccessfulCatchUp(t *testing.T) {
 
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock.Uint64() == 100 && q.ToBlock.Uint64() == 105
+			q.FromBlock.Uint64() == 101 && q.ToBlock.Uint64() == 105
 	})).Return(missedLogs, nil)
 
 	mockClient.On("CallContract", mock.Anything, mock.Anything, mock.Anything).
@@ -8461,7 +8568,7 @@ func TestLeaderNode_catchUpMissedEvents_Sorting(t *testing.T) {
 
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock.Uint64() == 100 && q.ToBlock.Uint64() == 105
+			q.FromBlock.Uint64() == 101 && q.ToBlock.Uint64() == 105
 	})).Return(missedLogs, nil)
 
 	mockClient.On("CallContract", mock.Anything, mock.Anything, mock.Anything).
@@ -8553,7 +8660,7 @@ func TestLeaderNode_catchUpMissedEvents_DuplicateDetection(t *testing.T) {
 
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock.Uint64() == 100 && q.ToBlock.Uint64() == 105
+			q.FromBlock.Uint64() == 101 && q.ToBlock.Uint64() == 105
 	})).Return(missedLogs, nil)
 
 	mockClient.On("CallContract", mock.Anything, mock.Anything, mock.Anything).
@@ -8626,7 +8733,7 @@ func TestLeaderNode_catchUpMissedEvents_SortingByTxIndex(t *testing.T) {
 
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock.Uint64() == 100 && q.ToBlock.Uint64() == 105
+			q.FromBlock.Uint64() == 101 && q.ToBlock.Uint64() == 105
 	})).Return(missedLogs, nil)
 
 	mockClient.On("CallContract", mock.Anything, mock.Anything, mock.Anything).
@@ -8699,7 +8806,7 @@ func TestLeaderNode_catchUpMissedEvents_SortingByLogIndex(t *testing.T) {
 
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock.Uint64() == 100 && q.ToBlock.Uint64() == 105
+			q.FromBlock.Uint64() == 101 && q.ToBlock.Uint64() == 105
 	})).Return(missedLogs, nil)
 
 	mockClient.On("CallContract", mock.Anything, mock.Anything, mock.Anything).
@@ -8971,7 +9078,7 @@ func TestLeaderNode_CatchUpFromSameBlock(t *testing.T) {
 
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock != nil && q.FromBlock.Uint64() == 100 &&
+			q.FromBlock != nil && q.FromBlock.Uint64() == 101 &&
 			q.ToBlock != nil && q.ToBlock.Uint64() == 101
 	})).Return(missedLogs, nil).Once()
 
@@ -9034,7 +9141,7 @@ func TestLeaderNode_catchUpMissedEvents_OnlyDuplicates_NoUpdate(t *testing.T) {
 
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock != nil && q.FromBlock.Uint64() == 100 &&
+			q.FromBlock != nil && q.FromBlock.Uint64() == 101 &&
 			q.ToBlock != nil && q.ToBlock.Uint64() == 101
 	})).Return(missedLogs, nil).Once()
 
@@ -9096,7 +9203,7 @@ func TestLeaderNode_catchUpMissedEvents_SameBlockSameTxHigherLogIndex_Processes(
 
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock != nil && q.FromBlock.Uint64() == 100 &&
+			q.FromBlock != nil && q.FromBlock.Uint64() == 101 &&
 			q.ToBlock != nil && q.ToBlock.Uint64() == 101
 	})).Return(missedLogs, nil).Once()
 
@@ -9145,7 +9252,7 @@ func TestLeaderNode_catchUpMissedEvents_RemovedLog_DoesNotAdvanceCoords(t *testi
 
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock != nil && q.FromBlock.Uint64() == 100 &&
+			q.FromBlock != nil && q.FromBlock.Uint64() == 101 &&
 			q.ToBlock != nil && q.ToBlock.Uint64() == 101
 	})).Return(missedLogs, nil).Once()
 

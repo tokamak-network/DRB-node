@@ -2987,6 +2987,10 @@ func TestRegularNode_receiveCommitRequest_MultipleEvents_OneFails_OthersContinue
 	}
 	mockSub.On("Unsubscribe").Return()
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventCount := int32(0)
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -3328,6 +3332,10 @@ func TestRegularNode_receiveCommitRequest_ReorgDetection(t *testing.T) {
 	}
 	mockSub.On("Unsubscribe").Return()
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -3392,6 +3400,10 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State1(t *testing.T) {
 		errChan: make(chan error),
 	}
 	mockSub.On("Unsubscribe").Return()
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -3471,6 +3483,10 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_InvalidData(t *testing.T) 
 	}
 	mockSub.On("Unsubscribe").Return()
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -3538,6 +3554,10 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_Success(t *testing
 		errChan: make(chan error),
 	}
 	mockSub.On("Unsubscribe").Return()
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -3610,6 +3630,10 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_DecodeError(t *tes
 	}
 	mockSub.On("Unsubscribe").Return()
 
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
+
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
@@ -3667,6 +3691,10 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_BlockTimestampErro
 		errChan: make(chan error),
 	}
 	mockSub.On("Unsubscribe").Return()
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -3736,6 +3764,10 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_ProcessCommitReque
 		errChan: make(chan error),
 	}
 	mockSub.On("Unsubscribe").Return()
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -3822,6 +3854,10 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_ProcessCosRequestE
 		errChan: make(chan error),
 	}
 	mockSub.On("Unsubscribe").Return()
+
+	// Mock HeaderByNumber for catchUpMissedEvents on reconnection (initializes to current block)
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(&types.Header{Number: big.NewInt(1)}, nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -5753,7 +5789,7 @@ func TestRegularNode_StartMerkleRootMonitoring_LogsElseBranch(t *testing.T) {
 
 // Test cases for catchUpMissedEvents function
 
-func TestRegularNode_catchUpMissedEvents_FirstTime_NoCatchUpNeeded(t *testing.T) {
+func TestRegularNode_catchUpMissedEvents_FirstTime_InitializesTracking(t *testing.T) {
 	node := createTestNodeForSendCommit()
 	mockClient := new(MockFallbackEthClient)
 	node.fallbackEthClient = mockClient
@@ -5762,13 +5798,25 @@ func TestRegularNode_catchUpMissedEvents_FirstTime_NoCatchUpNeeded(t *testing.T)
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
 
-	// lastProcessedBlock is 0 by default
+	// Mock HeaderByNumber to return current block 200
+	mockHeader := &types.Header{
+		Number: big.NewInt(200),
+	}
+	mockClient.On("HeaderByNumber", mock.Anything, (*big.Int)(nil)).
+		Return(mockHeader, nil).Once()
+
+	// lastProcessedBlock is 0 by default - should initialize to current block
 	err = node.catchUpMissedEvents(context.Background(), contractAddr, parsedABI)
 
 	assert.NoError(t, err)
-	// Verify no calls were made to HeaderByNumber or FilterLogs
-	mockClient.AssertNotCalled(t, "HeaderByNumber")
+	// Verify HeaderByNumber was called
+	mockClient.AssertExpectations(t)
+	// Verify FilterLogs was not called since this is first connection
 	mockClient.AssertNotCalled(t, "FilterLogs")
+
+	// Verify lastProcessedBlock was initialized
+	lastBlock, _, _ := node.getLastProcessedCoords()
+	assert.Equal(t, uint64(200), lastBlock, "lastProcessedBlock should be initialized to current block")
 }
 
 func TestRegularNode_catchUpMissedEvents_NoNewBlocks(t *testing.T) {
@@ -5841,7 +5889,7 @@ func TestRegularNode_catchUpMissedEvents_NoMissedLogs(t *testing.T) {
 	contractAddr := common.HexToAddress("0x1234567890123456789012345678901234567890")
 	mockClient.On("FilterLogs", mock.Anything, mock.MatchedBy(func(q ethereum.FilterQuery) bool {
 		return len(q.Addresses) == 1 && q.Addresses[0] == contractAddr &&
-			q.FromBlock.Uint64() == 100 && q.ToBlock.Uint64() == 150
+			q.FromBlock.Uint64() == 101 && q.ToBlock.Uint64() == 150
 	})).Return([]types.Log{}, nil).Once()
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")

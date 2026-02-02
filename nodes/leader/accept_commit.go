@@ -350,15 +350,13 @@ func (n *LeaderNode) resuming(ctx context.Context) error {
 
 func (n *LeaderNode) processCOS(ctx context.Context, round *big.Int, trialNum *big.Int, cos [32]byte, activatedOperatorIndex *big.Int) error {
 	if n.GetHalted() {
-		log.Println("System is halted. Skipping processCOS.")
-		return nil
+		return fmt.Errorf("system is halted. Skipping processCOS")
 	}
 	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
 
 	activatedOps := n.ethService.GetActivatedOperatorsCached()
 	if activatedOperatorIndex.Int64() >= int64(len(activatedOps)) {
-		log.Printf("Index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
-		return nil
+		return fmt.Errorf("index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
 	}
 	eoa := activatedOps[activatedOperatorIndex.Int64()]
 	cosHex := hex.EncodeToString(cos[:])
@@ -447,16 +445,14 @@ func (n *LeaderNode) updateCOS(ctx context.Context, round string, trialNum strin
 
 func (n *LeaderNode) processCVS(ctx context.Context, round *big.Int, trialNum *big.Int, cvs [32]byte, activatedOperatorIndex *big.Int) error {
 	if n.GetHalted() {
-		log.Println("System is halted. Skipping processCVS.")
-		return nil
+		return fmt.Errorf("system is halted. Skipping processCVS")
 	}
 	fmt.Printf("Round %v, TrialNum %v, activatedOperatorIndex %v\n", round, trialNum, activatedOperatorIndex)
 	roundStr := round.String()
 	trialNumStr := trialNum.String()
 	activatedOps := n.ethService.GetActivatedOperatorsCached()
 	if activatedOperatorIndex.Int64() >= int64(len(activatedOps)) {
-		log.Printf("Index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
-		return nil
+		return fmt.Errorf("index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
 	}
 	eoa := activatedOps[activatedOperatorIndex.Int64()]
 	cvsHex := hex.EncodeToString(cvs[:])
@@ -1402,16 +1398,16 @@ func (n *LeaderNode) getLastProcessedCoords() (uint64, uint, uint) {
 }
 
 func (n *LeaderNode) updateLastProcessedCoords(blockNumber uint64, txIndex uint, logIndex uint) {
-	n.lastProcessedCoordsMu.RLock()
+	n.lastProcessedCoordsMu.Lock()
+	defer n.lastProcessedCoordsMu.Unlock()
+
 	currentBlock := n.lastProcessedBlock
 	currentTxIndex := n.lastProcessedTxIndex
 	currentLogIndex := n.lastProcessedLogIndex
-	n.lastProcessedCoordsMu.RUnlock()
 
-	isNewBlock := blockNumber > currentBlock
 	shouldUpdate := false
 
-	if isNewBlock {
+	if blockNumber > currentBlock {
 		shouldUpdate = true
 	} else if blockNumber == currentBlock {
 		if txIndex > currentTxIndex {
@@ -1424,11 +1420,9 @@ func (n *LeaderNode) updateLastProcessedCoords(blockNumber uint64, txIndex uint,
 	}
 
 	if shouldUpdate {
-		n.lastProcessedCoordsMu.Lock()
 		n.lastProcessedBlock = blockNumber
 		n.lastProcessedTxIndex = txIndex
 		n.lastProcessedLogIndex = logIndex
-		n.lastProcessedCoordsMu.Unlock()
 	}
 }
 
@@ -1666,9 +1660,6 @@ func (n *LeaderNode) processEventLog(ctx context.Context, vLog types.Log, parsed
 
 func (n *LeaderNode) catchUpMissedEvents(ctx context.Context, contractAddr common.Address, parsedABI abi.ABI) error {
 	lastProcessedBlock, _, _ := n.getLastProcessedCoords()
-	if lastProcessedBlock == 0 {
-		return nil
-	}
 
 	currentHeader, err := n.fallbackEthClient.HeaderByNumber(ctx, nil)
 	if err != nil {
@@ -1676,6 +1667,15 @@ func (n *LeaderNode) catchUpMissedEvents(ctx context.Context, contractAddr commo
 	}
 
 	currentBlock := currentHeader.Number.Uint64()
+
+	// If this is the first connection (no blocks processed yet), initialize the tracking
+	// to the current block so that subsequent reconnections can catch up properly
+	if lastProcessedBlock == 0 {
+		log.Printf("First connection: initializing lastProcessedBlock to current block %d", currentBlock)
+		n.updateLastProcessedCoords(currentBlock, 0, 0)
+		return nil
+	}
+
 	if currentBlock <= lastProcessedBlock {
 		return nil
 	}
@@ -1684,7 +1684,7 @@ func (n *LeaderNode) catchUpMissedEvents(ctx context.Context, contractAddr commo
 
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddr},
-		FromBlock: big.NewInt(int64(lastProcessedBlock)),
+		FromBlock: big.NewInt(int64(lastProcessedBlock + 1)),
 		ToBlock:   big.NewInt(int64(currentBlock)),
 	}
 

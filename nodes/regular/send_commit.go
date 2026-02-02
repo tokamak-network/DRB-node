@@ -192,8 +192,7 @@ func (n *RegularNode) processSubmittedSecretRequest(ctx context.Context, round, 
 
 func (n *RegularNode) processSecretRequest(ctx context.Context, round, trialNum, index *big.Int) error {
 	if n.GetHalted() {
-		fmt.Println("system is halted. Skipping processSubmittedSecretRequest.")
-		return nil
+		return fmt.Errorf("system is halted. Skipping processSecretRequest")
 	}
 	if appconfig.Get().DisableSecretSubmission {
 		return fmt.Errorf("secret submission is disabled via configuration. Skipping processSecretRequest.")
@@ -279,8 +278,7 @@ func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string
 
 func (n *RegularNode) processMerkleRoot(Round *big.Int, TrialNum *big.Int) error {
 	if n.GetHalted() {
-		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
-		return nil
+		return fmt.Errorf("system is halted. Skipping processMerkleRoot")
 	}
 	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
 	uniqueKey := utils.GetUniqueKey(Round.String(), TrialNum.String())
@@ -913,16 +911,16 @@ func (n *RegularNode) getLastProcessedCoords() (uint64, uint, uint) {
 }
 
 func (n *RegularNode) updateLastProcessedCoords(blockNumber uint64, txIndex uint, logIndex uint) {
-	n.lastProcessedCoordsMu.RLock()
+	n.lastProcessedCoordsMu.Lock()
+	defer n.lastProcessedCoordsMu.Unlock()
+
 	currentBlock := n.lastProcessedBlock
 	currentTxIndex := n.lastProcessedTxIndex
 	currentLogIndex := n.lastProcessedLogIndex
-	n.lastProcessedCoordsMu.RUnlock()
 
-	isNewBlock := blockNumber > currentBlock
 	shouldUpdate := false
 
-	if isNewBlock {
+	if blockNumber > currentBlock {
 		shouldUpdate = true
 	} else if blockNumber == currentBlock {
 		if txIndex > currentTxIndex {
@@ -935,11 +933,9 @@ func (n *RegularNode) updateLastProcessedCoords(blockNumber uint64, txIndex uint
 	}
 
 	if shouldUpdate {
-		n.lastProcessedCoordsMu.Lock()
 		n.lastProcessedBlock = blockNumber
 		n.lastProcessedTxIndex = txIndex
 		n.lastProcessedLogIndex = logIndex
-		n.lastProcessedCoordsMu.Unlock()
 	}
 }
 
@@ -1018,6 +1014,7 @@ func (n *RegularNode) processEventLog(ctx context.Context, vLog types.Log, parse
 		err = n.processCommitRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
 		if err != nil {
 			log.Printf("Failed to process commit request: %v", err)
+			return
 		}
 
 	case StatusSig:
@@ -1106,6 +1103,7 @@ func (n *RegularNode) processEventLog(ctx context.Context, vLog types.Log, parse
 		err = n.processCosRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
 		if err != nil {
 			log.Printf("Failed to process cos request: %v", err)
+			return
 		}
 
 	case RequestedToSubmitSFromIndexKSig:
@@ -1181,9 +1179,6 @@ func (n *RegularNode) processEventLog(ctx context.Context, vLog types.Log, parse
 
 func (n *RegularNode) catchUpMissedEvents(ctx context.Context, contractAddr common.Address, parsedABI abi.ABI) error {
 	lastProcessedBlock, _, _ := n.getLastProcessedCoords()
-	if lastProcessedBlock == 0 {
-		return nil
-	}
 
 	currentHeader, err := n.fallbackEthClient.HeaderByNumber(ctx, nil)
 	if err != nil {
@@ -1191,6 +1186,15 @@ func (n *RegularNode) catchUpMissedEvents(ctx context.Context, contractAddr comm
 	}
 
 	currentBlock := currentHeader.Number.Uint64()
+
+	// If this is the first connection (no blocks processed yet), initialize the tracking
+	// to the current block so that subsequent reconnections can catch up properly
+	if lastProcessedBlock == 0 {
+		log.Printf("First connection: initializing lastProcessedBlock to current block %d", currentBlock)
+		n.updateLastProcessedCoords(currentBlock, 0, 0)
+		return nil
+	}
+
 	if currentBlock <= lastProcessedBlock {
 		return nil
 	}
@@ -1199,7 +1203,7 @@ func (n *RegularNode) catchUpMissedEvents(ctx context.Context, contractAddr comm
 
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddr},
-		FromBlock: big.NewInt(int64(lastProcessedBlock)),
+		FromBlock: big.NewInt(int64(lastProcessedBlock + 1)),
 		ToBlock:   big.NewInt(int64(currentBlock)),
 	}
 
