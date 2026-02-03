@@ -29,8 +29,9 @@ const abiFilePath = "contract/abi/Commit2RevealDRB.json"
 
 // Flags to track whether deposit and activate have been called in current run
 var (
-	depositCalledInThisRun  bool = false
-	activateCalledInThisRun bool = false
+	depositCalledInThisRun           bool = false
+	activateCalledInThisRun          bool = false
+	registrationSentWhenActivated    bool = false // Send registration only once when activated in main loop
 )
 
 type RegularNodeHandler struct {
@@ -217,6 +218,10 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 			log.Println("Node is activated. No further action required.")
 			activateCalledInThisRun = true
 			depositCalledInThisRun = true
+			if !registrationSentWhenActivated {
+				rh.sendRegistrationRequestToLeader(ctx, h, leaderInfo.ID, eoaAddress, privateKey)
+				registrationSentWhenActivated = true
+			}
 		} else {
 			log.Println("Node is not activated. Checking deposit amount...")
 			if !depositCalledInThisRun {

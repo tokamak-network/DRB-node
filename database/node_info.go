@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/go-pg/pg/v10"
 	"github.com/tokamak-network/DRB-node/utils"
@@ -30,48 +29,12 @@ func (r *NodeInfoRepository) AddAndUpdateNodeInfo(ctx context.Context, nodeInfo 
 		EOAAddress: nodeInfo.EOAAddress,
 	}
 
-	// First, check if there's a record with the same IP but different EOA
-	var existingByIP NodeInfoScheme
-	errIP := r.db.WithContext(ctx).Model(&existingByIP).
-		Where("ip = ?", nodeInfo.IP).
-		Select()
-
-	if errIP == nil && existingByIP.EOAAddress != nodeInfo.EOAAddress {
-		log.Printf("IP %s exists with different EOA (%s), deleting old record",
-			nodeInfo.IP, existingByIP.EOAAddress)
-		_, err := r.db.WithContext(ctx).Model(&existingByIP).
-			Where("ip = ?", nodeInfo.IP).
-			Delete()
-		if err != nil {
-			log.Printf("Failed to delete old record with IP %s: %v", nodeInfo.IP, err)
-		}
-	}
-
-	// Now try UPSERT based on eoa_address
 	_, err := r.db.WithContext(ctx).Model(node).
 		OnConflict("(eoa_address) DO UPDATE").
 		Set("peer_id = EXCLUDED.peer_id").
 		Set("ip = EXCLUDED.ip").
 		Set("port = EXCLUDED.port").
 		Insert()
-
-	if err != nil {
-		errStr := err.Error()
-		if strings.Contains(errStr, "duplicate key") && strings.Contains(errStr, "ip_key") {
-			log.Printf("Retrying after deleting conflicting IP record")
-			_, delErr := r.db.WithContext(ctx).Model(&NodeInfoScheme{}).
-				Where("ip = ? AND eoa_address != ?", nodeInfo.IP, nodeInfo.EOAAddress).
-				Delete()
-			if delErr == nil {
-				_, err = r.db.WithContext(ctx).Model(node).
-					OnConflict("(eoa_address) DO UPDATE").
-					Set("peer_id = EXCLUDED.peer_id").
-					Set("ip = EXCLUDED.ip").
-					Set("port = EXCLUDED.port").
-					Insert()
-			}
-		}
-	}
 
 	if err != nil {
 		log.Printf("Database error occurred: %s", err.Error())

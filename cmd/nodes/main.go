@@ -30,7 +30,7 @@ func main() {
 
 	err := database.InitSQLDB(ctx, cfg.PostgresPort, cfg.PostgresHost, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresName)
 	if err != nil {
-		log.Fatalf("Error initializing sql db: %v", err)
+		logger.Log.Errorf("Error initializing sql db: %v", err)
 	}
 
 	// Initialize the fallback ethclient
