@@ -86,6 +86,7 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 			case <-ctx.Done():
 				log.Println("ReceiveCommit function received shutdown signal, closing subscription...")
 				sub.Unsubscribe()
+				close(logs)
 				return
 			case err := <-sub.Err():
 				log.Printf("Error in event subscription: %v", err)
@@ -98,6 +99,7 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 					}
 				}
 				time.Sleep(1 * time.Second)
+				close(logs)
 				reconnect = true
 
 			case vLog := <-logs:
@@ -165,7 +167,8 @@ func (n *LeaderNode) processDeactivated(ctx context.Context, operator common.Add
 
 func (n *LeaderNode) processSubmittedSecretRequest(ctx context.Context, round *big.Int, trialNum *big.Int, secret [32]byte, index *big.Int) error {
 	if n.GetHalted() {
-		return fmt.Errorf("system is halted. Skipping processSubmittedSecretRequest.")
+		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
+		return nil
 	}
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	intValue := int(index.Int64())
@@ -357,8 +360,7 @@ func (n *LeaderNode) processCOS(ctx context.Context, round *big.Int, trialNum *b
 
 	activatedOps := n.ethService.GetActivatedOperatorsCached()
 	if activatedOperatorIndex.Int64() >= int64(len(activatedOps)) {
-		log.Printf("Index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
-		return nil
+		return fmt.Errorf("index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
 	}
 	eoa := activatedOps[activatedOperatorIndex.Int64()]
 	cosHex := hex.EncodeToString(cos[:])
@@ -455,8 +457,7 @@ func (n *LeaderNode) processCVS(ctx context.Context, round *big.Int, trialNum *b
 	trialNumStr := trialNum.String()
 	activatedOps := n.ethService.GetActivatedOperatorsCached()
 	if activatedOperatorIndex.Int64() >= int64(len(activatedOps)) {
-		log.Printf("Index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
-		return nil
+		return fmt.Errorf("index %d out of bounds for activated operators length %d", activatedOperatorIndex.Int64(), len(activatedOps))
 	}
 	eoa := activatedOps[activatedOperatorIndex.Int64()]
 	cvsHex := hex.EncodeToString(cvs[:])
@@ -591,7 +592,8 @@ func (n *LeaderNode) processRequestedToSubmitCo(ctx context.Context, blockTimest
 // Add new function to process RequestedToSubmitCv event
 func (n *LeaderNode) processRequestedToSubmitCv(ctx context.Context, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int) error {
 	if n.GetHalted() {
-		return fmt.Errorf("system is halted. Skipping processRequestedToSubmitCv.")
+		log.Println("System is halted. Skipping processRequestedToSubmitCv.")
+		return nil
 	}
 
 	// Stop the requestToSubmitCv monitoring since the request has been made
@@ -951,7 +953,8 @@ func (n *LeaderNode) stopRequestToSubmitCvMonitoring() {
 // Add function to call requestToSubmitCv when regular nodes haven't submitted CVS
 func (n *LeaderNode) callRequestToSubmitCv(ctx context.Context, round string, trialNum string) error {
 	if n.GetHalted() {
-		return fmt.Errorf("system is halted. Skipping callRequestToSubmitCv.")
+		log.Println("System is halted. Skipping callRequestToSubmitCv.")
+		return nil
 	}
 
 	log.Printf("Calling requestToSubmitCv for round %s with trial %s due to missing CVS submissions", round, trialNum)
@@ -1042,7 +1045,8 @@ func (n *LeaderNode) GenerateMerkleRoot(ctx context.Context, roundNum string, tr
 		return fmt.Errorf("merkle root submission is disabled via configuration. Skipping GenerateMerkleRoot once.")
 	}
 	if n.GetHalted() {
-		return fmt.Errorf("system is halted. Skipping GenerateMerkleRoot.")
+		log.Println("System is halted. Skipping GenerateMerkleRoot.")
+		return nil
 	}
 
 	if !n.CompareAndSwapSubmittingMerkleRoot(false, true) {
@@ -1402,11 +1406,12 @@ func (n *LeaderNode) getLastProcessedCoords() (uint64, uint, uint) {
 }
 
 func (n *LeaderNode) updateLastProcessedCoords(blockNumber uint64, txIndex uint, logIndex uint) {
-	n.lastProcessedCoordsMu.RLock()
+	n.lastProcessedCoordsMu.Lock()
+	defer n.lastProcessedCoordsMu.Unlock()
+
 	currentBlock := n.lastProcessedBlock
 	currentTxIndex := n.lastProcessedTxIndex
 	currentLogIndex := n.lastProcessedLogIndex
-	n.lastProcessedCoordsMu.RUnlock()
 
 	isNewBlock := blockNumber > currentBlock
 	shouldUpdate := false
@@ -1424,11 +1429,9 @@ func (n *LeaderNode) updateLastProcessedCoords(blockNumber uint64, txIndex uint,
 	}
 
 	if shouldUpdate {
-		n.lastProcessedCoordsMu.Lock()
 		n.lastProcessedBlock = blockNumber
 		n.lastProcessedTxIndex = txIndex
 		n.lastProcessedLogIndex = logIndex
-		n.lastProcessedCoordsMu.Unlock()
 	}
 }
 

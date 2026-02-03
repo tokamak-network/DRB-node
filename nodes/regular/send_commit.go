@@ -84,6 +84,7 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 			case <-ctx.Done():
 				log.Println("MonitorCommitRequest function received shutdown signal, closing subscription...")
 				sub.Unsubscribe()
+				close(logs)
 				return
 			case err := <-sub.Err():
 				log.Printf("Error in event subscription: %v", err)
@@ -95,6 +96,7 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 					}
 				}
 				time.Sleep(1 * time.Second)
+				close(logs)
 				reconnect = true
 
 			case vLog := <-logs:
@@ -116,7 +118,7 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 func (n *RegularNode) processCvSubmitted(round *big.Int, trialNum *big.Int, index *big.Int) error {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping processCVS.")
-		return fmt.Errorf("system is halted. Skipping processCVS.")
+		return nil
 	}
 
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
@@ -155,7 +157,8 @@ func (n *RegularNode) checkAllCVsSubmittedOnChain(round string, trialNum string)
 
 func (n *RegularNode) processSubmittedSecretRequest(ctx context.Context, round, trialNum, index *big.Int) error {
 	if n.GetHalted() {
-		return fmt.Errorf("system is halted. Skipping processSubmittedSecretRequest.")
+		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
+		return nil
 	}
 
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
@@ -317,7 +320,7 @@ func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimes
 		// Delete old round data except current round from database
 		err := n.batchRepository.DeleteOldRoundDataForRegularNode(ctx, round.String())
 		if err != nil {
-			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
+			return fmt.Errorf("failed to delete old round data except round %v for regular node: %w", round, err)
 		}
 
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
@@ -339,7 +342,7 @@ func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimes
 		// Delete old round data except current round from database
 		err := n.batchRepository.DeleteOldRoundDataForRegularNode(ctx, round.String())
 		if err != nil {
-			log.Printf("Failed to delete old round data %v for regular node\n", round)
+			return fmt.Errorf("failed to delete old round data %v for regular node: %w", round, err)
 		}
 		// Update in-memory round data
 		roundData, exists := n.GetRoundData(uniqueKey)
@@ -356,7 +359,7 @@ func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimes
 		// Delete round and trial data from database
 		err := n.batchRepository.DeleteRoundTrialDataForRegularNode(ctx, n.GetCurrentRound(), trialNum.String())
 		if err != nil {
-			log.Printf("Failed to delete old round data %v for regular node\n", round)
+			return fmt.Errorf("failed to delete round %v trial %v data for regular node: %w", n.GetCurrentRound(), trialNum.String(), err)
 		}
 		// resume the round
 		n.SetHalted(true)
@@ -898,14 +901,6 @@ func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(ctx context.Conte
 	return nil
 }
 
-func (n *RegularNode) setLastProcessedBlock(blockNumber uint64) {
-	n.lastProcessedCoordsMu.Lock()
-	defer n.lastProcessedCoordsMu.Unlock()
-	if blockNumber > n.lastProcessedBlock {
-		n.lastProcessedBlock = blockNumber
-	}
-}
-
 func (n *RegularNode) getLastProcessedCoords() (uint64, uint, uint) {
 	n.lastProcessedCoordsMu.RLock()
 	defer n.lastProcessedCoordsMu.RUnlock()
@@ -913,11 +908,12 @@ func (n *RegularNode) getLastProcessedCoords() (uint64, uint, uint) {
 }
 
 func (n *RegularNode) updateLastProcessedCoords(blockNumber uint64, txIndex uint, logIndex uint) {
-	n.lastProcessedCoordsMu.RLock()
+	n.lastProcessedCoordsMu.Lock()
+	defer n.lastProcessedCoordsMu.Unlock()
+
 	currentBlock := n.lastProcessedBlock
 	currentTxIndex := n.lastProcessedTxIndex
 	currentLogIndex := n.lastProcessedLogIndex
-	n.lastProcessedCoordsMu.RUnlock()
 
 	isNewBlock := blockNumber > currentBlock
 	shouldUpdate := false
@@ -935,11 +931,9 @@ func (n *RegularNode) updateLastProcessedCoords(blockNumber uint64, txIndex uint
 	}
 
 	if shouldUpdate {
-		n.lastProcessedCoordsMu.Lock()
 		n.lastProcessedBlock = blockNumber
 		n.lastProcessedTxIndex = txIndex
 		n.lastProcessedLogIndex = logIndex
-		n.lastProcessedCoordsMu.Unlock()
 	}
 }
 
@@ -1106,6 +1100,7 @@ func (n *RegularNode) processEventLog(ctx context.Context, vLog types.Log, parse
 		err = n.processCosRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
 		if err != nil {
 			log.Printf("Failed to process cos request: %v", err)
+			return
 		}
 
 	case RequestedToSubmitSFromIndexKSig:
