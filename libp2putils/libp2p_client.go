@@ -50,32 +50,42 @@ func calculateOptimalLimits(nodeType string, maxOperators int) rcmgr.ScalingLimi
 	if nodeType == "leader" {
 		estimatedConnections := maxOperators + (maxOperators / 4)
 
-		streamsInbound := 3200
-		streamsOutbound := 3072
+		streamsInbound := 3104
+		streamsOutbound := 2976
 
 		// 25% safety margin
 		streamsInbound = streamsInbound + (streamsInbound / 4)
 		streamsOutbound = streamsOutbound + (streamsOutbound / 4)
 
+		connStreamsInbound := 97
+		connStreamsOutbound := 280
+		// 25% safety margin for per-connection limits
+		connStreamsInbound = connStreamsInbound + (connStreamsInbound / 4)
+		connStreamsOutbound = connStreamsOutbound + (connStreamsOutbound / 4)
+
 		limits.SystemBaseLimit.ConnsInbound = estimatedConnections
 		limits.SystemBaseLimit.ConnsOutbound = estimatedConnections
 		limits.SystemBaseLimit.StreamsInbound = streamsInbound
 		limits.SystemBaseLimit.StreamsOutbound = streamsOutbound
-		limits.ConnBaseLimit.StreamsInbound = 96
-		limits.ConnBaseLimit.StreamsOutbound = 10
+		limits.ConnBaseLimit.StreamsInbound = connStreamsInbound
+		limits.ConnBaseLimit.StreamsOutbound = connStreamsOutbound
 		limits.SystemBaseLimit.FD = estimatedConnections * 4
 		limits.SystemBaseLimit.Memory = int64((estimatedConnections * 512 * 1024) + (streamsInbound * 32 * 1024) + (streamsOutbound * 32 * 1024) + (256 * 1024 * 1024))
 
-		log.Printf("Leader node limits: %d connections (in/out), %d streams inbound, %d streams outbound (for %d operators)",
-			estimatedConnections, streamsInbound, streamsOutbound, maxOperators)
+		log.Printf("Leader node limits: %d connections (in/out), %d streams inbound, %d streams outbound, conn streams out: %d (for %d operators)",
+			estimatedConnections, streamsInbound, streamsOutbound, connStreamsOutbound, maxOperators)
 
 	} else {
 		limits.SystemBaseLimit.ConnsInbound = 2
 		limits.SystemBaseLimit.ConnsOutbound = 2
 
 		maxRetries := 3
-		streamsInbound := 3 * maxOperators * maxRetries
-		streamsOutbound := 3 + (3 * maxOperators)
+
+		streamsInbound := 3 * (maxOperators - 1) * maxRetries
+		streamsOutbound := 3 + (3 * (maxOperators - 1))
+
+		streamsInbound = streamsInbound + (streamsInbound / 4)
+		streamsOutbound = streamsOutbound + (streamsOutbound / 4)
 
 		limits.SystemBaseLimit.StreamsInbound = streamsInbound
 		limits.SystemBaseLimit.StreamsOutbound = streamsOutbound
