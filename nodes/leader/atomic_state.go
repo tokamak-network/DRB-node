@@ -15,19 +15,6 @@ import (
 // ATOMIC BOOLEAN VARIABLES (using int32: 0 = false, 1 = true)
 // ============================================================================
 
-// Execution state management
-func (n *LeaderNode) SetExecution(value bool) {
-	var val int32
-	if value {
-		val = 1
-	}
-	atomic.StoreInt32(&n.execution, val)
-}
-
-func (n *LeaderNode) GetExecution() bool {
-	return atomic.LoadInt32(&n.execution) == 1
-}
-
 // Halted state management (already using atomic in original code)
 func (n *LeaderNode) SetHalted(value bool) {
 	var val int32

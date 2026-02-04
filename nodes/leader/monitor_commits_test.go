@@ -424,9 +424,8 @@ func (s *MonitorCommitsSuite) SetupTest() {
 	// Set round/trial
 	s.ln.SetCurrentRound("1")
 	s.ln.SetCurrentTrial("1")
-	// Default: not halted, execution true
+	// Default: not halted
 	s.ln.SetHalted(false)
-	s.ln.SetExecution(true)
 
 	// Set envs needed by tx paths
 	pk, _ := ethcrypto.GenerateKey()

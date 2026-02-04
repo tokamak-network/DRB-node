@@ -367,7 +367,6 @@ func TestConcurrentCrossNodeStateSynchronization(t *testing.T) {
 					return
 				default:
 					// Leader modifies state
-					leaderNode.SetExecution(cycle%2 == 0)
 					leaderNode.SetHalted(cycle%3 == 0)
 					
 					round := fmt.Sprintf("sync_round_%d", cycle)
@@ -379,7 +378,7 @@ func TestConcurrentCrossNodeStateSynchronization(t *testing.T) {
 					for op := 0; op < operationsPerCycle; op++ {
 						key := fmt.Sprintf("leader_state_%d_%d", cycle, op)
 						roundData := leader_node.RoundData{
-							MerkleRoot:   leaderNode.GetExecution(),
+							MerkleRoot:   leaderNode.GetHalted(),
 							RandomNumber: !leaderNode.GetHalted(),
 						}
 						
@@ -407,17 +406,15 @@ func TestConcurrentCrossNodeStateSynchronization(t *testing.T) {
 					time.Sleep(time.Millisecond * 50) // Sync delay
 					
 					// Try to read leader state (potential inconsistency)
-					leaderExecution := leaderNode.GetExecution()
 					leaderHalted := leaderNode.GetHalted()
 					leaderRound := leaderNode.GetCurrentRound()
-					
+
 					// Apply state to regular node
-					regularNode1.SetExecution(leaderExecution)
 					regularNode1.SetHalted(leaderHalted)
 					regularNode1.SetCurrentRound(leaderRound)
-					
+
 					// Verify consistency
-					if regularNode1.GetExecution() == leaderExecution {
+					if regularNode1.GetHalted() == leaderHalted {
 						atomic.AddInt64(&syncSuccesses, 1)
 					} else {
 						atomic.AddInt64(&syncFailures, 1)
@@ -444,22 +441,20 @@ func TestConcurrentCrossNodeStateSynchronization(t *testing.T) {
 					time.Sleep(time.Millisecond * 75) // Different sync delay
 					
 					// Read leader state
-					leaderExecution := leaderNode.GetExecution()
 					leaderHalted := leaderNode.GetHalted()
 					leaderRound := leaderNode.GetCurrentRound()
-					
+
 					// Apply state
-					regularNode2.SetExecution(leaderExecution)
 					regularNode2.SetHalted(leaderHalted)
 					regularNode2.SetCurrentRound(leaderRound)
-					
+
 					// Check consistency with other regular node
-					if regularNode2.GetExecution() != regularNode1.GetExecution() {
+					if regularNode2.GetHalted() != regularNode1.GetHalted() {
 						atomic.AddInt64(&stateInconsistencies, 1)
 					}
-					
+
 					// Verify sync
-					if regularNode2.GetExecution() == leaderExecution {
+					if regularNode2.GetHalted() == leaderHalted {
 						atomic.AddInt64(&syncSuccesses, 1)
 					} else {
 						atomic.AddInt64(&syncFailures, 1)

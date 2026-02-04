@@ -42,7 +42,6 @@ func TestAtomicStateCorruptionDuringContextSwitching(t *testing.T) {
 						return
 					default:
 						// Rapid state changes that could cause corruption
-						expectedExecution := (op + switcherID) % 2 == 0
 						expectedHalted := (op + switcherID) % 3 == 0
 						expectedMonitoring := (op + switcherID) % 5 == 0
 						
@@ -52,11 +51,8 @@ func TestAtomicStateCorruptionDuringContextSwitching(t *testing.T) {
 						// Atomic operations - just ensure no crashes/races occur
 						// NOTE: We don't test that set/get returns the same value in concurrent context
 						// because other goroutines may modify the value between set and get
-						node.SetExecution(expectedExecution)
-						_ = node.GetExecution() // Don't expect this to equal expectedExecution
-						
 						runtime.Gosched() // Force context switch mid-operation
-						
+
 						node.SetHalted(expectedHalted)
 						_ = node.GetHalted()
 						
@@ -69,13 +65,12 @@ func TestAtomicStateCorruptionDuringContextSwitching(t *testing.T) {
 						// The only real corruption would be if atomic ops themselves failed
 						
 						// Check that we can read a coherent value (not corrupted memory)
-						exec := node.GetExecution()
 						halted := node.GetHalted()
 						monitoring := node.GetRequestedToSubmitCvMonitoringActive()
-						
+
 						// Just verify the atomic reads return valid boolean values
 						// In concurrent context, any combination of true/false is valid
-						_ = exec && halted && monitoring // This is fine in concurrent context
+						_ = halted && monitoring // This is fine in concurrent context
 						
 						localSwitches++
 						atomic.AddInt64(&contextSwitches, 1)
@@ -220,19 +215,14 @@ func TestConcurrentRegularNodeAtomicEdgeCases(t *testing.T) {
 						return
 					default:
 						// Stress test: Rapid atomic operations without expecting specific results
-						node.SetExecution(op%2 == 0)
-						_ = node.GetExecution() // Don't check value in concurrent context
-						
 						// Force context switch during critical period
 						runtime.Gosched()
-						
+
 						// Test multiple atomic operations
-						node.SetExecution(true)
 						node.SetHalted(false)
 						node.SetLeaderMonitoringActive(true)
-						
+
 						// Read all states - just ensure no crashes/memory corruption
-						_ = node.GetExecution()
 						_ = node.GetHalted()
 						_ = node.GetLeaderMonitoringActive()
 						

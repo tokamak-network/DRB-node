@@ -198,10 +198,6 @@ func TestAtomicOperationsStress(t *testing.T) {
 			defer wg.Done()
 
 			for j := 0; j < numOperationsPerWorker; j++ {
-				// Test execution state
-				node.SetExecution(j%2 == 0)
-				_ = node.GetExecution()
-
 				// Test halted state
 				node.SetHalted(j%3 == 0)
 				_ = node.GetHalted()

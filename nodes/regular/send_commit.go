@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"strings"
+	"sort"
 	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -65,225 +66,39 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 		logs := make(chan types.Log)
 		sub, err := n.fallbackEthClient.SubscribeFilterLogs(ctx, query, logs)
 		if err != nil {
-			log.Printf("Failed to subscribe to logs: %v. Retrying in 5 seconds...", err)
-			time.Sleep(5 * time.Second)
+			log.Printf("Failed to subscribe to logs: %v. Retrying in 2 seconds...", err)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
-		RequestedToSubmitCvS := parsedABI.Events["RequestedToSubmitCv"].ID
-		CvsEventSig := parsedABI.Events["CvSubmitted"].ID
-		StatusSig := parsedABI.Events["Status"].ID
-		MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
-		RequestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
-		RequestedToSubmitSFromIndexKSig := parsedABI.Events["RequestedToSubmitSFromIndexK"].ID
-		SSubmittedSig := parsedABI.Events["SSubmitted"].ID
-
+		// Connection succeeded - catch up on any missed events during retry period
+		log.Printf("Websocket connection established. Catching up on missed events...")
+		if catchUpErr := n.catchUpMissedEvents(ctx, contractAddr, parsedABI); catchUpErr != nil {
+			log.Printf("Error catching up on missed events: %v", catchUpErr)
+		}
 		reconnect := false
 		for {
 			select {
 			case <-ctx.Done():
 				log.Println("MonitorCommitRequest function received shutdown signal, closing subscription...")
 				sub.Unsubscribe()
+				close(logs)
 				return
 			case err := <-sub.Err():
 				log.Printf("Error in event subscription: %v", err)
 
-				if err != nil && (strings.Contains(err.Error(), "websocket: close 1006") || strings.Contains(err.Error(), "unexpected EOF")) {
+				if err != nil {
 					log.Printf("Websocket closed abnormally. Attempting to reconnect in 1 seconds...")
-				} else {
-					log.Printf("Fatal error in event subscription: %v", err)
+					if catchUpErr := n.catchUpMissedEvents(ctx, contractAddr, parsedABI); catchUpErr != nil {
+						log.Printf("Error catching up on missed events: %v", catchUpErr)
+					}
 				}
 				time.Sleep(1 * time.Second)
+				close(logs)
 				reconnect = true
 
 			case vLog := <-logs:
-				{
-					isReorg := vLog.Removed
-					if isReorg {
-						log.Printf("Reorg detected. Skipping event: %v", vLog.TxHash)
-						continue
-					}
-					switch vLog.Topics[0] {
-					case RequestedToSubmitCvS:
-						eventData := struct {
-							Round                         *big.Int
-							TrialNum                      *big.Int
-							PackedIndicesAscendingFromLSB *big.Int
-						}{}
-						err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
-						if err != nil {
-							log.Printf("Failed to decode event log: %v", err)
-							continue
-						}
-
-						fmt.Printf("CommitRequest Event: Round %v, TrialNum %v, indices %v\n", eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
-
-						// Mark CV as requested and stop leader monitoring
-						n.StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
-
-						// Get the block timestamp for the RequestedToSubmitCv event
-						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
-						if err != nil {
-							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
-							continue
-						}
-						// requestedToSubmitCvTime = big.NewInt(int64(blockTimestamp))
-
-						// Start monitoring for merkle root submission
-						n.StartMerkleRootMonitoring(ctx, eventData.Round.String(), eventData.TrialNum.String(), big.NewInt(int64(blockTimestamp)))
-
-						err = n.processCommitRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
-						if err != nil {
-							log.Printf("Failed to process commit request: %v", err)
-						}
-
-					case StatusSig:
-						eventData := struct {
-							CurRound    *big.Int
-							CurTrialNum *big.Int
-							CurState    *big.Int
-						}{}
-
-						err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
-						if err != nil {
-							log.Printf("Failed to decode Status event log: %v", err)
-							continue
-						}
-
-						// Get the actual block timestamp
-						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
-						if err != nil {
-							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
-							continue
-						}
-
-						n.processRandomRequestNumber(ctx, big.NewInt(int64(blockTimestamp)), eventData.CurRound, eventData.CurTrialNum, eventData.CurState)
-
-					case MerkleRootSubmittedSig:
-						eventData := struct {
-							Round      *big.Int
-							TrialNum   *big.Int
-							MerkleRoot [32]byte
-						}{}
-
-						err := parsedABI.UnpackIntoInterface(&eventData, "MerkleRootSubmitted", vLog.Data)
-						if err != nil {
-							log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
-							continue
-						}
-						fmt.Printf("MerkleRootSubmitted Event:\n Round %v, TrialNum %v, MerkleRoot: %v\n Round: %v\n",
-							eventData.Round, eventData.TrialNum, eventData.MerkleRoot, eventData.Round.String())
-
-						// Mark Merkle root as submitted and stop leader monitoring
-						n.SetMerkleRootSubmittedEventEmitted(true)
-						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
-						n.SetSubmitSMonitoringReferenceTime(big.NewInt(int64(blockTimestamp)))
-
-						n.StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
-						n.StopFailToSubmitMerkleRootAfterDisputeMonitoring(eventData.Round.String(), eventData.TrialNum.String())
-						n.StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx, eventData.Round.String(), eventData.TrialNum.String())
-
-						n.processMerkleRoot(eventData.Round, eventData.TrialNum)
-
-						if err != nil {
-							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
-							continue
-						}
-
-					case RequestedToSubmitCoSig:
-						eventData := struct {
-							Round         *big.Int
-							TrialNum      *big.Int
-							IndicesLength *big.Int
-							PackedIndices *big.Int
-						}{}
-						err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCo", vLog.Data)
-						if err != nil {
-							log.Printf("Failed to decode RequestedToSubmitCo event log: %v", err)
-							continue
-						}
-						fmt.Printf("RequestedToSubmitCo Event: Round %v, TrialNum %v, indicesLength %v\n, indices %v\n", eventData.Round, eventData.TrialNum, eventData.IndicesLength, eventData.PackedIndices)
-
-						// Get the block timestamp for RequestedToSubmitCo event
-						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
-						if err != nil {
-							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
-							continue
-						}
-
-						// Stop the current monitoring
-						n.StopRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
-
-						// Update the time reference to RequestedToSubmitCo event time
-						n.SetSubmitSMonitoringReferenceTime(big.NewInt(int64(blockTimestamp)))
-
-						// Restart monitoring with the new time reference
-						n.StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx, eventData.Round.String(), eventData.TrialNum.String())
-
-						log.Printf("Restarted monitoring for round %s trial %s with RequestedToSubmitCo event time", eventData.Round.String(), eventData.TrialNum.String())
-
-						err = n.processCosRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
-						if err != nil {
-							log.Printf("Failed to process cos request: %v", err)
-						}
-
-					case RequestedToSubmitSFromIndexKSig:
-						eventData := struct {
-							Round    *big.Int
-							TrialNum *big.Int
-							IndexK   *big.Int
-						}{}
-
-						err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitSFromIndexK", vLog.Data)
-
-						if err != nil {
-							log.Printf("Failed to decode RequestedToSubmitSFromIndexK event log: %v", err)
-							continue
-						}
-						fmt.Printf("RequestedToSubmitSFromIndexK Event:\n Round %v, TrialNum %v, indexK %v\n", eventData.Round, eventData.TrialNum, eventData.IndexK)
-
-						// Stop request to submit S or generate random number monitoring when RequestedToSubmitSFromIndexK event is received
-						n.StopRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
-						blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
-						n.SetSubmitSMonitoringReferenceTime(big.NewInt(int64(blockTimestamp)))
-						if err != nil {
-							log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
-							continue
-						}
-						n.processSecretRequest(ctx, eventData.Round, eventData.TrialNum, eventData.IndexK)
-
-					case SSubmittedSig:
-						eventData := struct {
-							Round    *big.Int
-							TrialNum *big.Int
-							S        [32]byte
-							Index    *big.Int
-						}{}
-
-						err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
-
-						if err != nil {
-							log.Printf("Failed to decode SSubmitted event log: %v", err)
-							continue
-						}
-						fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
-						n.processSubmittedSecretRequest(ctx, eventData.Round, eventData.TrialNum, eventData.Index)
-					case CvsEventSig:
-						eventData := struct {
-							Round    *big.Int
-							TrialNum *big.Int
-							Cv       [32]byte
-							Index    *big.Int
-						}{}
-						err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
-						if err != nil {
-							log.Printf("Failed to decode CvSubmitted event log: %v", err)
-							continue
-						}
-						fmt.Printf("CvSubmitted Event: Fetched successfully")
-						n.processCvSubmitted(eventData.Round, eventData.TrialNum, eventData.Index)
-					}
-				}
+				n.processEventLog(ctx, vLog, parsedABI)
 			}
 			if reconnect {
 				log.Printf("Reconnection triggered, breaking out of event loop to restart subscription...")
@@ -298,10 +113,10 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 	}
 }
 
-func (n *RegularNode) processCvSubmitted(round *big.Int, trialNum *big.Int, index *big.Int) {
+func (n *RegularNode) processCvSubmitted(round *big.Int, trialNum *big.Int, index *big.Int) error {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping processCVS.")
-		return
+		return nil
 	}
 
 	uniqueKey := utils.GetUniqueKey(round.String(), trialNum.String())
@@ -312,7 +127,7 @@ func (n *RegularNode) processCvSubmitted(round *big.Int, trialNum *big.Int, inde
 	n.SetSubmittedCvIndicesValue(uniqueKey, indexStr, true)
 
 	log.Printf("CV submitted for index %s in round %s with trail %s", indexStr, round.String(), trialNum.String())
-
+	return nil
 }
 
 func (n *RegularNode) checkAllCVsSubmittedOnChain(round string, trialNum string) bool {
@@ -338,22 +153,21 @@ func (n *RegularNode) checkAllCVsSubmittedOnChain(round string, trialNum string)
 	return allSubmitted
 }
 
-func (n *RegularNode) processSubmittedSecretRequest(ctx context.Context, round, trialNum, index *big.Int) {
+func (n *RegularNode) processSubmittedSecretRequest(ctx context.Context, round, trialNum, index *big.Int) error {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
-		return
+		return nil
 	}
 
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 	data, err := n.revealOrderRepository.GetRevealOrder(ctx, round.String(), trialNum.String())
 	if err != nil {
-		log.Printf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
+		return fmt.Errorf("Failed to get reveal order for round %s with trail %s: %v", round.String(), trialNum.String(), err)
 	}
 	orderedNodes := data.OrderedNodes
 	revealOrder := data.RevealOrder
 	if index.Int64() >= int64(len(orderedNodes)) {
-		log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(orderedNodes))
-		return
+		return fmt.Errorf("index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(orderedNodes))
 	}
 	var indexInRevealOrder int
 	intValue := int(index.Int64())
@@ -368,20 +182,22 @@ func (n *RegularNode) processSubmittedSecretRequest(ctx context.Context, round, 
 			regularEoaAddress := orderedNodes[indexInRevealOrder+1]
 			if eoaAddress == regularEoaAddress {
 				fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, TrialNum: %v, EOA: %v\n", round.String(), trialNum.String(), regularEoaAddress)
-				n.submitS(ctx, round.String(), trialNum.String())
+				if err := n.submitS(ctx, round.String(), trialNum.String()); err != nil {
+					return fmt.Errorf("failed to submit S: %v", err)
+				}
 			}
 		}
 	}
+	return nil
 }
 
-func (n *RegularNode) processSecretRequest(ctx context.Context, round, trialNum, index *big.Int) {
+func (n *RegularNode) processSecretRequest(ctx context.Context, round, trialNum, index *big.Int) error {
 	if n.GetHalted() {
-		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
-		return
+		fmt.Println("system is halted. Skipping processSubmittedSecretRequest.")
+		return nil
 	}
 	if appconfig.Get().DisableSecretSubmission {
-		log.Println("Secret submission is disabled via configuration. Skipping processSecretRequest.")
-		return
+		return fmt.Errorf("secret submission is disabled via configuration. Skipping processSecretRequest.")
 	}
 	fmt.Printf("Round %v, TrialNum %v, index %v\n", round, trialNum, index)
 
@@ -396,52 +212,55 @@ func (n *RegularNode) processSecretRequest(ctx context.Context, round, trialNum,
 		// Try to determine reveal order for regular node
 		success, err := n.revealOrderService.DetermineRegularRevealOrder(ctx, round.String(), trialNum.String(), activatedOps)
 		if err != nil || !success {
-			log.Printf("Failed to determine reveal order: %v", err)
-			return
+			return fmt.Errorf("failed to determine reveal order: %v", err)
 		}
 
 		// Try to get reveal order again after creation
 		revealOrder, err = n.revealOrderRepository.GetRevealOrder(ctx, round.String(), trialNum.String())
 		if err != nil {
-			log.Printf("Still failed to get reveal order after creation: %v", err)
-			return
+			return fmt.Errorf("still failed to get reveal order after creation: %v", err)
 		}
 		log.Printf("Successfully created and retrieved reveal order")
 	}
 
 	// Check bounds safely
 	if revealOrder == nil {
-		log.Printf("Reveal order is nil for round %s with trail %s", round.String(), trialNum.String())
-		return
+		return fmt.Errorf("reveal order is nil for round %s with trail %s", round.String(), trialNum.String())
 	}
 
 	if revealOrder.OrderedNodes == nil {
-		log.Printf("Reveal order ordered nodes is nil for round %s with trail %s", round.String(), trialNum.String())
-		return
+		return fmt.Errorf("reveal order ordered nodes is nil for round %s with trail %s", round.String(), trialNum.String())
 	}
 
 	if index.Int64() >= int64(len(revealOrder.OrderedNodes)) {
-		log.Printf("Index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(revealOrder.OrderedNodes))
-		return
+		return fmt.Errorf("index %d is out of bounds for the ordered nodes length %d", index.Int64(), len(revealOrder.OrderedNodes))
 	}
 
 	regularEoaAddress := revealOrder.OrderedNodes[index.Int64()]
 	if n.GetRegularNodeEOA() == regularEoaAddress {
 		fmt.Printf("Processing RequestedToSubmitSFromIndexK event for Round: %v, EOA: %v\n", round, regularEoaAddress)
-		n.submitS(ctx, round.String(), trialNum.String())
+		err := n.submitS(ctx, round.String(), trialNum.String())
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string) {
+func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string) error {
 	roundData, err := n.regularCommitRepository.GetCommitByRound(ctx, round, trialNum)
 	if err != nil {
-		log.Printf("Failed to get regular commit for round %s with : %v", round, err)
-		return
+		return fmt.Errorf("failed to get regular commit for round %s with : %v", round, err)
 	}
 
 	secretValueBytes := roundData.SecretValue
 
 	fmt.Printf("Extracted secret_value as bytes32: %x\n", secretValueBytes)
+
+	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return fmt.Errorf("Failed to create EOA client: %v", err)
+	}
 
 	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
@@ -452,17 +271,17 @@ func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string
 		secretValueBytes,
 	)
 	if err != nil {
-		log.Printf("Failed to submit secret_value: %v", err)
-		return
+		return fmt.Errorf("failed to submit secret_value: %v", err)
 	}
 
 	log.Printf("Successfully submitted secret_value: %x", secretValueBytes)
+	return nil
 }
 
-func (n *RegularNode) processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
+func (n *RegularNode) processMerkleRoot(Round *big.Int, TrialNum *big.Int) error {
 	if n.GetHalted() {
 		log.Println("System is halted. Skipping processSubmittedSecretRequest.")
-		return
+		return nil
 	}
 	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
 	uniqueKey := utils.GetUniqueKey(Round.String(), TrialNum.String())
@@ -472,9 +291,10 @@ func (n *RegularNode) processMerkleRoot(Round *big.Int, TrialNum *big.Int) {
 	}
 	roundData.MerkleRoot = true
 	n.SetRoundData(uniqueKey, roundData)
+	return nil
 }
 
-func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) {
+func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimestamp *big.Int, round *big.Int, trialNum *big.Int, state *big.Int) error {
 
 	fmt.Printf("Round %v, TrialNum %v, state %v\n", round, trialNum, state)
 
@@ -500,7 +320,7 @@ func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimes
 		// Delete old round data except current round from database
 		err := n.batchRepository.DeleteOldRoundDataForRegularNode(ctx, round.String())
 		if err != nil {
-			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
+			return fmt.Errorf("failed to delete old round data except round %v for regular node: %w", round, err)
 		}
 
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
@@ -510,6 +330,11 @@ func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimes
 
 		// Start leader monitoring for the new round using block timestamp
 		n.StartLeaderMonitoring(ctx, blockTimestamp, round.String(), trialNum.String())
+		n.SetRoundData(uniqueKey, RoundData{
+			MerkleRoot:   false,
+			RandomNumber: false,
+		})
+
 		go n.AllCosReceivedUnlocked(ctx, round.String(), trialNum.String())
 	}
 
@@ -517,7 +342,7 @@ func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimes
 		// Delete old round data except current round from database
 		err := n.batchRepository.DeleteOldRoundDataForRegularNode(ctx, round.String())
 		if err != nil {
-			log.Printf("Failed to delete old round data except round %v for regular node\n", round)
+			return fmt.Errorf("failed to delete old round data %v for regular node: %w", round, err)
 		}
 		// Update in-memory round data
 		roundData, exists := n.GetRoundData(uniqueKey)
@@ -532,22 +357,21 @@ func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimes
 
 	if state.Cmp(big.NewInt(3)) == 0 {
 		// Delete round and trial data from database
-		n.batchRepository.DeleteRoundTrialDataForRegularNode(ctx, n.GetCurrentRound(), trialNum.String())
+		err := n.batchRepository.DeleteRoundTrialDataForRegularNode(ctx, n.GetCurrentRound(), trialNum.String())
+		if err != nil {
+			return fmt.Errorf("failed to delete round %v trial %v data for regular node: %w", n.GetCurrentRound(), trialNum.String(), err)
+		}
 		// resume the round
 		n.SetHalted(true)
 		// resuming(fallbackEthClient)
 		n.SetExecution(false)
-	}
 
-	// Update rounds data
-	if n.roundsData == nil {
-		n.roundsData = make(map[string]RoundData)
+		n.SetRoundData(uniqueKey, RoundData{
+			MerkleRoot:   false,
+			RandomNumber: false,
+		})
 	}
-
-	n.SetRoundData(uniqueKey, RoundData{
-		MerkleRoot:   false,
-		RandomNumber: false,
-	})
+	return nil
 }
 
 func (n *RegularNode) CleanupRoundDataByUniqueKey(uniqueKey string) {
@@ -566,6 +390,12 @@ func (n *RegularNode) AllCosReceivedUnlocked(ctx context.Context, round string, 
 			log.Println("AllCosReceivedUnlocked received shutdown signal, stopping...")
 			return
 		case <-ticker.C:
+			// Stop if the round/trial has moved on
+			if n.GetCurrentRound() != round || n.GetCurrentTrialNum() != trialNum {
+				log.Printf("Round/trial changed (now %s/%s), stopping AllCosReceivedUnlocked for round %s/%s",
+					n.GetCurrentRound(), n.GetCurrentTrialNum(), round, trialNum)
+				return
+			}
 			activatedOps := eth.Service.GetActivatedOperatorsCached()
 			if n.GetHalted() {
 				log.Println("System is halted. Skipping AllCosReceivedUnlocked.")
@@ -730,7 +560,11 @@ func (n *RegularNode) findEOAAddress(indices []*big.Int, activatedOps []string, 
 		return false, fmt.Errorf("indices length is greater than activated operators")
 	}
 	for _, index := range indices {
-		if eoaAddress == activatedOps[index.Int64()] {
+		idx := index.Int64()
+		if idx < 0 || idx >= int64(len(activatedOps)) {
+			return false, fmt.Errorf("index %d out of bounds for activated operators length %d", idx, len(activatedOps))
+		}
+		if eoaAddress == activatedOps[idx] {
 			return true, nil
 		}
 	}
@@ -781,7 +615,10 @@ func (n *RegularNode) StartLeaderMonitoring(ctx context.Context, startTime *big.
 	if duration <= 0 {
 		log.Printf("Deadline has already passed for round %s with trail %s, calling failToRequestSubmitCVOrSubmitMerkleRoot immediately", round, trialNum)
 		atomic.StoreInt32(&n.leaderMonitoringActive, 0)
-		n.callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx, round, trialNum)
+		if err := n.callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx, round, trialNum); err != nil {
+			log.Printf("Failed to call failToRequestSubmitCVOrSubmitMerkleRoot: %v", err)
+			return
+		}
 		return
 	}
 
@@ -790,13 +627,16 @@ func (n *RegularNode) StartLeaderMonitoring(ctx context.Context, startTime *big.
 	// Set timer to call the function when deadline is reached
 	n.monitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToRequestSubmitCVOrSubmitMerkleRoot", round)
-		n.callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx, round, trialNum)
+		if err := n.callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx, round, trialNum); err != nil {
+			log.Printf("Failed to call failToRequestSubmitCVOrSubmitMerkleRoot: %v", err)
+			return
+		}
 		atomic.StoreInt32(&n.leaderMonitoringActive, 0)
 	})
 }
 
 // StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring stops the current leader monitoring
-func (n *RegularNode) StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round string, trialNum string) {
+func (n *RegularNode) StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(round string, trialNum string) error {
 	// Protect timer operations with mutex
 	n.timerMutex.Lock()
 	defer n.timerMutex.Unlock()
@@ -808,6 +648,7 @@ func (n *RegularNode) StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(roun
 
 	atomic.StoreInt32(&n.leaderMonitoringActive, 0)
 	log.Printf("Stopped leader monitoring for round %s", round)
+	return nil
 }
 
 // ResetMonitoringState resets all monitoring variables
@@ -824,8 +665,13 @@ func (n *RegularNode) ResetMonitoringState(round string, trialNum string) {
 }
 
 // callFailToRequestSubmitCVOrSubmitMerkleRoot calls the contract function to fail the leader
-func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx context.Context, round string, trialNum string) {
-	_, _, err := eth.Service.ExecuteTransaction(
+func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx context.Context, round string, trialNum string) error {
+	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return fmt.Errorf("failed to create EOA client: %v", err)
+	}
+
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		n.client,
 		n.fallbackEthClient,
@@ -833,18 +679,17 @@ func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx context.Co
 		big.NewInt(0),
 	)
 	if err != nil {
-		log.Printf("Failed to call failToRequestSubmitCVOrSubmitMerkleRoot: %v", err)
-		return
+		return fmt.Errorf("failed to call failToRequestSubmitCVOrSubmitMerkleRoot: %v", err)
 	}
 
 	log.Printf("Successfully called failToRequestSubmitCVOrSubmitMerkleRoot for round %swith trail %s", round, trialNum)
+	return nil
 }
 
 // StartMerkleRootMonitoring starts monitoring for merkle root submission after CV request
-func (n *RegularNode) StartMerkleRootMonitoring(ctx context.Context, round string, trialNum string, requestedToSubmitCvTime *big.Int) {
+func (n *RegularNode) StartMerkleRootMonitoring(ctx context.Context, round string, trialNum string, requestedToSubmitCvTime *big.Int) error {
 	if requestedToSubmitCvTime == nil {
-		log.Printf("RequestedToSubmitCvTime is nil, cannot start merkle root monitoring")
-		return
+		return fmt.Errorf("requestedToSubmitCvTime is nil, cannot start merkle root monitoring")
 	}
 
 	// Protect timer operations with mutex
@@ -878,11 +723,15 @@ func (n *RegularNode) StartMerkleRootMonitoring(ctx context.Context, round strin
 		// Check if all CVs have been submitted on-chain and merkle root hasn't been submitted
 		if n.checkAllCVsSubmittedOnChain(round, trialNum) && !n.GetMerkleRootSubmittedEventEmitted() {
 			log.Printf("All CVs submitted on-chain but merkle root not submitted, calling failToSubmitMerkleRootAfterDispute")
-			n.callFailToSubmitMerkleRootAfterDispute(ctx, round, trialNum)
+			if err := n.callFailToSubmitMerkleRootAfterDispute(ctx, round, trialNum); err != nil {
+				log.Printf("Failed to call failToSubmitMerkleRootAfterDispute: %v", err)
+				return
+			}
 		} else {
 			log.Printf("Conditions not met for failToSubmitMerkleRootAfterDispute - CVs not all submitted or merkle root already submitted")
 		}
 	})
+	return nil
 }
 
 // StopFailToSubmitMerkleRootAfterDisputeMonitoring stops the current merkle root monitoring
@@ -900,8 +749,13 @@ func (n *RegularNode) StopFailToSubmitMerkleRootAfterDisputeMonitoring(round str
 }
 
 // callFailToSubmitMerkleRootAfterDispute calls the contract function to fail the leader for not submitting merkle root
-func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(ctx context.Context, round string, trialNum string) {
-	_, _, err := eth.Service.ExecuteTransaction(
+func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(ctx context.Context, round string, trialNum string) error {
+	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return fmt.Errorf("failed to create EOA client: %v", err)
+	}
+
+	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
 		n.client,
 		n.fallbackEthClient,
@@ -909,11 +763,11 @@ func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(ctx context.Context
 		big.NewInt(0),
 	)
 	if err != nil {
-		log.Printf("Failed to call failToSubmitMerkleRootAfterDispute: %v", err)
-		return
+		return fmt.Errorf("failed to call failToSubmitMerkleRootAfterDispute: %v", err)
 	}
 
 	log.Printf("Successfully called failToSubmitMerkleRootAfterDispute for round %s with trail %s", round, trialNum)
+	return nil
 }
 
 // CheckAndStartMonitoring checks if monitoring should be started and starts it if needed
@@ -961,8 +815,14 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 	periods := appconfig.GetContractPeriods()
 	activatedOperatorsLength := new(big.Int).SetInt64(eth.Service.GetActivatedOperatorsLength())
 
+	referenceTime := n.GetSubmitSMonitoringReferenceTime()
+	if referenceTime == nil {
+		log.Printf("SubmitSMonitoringReferenceTime is nil, cannot start monitoring for round %s with trail %s", round, trialNum)
+		return
+	}
+
 	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod
-	deadline := new(big.Int).Add(n.GetSubmitSMonitoringReferenceTime(), periods.OffChainSubmissionPeriod)
+	deadline := new(big.Int).Add(referenceTime, periods.OffChainSubmissionPeriod)
 	operatorDelay := new(big.Int).Mul(periods.OffChainSubmissionPeriodPerOperator, activatedOperatorsLength)
 	deadline.Add(deadline, operatorDelay)
 	deadline.Add(deadline, periods.RequestOrSubmitOrFailDecisionPeriod)
@@ -972,6 +832,14 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 	now := time.Now()
 	duration := deadlineTime.Sub(now)
 
+	if duration <= 0 {
+		log.Printf("Deadline has already passed for round %s with trail %s, calling failToRequestSOrGenerateRandomNumber immediately", round, trialNum)
+		if err := n.callFailToRequestSOrGenerateRandomNumber(ctx, round, trialNum); err != nil {
+			log.Printf("Failed to call failToRequestSOrGenerateRandomNumber: %v", err)
+		}
+		return
+	}
+
 	log.Printf("Starting request to submit S or generate random number monitoring for round %s, deadline: %v (in %v)", round, deadlineTime, duration)
 	log.Printf("Parameters - merkleRootSubmittedTime: %v, offChainSubmissionPeriod: %v, offChainSubmissionPeriodPerOperator: %v, activatedOperatorsLength: %v, requestOrSubmitOrFailDecisionPeriod: %v",
 		n.GetSubmitSMonitoringReferenceTime(), periods.OffChainSubmissionPeriod, periods.OffChainSubmissionPeriodPerOperator, activatedOperatorsLength, periods.RequestOrSubmitOrFailDecisionPeriod)
@@ -979,7 +847,10 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 	// Set timer to call the function when deadline is reached
 	n.requestToSubmitSOrGenerateRandomNumberMonitoringTimer = time.AfterFunc(duration, func() {
 		log.Printf("Deadline reached for round %s, calling failToRequestSOrGenerateRandomNumber", round)
-		n.callFailToRequestSOrGenerateRandomNumber(ctx, round, trialNum)
+		if err := n.callFailToRequestSOrGenerateRandomNumber(ctx, round, trialNum); err != nil {
+			log.Printf("Failed to call failToRequestSOrGenerateRandomNumber: %v", err)
+			return
+		}
 	})
 }
 
@@ -998,8 +869,13 @@ func (n *RegularNode) StopRequestToSubmitSOrGenerateRandomNumberMonitoring(round
 }
 
 // callFailToRequestSOrGenerateRandomNumber calls the contract function to fail
-func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(ctx context.Context, round string, trialNum string) {
+func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(ctx context.Context, round string, trialNum string) error {
 	log.Printf("Calling failToRequestSOrGenerateRandomNumber for round %s with trial %s", round, trialNum)
+
+	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
+	if err != nil {
+		return fmt.Errorf("failed to create EOA client: %v", err)
+	}
 
 	// Execute the transaction
 	_, _, err := eth.Service.ExecuteTransaction(
@@ -1010,9 +886,362 @@ func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(ctx context.Conte
 		big.NewInt(0),
 	)
 	if err != nil {
-		log.Printf("Failed to execute failToRequestSOrGenerateRandomNumber transaction: %v", err)
-		return
+		return fmt.Errorf("failed to execute failToRequestSOrGenerateRandomNumber transaction: %v", err)
 	}
 
 	log.Printf("Successfully called failToRequestSOrGenerateRandomNumber for round %s with trial %s", round, trialNum)
+	return nil
+}
+
+func (n *RegularNode) getLastProcessedCoords() (uint64, uint, uint) {
+	n.lastProcessedCoordsMu.RLock()
+	defer n.lastProcessedCoordsMu.RUnlock()
+	return n.lastProcessedBlock, n.lastProcessedTxIndex, n.lastProcessedLogIndex
+}
+
+func (n *RegularNode) updateLastProcessedCoords(blockNumber uint64, txIndex uint, logIndex uint) {
+	n.lastProcessedCoordsMu.Lock()
+	defer n.lastProcessedCoordsMu.Unlock()
+
+	currentBlock := n.lastProcessedBlock
+	currentTxIndex := n.lastProcessedTxIndex
+	currentLogIndex := n.lastProcessedLogIndex
+
+	isNewBlock := blockNumber > currentBlock
+	shouldUpdate := false
+
+	if isNewBlock {
+		shouldUpdate = true
+	} else if blockNumber == currentBlock {
+		if txIndex > currentTxIndex {
+			shouldUpdate = true
+		} else if txIndex == currentTxIndex {
+			if logIndex > currentLogIndex {
+				shouldUpdate = true
+			}
+		}
+	}
+
+	if shouldUpdate {
+		n.lastProcessedBlock = blockNumber
+		n.lastProcessedTxIndex = txIndex
+		n.lastProcessedLogIndex = logIndex
+	}
+}
+
+func (n *RegularNode) processEventLog(ctx context.Context, vLog types.Log, parsedABI abi.ABI) {
+	isReorg := vLog.Removed
+	if isReorg {
+		log.Printf("Reorg detected. Skipping event: %v", vLog.TxHash)
+		return
+	}
+
+	DeactivatedSig := parsedABI.Events["DeActivated"].ID
+	StatusSig := parsedABI.Events["Status"].ID
+	isCriticalEvent := vLog.Topics[0] == DeactivatedSig || vLog.Topics[0] == StatusSig
+
+	if !isCriticalEvent {
+		regularNodeEOA := n.GetRegularNodeEOA()
+		if regularNodeEOA == "" {
+			log.Println("Regular node EOA not set yet. Allowing event processing.")
+		} else {
+			activatedOps := eth.Service.GetActivatedOperatorsCached()
+			isRegularNodeActivated := false
+			for _, op := range activatedOps {
+				if op.Hex() == regularNodeEOA {
+					isRegularNodeActivated = true
+					break
+				}
+			}
+
+			if !isRegularNodeActivated {
+				log.Printf("Regular node %s is deactivated. Skipping event processing.", regularNodeEOA)
+				return
+			}
+		}
+	}
+
+	RequestedToSubmitCvS := parsedABI.Events["RequestedToSubmitCv"].ID
+	CvsEventSig := parsedABI.Events["CvSubmitted"].ID
+	MerkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
+	RequestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
+	RequestedToSubmitSFromIndexKSig := parsedABI.Events["RequestedToSubmitSFromIndexK"].ID
+	SSubmittedSig := parsedABI.Events["SSubmitted"].ID
+
+	switch vLog.Topics[0] {
+	case RequestedToSubmitCvS:
+		eventData := struct {
+			Round                         *big.Int
+			TrialNum                      *big.Int
+			PackedIndicesAscendingFromLSB *big.Int
+		}{}
+		err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCv", vLog.Data)
+		if err != nil {
+			log.Printf("Failed to decode event log: %v", err)
+			return
+		}
+
+		fmt.Printf("CommitRequest Event: Round %v, TrialNum %v, indices %v\n", eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
+
+		err = n.StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+		if err != nil {
+			log.Printf("Failed to stop fail to request submit CV or submit merkle root monitoring: %v", err)
+			return
+		}
+
+		blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
+		if err != nil {
+			log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+			return
+		}
+
+		err = n.StartMerkleRootMonitoring(ctx, eventData.Round.String(), eventData.TrialNum.String(), big.NewInt(int64(blockTimestamp)))
+		if err != nil {
+			log.Printf("Failed to start merkle root monitoring: %v", err)
+			return
+		}
+
+		err = n.processCommitRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndicesAscendingFromLSB)
+		if err != nil {
+			log.Printf("Failed to process commit request: %v", err)
+		}
+
+	case StatusSig:
+		eventData := struct {
+			CurRound    *big.Int
+			CurTrialNum *big.Int
+			CurState    *big.Int
+		}{}
+
+		err := parsedABI.UnpackIntoInterface(&eventData, "Status", vLog.Data)
+		if err != nil {
+			log.Printf("Failed to decode Status event log: %v", err)
+			return
+		}
+
+		blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
+		if err != nil {
+			log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+			return
+		}
+
+		err = n.processRandomRequestNumber(ctx, big.NewInt(int64(blockTimestamp)), eventData.CurRound, eventData.CurTrialNum, eventData.CurState)
+		if err != nil {
+			log.Printf("Failed to process random request number: %v", err)
+			return
+		}
+
+	case MerkleRootSubmittedSig:
+		eventData := struct {
+			Round      *big.Int
+			TrialNum   *big.Int
+			MerkleRoot [32]byte
+		}{}
+
+		err := parsedABI.UnpackIntoInterface(&eventData, "MerkleRootSubmitted", vLog.Data)
+		if err != nil {
+			log.Printf("Failed to decode MerkleRootSubmitted event log: %v", err)
+			return
+		}
+		fmt.Printf("MerkleRootSubmitted Event:\n Round %v, TrialNum %v, MerkleRoot: %v\n Round: %v\n",
+			eventData.Round, eventData.TrialNum, eventData.MerkleRoot, eventData.Round.String())
+
+		n.SetMerkleRootSubmittedEventEmitted(true)
+		blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
+		if err != nil {
+			log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+			return
+		}
+		n.SetSubmitSMonitoringReferenceTime(big.NewInt(int64(blockTimestamp)))
+
+		n.StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+		n.StopFailToSubmitMerkleRootAfterDisputeMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+		n.StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx, eventData.Round.String(), eventData.TrialNum.String())
+
+		if err := n.processMerkleRoot(eventData.Round, eventData.TrialNum); err != nil {
+			log.Printf("Failed to process merkle root: %v", err)
+			return
+		}
+
+	case RequestedToSubmitCoSig:
+		eventData := struct {
+			Round         *big.Int
+			TrialNum      *big.Int
+			IndicesLength *big.Int
+			PackedIndices *big.Int
+		}{}
+		err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitCo", vLog.Data)
+		if err != nil {
+			log.Printf("Failed to decode RequestedToSubmitCo event log: %v", err)
+			return
+		}
+		fmt.Printf("RequestedToSubmitCo Event: Round %v, TrialNum %v, indicesLength %v\n, indices %v\n", eventData.Round, eventData.TrialNum, eventData.IndicesLength, eventData.PackedIndices)
+
+		blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
+		if err != nil {
+			log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+			return
+		}
+
+		n.StopRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+		n.SetSubmitSMonitoringReferenceTime(big.NewInt(int64(blockTimestamp)))
+		n.StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx, eventData.Round.String(), eventData.TrialNum.String())
+
+		log.Printf("Restarted monitoring for round %s trial %s with RequestedToSubmitCo event time", eventData.Round.String(), eventData.TrialNum.String())
+
+		err = n.processCosRequest(ctx, eventData.Round, eventData.TrialNum, eventData.PackedIndices, eventData.IndicesLength)
+		if err != nil {
+			log.Printf("Failed to process cos request: %v", err)
+			return
+		}
+
+	case RequestedToSubmitSFromIndexKSig:
+		eventData := struct {
+			Round    *big.Int
+			TrialNum *big.Int
+			IndexK   *big.Int
+		}{}
+
+		err := parsedABI.UnpackIntoInterface(&eventData, "RequestedToSubmitSFromIndexK", vLog.Data)
+		if err != nil {
+			log.Printf("Failed to decode RequestedToSubmitSFromIndexK event log: %v", err)
+			return
+		}
+		fmt.Printf("RequestedToSubmitSFromIndexK Event:\n Round %v, TrialNum %v, indexK %v\n", eventData.Round, eventData.TrialNum, eventData.IndexK)
+
+		n.StopRequestToSubmitSOrGenerateRandomNumberMonitoring(eventData.Round.String(), eventData.TrialNum.String())
+		blockTimestamp, err := n.fallbackEthClient.BlockTimestamp(ctx, big.NewInt(int64(vLog.BlockNumber)))
+		if err != nil {
+			log.Printf("Failed to get block timestamp for block %d: %v", vLog.BlockNumber, err)
+			return
+		}
+		n.SetSubmitSMonitoringReferenceTime(big.NewInt(int64(blockTimestamp)))
+
+		if err := n.processSecretRequest(ctx, eventData.Round, eventData.TrialNum, eventData.IndexK); err != nil {
+			log.Printf("Failed to process secret request: %v", err)
+			return
+		}
+
+	case SSubmittedSig:
+		eventData := struct {
+			Round    *big.Int
+			TrialNum *big.Int
+			S        [32]byte
+			Index    *big.Int
+		}{}
+
+		err := parsedABI.UnpackIntoInterface(&eventData, "SSubmitted", vLog.Data)
+		if err != nil {
+			log.Printf("Failed to decode SSubmitted event log: %v", err)
+			return
+		}
+
+		fmt.Printf("SSubmitted Event:\n Round %v, TrialNum %v, Secret %v\n, indexK %v\n ", eventData.Round, eventData.TrialNum, eventData.S, eventData.Index)
+		if err := n.processSubmittedSecretRequest(ctx, eventData.Round, eventData.TrialNum, eventData.Index); err != nil {
+			log.Printf("Failed to process submitted secret request: %v", err)
+			return
+		}
+
+	case CvsEventSig:
+		eventData := struct {
+			Round    *big.Int
+			TrialNum *big.Int
+			Cv       [32]byte
+			Index    *big.Int
+		}{}
+		err := parsedABI.UnpackIntoInterface(&eventData, "CvSubmitted", vLog.Data)
+		if err != nil {
+			log.Printf("Failed to decode CvSubmitted event log: %v", err)
+			return
+		}
+
+		fmt.Printf("CvSubmitted Event: Fetched successfully")
+		err = n.processCvSubmitted(eventData.Round, eventData.TrialNum, eventData.Index)
+		if err != nil {
+			log.Printf("Failed to process cv submitted: %v", err)
+			return
+		}
+	}
+
+	n.updateLastProcessedCoords(vLog.BlockNumber, vLog.TxIndex, vLog.Index)
+}
+
+func (n *RegularNode) catchUpMissedEvents(ctx context.Context, contractAddr common.Address, parsedABI abi.ABI) error {
+	lastProcessedBlock, _, _ := n.getLastProcessedCoords()
+	if lastProcessedBlock == 0 {
+		return nil
+	}
+
+	currentHeader, err := n.fallbackEthClient.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get current block header: %v", err)
+	}
+
+	currentBlock := currentHeader.Number.Uint64()
+	if currentBlock <= lastProcessedBlock {
+		return nil
+	}
+
+	log.Printf("Catching up on missed events from block %d to %d", lastProcessedBlock+1, currentBlock)
+
+	query := ethereum.FilterQuery{
+		Addresses: []common.Address{contractAddr},
+		FromBlock: big.NewInt(int64(lastProcessedBlock)),
+		ToBlock:   big.NewInt(int64(currentBlock)),
+	}
+
+	missedLogs, err := n.fallbackEthClient.FilterLogs(ctx, query)
+	if err != nil {
+		return fmt.Errorf("failed to fetch missed logs: %v", err)
+	}
+
+	if len(missedLogs) == 0 {
+		log.Printf("No missed events found between blocks %d and %d", lastProcessedBlock+1, currentBlock)
+		return nil
+	}
+
+	sort.Slice(missedLogs, func(i, j int) bool {
+		if missedLogs[i].BlockNumber != missedLogs[j].BlockNumber {
+			return missedLogs[i].BlockNumber < missedLogs[j].BlockNumber
+		}
+		// Then by TxIndex
+		if missedLogs[i].TxIndex != missedLogs[j].TxIndex {
+			return missedLogs[i].TxIndex < missedLogs[j].TxIndex
+		}
+		//Finally by Index
+		return missedLogs[i].Index < missedLogs[j].Index
+	})
+
+	log.Printf("Processing %d missed events in blockchain order", len(missedLogs))
+
+	// Process events sequentially in blockchain order
+	for _, eventLog := range missedLogs {
+		lastProcessedBlock, lastProcessedTxIndex, lastProcessedLogIndex := n.getLastProcessedCoords() // 101,0,0
+
+		// Check if this event is already processed (duplicate detection)
+		isDuplicate := false
+		if eventLog.BlockNumber < lastProcessedBlock {
+			isDuplicate = true
+		} else if eventLog.BlockNumber == lastProcessedBlock {
+			if eventLog.TxIndex < lastProcessedTxIndex {
+				isDuplicate = true
+			} else if eventLog.TxIndex == lastProcessedTxIndex {
+				if eventLog.Index <= lastProcessedLogIndex {
+					isDuplicate = true
+				}
+			}
+		}
+
+		if isDuplicate {
+			log.Printf("Skipping duplicate event log: block %d, txIndex %d, logIndex %d",
+				eventLog.BlockNumber, eventLog.TxIndex, eventLog.Index)
+			continue
+		}
+
+		n.processEventLog(ctx, eventLog, parsedABI)
+	}
+
+	log.Printf("Successfully caught up on missed events")
+
+	return nil
 }

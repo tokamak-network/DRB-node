@@ -54,22 +54,6 @@ func (m *MockEthServiceForAtomicState) GetActivatedOperatorsLength() int64 {
 	return 0
 }
 
-// TestSetGetExecution tests the atomic execution flag
-func TestSetGetExecution(t *testing.T) {
-	node := CreateTestLeaderNodeMinimal()
-
-	// Test initial state
-	assert.False(t, node.GetExecution(), "Initial execution should be false")
-
-	// Test setting to true
-	node.SetExecution(true)
-	assert.True(t, node.GetExecution(), "Execution should be true after setting")
-
-	// Test setting to false
-	node.SetExecution(false)
-	assert.False(t, node.GetExecution(), "Execution should be false after setting")
-}
-
 // TestSetGetHalted tests the atomic halted flag
 func TestSetGetHalted(t *testing.T) {
 	node := CreateTestLeaderNodeMinimal()

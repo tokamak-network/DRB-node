@@ -1102,13 +1102,21 @@ func TestLeaderNode_CreateHost_NetworkInterfaceFailures(t *testing.T) {
 			revealRequestStatus: make(map[string][]string),
 		}
 
-		nodeTypes := []string{"leader", "regular", "test", "node"}
-		for _, nodeType := range nodeTypes {
+		// Valid nodeTypes should not get "invalid nodeType" error
+		validNodeTypes := []string{"leader", "regular"}
+		for _, nodeType := range validNodeTypes {
 			_, _, err := leaderNode.CreateHost("4001", nodeType)
-
 			if err != nil {
 				assert.NotContains(t, err.Error(), "invalid nodeType", "NodeType %s should be accepted", nodeType)
 			}
+		}
+
+		// Invalid nodeTypes should get "invalid nodeType" error
+		invalidNodeTypes := []string{"test", "node"}
+		for _, nodeType := range invalidNodeTypes {
+			_, _, err := leaderNode.CreateHost("4001", nodeType)
+			assert.Error(t, err, "NodeType %s should return an error", nodeType)
+			assert.Contains(t, err.Error(), "invalid nodeType", "NodeType %s should get invalid nodeType error", nodeType)
 		}
 	})
 
@@ -1131,11 +1139,9 @@ func TestLeaderNode_CreateHost_NetworkInterfaceFailures(t *testing.T) {
 		testCases := []string{"leader@", "leader/", "leader node", "leader#", "leader$"}
 		for _, nodeType := range testCases {
 			_, _, err := leaderNode.CreateHost("4001", nodeType)
-			if err != nil {
-				assert.True(t,
-					containsAny(err.Error(), []string{"not found", "private key file", "static-key", "failed to load", "no such file"}),
-					"Error for nodeType '%s' should be file-related, got: %v", nodeType, err)
-			}
+			assert.Error(t, err, "NodeType '%s' should return an error", nodeType)
+			// nodeType validation happens before file operations, so we expect "invalid nodeType" error
+			assert.Contains(t, err.Error(), "invalid nodeType", "Error for nodeType '%s' should be about invalid nodeType, got: %v", nodeType, err)
 		}
 	})
 
@@ -1157,11 +1163,9 @@ func TestLeaderNode_CreateHost_NetworkInterfaceFailures(t *testing.T) {
 
 		longNodeType := "leader" + string(make([]byte, 1000))
 		_, _, err := leaderNode.CreateHost("4001", longNodeType)
-		if err != nil {
-			assert.True(t,
-				containsAny(err.Error(), []string{"not found", "private key file", "static-key", "failed to load", "no such file"}),
-				"Error for very long nodeType should be file-related, got: %v", err)
-		}
+		assert.Error(t, err, "Very long nodeType should return an error")
+		// nodeType validation happens before file operations, so we expect "invalid nodeType" error
+		assert.Contains(t, err.Error(), "invalid nodeType", "Error for very long nodeType should be about invalid nodeType, got: %v", err)
 	})
 
 	t.Run("CreateHost with nodeType containing path traversal", func(t *testing.T) {
@@ -1183,13 +1187,10 @@ func TestLeaderNode_CreateHost_NetworkInterfaceFailures(t *testing.T) {
 		testCases := []string{"../leader", "../../leader", "..\\leader", "/etc/passwd"}
 		for _, nodeType := range testCases {
 			_, _, err := leaderNode.CreateHost("4001", nodeType)
-			if err != nil {
-				assert.True(t,
-					containsAny(err.Error(), []string{"not found", "private key file", "static-key", "failed to load", "no such file"}),
-					"Path traversal attempt '%s' should cause file-related error, got: %v", nodeType, err)
-			} else {
-				t.Logf(" Path traversal '%s' did not cause error", nodeType)
-			}
+			assert.Error(t, err, "Path traversal attempt '%s' should return an error", nodeType)
+			// nodeType validation happens before file operations, preventing path traversal attacks
+			// So we expect "invalid nodeType" error rather than file-related errors
+			assert.Contains(t, err.Error(), "invalid nodeType", "Path traversal attempt '%s' should cause invalid nodeType error, got: %v", nodeType, err)
 		}
 	})
 	t.Run("CreateHost with network interface unavailable", func(t *testing.T) {

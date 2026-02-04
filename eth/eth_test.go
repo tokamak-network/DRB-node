@@ -112,6 +112,22 @@ func (m *MockFallbackEthClient) PendingNonceAt(ctx context.Context, account comm
 	return args.Get(0).(uint64), args.Error(1)
 }
 
+func (m *MockFallbackEthClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]types.Log, error) {
+	args := m.Called(ctx, q)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]types.Log), args.Error(1)
+}
+
+func (m *MockFallbackEthClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error) {
+	args := m.Called(ctx, blockNumber)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.Header), args.Error(1)
+}
+
 func TestMain(m *testing.M) {
 	logger.InitLogger()
 

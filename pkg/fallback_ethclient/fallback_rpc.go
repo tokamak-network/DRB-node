@@ -289,20 +289,44 @@ func (f *FallbackRPCClient) BalanceAt(ctx context.Context, account common.Addres
 	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
 }
 
-// BlockTimestamp gets the timestamp of a specific block
-func (f *FallbackRPCClient) BlockTimestamp(ctx context.Context, blockNumber *big.Int) (uint64, error) {
+func (f *FallbackRPCClient) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]types.Log, error) {
+	var lastErr error
+	for i := 0; i < len(f.clients); i++ {
+		client := f.getCurrentClient()
+		logs, err := client.FilterLogs(ctx, q)
+		if err == nil {
+			return logs, nil
+		}
+		lastErr = err
+		f.logger.WithError(err).Warn("RPC filter logs failed, switching to fallback")
+		f.switchToNextClient()
+	}
+	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
+}
+
+// HeaderByNumber gets the header of a specific block (nil = latest)
+func (f *FallbackRPCClient) HeaderByNumber(ctx context.Context, blockNumber *big.Int) (*types.Header, error) {
 	var lastErr error
 	for i := 0; i < len(f.clients); i++ {
 		client := f.getCurrentClient()
 		header, err := client.HeaderByNumber(ctx, blockNumber)
 		if err == nil {
-			return header.Time, nil
+			return header, nil
 		}
 		lastErr = err
 		f.logger.WithError(err).Warn("RPC get block header failed, switching to fallback")
 		f.switchToNextClient()
 	}
-	return 0, fmt.Errorf("all RPCs failed: %v", lastErr)
+	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
+}
+
+// BlockTimestamp gets the timestamp of a specific block
+func (f *FallbackRPCClient) BlockTimestamp(ctx context.Context, blockNumber *big.Int) (uint64, error) {
+	header, err := f.HeaderByNumber(ctx, blockNumber)
+	if err != nil {
+		return 0, err
+	}
+	return header.Time, nil
 }
 
 // Close closes all RPC client connections
