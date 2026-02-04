@@ -54,7 +54,7 @@ func NewFallbackRPCClient(urls []string) (*FallbackRPCClient, error) {
 		}
 
 		// Test if the RPC is reachable
-		_, err = client.ChainID(context.Background())
+		_, err = client.BlockNumber(context.Background())
 		if err != nil {
 			l.WithError(err).Error("failed to connect to RPC", "url", url)
 			continue
