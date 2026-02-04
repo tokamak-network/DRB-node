@@ -9,13 +9,26 @@ import (
 	"testing"
 
 	"github.com/eapache/queue"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // Helper function to create a test regular node
 func createTestRegularNode() *RegularNode {
+	// Create a test client with generated private key
+	testPrivateKey, _ := crypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	return &RegularNode{
+		client:                        testClient,
 		submittedCvIndices:            make(map[string]map[string]bool),
 		cleanupQueue:                  queue.New(),
 		strictOrderWhileSecretRequest: make(map[string][]string),

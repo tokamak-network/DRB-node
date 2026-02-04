@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -44,13 +47,30 @@ func CreateStream(ctx context.Context, h host.Host, nodeInfo NodeInfo, protocolS
 }
 
 func DecodeJSONWithContext(ctx context.Context, s network.Stream, v interface{}) error {
+	// Extract deadline from context or use default
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(10 * time.Second)
+	}
+
+	// CRITICAL FIX: Set read deadline on stream to prevent slow-send DoS attacks
+	// This ensures the underlying TCP read will timeout even if the sender is slow
+	if err := s.SetReadDeadline(deadline); err != nil {
+		return fmt.Errorf("failed to set read deadline: %w", err)
+	}
+	defer s.SetReadDeadline(time.Time{}) // Clear deadline on exit
+
 	done := make(chan error, 1)
 	go func() {
 		err := json.NewDecoder(s).Decode(v)
 		done <- err
 	}()
+
 	select {
 	case err := <-done:
+		if err != nil && isDeadlineError(err) {
+			return fmt.Errorf("JSON decode timeout (stream deadline): %w", err)
+		}
 		return err
 
 	case <-ctx.Done():
@@ -60,4 +80,23 @@ func DecodeJSONWithContext(ctx context.Context, s network.Stream, v interface{})
 		}
 		return fmt.Errorf("JSON decode cancelled: %w", ctx.Err())
 	}
+}
+
+// isDeadlineError checks if an error is a deadline/timeout error from the network layer
+func isDeadlineError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for net.Error timeout
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+
+	// Check error message for common deadline-related strings
+	errStr := err.Error()
+	return strings.Contains(errStr, "deadline exceeded") ||
+		strings.Contains(errStr, "i/o timeout") ||
+		strings.Contains(errStr, "timeout")
 }

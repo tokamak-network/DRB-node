@@ -55,10 +55,8 @@ func (n *RegularNode) receiveCommitRequest(ctx context.Context) {
 	contractAddress := appconfig.Get().ContractAddress
 	contractAddr := common.HexToAddress(contractAddress)
 
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Fatalf("Failed to parse contract ABI: %v", err)
-	}
+	// Use cached ABI from client
+	parsedABI := n.client.ContractABI
 
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddr},
@@ -266,7 +264,7 @@ func (n *RegularNode) submitS(ctx context.Context, round string, trialNum string
 
 	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"submitS",
 		big.NewInt(0),
@@ -311,7 +309,9 @@ func (n *RegularNode) processRandomRequestNumber(ctx context.Context, blockTimes
 	// Store the current round and trialNum from Status event
 	n.SetCurrentTrialNum(trialNum.String())
 
-	eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+	if err := eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient); err != nil {
+		log.Printf("Failed to update activated operators: %v", err)
+	}
 	n.SetCurrentRound(round.String())
 
 	if state.Cmp(big.NewInt(1)) == 0 {
@@ -429,11 +429,7 @@ func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, 
 		return nil
 	}
 	fmt.Printf("Round %v, TrialNum %v, packedIndices %v\n", round, trialNum, packedIndices)
-	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to create EOA client: %v", err)
-	}
-	eoaAddress := crypto.PubkeyToAddress(clientUtils.PrivateKey.PublicKey).Hex()
+	eoaAddress := crypto.PubkeyToAddress(n.client.PrivateKey.PublicKey).Hex()
 
 	indices := n.unpackIndices(packedIndices)
 	// Copy indices by value (deep copy)
@@ -464,7 +460,7 @@ func (n *RegularNode) processCommitRequest(ctx context.Context, round *big.Int, 
 
 	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"submitCv",
 		big.NewInt(0),
@@ -487,11 +483,7 @@ func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, Tri
 		return nil
 	}
 	fmt.Printf("Round %v, TrialNum %v\n", Round, TrialNum)
-	clientUtils, err := utils.NewEOAClient("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		return fmt.Errorf("failed to create EOA client: %v", err)
-	}
-	eoaAddress := crypto.PubkeyToAddress(clientUtils.PrivateKey.PublicKey).Hex()
+	eoaAddress := crypto.PubkeyToAddress(n.client.PrivateKey.PublicKey).Hex()
 
 	// Convert eth.ActivatedOperators to []string for compatibility
 	activatedOps := eth.Service.GetActivatedOperatorsCached()
@@ -519,7 +511,7 @@ func (n *RegularNode) processCosRequest(ctx context.Context, Round *big.Int, Tri
 
 	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"submitCo",
 		big.NewInt(0),
@@ -681,7 +673,7 @@ func (n *RegularNode) callFailToRequestSubmitCVOrSubmitMerkleRoot(ctx context.Co
 
 	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"failToRequestSubmitCvOrSubmitMerkleRoot",
 		big.NewInt(0),
@@ -765,7 +757,7 @@ func (n *RegularNode) callFailToSubmitMerkleRootAfterDispute(ctx context.Context
 
 	_, _, err = eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"failToSubmitMerkleRootAfterDispute",
 		big.NewInt(0),
@@ -886,9 +878,9 @@ func (n *RegularNode) callFailToRequestSOrGenerateRandomNumber(ctx context.Conte
 	}
 
 	// Execute the transaction
-	_, _, err = eth.Service.ExecuteTransaction(
+	_, _, err := eth.Service.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"failToRequestSorGenerateRandomNumber",
 		big.NewInt(0),

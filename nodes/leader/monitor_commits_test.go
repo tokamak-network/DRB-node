@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/go-pg/pg/v10"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -220,7 +221,7 @@ type mockLeaderCommitRepo struct {
 	updateRandomHit int
 }
 
-var errNotFound = errors.New("not found")
+var errNotFound = pg.ErrNoRows
 
 func (m *mockLeaderCommitRepo) GetLeaderCommitByRoundAndEoaAddr(ctx context.Context, round, trialNum, eoaAddress string) (*utils.LeaderCommitData, error) {
 	if m.getErr != nil {
@@ -265,7 +266,8 @@ func (m *mockEthServiceWithError) GetActivatedOperatorsUnsafe() []common.Address
 func (m *mockEthServiceWithError) GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
 	return nil, errors.New("network error")
 }
-func (m *mockEthServiceWithError) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
+func (m *mockEthServiceWithError) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error {
+	return nil
 }
 func (m *mockEthServiceWithError) CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
 	return nil, nil
@@ -355,7 +357,8 @@ func (m *mockEthService) GetActivatedOperatorsUnsafe() []common.Address { return
 func (m *mockEthService) GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
 	return append([]common.Address{}, m.operators...), nil
 }
-func (m *mockEthService) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
+func (m *mockEthService) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error {
+	return nil
 }
 func (m *mockEthService) CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
 	return nil, nil
@@ -483,7 +486,8 @@ func (s *MonitorCommitsSuite) Test_LoadNodeData_ParsesAndDefaults() {
 	lc2 := makeLeaderCommit(addr2, true, "", common.Hash{}, common.Hash{})
 	s.lcRepo.byRoundTrial = []*utils.LeaderCommitData{lc2, lc1}
 
-	cvs, cos, secrets, vs, rs, ss := s.ln.LoadNodeData(s.ctx, "1", "1")
+	cvs, cos, secrets, vs, rs, ss, err := s.ln.LoadNodeData(s.ctx, "1", "1")
+	s.Require().NoError(err)
 	s.Require().Len(secrets, 2)
 	s.Equal(byte(0), vs[1]) // second commit had empty v
 	s.Equal(common.Hash{}, rs[1])
@@ -614,7 +618,7 @@ func TestLeaderNode_checkRoundsForCompletion_MissingCommitData(t *testing.T) {
 	defer func() { eth.Service = originalService }()
 
 	mockRepo := &mockLeaderCommitRepo{
-		getErr: errors.New("commit data not found"),
+		getErr: pg.ErrNoRows,
 	}
 
 	ln := &LeaderNode{
@@ -1194,45 +1198,28 @@ func TestLeaderNode_generateRandomNumberTransaction_Success(t *testing.T) {
 	assert.Equal(t, "generateRandomNumber", mockEth.execLastMethod)
 }
 
-func TestLeaderNode_generateRandomNumberTransaction_InvalidPrivateKey(t *testing.T) {
-	logger.InitLogger()
-
-	os.Setenv("LEADER_PRIVATE_KEY", "invalid-key")
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	defer func() {
-		os.Unsetenv("LEADER_PRIVATE_KEY")
-		os.Unsetenv("CONTRACT_ADDRESS")
-	}()
-
-	ln := &LeaderNode{}
-
-	secrets := [][]byte{{1, 2, 3}}
-	vs := []uint8{27}
-	rs := []common.Hash{common.BigToHash(big.NewInt(1))}
-	ss := []common.Hash{common.BigToHash(big.NewInt(2))}
-
-	err := ln.generateRandomNumberTransaction(context.Background(), "1", "1", secrets, vs, rs, ss)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create leader client")
-}
+// TestLeaderNode_generateRandomNumberTransaction_InvalidPrivateKey is removed because
+// the client is now created at node initialization, not per-call. Invalid private key
+// errors would be caught during NewLeaderNode(), not during generateRandomNumberTransaction().
 
 func TestLeaderNode_generateRandomNumberTransaction_RevealOrderError(t *testing.T) {
 	logger.InitLogger()
 
-	pk, _ := ethcrypto.GenerateKey()
-	os.Setenv("LEADER_PRIVATE_KEY", hex.EncodeToString(ethcrypto.FromECDSA(pk)))
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	defer func() {
-		os.Unsetenv("LEADER_PRIVATE_KEY")
-		os.Unsetenv("CONTRACT_ADDRESS")
-	}()
-
 	mockRevealRepo := &mockRevealOrderRepo{
-		err: errors.New("reveal order not found"),
+		err: pg.ErrNoRows,
+	}
+
+	// Create a test client with generated private key
+	testPrivateKey, _ := ethcrypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
 	}
 
 	ln := &LeaderNode{
+		client:                 testClient,
 		reavealOrderRepository: mockRevealRepo,
 	}
 
@@ -1244,7 +1231,7 @@ func TestLeaderNode_generateRandomNumberTransaction_RevealOrderError(t *testing.
 	err := ln.generateRandomNumberTransaction(context.Background(), "1", "1", secrets, vs, rs, ss)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "reveal order not found")
+	assert.True(t, errors.Is(err, pg.ErrNoRows), "Expected pg.ErrNoRows error")
 }
 
 func TestLeaderNode_generateRandomNumberTransaction_ExecuteTransactionError(t *testing.T) {
@@ -1328,45 +1315,28 @@ func TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_Success(t *test
 	assert.Equal(t, "generateRandomNumberWhenSomeCvsAreOnChain", mockEth.execLastMethod)
 }
 
-func TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_InvalidPrivateKey(t *testing.T) {
-	logger.InitLogger()
-
-	os.Setenv("LEADER_PRIVATE_KEY", "invalid-key")
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	defer func() {
-		os.Unsetenv("LEADER_PRIVATE_KEY")
-		os.Unsetenv("CONTRACT_ADDRESS")
-	}()
-
-	ln := &LeaderNode{}
-
-	secrets := [][]byte{{1, 2, 3}}
-	vs := []uint8{27}
-	rs := []common.Hash{common.BigToHash(big.NewInt(1))}
-	ss := []common.Hash{common.BigToHash(big.NewInt(2))}
-
-	err := ln.generateRandomNumberTransactionSomeCvOnChain(context.Background(), "1", "1", secrets, vs, rs, ss)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create leader client")
-}
+// TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_InvalidPrivateKey is removed because
+// the client is now created at node initialization, not per-call. Invalid private key
+// errors would be caught during NewLeaderNode(), not during generateRandomNumberTransactionSomeCvOnChain().
 
 func TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_RevealOrderError(t *testing.T) {
 	logger.InitLogger()
 
-	pk, _ := ethcrypto.GenerateKey()
-	os.Setenv("LEADER_PRIVATE_KEY", hex.EncodeToString(ethcrypto.FromECDSA(pk)))
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	defer func() {
-		os.Unsetenv("LEADER_PRIVATE_KEY")
-		os.Unsetenv("CONTRACT_ADDRESS")
-	}()
-
 	mockRevealRepo := &mockRevealOrderRepo{
-		err: errors.New("reveal order not found"),
+		err: pg.ErrNoRows,
+	}
+
+	// Create a test client with generated private key
+	testPrivateKey, _ := ethcrypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
 	}
 
 	ln := &LeaderNode{
+		client:                 testClient,
 		reavealOrderRepository: mockRevealRepo,
 	}
 
@@ -1378,7 +1348,7 @@ func TestLeaderNode_generateRandomNumberTransactionSomeCvOnChain_RevealOrderErro
 	err := ln.generateRandomNumberTransactionSomeCvOnChain(context.Background(), "1", "1", secrets, vs, rs, ss)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "reveal order not found")
+	assert.True(t, errors.Is(err, pg.ErrNoRows), "Expected pg.ErrNoRows error")
 }
 
 func TestLeaderNode_completeRound_Success(t *testing.T) {
@@ -1461,8 +1431,9 @@ func TestLeaderNode_LoadNodeData_LoadError(t *testing.T) {
 	}
 
 	// Should handle error gracefully and return empty slices
-	cvs, cos, secrets, vs, rs, ss := ln.LoadNodeData(context.Background(), "1", "1")
+	cvs, cos, secrets, vs, rs, ss, err := ln.LoadNodeData(context.Background(), "1", "1")
 
+	assert.Error(t, err)
 	assert.Empty(t, cvs)
 	assert.Empty(t, cos)
 	assert.Empty(t, secrets)
@@ -1503,7 +1474,8 @@ func TestLeaderNode_LoadNodeData_ParseError(t *testing.T) {
 		leaderCommitRepository: mockRepo,
 	}
 
-	cvs, cos, secrets, vs, rs, ss := ln.LoadNodeData(context.Background(), "1", "1")
+	cvs, cos, secrets, vs, rs, ss, err := ln.LoadNodeData(context.Background(), "1", "1")
+	assert.NoError(t, err)
 
 	// Should still process but with v = 0 for invalid parse
 	assert.Len(t, cvs, 1)

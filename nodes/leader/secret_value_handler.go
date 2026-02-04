@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
@@ -110,7 +111,11 @@ func (n *LeaderNode) AcceptSecretValue(ctx context.Context, h host.Host, s netwo
 	// Fetch or initialize the leader commit data for the given round and EOA
 	leaderCommitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, round, trial, req.RegularEoaAddress)
 	if err != nil {
-		log.Printf("Commit data not found  for round %s with trail %s EOA %s.", round, trial, eoaAddress.Hex())
+		if err == pg.ErrNoRows {
+			log.Printf("Leader commit data not found for round %s with trail %s EOA %s. Cannot process secret value.", round, trial, eoaAddress.Hex())
+		} else {
+			log.Printf("Database connection error while getting leader commit data for round %s with trail %s EOA %s: %v", round, trial, eoaAddress.Hex(), err)
+		}
 		return
 	}
 

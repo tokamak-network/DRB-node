@@ -602,8 +602,9 @@ func (m *MockEthService) GetActivatedOperators(ctx context.Context, fallbackEthC
 	return []common.Address{}, nil
 }
 
-func (m *MockEthService) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
+func (m *MockEthService) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error {
 	// No-op for tests
+	return nil
 }
 
 func (m *MockEthService) CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {
@@ -739,9 +740,19 @@ func createTestRegularNodeHandler() *RegularNodeHandler {
 	mockCommitRepo := new(MockRegularCommitRepository)
 	mockNodeInfoRepo := new(MockNodeInfoRepository)
 
+	// Create a test client with generated private key
+	testPrivateKey, _ := crypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	handler := &RegularNodeHandler{
 		fallbackEthClient: nil,
 		regularNode: &RegularNode{
+			client:                  testClient,
 			regularCommitRepository: mockCommitRepo,
 			nodeInfoRepository:      mockNodeInfoRepo,
 		},
@@ -1350,7 +1361,17 @@ func TestRegularNodeHandler_SubmittedCvIndices(t *testing.T) {
 }
 
 func createTestNodeForHandler() *RegularNode {
+	// Create a test client with generated private key
+	testPrivateKey, _ := crypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	return &RegularNode{
+		client:                        testClient,
 		submittedCvIndices:            make(map[string]map[string]bool),
 		cleanupQueue:                  queue.New(),
 		strictOrderWhileSecretRequest: make(map[string][]string),
@@ -1988,21 +2009,9 @@ func TestRegularNodeHandler_activateOnChain_Success(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestRegularNodeHandler_activateOnChain_InvalidPrivateKey(t *testing.T) {
-	handler := createTestRegularNodeHandler()
-
-	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("EOA_PRIVATE_KEY", "invalid_key")
-	defer func() {
-		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("EOA_PRIVATE_KEY")
-	}()
-
-	err := handler.activateOnChain(context.Background(), abiFilePath)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to decode private key")
-}
+// TestRegularNodeHandler_activateOnChain_InvalidPrivateKey is removed because
+// the client is now created at node initialization, not per-call. Invalid private key
+// errors would be caught during NewRegularNode(), not during activateOnChain().
 
 func TestRegularNodeHandler_activateOnChain_TransactionError(t *testing.T) {
 	handler := createTestRegularNodeHandler()

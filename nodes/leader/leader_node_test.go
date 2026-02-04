@@ -2,12 +2,15 @@ package leader_node
 
 import (
 	"context"
+	"encoding/hex"
 	"math/big"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -1361,6 +1364,15 @@ func TestLeaderNode_DetermineRevealOrder(t *testing.T) {
 }
 
 func TestNewLeaderNode(t *testing.T) {
+	// Set required environment variables for client creation
+	pk, _ := crypto.GenerateKey()
+	os.Setenv("LEADER_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(pk)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
 	// Create mock repositories
 	mockFallbackClient := &fallback_ethclient.FallbackRPCClient{}
 	mockRevealOrderService := new(MockRevealOrderService)
@@ -1407,6 +1419,15 @@ func TestNewLeaderNode(t *testing.T) {
 
 // Test cases for Database Connection Failures
 func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
+	// Set required environment variables for client creation
+	pk, _ := crypto.GenerateKey()
+	os.Setenv("LEADER_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(pk)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
 	ctx := context.Background()
 	commitData := &utils.LeaderCommitData{
 		Round:      "1",
@@ -1608,6 +1629,15 @@ func TestNewLeaderNode_DatabaseConnectionFailures(t *testing.T) {
 	})
 }
 func TestNewLeaderNodeHandler_DatabaseConnectionFailures(t *testing.T) {
+	// Set required environment variables for client creation
+	pk, _ := crypto.GenerateKey()
+	os.Setenv("LEADER_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(pk)))
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	defer func() {
+		os.Unsetenv("LEADER_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
+
 	t.Run("NewLeaderNodeHandler with nil fallbackEthClient", func(t *testing.T) {
 		handler, err := NewLeaderNodeHandler(nil, nil)
 

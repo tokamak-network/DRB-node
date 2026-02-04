@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // FallbackRPCClient implements a fallback mechanism for Ethereum RPC calls
@@ -38,33 +38,43 @@ func NewFallbackRPCClient(urls []string) (*FallbackRPCClient, error) {
 		return nil, fmt.Errorf("at least one RPC URL is required")
 	}
 
-	clients := make([]*ethclient.Client, len(urls))
-	for i, url := range urls {
-		client, err := ethclient.Dial(url)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to RPC %s: %v", url, err)
-		}
-		_, err = client.ChainID(context.Background())
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to RPC %s: %v", url, err)
-		}
-
-		clients[i] = client
-	}
-
 	l := logger.Log
 
 	if l == nil {
 		return nil, errors.New("logger not found")
 	}
 
+	validURLs := make([]string, 0, len(urls))
+	validClients := make([]*ethclient.Client, 0, len(urls))
+	for _, url := range urls {
+		client, err := ethclient.Dial(url)
+		if err != nil {
+			l.WithError(err).Error("failed to connect to RPC", "url", url)
+			continue
+		}
+
+		// Test if the RPC is reachable
+		_, err = client.BlockNumber(context.Background())
+		if err != nil {
+			l.WithError(err).Error("failed to connect to RPC", "url", url)
+			continue
+		}
+
+		validClients = append(validClients, client)
+		validURLs = append(validURLs, url)
+	}
+
+	if len(validClients) == 0 {
+		return nil, errors.New("failed to connect to any RPC")
+	}
+
 	return &FallbackRPCClient{
-		clients:    clients,
-		urls:       urls,
+		clients:    validClients,
+		urls:       validURLs,
 		currentIdx: 0,
 		maxRetries: 3,
 		retryDelay: time.Second * 2,
-		logger:     logger.Log,
+		logger:     l,
 	}, nil
 }
 
@@ -122,7 +132,7 @@ func (f *FallbackRPCClient) SendTransaction(ctx context.Context, tx *types.Trans
 		lastErr = err
 
 		// Don't switch RPC for replacement transaction errors as these are client-side issues
-		if isReplacementError(err) {
+		if utils.IsReplacementError(err) {
 			f.logger.WithError(err).Warn("Replacement transaction error - not switching RPC")
 			return err
 		}
@@ -131,18 +141,6 @@ func (f *FallbackRPCClient) SendTransaction(ctx context.Context, tx *types.Trans
 		f.switchToNextClient()
 	}
 	return fmt.Errorf("all RPCs failed: %v", lastErr)
-}
-
-// isReplacementError checks if the error is related to replacement transaction underpricing
-func isReplacementError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := err.Error()
-	return strings.Contains(errStr, "replacement transaction underpriced") ||
-		strings.Contains(errStr, "nonce too low") ||
-		strings.Contains(errStr, "already known")
 }
 
 // TransactionReceipt implements the ethereum.ContractTransactor interface

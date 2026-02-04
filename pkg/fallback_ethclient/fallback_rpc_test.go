@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tokamak-network/DRB-node/logger"
+	"github.com/tokamak-network/DRB-node/utils"
 )
 
 // JSON-RPC request structure
@@ -156,7 +157,7 @@ func TestNewFallbackRPCClient(t *testing.T) {
 		client, err := NewFallbackRPCClient([]string{"http://invalid-url-that-does-not-exist:8545"})
 		require.Error(t, err)
 		require.Nil(t, client)
-		assert.Contains(t, err.Error(), "failed to connect to RPC")
+		assert.Contains(t, err.Error(), "failed to connect to any RPC")
 	})
 
 	t.Run("error with logger nil", func(t *testing.T) {
@@ -400,18 +401,18 @@ func TestFallbackRPCClient_SendTransaction(t *testing.T) {
 func TestIsReplacementError(t *testing.T) {
 	// Test with actual error messages
 	err1 := errors.New("replacement transaction underpriced")
-	assert.True(t, isReplacementError(err1))
+	assert.True(t, utils.IsReplacementError(err1))
 
 	err2 := errors.New("nonce too low")
-	assert.True(t, isReplacementError(err2))
+	assert.True(t, utils.IsReplacementError(err2))
 
 	err3 := errors.New("already known")
-	assert.True(t, isReplacementError(err3))
+	assert.True(t, utils.IsReplacementError(err3))
 
 	err4 := errors.New("some other error")
-	assert.False(t, isReplacementError(err4))
+	assert.False(t, utils.IsReplacementError(err4))
 
-	assert.False(t, isReplacementError(nil))
+	assert.False(t, utils.IsReplacementError(nil))
 }
 
 func TestFallbackRPCClient_TransactionReceipt(t *testing.T) {

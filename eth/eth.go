@@ -33,6 +33,24 @@ var (
 var ActivatedOperators = make([]common.Address, 0)
 var ActivatedOperatorsMu sync.RWMutex
 
+// Cached contract ABI - loaded once and reused
+var (
+	cachedABI     abi.ABI
+	cachedABIOnce sync.Once
+)
+
+// getCachedABI returns the cached contract ABI, loading it once on first call
+func getCachedABI() abi.ABI {
+	cachedABIOnce.Do(func() {
+		var err error
+		cachedABI, err = utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+		if err != nil {
+			log.Fatalf("Failed to load contract ABI: %v", err)
+		}
+	})
+	return cachedABI
+}
+
 // ActivatedOperators thread-safe access functions
 func GetActivatedOperatorsCached() []common.Address {
 	ActivatedOperatorsMu.RLock()
@@ -150,82 +168,11 @@ func ExecuteTransaction(
 		return nil, nil, fmt.Errorf("failed to create authorized transactor: %v", err)
 	}
 
-	var nonce uint64
-	var nonceErrors []error
-
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		nonce, err = fallbackEthClient.PendingNonceAt(ctx, auth.From)
-		if err == nil {
-			if attempt > 1 {
-				log.Infof("Successfully fetched nonce after %d retries for %s", attempt-1, functionName)
-			}
-			break
-		}
-
-		nonceErrors = append(nonceErrors, fmt.Errorf("attempt %d: %v", attempt, err))
-		log.Errorf("Failed to fetch nonce for %s, attempt %d/%d: %v", functionName, attempt, maxRetries, err)
-
-		if attempt < maxRetries {
-			log.Printf("Waiting %v before retry %d/%d for nonce", retryDelay, attempt+1, maxRetries)
-			select {
-			case <-ctx.Done():
-				errorDetails := fmt.Sprintf("failed to fetch nonce after %d attempts for %s. Errors: ", attempt, functionName)
-				for i, e := range nonceErrors {
-					if i > 0 {
-						errorDetails += "; "
-					}
-					errorDetails += fmt.Sprintf("Attempt %d: %v", i+1, e)
-				}
-				return nil, nil, errors.New(errorDetails)
-			case <-time.After(retryDelay):
-			}
-			continue
-		}
-
-		// All retries exhausted
-		errorDetails := fmt.Sprintf("failed to fetch nonce after %d attempts for %s. Errors: ", maxRetries, functionName)
-		for i, e := range nonceErrors {
-			if i > 0 {
-				errorDetails += "; "
-			}
-			errorDetails += fmt.Sprintf("Attempt %d: %v", i+1, e)
-		}
-		return nil, nil, errors.New(errorDetails)
-	}
-
-	auth.Nonce = big.NewInt(int64(nonce))
-
 	packedData, err := client.ContractABI.Pack(functionName, params...)
 	if err != nil {
 		log.Errorf("Failed to pack data for %s: %v", functionName, err)
 		return nil, nil, fmt.Errorf("failed to pack data for %s: %v", functionName, err)
 	}
-
-	callMsg := ethereum.CallMsg{
-		From:  auth.From,
-		To:    &client.ContractAddress,
-		Data:  packedData,
-		Value: amount,
-	}
-
-	var estimateGas uint64
-	maxAttempt := 3
-	attempt := 0
-
-	for attempt < maxAttempt {
-		estimateGas, err = fallbackEthClient.EstimateGas(ctx, callMsg)
-		if err != nil {
-			attempt++
-			log.Errorf("Gas estimation failed for %s, attempt %d: %v", functionName, attempt, err)
-			if attempt == maxAttempt {
-				return nil, nil, fmt.Errorf("gas estimation failed after %d attempts, %v transaction will revert", maxAttempt, functionName)
-			}
-			time.Sleep(10 * time.Second)
-			continue
-		}
-		break
-	}
-	log.Infof("Transaction simulation successful, estimated gas: %d", estimateGas)
 
 	receipt, signedTx, err := sendWithRetry(ctx, fallbackEthClient, chainID, auth, client.ContractAddress, amount, packedData)
 	if err != nil {
@@ -314,17 +261,15 @@ func sendWithRetry(
 		}
 	}
 
-	for retryCount < maxRetries {
-		nonce, err := client.PendingNonceAt(ctx, auth.From)
-		if err != nil {
-			log.Printf("Failed to get nonce: %v, continuing to next retry", err)
-			retryCount++
-			if retryCount >= maxRetries {
-				return nil, nil, fmt.Errorf("failed to get nonce after %d retries: %v", maxRetries, err)
-			}
-			continue
-		}
+	// Fetch nonce once before the retry loop to prevent race conditions
+	// If we retry with a new nonce, we might execute the same transaction twice
+	nonce, err := client.PendingNonceAt(ctx, auth.From)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get nonce: %v", err)
+	}
+	log.Printf("Using nonce %d for transaction", nonce)
 
+	for retryCount < maxRetries {
 		gasLimit, err := client.EstimateGas(ctx, callMsg)
 		if err != nil {
 			log.Printf("Failed to estimate gas: %v, continuing to next retry", err)
@@ -381,6 +326,18 @@ func sendWithRetry(
 		err = client.SendTransaction(ctx, signedTx)
 		if err != nil {
 			log.Printf("Failed to send tx %v, continuing to next retry", err)
+
+			if utils.IsReplacementError(err) {
+				log.Printf("Transaction with nonce %d was already processed (nonce too low). Checking for receipt...", nonce)
+				// Try to find the receipt of the original transaction
+				receipt, tx, err, found := checkTransactionInclusion(ctx, client, signedTx)
+				if found {
+					return receipt, tx, err
+				}
+				// If we can't find the receipt, the transaction might still be pending
+				// Continue with retry logic but preserve the nonce
+			}
+
 			retryCount++
 			if retryCount >= maxRetries {
 				return nil, nil, fmt.Errorf("failed to send tx after %d retries: %v", maxRetries, err)
@@ -405,12 +362,20 @@ func sendWithRetry(
 				return nil, nil, err
 			}
 
+			// Before retrying, check if the transaction was included after the timeout
+			// This handles the race condition where the transaction is processed right after timeout
+			log.Printf("Transaction %s timed out, checking if it was included after timeout...", signedTx.Hash().Hex())
+			receipt, tx, err, found := checkTransactionInclusion(ctx, client, signedTx)
+			if found {
+				return receipt, tx, err
+			}
+
 			retryCount++
 			if retryCount >= maxRetries {
 				return nil, nil, fmt.Errorf("transaction failed after %d retries: %v", maxRetries, err)
 			}
-			// If failed or timeout -> bump gas and retry
-			log.Printf("Bumping gas and retrying... (attempt %d/%d)", retryCount, maxRetries)
+			// If failed or timeout -> bump gas and retry with same nonce
+			log.Printf("Bumping gas and retrying with same nonce %d... (attempt %d/%d)", nonce, retryCount, maxRetries)
 			newFee := new(big.Float).Mul(new(big.Float).SetInt(maxFeePerGas), big.NewFloat(bumpFactor))
 			maxFeePerGas, _ = newFee.Int(nil)
 			newPriorityFee := new(big.Float).Mul(new(big.Float).SetInt(priorityFee), big.NewFloat(bumpFactor))
@@ -463,11 +428,7 @@ func waitForTransactionSuccess(ctx context.Context, client fallback_ethclient.IF
 
 func GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) ([]common.Address, error) {
 	var activatedOperators []common.Address
-	abiFilePath := "contract/abi/Commit2RevealDRB.json"
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		log.Fatalf("Failed to load contract ABI: %v", err)
-	}
+	parsedABI := getCachedABI()
 
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
@@ -485,22 +446,19 @@ func GetActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethcl
 	return activatedOperators, nil
 }
 
-func UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
+func UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error {
 	operators, err := GetActivatedOperators(ctx, fallbackEthClient)
 	if err != nil {
 		log.Printf("Error updating ActivatedOperators: %v", err)
-		return
+		return err
 	}
 	SetActivatedOperatorsCached(operators)
+	return nil
 }
 
 // UpdateCurrentRoundFromContract fetches the current round from the contract
 func UpdateCurrentRoundFromContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) (*big.Int, error) {
-	abiFilePath := "contract/abi/Commit2RevealDRB.json"
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
-	}
+	parsedABI := getCachedABI()
 
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
@@ -527,11 +485,7 @@ func UpdateCurrentRoundFromContract(ctx context.Context, fallbackEthClient fallb
 
 // GetTrialNumFromContract fetches the trial number for a given round from the smart contract
 func GetTrialNumFromContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, round *big.Int) (*big.Int, error) {
-	abiFilePath := "contract/abi/Commit2RevealDRB.json"
-	parsedABI, err := utils.LoadContractABI(abiFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
-	}
+	parsedABI := getCachedABI()
 
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
@@ -552,4 +506,20 @@ func GetTrialNumFromContract(ctx context.Context, fallbackEthClient fallback_eth
 
 	log.Printf("Fetched trialNum for round %s from contract: %s", round.String(), trialNum.String())
 	return trialNum, nil
+}
+
+// checkTransactionInclusion attempts to find a receipt for the given transaction.
+// It returns the receipt, the transaction, an error if the transaction failed, and a boolean indicating if a receipt was found.
+func checkTransactionInclusion(ctx context.Context, client fallback_ethclient.IFallbackEthClient, tx *types.Transaction) (*types.Receipt, *types.Transaction, error, bool) {
+	receipt, err := client.TransactionReceipt(ctx, tx)
+	if err == nil && receipt != nil {
+		if receipt.Status == types.ReceiptStatusSuccessful {
+			return receipt, tx, nil, true
+		}
+		// transaction reverted
+		revertErr := fmt.Errorf("%w: transaction %s reverted (gas used: %d)", ErrTransactionFailed, tx.Hash().Hex(), receipt.GasUsed)
+		return receipt, tx, revertErr, true
+	}
+	// NotFound or other errors are treated as "not found" for simplicity here.
+	return nil, nil, nil, false
 }

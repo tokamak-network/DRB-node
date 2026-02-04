@@ -123,7 +123,9 @@ func (lh *LeaderNodeHandler) Run(ctx context.Context) {
 	log.Printf("Leader node running on: %s", h.Addrs())
 	log.Printf("Leader node PeerID: %s", peerID.String())
 
-	lh.ethService.UpdateActivatedOperators(ctx, lh.fallbackEthClient)
+	if err = lh.ethService.UpdateActivatedOperators(ctx, lh.fallbackEthClient); err != nil {
+		log.Printf("Failed to update activated operators: %v", err)
+	}
 
 	err = lh.leaderNode.UpdateCurrentRoundAndTrial(ctx)
 	if err != nil {
@@ -206,8 +208,6 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 		commitData.SubmitMerkleRootDone = false
 		commitData.RandomNumberGenerated = false
 	}
-	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
-	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, commitData.EOAAddress)
 
 	// Update database for commit data from regular node
 	if err := lh.leaderNode.AddLeaderCommit(ctx, commitData); err != nil {
@@ -215,6 +215,8 @@ func (lh *LeaderNodeHandler) handleCommitRequest(ctx context.Context, s network.
 		return
 	}
 	lh.updateInMemoryData(uniqueKey, eoaAddress, *commitData)
+	log.Printf("Commit data saved and updated in-memory for round %s with trail %s EOA %s", round, trial, commitData.EOAAddress)
+
 	activatedOps := lh.ethService.GetActivatedOperatorsCached()
 	lh.leaderNode.ReliableBroadCastCVS(ctx, round, trial, eoaAddress, commitData.Cvs, activatedOps)
 	// Check if all commits are ready after this update
@@ -303,7 +305,11 @@ func (lh *LeaderNodeHandler) handleCOSRequest(ctx context.Context, h host.Host, 
 	// Update database for leaderCommit's COS
 	leaderCommitDBData, err := lh.leaderNode.GetLeaderCommitByRoundAndEoaAddr(ctx, round, trial, eoaAddress.Hex())
 	if err != nil {
-		log.Printf("Error loading leaderCommit data from database for round: %s, trail: %s, and eoaAddress: %s, error: %v", round, trial, eoaAddress.Hex(), err)
+		if err == pg.ErrNoRows {
+			log.Printf("Leader commit data not found for round %s, trail %s, EOA %s. Cannot update COS.", round, trial, eoaAddress.Hex())
+			return
+		}
+		log.Printf("Database connection error while loading leader commit data for round %s, trail %s, EOA %s: %v", round, trial, eoaAddress.Hex(), err)
 		return
 	}
 
@@ -384,31 +390,6 @@ func (lh *LeaderNodeHandler) allCosReceivedUnlocked(uniqueKey string) bool {
 	return true
 }
 
-func (lh *LeaderNodeHandler) UpdatedallCommitsReceivedUnlocked(ctx context.Context, fallbackEthClient *fallback_ethclient.FallbackRPCClient, uniqueKey string) map[string]bool {
-	result := make(map[string]bool)
-	ops := lh.ethService.GetActivatedOperatorsCached()
-
-	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
-	if !roundExists || len(roundCommits) == 0 {
-		for _, op := range ops {
-			result[op.Hex()] = false
-		}
-	}
-
-	for _, op := range ops {
-		data, ok := roundCommits[op]
-		if ok {
-			if data.Cvs != [32]byte{} {
-				result[op.Hex()] = true
-			} else {
-				result[op.Hex()] = false
-			}
-		} else {
-			result[op.Hex()] = false
-		}
-	}
-	return result
-}
 
 // updateInMemoryData updates committedNodes with the latest commitData.
 // Called with commitMu locked.

@@ -689,7 +689,8 @@ func (suite *RevealRequestsTestSuite) TestPrepareArgumentsForRequestToSubmitS() 
 	suite.leaderNode.AppendToRoundSecrets(uniqueKey, secret)
 
 	// Call prepare function
-	allCos, secretsReceived, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := suite.leaderNode.prepareArgumentsForRequestToSubmitS(context.Background(), testRound, testTrial)
+	allCos, secretsReceived, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders, err := suite.leaderNode.prepareArgumentsForRequestToSubmitS(context.Background(), testRound, testTrial)
+	assert.NoError(suite.T(), err)
 
 	assert.NotNil(suite.T(), allCos)
 	assert.NotNil(suite.T(), secretsReceived)
@@ -1023,7 +1024,8 @@ func (suite *RevealRequestsTestSuite) TestLoadNodeDataIntegration() {
 		Where("round = ? AND trial_num = ?", testRound, testTrial).
 		Delete()
 
-	commits, cosArray, cvsArray, vs, rs, ss := suite.leaderNode.LoadNodeData(context.Background(), testRound, testTrial)
+	commits, cosArray, cvsArray, vs, rs, ss, err := suite.leaderNode.LoadNodeData(context.Background(), testRound, testTrial)
+	assert.NoError(suite.T(), err)
 
 	assert.NotNil(suite.T(), commits)
 	assert.Len(suite.T(), commits, 1)
@@ -1124,7 +1126,8 @@ func (suite *RevealRequestsTestSuite) TestPrepareArguments_Comprehensive() {
 	suite.leaderNode.AppendToRoundSecrets(uniqueKey, secret)
 
 	// Call prepare function
-	allCos, secretsReceived, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := suite.leaderNode.prepareArgumentsForRequestToSubmitS(context.Background(), testRound, testTrial)
+	allCos, secretsReceived, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders, err := suite.leaderNode.prepareArgumentsForRequestToSubmitS(context.Background(), testRound, testTrial)
+	assert.NoError(suite.T(), err)
 
 	assert.NotNil(suite.T(), allCos)
 	assert.Len(suite.T(), allCos, 1)
@@ -1396,7 +1399,8 @@ func (suite *RevealRequestsTestSuite) TestPrepareArguments_NoIndices() {
 	suite.leaderNode.indicesMutex.Unlock()
 
 	// Call prepare function - all operators are not on chain
-	allCos, secretsReceived, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := suite.leaderNode.prepareArgumentsForRequestToSubmitS(context.Background(), testRound, testTrial)
+	allCos, secretsReceived, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders, err := suite.leaderNode.prepareArgumentsForRequestToSubmitS(context.Background(), testRound, testTrial)
+	assert.NoError(suite.T(), err)
 
 	assert.NotNil(suite.T(), allCos)
 	assert.Len(suite.T(), allCos, 1)
@@ -2701,7 +2705,8 @@ func (suite *RevealRequestsTestSuite) TestPrepareArgumentsForRequestToSubmitS_Wi
 	suite.leaderNode.AppendToRoundSecrets(uniqueKey, secret2)
 
 	// Call prepare function - should handle indices correctly
-	allCos, secretsReceived, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders := suite.leaderNode.prepareArgumentsForRequestToSubmitS(ctx, testRound, testTrial)
+	allCos, secretsReceived, packedVs, cvNotOnChainCvAndSigRS, packedRevealOrders, err := suite.leaderNode.prepareArgumentsForRequestToSubmitS(ctx, testRound, testTrial)
+	assert.NoError(suite.T(), err)
 
 	assert.NotNil(suite.T(), allCos)
 	assert.Len(suite.T(), allCos, 2) // Both operators

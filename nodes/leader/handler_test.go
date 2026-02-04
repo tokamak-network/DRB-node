@@ -2363,8 +2363,9 @@ func (m *MockEthService) GetActivatedOperators(ctx context.Context, fallbackEthC
 	return []common.Address{}, nil
 }
 
-func (m *MockEthService) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) {
+func (m *MockEthService) UpdateActivatedOperators(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient) error {
 	// No-op for tests
+	return nil
 }
 
 func (m *MockEthService) CallSmartContract(ctx context.Context, fallbackEthClient fallback_ethclient.IFallbackEthClient, parsedABI abi.ABI, method string, contractAddress common.Address, params ...interface{}) (interface{}, error) {

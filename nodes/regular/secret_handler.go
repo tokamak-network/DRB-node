@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -20,7 +21,11 @@ func (n *RegularNode) checkPreviousSecretReceived(ctx context.Context, round, tr
 	// Check if we have the peer commit data (from broadcast) for the previous node
 	peerCommitData, err := n.peerCommitDataRepository.GetPeerCommitData(ctx, round, trialNum, previousNodeEOA)
 	if err != nil {
-		log.Printf("Failed to get peer commit data for previous node %s: %v", previousNodeEOA, err)
+		if err == pg.ErrNoRows {
+			log.Printf("Previous node %s secret not yet received (no data found)", previousNodeEOA)
+			return false
+		}
+		log.Printf("Database connection error while checking previous node %s secret: %v", previousNodeEOA, err)
 		return false
 	}
 
@@ -70,11 +75,28 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 		}
 		return
 	}
+
+	leaderEOA := appconfig.Get().LeaderEOA
+	if leaderEOA == "" {
+		log.Println("LEADER_EOA is not set in the environment variables")
+		return
+	}
+
+	if !utils.VerifySecretValueRequestContentSignature(req, leaderEOA) {
+		log.Printf("Signature verification failed for secret value request from EOA: %s. Round, TrialNum, Order, LeaderEoaAddress, or RegularEoaAddress may have been tampered.", req.LeaderEoaAddress)
+		return
+	}
+
 	uniqueKey := utils.GetUniqueKey(req.Round, req.TrialNum)
 	for {
 		roundData, err := n.revealOrderRepository.GetRevealOrder(ctx, req.Round, req.TrialNum)
 		if err != nil {
-			log.Printf("Failed to load reveal order with trail %s for round %s: %v", req.TrialNum, req.Round, err)
+			if err == pg.ErrNoRows {
+				log.Printf("Reveal order not yet calculated for round %s with trail %s. Waiting...", req.Round, req.TrialNum)
+			} else {
+				log.Printf("Database connection error while loading reveal order for round %s with trail %s: %v", req.Round, req.TrialNum, err)
+				return
+			}
 		} else if roundData != nil {
 			n.SetStrictOrder(uniqueKey, roundData.OrderedNodes)
 			break
@@ -105,26 +127,17 @@ func (n *RegularNode) HandleSecretValueRequest(ctx context.Context, h host.Host,
 		log.Printf("🎯 First node in reveal order. No need to check previous secrets.")
 	}
 
-	// Fetch the leader's EOA address from the environment variables
-	leaderEOA := appconfig.Get().LeaderEOA
-	if leaderEOA == "" {
-		log.Println("LEADER_EOA is not set in the environment variables")
-		return
-	}
-
-	// Verify signature for ALL fields
-	if !utils.VerifySecretValueRequestContentSignature(req, leaderEOA) {
-		log.Printf("Signature verification failed for secret value request from EOA: %s. Round, TrialNum, Order, LeaderEoaAddress, or RegularEoaAddress may have been tampered.", req.LeaderEoaAddress)
-		return
-	}
-
 	// Log the request details
 	log.Printf("Verified secret value request for round %s with trail %s from leader %s", req.Round, req.TrialNum, req.LeaderEoaAddress)
 
 	// Fetch the secret value for the specified round
 	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, req.Round, req.TrialNum)
 	if err != nil {
-		log.Printf("Failed to load commit data for round %s with trail %s: %v", req.Round, req.TrialNum, err)
+		if err == pg.ErrNoRows {
+			log.Printf("Commit data not found for round %s with trail %s. Cannot send secret value.", req.Round, req.TrialNum)
+			return
+		}
+		log.Printf("Database connection error while loading commit data for round %s with trail %s: %v", req.Round, req.TrialNum, err)
 		return
 	}
 
@@ -159,7 +172,11 @@ func (n *RegularNode) SendSecretValue(ctx context.Context, h host.Host, leaderPe
 	// Load the commit data for the specified round
 	commitData, err := n.regularCommitRepository.GetCommitByRound(ctx, roundNum, trialNum)
 	if err != nil {
-		log.Printf("Failed to load commit data for round %s with trial %s: %v", roundNum, trialNum, err)
+		if err == pg.ErrNoRows {
+			log.Printf("Commit data not found for round %s with trial %s. Cannot send secret value.", roundNum, trialNum)
+			return
+		}
+		log.Printf("Database connection error while loading commit data for round %s with trial %s: %v", roundNum, trialNum, err)
 		return
 	}
 

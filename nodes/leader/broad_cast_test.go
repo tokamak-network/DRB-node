@@ -196,7 +196,17 @@ func (m *MockP2PClientWithNodeInfo) GetHostInstance() host.Host {
 }
 
 func createTestNodeForBroadcast() *LeaderNode {
+	// Create a test client with generated private key
+	testPrivateKey, _ := crypto.GenerateKey()
+	testContractAddress := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	testClient := &utils.Client{
+		ContractAddress: testContractAddress,
+		PrivateKey:      testPrivateKey,
+	}
+
 	return &LeaderNode{
+		client:              testClient,
 		activeBroadcasts:    make(map[string]*utils.BroadcastTracker),
 		cvOnChain:           make(map[string]bool),
 		roundSecrets:        make(map[string][][32]byte),

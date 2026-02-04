@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/go-pg/pg/v10"
 	"github.com/libp2p/go-libp2p/core/peer"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	appconfig "github.com/tokamak-network/DRB-node/config"
@@ -57,10 +58,8 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 	contractAddress := appconfig.Get().ContractAddress
 	contractAddr := common.HexToAddress(contractAddress)
 
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Fatalf("Failed to parse contract ABI: %v", err)
-	}
+	// Use cached ABI from client
+	parsedABI := n.client.ContractABI
 
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddr},
@@ -120,11 +119,17 @@ func (n *LeaderNode) receiveCommit(ctx context.Context) {
 
 func (n *LeaderNode) processDeactivated(ctx context.Context, operator common.Address) error {
 	fmt.Printf("Deactivated Event:\n Operator %v\n", operator)
-	eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+	if err := eth.Service.UpdateActivatedOperators(ctx, n.fallbackEthClient); err != nil {
+		log.Printf("Failed to update activated operators after deactivation: %v", err)
+	}
 
 	var peerIDStr string
 	nodeInfos, err := n.nodeInfoRepository.GetNodeInfos(ctx)
-	if err == nil {
+	if err != nil {
+		log.Printf("Database connection error while getting node infos for operator %s: %v", operator.Hex(), err)
+	} else if len(nodeInfos) == 0 {
+		log.Printf("No node info found for operator %s.", operator.Hex())
+	} else {
 		for _, nodeInfo := range nodeInfos {
 			if nodeInfo.EOAAddress == operator.Hex() {
 				peerIDStr = nodeInfo.PeerID
@@ -180,7 +185,12 @@ func (n *LeaderNode) processSubmittedSecretRequest(ctx context.Context, round *b
 	fmt.Println("GetSecretRequestSentForWhichRound", n.GetSecretRequestSentForWhichRound())
 	leaderCommits, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, n.GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex())
 	if err != nil {
-		return fmt.Errorf("failed to get leadercommit data from database by round and eoaAddress %v", err)
+		if err == pg.ErrNoRows {
+			log.Printf("Leader commit data not found for round %s, trial %s, EOA %s. Cannot process submitted secret.", n.GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex())
+			return
+		}
+		log.Printf("Database connection error while getting leader commit data for round %s, trial %s, EOA %s: %v", n.GetSecretRequestSentForWhichRound(), trialNum.String(), regularNodeAddress.Hex(), err)
+		return
 	}
 
 	// Update leader commit data with secretValue
@@ -228,7 +238,9 @@ func (n *LeaderNode) processRandomRequestNumber(ctx context.Context, blockTimest
 		fmt.Printf("Status Event:\n StartTime: %v\n State: %v\n Round: %v\n",
 			blockTimestamp, state, round)
 		// Update the activated operators
-		n.ethService.UpdateActivatedOperators(ctx, n.fallbackEthClient)
+		if err := n.ethService.UpdateActivatedOperators(ctx, n.fallbackEthClient); err != nil {
+			log.Printf("Failed to update activated operators for new round: %v", err)
+		}
 		// Reset the indices for the new round
 		n.ResetIndicesForNewRound()
 		log.Printf("Reset Indices array for new round %s with trail %s", n.GetCurrentRound(), n.GetCurrentTrial())
@@ -294,14 +306,9 @@ func (n *LeaderNode) resuming(ctx context.Context) error {
 	if depositAmount.Cmp(minDeposit) < 0 {
 		// Need to top up
 		amountToDeposit := new(big.Int).Sub(minDeposit, depositAmount)
-		clientUtils := &utils.Client{
-			ContractAddress: contractAddress,
-			PrivateKey:      privateKey,
-			ContractABI:     parsedABI,
-		}
 		_, _, err := n.ethService.ExecuteTransaction(
 			ctx,
-			clientUtils,
+			n.client,
 			n.fallbackEthClient,
 			"deposit",
 			amountToDeposit,
@@ -328,14 +335,9 @@ func (n *LeaderNode) resuming(ctx context.Context) error {
 		}
 		if opsLen.Cmp(big.NewInt(2)) >= 0 {
 			// Call resume
-			clientUtils := &utils.Client{
-				ContractAddress: contractAddress,
-				PrivateKey:      privateKey,
-				ContractABI:     parsedABI,
-			}
 			_, _, err := n.ethService.ExecuteTransaction(
 				ctx,
-				clientUtils,
+				n.client,
 				n.fallbackEthClient,
 				"resume",
 				big.NewInt(0),
@@ -370,30 +372,37 @@ func (n *LeaderNode) processCOS(ctx context.Context, round *big.Int, trialNum *b
 
 	leaderCommitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, roundStr, trialNumStr, eoa.Hex())
 	if err != nil {
-		signInfo := utils.SignInfo{
-			R: "",
-			S: "",
-			V: "",
-		}
-		leaderCommit := utils.LeaderCommitData{
-			UniqueKey:             uniqueKey,
-			Round:                 roundStr,
-			TrialNum:              trialNumStr,
-			EOAAddress:            eoa.Hex(),
-			Cvs:                   [32]byte{},
-			CvsHex:                "",
-			Cos:                   [32]byte{},
-			CosHex:                "",
-			SecretValue:           [32]byte{},
-			SecretValueHex:        "",
-			Sign:                  signInfo,
-			SubmitMerkleRootDone:  false,
-			RandomNumberGenerated: false,
-			CreatedAt:             time.Now().Unix(),
-		}
-		err := n.leaderCommitRepository.AddLeaderCommit(ctx, &leaderCommit)
-		if err != nil {
-			return fmt.Errorf("failed to add leader commit for round %s, trial %s, EOA %s: %v",
+		if err == pg.ErrNoRows {
+			// Leader commit data not found, create new entry with COS value
+			signInfo := utils.SignInfo{
+				R: "",
+				S: "",
+				V: "",
+			}
+			leaderCommit := utils.LeaderCommitData{
+				UniqueKey:             uniqueKey,
+				Round:                 roundStr,
+				TrialNum:              trialNumStr,
+				EOAAddress:            eoa.Hex(),
+				Cvs:                   [32]byte{},
+				CvsHex:                "",
+				Cos:                   [32]byte{},
+				CosHex:                "",
+				SecretValue:           [32]byte{},
+				SecretValueHex:        "",
+				Sign:                  signInfo,
+				SubmitMerkleRootDone:  false,
+				RandomNumberGenerated: false,
+				CreatedAt:             time.Now().Unix(),
+			}
+			err := n.leaderCommitRepository.AddLeaderCommit(ctx, &leaderCommit)
+			if err != nil {
+				return fmt.Errorf("failed to add leader commit for round %s, trial %s, EOA %s: %v",
+					roundStr, trialNumStr, eoa.Hex(), err)
+			}
+		} else {
+			log.Printf("Database connection error while getting leader commit data for round %s, trial %s, EOA %s: %v", roundStr, trialNumStr, eoa.Hex(), err)
+			return fmt.Errorf("database connection error while getting leader commit data for round %s, trial %s, EOA %s: %v",
 				roundStr, trialNumStr, eoa.Hex(), err)
 		}
 	} else {
@@ -465,30 +474,37 @@ func (n *LeaderNode) processCVS(ctx context.Context, round *big.Int, trialNum *b
 	uniqueKey := utils.GetUniqueKey(roundStr, trialNumStr)
 	leaderCommitData, err := n.leaderCommitRepository.GetLeaderCommitByRoundAndEoaAddr(ctx, roundStr, trialNumStr, eoa.Hex())
 	if err != nil {
-		signInfo := utils.SignInfo{
-			R: "",
-			S: "",
-			V: "",
-		}
-		leaderCommit := utils.LeaderCommitData{
-			UniqueKey:             uniqueKey,
-			Round:                 roundStr,
-			TrialNum:              trialNumStr,
-			EOAAddress:            eoa.Hex(),
-			Cvs:                   cvs,
-			CvsHex:                cvsHex,
-			Cos:                   [32]byte{},
-			CosHex:                "",
-			SecretValue:           [32]byte{},
-			SecretValueHex:        "",
-			Sign:                  signInfo,
-			SubmitMerkleRootDone:  false,
-			RandomNumberGenerated: false,
-			CreatedAt:             time.Now().Unix(),
-		}
-		err := n.leaderCommitRepository.AddLeaderCommit(ctx, &leaderCommit)
-		if err != nil {
-			return fmt.Errorf("failed to add leader commit for round %s, trial %s, EOA %s: %v",
+		if err == pg.ErrNoRows {
+			// Leader commit data not found, create new entry with CVS value
+			signInfo := utils.SignInfo{
+				R: "",
+				S: "",
+				V: "",
+			}
+			leaderCommit := utils.LeaderCommitData{
+				UniqueKey:             uniqueKey,
+				Round:                 roundStr,
+				TrialNum:              trialNumStr,
+				EOAAddress:            eoa.Hex(),
+				Cvs:                   cvs,
+				CvsHex:                cvsHex,
+				Cos:                   [32]byte{},
+				CosHex:                "",
+				SecretValue:           [32]byte{},
+				SecretValueHex:        "",
+				Sign:                  signInfo,
+				SubmitMerkleRootDone:  false,
+				RandomNumberGenerated: false,
+				CreatedAt:             time.Now().Unix(),
+			}
+			err := n.leaderCommitRepository.AddLeaderCommit(ctx, &leaderCommit)
+			if err != nil {
+				return fmt.Errorf("failed to add leader commit for round %s, trial %s, EOA %s: %v",
+					roundStr, trialNumStr, eoa.Hex(), err)
+			}
+		} else {
+			log.Printf("Database connection error while getting leader commit data for round %s, trial %s, EOA %s: %v", roundStr, trialNumStr, eoa.Hex(), err)
+			return fmt.Errorf("database connection error while getting leader commit data for round %s, trial %s, EOA %s: %v",
 				roundStr, trialNumStr, eoa.Hex(), err)
 		}
 	} else {
@@ -682,7 +698,7 @@ func (n *LeaderNode) callFailToSubmitCo(ctx context.Context, round string, trial
 
 	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"failToSubmitCo",
 		big.NewInt(0),
@@ -801,7 +817,7 @@ func (n *LeaderNode) callFailToSubmitCv(ctx context.Context, round string, trial
 
 	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"failToSubmitCv",
 		big.NewInt(0),
@@ -832,12 +848,8 @@ func (n *LeaderNode) ResetCosAndCvsMonitoringState(round string, trialNum string
 }
 
 func (n *LeaderNode) CheckHaltedState(ctx context.Context) {
-	// Load contract ABI and address
-	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
-	if err != nil {
-		log.Printf("Failed to load contract ABI: %v", err)
-		return
-	}
+	// Use cached ABI from client
+	parsedABI := n.client.ContractABI
 
 	contractAddressStr := appconfig.Get().ContractAddress
 	if contractAddressStr == "" {
@@ -999,7 +1011,7 @@ func (n *LeaderNode) callRequestToSubmitCv(ctx context.Context, round string, tr
 
 	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"requestToSubmitCv",
 		big.NewInt(0),
@@ -1132,7 +1144,7 @@ func (n *LeaderNode) SubmitMerkleRoot(ctx context.Context, roundNum string, tria
 
 	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"submitMerkleRoot",
 		big.NewInt(0),
@@ -1318,17 +1330,14 @@ type CvAndSigRS struct {
 
 // requestToSubmitCo submits on-chain request for missing COS values
 func (n *LeaderNode) requestToSubmitCo(ctx context.Context, roundNum string, trialNum string, missingIndices []*big.Int) {
-	cvNotOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices := n.prepareArgumentsForRequestToSubmitCo(ctx, roundNum, trialNum, missingIndices)
-
-	clientUtils, err := utils.NewLeaderClient("contract/abi/Commit2RevealDRB.json")
+	cvNotOnChainCvAndSigRS, packedVs, indicesLength, packedOrederedIndices, err := n.prepareArgumentsForRequestToSubmitCo(ctx, roundNum, trialNum, missingIndices)
 	if err != nil {
-		log.Printf("Failed to create leader client: %v", err)
+		log.Printf("Failed to prepare arguments for requestToSubmitCo for round %s with trial %s: %v", roundNum, trialNum, err)
 		return
 	}
-
 	_, _, err = n.ethService.ExecuteTransaction(
 		ctx,
-		clientUtils,
+		n.client,
 		n.fallbackEthClient,
 		"requestToSubmitCo",
 		big.NewInt(0),
@@ -1346,8 +1355,12 @@ func (n *LeaderNode) requestToSubmitCo(ctx context.Context, roundNum string, tri
 }
 
 // prepareArgumentsForRequestToSubmitCo prepares arguments for COS request
-func (n *LeaderNode) prepareArgumentsForRequestToSubmitCo(ctx context.Context, roundNum string, trialNum string, missingIndices []*big.Int) ([]CvAndSigRS, *big.Int, *big.Int, *big.Int) {
-	cvs, _, _, vs, rs, ss := n.LoadNodeData(ctx, roundNum, trialNum)
+func (n *LeaderNode) prepareArgumentsForRequestToSubmitCo(ctx context.Context, roundNum string, trialNum string, missingIndices []*big.Int) ([]CvAndSigRS, *big.Int, *big.Int, *big.Int, error) {
+	cvs, _, _, vs, rs, ss, err := n.LoadNodeData(ctx, roundNum, trialNum)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to load node data for round %s trial %s: %w", roundNum, trialNum, err)
+	}
+
 	indicesLength := big.NewInt(int64(len(missingIndices)))
 
 	notOnChainIndices, onChainIndices := n.orderedPackedIndices(missingIndices)
@@ -1375,7 +1388,7 @@ func (n *LeaderNode) prepareArgumentsForRequestToSubmitCo(ctx context.Context, r
 		cvNotOnChainCvAndSigRS = append(cvNotOnChainCvAndSigRS, cvAndSigRS)
 	}
 	packedVs := PackIndices(vsForNotOnChain)
-	return cvNotOnChainCvAndSigRS, packedVs, indicesLength, packedOrderedIndices
+	return cvNotOnChainCvAndSigRS, packedVs, indicesLength, packedOrderedIndices, nil
 }
 
 // orderedPackedIndices separates indices into on-chain and not-on-chain

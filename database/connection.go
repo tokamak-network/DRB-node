@@ -43,7 +43,7 @@ func InitSQLDB(ctx context.Context, port int, host, user, password, name string)
 			MinIdleConns:          10,
 			MaxConnAge:            10 * time.Minute,
 			IdleTimeout:           5 * time.Minute,
-			PoolSize:              10,
+			PoolSize:              45,
 			PoolTimeout:           5 * time.Minute,
 			IdleCheckFrequency:    1 * time.Minute,
 			MaxRetries:            3,
