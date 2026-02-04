@@ -42,6 +42,65 @@ func (p *P2PClient) GetHostInstance() host.Host {
 	return p.hostInstance
 }
 
+// calculateOptimalLimits calculates resource limits based on node type and expected operator count.
+// See docs/network-limits.md for detailed parameter calculations.
+func calculateOptimalLimits(nodeType string, maxOperators int) rcmgr.ScalingLimitConfig {
+	limits := rcmgr.DefaultLimits
+
+	if nodeType == "leader" {
+		estimatedConnections := maxOperators + (maxOperators / 4)
+
+		streamsInbound := 3104
+		streamsOutbound := 2976
+
+		// 25% safety margin
+		streamsInbound = streamsInbound + (streamsInbound / 4)
+		streamsOutbound = streamsOutbound + (streamsOutbound / 4)
+
+		connStreamsInbound := 97
+		connStreamsOutbound := 280
+		// 25% safety margin for per-connection limits
+		connStreamsInbound = connStreamsInbound + (connStreamsInbound / 4)
+		connStreamsOutbound = connStreamsOutbound + (connStreamsOutbound / 4)
+
+		limits.SystemBaseLimit.ConnsInbound = estimatedConnections
+		limits.SystemBaseLimit.ConnsOutbound = estimatedConnections
+		limits.SystemBaseLimit.StreamsInbound = streamsInbound
+		limits.SystemBaseLimit.StreamsOutbound = streamsOutbound
+		limits.ConnBaseLimit.StreamsInbound = connStreamsInbound
+		limits.ConnBaseLimit.StreamsOutbound = connStreamsOutbound
+		limits.SystemBaseLimit.FD = estimatedConnections * 4
+		limits.SystemBaseLimit.Memory = int64((estimatedConnections * 512 * 1024) + (streamsInbound * 32 * 1024) + (streamsOutbound * 32 * 1024) + (256 * 1024 * 1024))
+
+		log.Printf("Leader node limits: %d connections (in/out), %d streams inbound, %d streams outbound, conn streams out: %d (for %d operators)",
+			estimatedConnections, streamsInbound, streamsOutbound, connStreamsOutbound, maxOperators)
+
+	} else {
+		limits.SystemBaseLimit.ConnsInbound = 2
+		limits.SystemBaseLimit.ConnsOutbound = 2
+
+		maxRetries := 3
+
+		streamsInbound := 3 * (maxOperators - 1) * maxRetries
+		streamsOutbound := 3 + (3 * (maxOperators - 1))
+
+		streamsInbound = streamsInbound + (streamsInbound / 4)
+		streamsOutbound = streamsOutbound + (streamsOutbound / 4)
+
+		limits.SystemBaseLimit.StreamsInbound = streamsInbound
+		limits.SystemBaseLimit.StreamsOutbound = streamsOutbound
+		limits.ConnBaseLimit.StreamsInbound = streamsInbound
+		limits.ConnBaseLimit.StreamsOutbound = streamsOutbound
+		limits.SystemBaseLimit.FD = 32
+		limits.SystemBaseLimit.Memory = int64(((streamsInbound + streamsOutbound) * 32 * 1024) + (32 * 1024 * 1024))
+
+		log.Printf("Regular node limits: %d connections, %d streams inbound, %d streams outbound (for %d operators)",
+			2, streamsInbound, streamsOutbound, maxOperators)
+	}
+
+	return limits
+}
+
 // CreateHost creates a new libp2p host with a given port and private key.
 func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID, error) {
 	// Load configuration once
@@ -101,20 +160,10 @@ func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID
 		log.Printf("%s validated successfully: %s", envVarName, regularPeerIDFromEnv)
 	}
 
-	limits := rcmgr.DefaultLimits
-	limits.SystemBaseLimit.StreamsInbound = 512
-	limits.SystemBaseLimit.StreamsOutbound = 512
-	limits.SystemBaseLimit.ConnsInbound = 256
-	limits.SystemBaseLimit.ConnsOutbound = 256
-	limits.SystemBaseLimit.FD = 512
+	maxOperators := 32 //
 
-	// per connection per peer limit
-	limits.ConnBaseLimit.StreamsInbound = 64
-	limits.ConnBaseLimit.StreamsOutbound = 64
-
-	limits.SystemBaseLimit.Memory = 1 << 30
-
-	scaledLimits := limits.Scale(256, 512)
+	limits := calculateOptimalLimits(nodeType, maxOperators)
+	scaledLimits := limits.Scale(1, 1)
 
 	rm, err := rcmgr.NewResourceManager(
 		rcmgr.NewFixedLimiter(scaledLimits),
@@ -132,8 +181,12 @@ func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID
 		return nil, "", fmt.Errorf("failed to create libp2p host: %v", err)
 	}
 
-	log.Printf("%s host created with PeerID: %s (Resource limits: %d streams, %d conns)",
-		nodeType, peerID.String(), 512, 256)
+	log.Printf("%s host created with PeerID: %s (Resource limits: %d streams inbound, %d streams outbound, %d conns inbound, %d conns outbound)",
+		nodeType, peerID.String(),
+		limits.SystemBaseLimit.StreamsInbound,
+		limits.SystemBaseLimit.StreamsOutbound,
+		limits.SystemBaseLimit.ConnsInbound,
+		limits.SystemBaseLimit.ConnsOutbound)
 	return h, peerID, nil
 }
 
