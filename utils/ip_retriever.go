@@ -1,10 +1,12 @@
 package utils
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"strings"
+	"time"
 )
 
 // GetLocalIP returns the local IP address of the node
@@ -32,18 +34,22 @@ func GetLocalIP() string {
 
 // GetPublicIP returns the public IP address of the node by querying an external service
 func GetPublicIP() string {
-	resp, err := http.Get("http://checkip.amazonaws.com/")
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Get("https://checkip.amazonaws.com/")
 	if err != nil {
 		log.Printf("Failed to get public IP: %v", err)
 		return "0.0.0.0"
 	}
 	defer resp.Body.Close()
 
-	publicIP, err := ioutil.ReadAll(resp.Body)
+	publicIP, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("Failed to read public IP response: %v", err)
 		return "0.0.0.0"
 	}
 
-	return string(publicIP)
+	return strings.TrimSpace(string(publicIP))
 }

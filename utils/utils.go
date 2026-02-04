@@ -17,6 +17,8 @@ type RegistrationRequest struct {
 	EOAAddress string `json:"eoa_address"`
 	Signature  []byte `json:"signature"`
 	PeerID     string `json:"peer_id"`
+	IP         string `json:"ip"`
+	Port       string `json:"port"`
 }
 
 type Verification struct {
@@ -219,7 +221,6 @@ func SignCosRequestContent(req CosRequest, privateKey *ecdsa.PrivateKey) ([]byte
 	}
 	return signature, nil
 }
-
 
 func VerifyCosRequestContentSignature(req CosRequest, expectedSignerEOA string) bool {
 	messageHash := crypto.Keccak256Hash(

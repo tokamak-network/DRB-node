@@ -136,8 +136,12 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 	rh.regularNode.SetRegularNodePrivateKey(privateKey)
 	log.Printf("EOA Address: %s", eoaAddress)
 
-	// Get the local IP address of the node
-	ip := utils.GetLocalIP() // Use dynamic IP retrieval
+	var ip string
+	if envCfg.Status == "prod" {
+		ip = utils.GetPublicIP() // Use public IP for production
+	} else {
+		ip = utils.GetLocalIP() // Use local IP for non-production
+	}
 
 	// Save the node's information (IP, Port, PeerID, EOA address)
 	nodeInfo := utils.NodeInfo{
@@ -431,10 +435,21 @@ func (rh *RegularNodeHandler) checkActivationStatus(ctx context.Context, client 
 
 // sendRegistrationRequestToLeader sends the registration request to the leader node
 func (rh *RegularNodeHandler) sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID peer.ID, eoaAddress string, privateKey *ecdsa.PrivateKey) {
+	envCfg := appconfig.Get()
+
+	var ip string
+	if envCfg.Status == "prod" {
+		ip = utils.GetPublicIP() // Use public IP for production
+	} else {
+		ip = utils.GetLocalIP() // Use local IP for non-production
+	}
+
 	req := utils.RegistrationRequest{
 		EOAAddress: eoaAddress,
 		Signature:  utils.SignData(eoaAddress, privateKey),
 		PeerID:     h.ID().String(),
+		IP:         ip,
+		Port:       envCfg.Port,
 	}
 
 	stream, err := h.NewStream(ctx, leaderID, "/register")

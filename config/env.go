@@ -18,6 +18,7 @@ type EnvConfig struct {
 	Port              string
 	RegularNodeNumber string
 	RegularPeerID     string // Regular node peer ID (REGULAR{N}_PEER_ID)
+	Status            string // Environment status (e.g., "prod" for production)
 
 	// Leader connection details for regular nodes
 	LeaderIP     string
@@ -134,6 +135,7 @@ func loadEnv() *EnvConfig {
 		Port:                        os.Getenv("PORT"),
 		RegularNodeNumber:           os.Getenv("REGULAR_NODE_NUMBER"),
 		RegularPeerID:               os.Getenv("REGULAR_PEER_ID"),
+		Status:                      os.Getenv("STATUS"),
 		LeaderIP:                    os.Getenv("LEADER_IP"),
 		LeaderPort:                  os.Getenv("LEADER_PORT"),
 		LeaderPeerID:                os.Getenv("LEADER_PEER_ID"),
