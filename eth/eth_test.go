@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1036,4 +1037,115 @@ func TestDefaultEthService(t *testing.T) {
 	// Test GetActivatedOperatorsUnsafe
 	operators = service.GetActivatedOperatorsUnsafe()
 	assert.Equal(t, 1, len(operators))
+}
+
+// TestExecuteTransaction_SequentialExecution verifies that concurrent ExecuteTransaction
+// calls are serialized by the txMu mutex (no concurrent execution)
+func TestExecuteTransaction_SequentialExecution(t *testing.T) {
+	numTransactions := 3
+	txDelay := 100 * time.Millisecond // Simulated transaction processing time
+
+	// Track concurrent executions using atomic counter
+	var activeCount int32
+	var maxConcurrent int32
+	var maxConcurrentMu sync.Mutex
+
+	var wg sync.WaitGroup
+
+	// Launch multiple goroutines that call ExecuteTransaction concurrently
+	wg.Add(numTransactions)
+	for i := 0; i < numTransactions; i++ {
+		go func(txID int) {
+			defer wg.Done()
+
+			mockClient := new(MockFallbackEthClient)
+			ctx := context.Background()
+
+			privateKey, err := crypto.GenerateKey()
+			require.NoError(t, err)
+
+			// Setup mock - ChainID will track concurrent execution
+			// ExecuteTransaction retries ChainID up to 3 times
+			mockClient.On("ChainID", ctx).Run(func(args mock.Arguments) {
+				// Increment counter when entering critical section
+				current := atomic.AddInt32(&activeCount, 1)
+
+				// Track maximum concurrent count
+				maxConcurrentMu.Lock()
+				if current > maxConcurrent {
+					maxConcurrent = current
+				}
+				maxConcurrentMu.Unlock()
+
+				// Simulate some work
+				time.Sleep(txDelay)
+
+				// Decrement counter when leaving
+				atomic.AddInt32(&activeCount, -1)
+			}).Return(nil, errors.New("simulated error")).Times(3)
+
+			abiJSON := `[{"constant":false,"inputs":[],"name":"testMethod","outputs":[],"type":"function"}]`
+			parsedABI, err := abi.JSON(strings.NewReader(abiJSON))
+			require.NoError(t, err)
+
+			client := &utils.Client{
+				ContractABI:     parsedABI,
+				ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+				PrivateKey:      privateKey,
+			}
+
+			// Execute transaction (will fail on first ChainID call)
+			_, _, _ = ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
+		}(i)
+	}
+
+	wg.Wait()
+
+	// With mutex protection, maxConcurrent should be exactly 1
+	// If mutex wasn't working, multiple goroutines would be inside simultaneously
+	assert.Equal(t, int32(1), maxConcurrent,
+		"Expected max concurrent count of 1 (sequential execution), but got %d", maxConcurrent)
+
+	t.Logf("Max concurrent executions: %d (expected 1 for sequential execution)", maxConcurrent)
+}
+
+// TestExecuteTransaction_MutexNotHeldOnReturn verifies that the mutex is released
+// even when ExecuteTransaction returns an error
+func TestExecuteTransaction_MutexNotHeldOnReturn(t *testing.T) {
+	mockClient := new(MockFallbackEthClient)
+	ctx := context.Background()
+
+	privateKey, err := crypto.GenerateKey()
+	require.NoError(t, err)
+
+	abiJSON := `[{"constant":false,"inputs":[],"name":"testMethod","outputs":[],"type":"function"}]`
+	parsedABI, err := abi.JSON(strings.NewReader(abiJSON))
+	require.NoError(t, err)
+
+	client := &utils.Client{
+		ContractABI:     parsedABI,
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
+
+	// First call - should fail
+	mockClient.On("ChainID", ctx).Return(nil, errors.New("error")).Times(3)
+	_, _, err = ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
+	assert.Error(t, err)
+
+	// Second call should not deadlock - mutex should have been released
+	done := make(chan bool, 1)
+	go func() {
+		mockClient2 := new(MockFallbackEthClient)
+		mockClient2.On("ChainID", ctx).Return(nil, errors.New("error")).Times(3)
+		_, _, _ = ExecuteTransaction(ctx, client, mockClient2, "testMethod", big.NewInt(0))
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		// Success - mutex was released
+	case <-time.After(5 * time.Second):
+		t.Fatal("Deadlock detected - mutex was not released after error")
+	}
 }
