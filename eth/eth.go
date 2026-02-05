@@ -118,48 +118,9 @@ func ExecuteTransaction(
 
 	log.Infof("Preparing to execute %s...", functionName)
 
-	maxRetries := 3
-	retryDelay := 2 * time.Second
-	var chainID *big.Int
-	var chainIDErrors []error
-	var err error
-
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		chainID, err = fallbackEthClient.ChainID(ctx)
-		if err == nil {
-			if attempt > 1 {
-				log.Infof("Successfully fetched chain ID after %d retries for %s", attempt-1, functionName)
-			}
-			break
-		}
-
-		chainIDErrors = append(chainIDErrors, fmt.Errorf("attempt %d: %v", attempt, err))
-		log.Errorf("Failed to fetch chain ID for %s, attempt %d/%d: %v", functionName, attempt, maxRetries, err)
-
-		if attempt < maxRetries {
-			log.Printf("Waiting %v before retry %d/%d for ChainID", retryDelay, attempt+1, maxRetries)
-			select {
-			case <-ctx.Done():
-				errorDetails := fmt.Sprintf("failed to fetch chain ID after %d attempts for %s. Errors: ", attempt, functionName)
-				for i, e := range chainIDErrors {
-					if i > 0 {
-						errorDetails += "; "
-					}
-					errorDetails += fmt.Sprintf("Attempt %d: %v", i+1, e)
-				}
-				return nil, nil, errors.New(errorDetails)
-			case <-time.After(retryDelay):
-			}
-			continue
-		}
-		errorDetails := fmt.Sprintf("failed to fetch chain ID after %d attempts for %s. Errors: ", maxRetries, functionName)
-		for i, e := range chainIDErrors {
-			if i > 0 {
-				errorDetails += "; "
-			}
-			errorDetails += fmt.Sprintf("Attempt %d: %v", i+1, e)
-		}
-		return nil, nil, errors.New(errorDetails)
+	chainID := appconfig.GetChainIDAsBigInt()
+	if chainID == nil {
+		return nil, nil, fmt.Errorf("CHAIN_ID environment variable is not set or invalid")
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(client.PrivateKey, chainID)

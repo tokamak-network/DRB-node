@@ -242,21 +242,6 @@ func (f *FallbackRPCClient) EstimateGas(ctx context.Context, msg ethereum.CallMs
 	return 0, lastErr
 }
 
-func (f *FallbackRPCClient) ChainID(ctx context.Context) (*big.Int, error) {
-	var lastErr error
-	for i := 0; i < len(f.clients); i++ {
-		client := f.getCurrentClient()
-		id, err := client.ChainID(ctx)
-		if err == nil {
-			return id, nil
-		}
-		lastErr = err
-		f.logger.WithError(err).Warn("RPC get chain ID failed, switching to fallback")
-		f.switchToNextClient()
-	}
-	return nil, fmt.Errorf("all RPCs failed: %v", lastErr)
-}
-
 // SubscribeFilterLogs implements the ethereum.ContractTransactor interface
 func (f *FallbackRPCClient) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error) {
 	var lastErr error

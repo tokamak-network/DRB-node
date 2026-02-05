@@ -396,14 +396,6 @@ func (m *MockFallbackEthClient) SubscribeFilterLogs(ctx context.Context, q ether
 	return args.Get(0).(ethereum.Subscription), args.Error(1)
 }
 
-func (m *MockFallbackEthClient) ChainID(ctx context.Context) (*big.Int, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*big.Int), args.Error(1)
-}
-
 func (m *MockFallbackEthClient) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 	args := m.Called(ctx, msg)
 	return args.Get(0).(uint64), args.Error(1)

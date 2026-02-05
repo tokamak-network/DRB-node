@@ -68,14 +68,6 @@ func (m *MockFallbackEthClient) SubscribeFilterLogs(ctx context.Context, q ether
 	return args.Get(0).(ethereum.Subscription), args.Error(1)
 }
 
-func (m *MockFallbackEthClient) ChainID(ctx context.Context) (*big.Int, error) {
-	args := m.Called(ctx)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*big.Int), args.Error(1)
-}
-
 func (m *MockFallbackEthClient) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 	args := m.Called(ctx, msg)
 	return args.Get(0).(uint64), args.Error(1)
@@ -230,9 +222,6 @@ func (suite *RevealRequestsTestSuite) SetupTest() {
 	mockFallbackClient := new(MockFallbackEthClient)
 	mockFallbackClient.On("NetworkID", mock.Anything).Return(big.NewInt(1), nil).Maybe()
 	mockFallbackClient.On("PendingNonceAt", mock.Anything, mock.Anything).Return(uint64(0), nil).Maybe()
-	// ChainID is called by ExecuteTransaction when timers fire, so ensure it's always mocked
-	// Use Maybe() to allow multiple calls from different timers
-	mockFallbackClient.On("ChainID", mock.Anything).Return(big.NewInt(1), nil).Maybe()
 	mockFallbackClient.On("EstimateGas", mock.Anything, mock.Anything).Return(uint64(21000), nil).Maybe()
 	mockFallbackClient.On("SuggestGasPrice", mock.Anything).Return(big.NewInt(1000000000), nil).Maybe()
 	mockFallbackClient.On("SuggestGasTipCap", mock.Anything).Return(big.NewInt(1000000000), nil).Maybe()

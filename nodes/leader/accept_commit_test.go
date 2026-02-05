@@ -3227,20 +3227,6 @@ func (m *MockFallbackEthClientForAcceptCommit) CallContract(ctx context.Context,
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func (m *MockFallbackEthClientForAcceptCommit) ChainID(ctx context.Context) (*big.Int, error) {
-	for _, call := range m.ExpectedCalls {
-		if call.Method == "ChainID" {
-			args := m.Called(ctx)
-			if args.Get(0) == nil {
-				return nil, args.Error(1)
-			}
-			return args.Get(0).(*big.Int), args.Error(1)
-		}
-	}
-	// Default to mainnet chain ID when not explicitly mocked.
-	return big.NewInt(1), nil
-}
-
 func (m *MockFallbackEthClientForAcceptCommit) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 	args := m.Called(ctx, msg)
 	return args.Get(0).(uint64), args.Error(1)
