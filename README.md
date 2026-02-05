@@ -382,6 +382,8 @@ OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR=20
 ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR=40
 ```
 
+> **Note:** `OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR` also controls the timeout for waiting for secret value responses from regular nodes. Adjust this value based on your chain's block time (e.g., lower for fast chains like Arbitrum, higher for slower chains).
+
 
 ## Deployment
 

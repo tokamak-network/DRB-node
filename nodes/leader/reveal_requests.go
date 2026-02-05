@@ -105,18 +105,17 @@ func (n *LeaderNode) sendSecretValueRequestToNode(ctx context.Context, h host.Ho
 	} else {
 		log.Printf("✅ Secret value request sent to EOA %s for round %s with trail %s", regularEoa, round, trialNum)
 
-		// Start a timer to track if the response is received within 15 seconds
+		// timeout derived from contract period config (chain 	aware)
 		go func() {
-			timer := time.NewTimer(20 * time.Second)
+			timeoutSeconds := appconfig.GetContractPeriods().OffChainSubmissionPeriodPerOperator.Int64()
+			timer := time.NewTimer(time.Duration(timeoutSeconds) * time.Second)
 			defer timer.Stop()
 
-			// Wait for the timer to expire
 			<-timer.C
 
-			// If the timer expires and the secret value is not received, call handleMissingSecretValue
 			hasSecret, exists := n.GetRoundSecretValue(uniqueKey, regularEoa)
 			if !exists || !hasSecret {
-				log.Printf("Secret value not received for EOA %s in round %s with trail %s within 15 seconds. Handling missing secret value.", regularEoa, round, trialNum)
+				log.Printf("Secret value not received for EOA %s in round %s with trail %s within %d seconds. Handling missing secret value.", regularEoa, round, trialNum, timeoutSeconds)
 				n.SetSecretsOnChain(uniqueKey, true)
 				n.requestToSubmitS(ctx, round, trialNum)
 			}
