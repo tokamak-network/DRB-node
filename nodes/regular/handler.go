@@ -328,29 +328,7 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 					log.Printf("Error saving commit data: %v", err)
 					continue
 				}
-
-				peerCommitData, err := rh.regularNode.peerCommitDataRepository.GetPeerCommitData(ctx, round, trialNum, eoaAddress)
-				if err != nil {
-					if err == pg.ErrNoRows {
-						// No existing record, create new and insert with CVS, COS, and Secret
-						peerCommitData = &database.PeerCommitDataScheme{
-							Round:       round,
-							TrialNum:    trialNum,
-							EOAAddress:  eoaAddress,
-							Cvs:         cvs[:],
-							Cos:         cos[:],
-							SecretValue: secretValue[:],
-						}
-						if err = rh.regularNode.peerCommitDataRepository.AddPeerCommitData(ctx, peerCommitData); err != nil {
-							log.Printf("Failed to add own CVS, COS, and Secret peer commit data: %v", err)
-						} else {
-							log.Printf("Successfully stored own CVS, COS, and Secret data in peer commit repository for round %s", round)
-						}
-					} else {
-						log.Printf("Database connection error while getting peer commit data for own CVS/COS/Secret: %v", err)
-					}
-				}
-				// Send commit to leader
+				//send commit to leader
 				rh.sendCommitToLeader(ctx, h, leaderInfo.ID, commitData, round, trialNum, eoaAddress)
 			}
 
@@ -412,12 +390,6 @@ func (rh *RegularNodeHandler) sendCosToLeader(ctx context.Context, h core.Host, 
 		log.Printf("Failed to send COS commit to leader: %v", err)
 	} else {
 		log.Printf("COS commit sent to leader for round %s", commitData.Round)
-
-		// CVS and COS are already stored in database when created, so we only need to set flags here
-		uniqueKey := utils.GetUniqueKey(commitData.Round, commitData.TrialNum)
-
-		rh.regularNode.SetCosReceived(uniqueKey, eoaAddress, true)
-		log.Printf("Set SetCosReceived flag to true for own EOA %s for round %s", eoaAddress, commitData.Round)
 
 		commitData.SendCosToLeader = true
 		if err := rh.regularNode.UpdateCommit(ctx, &commitData); err != nil {

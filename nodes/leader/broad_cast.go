@@ -54,11 +54,7 @@ func (n *LeaderNode) ReliableBroadCastSSync(ctx context.Context, h host.Host, ro
 
 	for _, op := range activatedOps {
 		// Mark the originating operator as already acknowledged (they don't need their own data)
-		if op.Hex() == eoaAddress {
-			tracker.Acknowledged[op.Hex()] = true
-		} else {
-			tracker.Acknowledged[op.Hex()] = false
-		}
+		tracker.Acknowledged[op.Hex()] = false
 	}
 
 	if err := n.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker); err != nil {
@@ -96,12 +92,7 @@ func (n *LeaderNode) ReliableBroadCastCOS(ctx context.Context, roundNum string, 
 	}
 
 	for _, op := range activatedOps {
-		// Mark the originating operator as already acknowledged (they don't need their own data)
-		if op.Hex() == eoaAddress.Hex() {
-			tracker.Acknowledged[op.Hex()] = true
-		} else {
-			tracker.Acknowledged[op.Hex()] = false
-		}
+		tracker.Acknowledged[op.Hex()] = false
 	}
 
 	if err := n.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker); err != nil {
@@ -134,12 +125,7 @@ func (n *LeaderNode) ReliableBroadCastCVS(ctx context.Context, roundNum string, 
 	}
 
 	for _, op := range activatedOps {
-		// Mark the originating operator as already acknowledged (they don't need their own data)
-		if op.Hex() == eoaAddress.Hex() {
-			tracker.Acknowledged[op.Hex()] = true
-		} else {
-			tracker.Acknowledged[op.Hex()] = false
-		}
+		tracker.Acknowledged[op.Hex()] = false
 	}
 
 	if err := n.broadcastTrackerRepository.AddBroadcastTracker(ctx, tracker); err != nil {
