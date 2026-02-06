@@ -30,12 +30,8 @@ func (n *LeaderNode) RegisterNode(ctx context.Context, s network.Stream, abiFile
 
 // registerNodeInternal contains the core registration logic to ease unit testing.
 func (n *LeaderNode) registerNodeInternal(ctx context.Context, req utils.RegistrationRequest, remoteAddr string) error {
-	verifyReq := utils.Verification{
-		EOAAddress: req.EOAAddress,
-		Signature:  req.Signature,
-	}
-	if !utils.VerifySignature(verifyReq) {
-		return fmt.Errorf("failed to verify signature for PeerID: %s", req.PeerID)
+	if !utils.VerifyRegistrationRequestContentSignature(req, req.EOAAddress) {
+		return fmt.Errorf("signature verification failed for registration request from EOA: %s. EOAAddress, PeerID, IP, or Port may have been tampered", req.EOAAddress)
 	}
 
 	log.Printf("Verified registration for PeerID: %s", req.PeerID)
