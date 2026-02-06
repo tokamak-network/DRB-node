@@ -350,7 +350,9 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=password
 ```
 
-**Note**: The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section below for detailed instructions.
+**Note**: 
+- The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section below for detailed instructions.
+- **For local/test environment**: The `STATUS` variable is **not required**. The node will automatically use local IP addresses.
 
 #### Configuration by Chain ID
 
@@ -425,6 +427,26 @@ Before deploying nodes, ensure the following:
    docker network create drb-production-net
    ```
 
+3. **Configure Environment Status** (Required for Production):  
+   Set the `STATUS` environment variable in your `.env` file based on your deployment environment:
+   
+   **For Production Deployment (AWS, Cloud Platforms):**
+   ```bash
+   STATUS=prod
+   ```
+   - Nodes will use public IP addresses for communication
+   - Required when nodes are deployed on different networks/VPCs
+   - Required for internet-based communication between nodes
+   
+   **For Local Development:**
+   ```bash
+   # Do NOT set STATUS variable - leave it unset
+   ```
+   - Nodes will automatically use local/Docker network IP addresses
+   - No configuration needed for local testing
+   - Works automatically with Docker Compose networks
+   - **Important**: Do not add `STATUS` variable to your `.env` file for local development
+
 ### Deploying Leader Node
 
 If you want to run a Leader Node on your system, follow these steps:
@@ -449,10 +471,16 @@ CHAIN_ID=<Chain_ID>
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=password
 
+# Environment Status (Required for Production Deployment)
+STATUS=prod
+
 # Contract Period Configuration (based on CHAIN_ID)
 ```
 
-**Note**: The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section for the correct values based on your network.
+**Note**: 
+- The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section for the correct values based on your network.
+- **For production deployment**: Set `STATUS=prod` to use public IP addresses. This is required for nodes deployed on AWS or other cloud platforms where nodes need to communicate over the internet.
+- **For local development**: Do **NOT** set the `STATUS` variable. Leave it unset in your `.env` file. The node will automatically use local/Docker network IP addresses.
 
 #### Leader Node Deployment Steps
 
@@ -513,10 +541,16 @@ CHAIN_ID=<Chain_ID>
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<Your Production Database Password>
 
+# Environment Status (Required for Production Deployment)
+STATUS=prod
+
 # Contract Period Configuration (based on CHAIN_ID)
 ```
 
-**Note**: The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section for the correct values based on your network.
+**Note**: 
+- The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section for the correct values based on your network.
+- **For production deployment**: Set `STATUS=prod` to use public IP addresses. This is required for nodes deployed on AWS or other cloud platforms where nodes need to communicate over the internet.
+- **For local development**: Do **NOT** set the `STATUS` variable. Leave it unset in your `.env` file. The node will automatically use local/Docker network IP addresses.
 
 #### Regular Node Deployment Steps
 

@@ -1,17 +1,19 @@
 package utils
 
 import (
-	"io/ioutil"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"strings"
+	"time"
 )
 
-// GetLocalIP returns the local IP address of the node
-func GetLocalIP() string {
+func GetLocalIP() (string, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		log.Fatalf("Failed to get network interfaces: %v", err)
+		return "", fmt.Errorf("failed to get network interfaces: %w", err)
 	}
 
 	for _, iface := range interfaces {
@@ -22,28 +24,43 @@ func GetLocalIP() string {
 		}
 		for _, addr := range addrs {
 			if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() && ipNet.IP.To4() != nil {
-				// Return the first non-loopback IPv4 address
-				return ipNet.IP.String()
+				localIP := ipNet.IP.String()
+				if net.ParseIP(localIP) == nil {
+					continue
+				}
+				return localIP, nil
 			}
 		}
 	}
-	return "0.0.0.0" // Default fallback if no IP found
+	return "", fmt.Errorf("no valid non-loopback IPv4 address found on any network interface")
 }
+func GetPublicIP() (string, error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
 
-// GetPublicIP returns the public IP address of the node by querying an external service
-func GetPublicIP() string {
-	resp, err := http.Get("http://checkip.amazonaws.com/")
+	resp, err := client.Get("https://checkip.amazonaws.com/")
 	if err != nil {
-		log.Printf("Failed to get public IP: %v", err)
-		return "0.0.0.0"
+		return "", fmt.Errorf("failed to get public IP: %w", err)
 	}
 	defer resp.Body.Close()
 
-	publicIP, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Failed to read public IP response: %v", err)
-		return "0.0.0.0"
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("public IP service returned non-200 status: %d", resp.StatusCode)
 	}
 
-	return string(publicIP)
+	publicIPBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read public IP response: %w", err)
+	}
+
+	publicIP := strings.TrimSpace(string(publicIPBytes))
+	if publicIP == "" {
+		return "", fmt.Errorf("public IP service returned empty response")
+	}
+	if net.ParseIP(publicIP) == nil {
+		return "", fmt.Errorf("public IP service returned invalid IP address: %q", publicIP)
+	}
+
+	return publicIP, nil
 }

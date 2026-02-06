@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -31,12 +30,8 @@ func (n *LeaderNode) RegisterNode(ctx context.Context, s network.Stream, abiFile
 
 // registerNodeInternal contains the core registration logic to ease unit testing.
 func (n *LeaderNode) registerNodeInternal(ctx context.Context, req utils.RegistrationRequest, remoteAddr string) error {
-	verifyReq := utils.Verification{
-		EOAAddress: req.EOAAddress,
-		Signature:  req.Signature,
-	}
-	if !utils.VerifySignature(verifyReq) {
-		return fmt.Errorf("failed to verify signature for PeerID: %s", req.PeerID)
+	if !utils.VerifyRegistrationRequestContentSignature(req, req.EOAAddress) {
+		return fmt.Errorf("signature verification failed for registration request from EOA: %s. EOAAddress, PeerID, IP, or Port may have been tampered", req.EOAAddress)
 	}
 
 	log.Printf("Verified registration for PeerID: %s", req.PeerID)
@@ -63,33 +58,30 @@ func (n *LeaderNode) registerNodeInternal(ctx context.Context, req utils.Registr
 
 	log.Printf("EOA %s is activated, proceeding with registration", req.EOAAddress)
 
-	parts := strings.Split(remoteAddr, "/")
-	if len(parts) < 5 {
-		return fmt.Errorf("invalid remote address format: %s", remoteAddr)
+	// Use IP and Port from registration request (public IP if prod, local IP otherwise)
+	if req.IP == "" || req.Port == "" {
+		return fmt.Errorf("IP or Port not provided in registration request")
 	}
-
-	ip := parts[2]   // Extract IP
-	port := parts[4] // Extract port
 
 	// Update or add the node information
 	nodeInfo := utils.NodeInfo{
-		IP:         ip,
-		Port:       port,
+		IP:         req.IP,
+		Port:       req.Port,
 		PeerID:     req.PeerID,
 		EOAAddress: req.EOAAddress,
 	}
 
 	// Save updated nodes
 	log.Printf("Attempting to register node: EOA=%s, IP=%s, Port=%s, PeerID=%s",
-		req.EOAAddress, ip, port, req.PeerID)
+		req.EOAAddress, req.IP, req.Port, req.PeerID)
 
 	err := n.nodeInfoRepository.AddAndUpdateNodeInfo(ctx, &nodeInfo)
 	if err != nil {
 		log.Printf("Registration failed for EOA %s: %v", req.EOAAddress, err)
-		log.Printf("Registration details: IP=%s, Port=%s, PeerID=%s", ip, port, req.PeerID)
+		log.Printf("Registration details: IP=%s, Port=%s, PeerID=%s", req.IP, req.Port, req.PeerID)
 		return fmt.Errorf("failed to save registered nodes: %v", err)
 	}
 
-	log.Printf("Successfully registered or updated EOA %s with NodeInfo: IP=%s, Port=%s, PeerID=%s.", req.EOAAddress, ip, port, req.PeerID)
+	log.Printf("Successfully registered or updated EOA %s with NodeInfo: IP=%s, Port=%s, PeerID=%s.", req.EOAAddress, req.IP, req.Port, req.PeerID)
 	return nil
 }

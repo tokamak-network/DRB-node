@@ -17,6 +17,8 @@ type RegistrationRequest struct {
 	EOAAddress string `json:"eoa_address"`
 	Signature  []byte `json:"signature"`
 	PeerID     string `json:"peer_id"`
+	IP         string `json:"ip"`
+	Port       string `json:"port"`
 }
 
 type Verification struct {
@@ -220,7 +222,6 @@ func SignCosRequestContent(req CosRequest, privateKey *ecdsa.PrivateKey) ([]byte
 	return signature, nil
 }
 
-
 func VerifyCosRequestContentSignature(req CosRequest, expectedSignerEOA string) bool {
 	messageHash := crypto.Keccak256Hash(
 		[]byte(req.Round),
@@ -416,6 +417,43 @@ func VerifyCommitRequestContentSignature(req CommitRequest, expectedSignerEOA st
 	expectedAddress := common.HexToAddress(expectedSignerEOA).Hex()
 
 	log.Printf("Commit request signature verification - Recovered: %s, Expected: %s", recoveredAddress, expectedAddress)
+
+	return recoveredAddress == expectedAddress
+}
+
+func SignRegistrationRequestContent(req RegistrationRequest, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	messageHash := crypto.Keccak256Hash(
+		[]byte(req.EOAAddress),
+		[]byte(req.PeerID),
+		[]byte(req.IP),
+		[]byte(req.Port),
+	)
+
+	signature, err := crypto.Sign(messageHash.Bytes(), privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign registration request content: %v", err)
+	}
+	return signature, nil
+}
+
+func VerifyRegistrationRequestContentSignature(req RegistrationRequest, expectedSignerEOA string) bool {
+	messageHash := crypto.Keccak256Hash(
+		[]byte(req.EOAAddress),
+		[]byte(req.PeerID),
+		[]byte(req.IP),
+		[]byte(req.Port),
+	)
+
+	pubKey, err := crypto.SigToPub(messageHash.Bytes(), req.Signature)
+	if err != nil {
+		log.Printf("Error recovering public key from registration request signature: %v", err)
+		return false
+	}
+
+	recoveredAddress := crypto.PubkeyToAddress(*pubKey).Hex()
+	expectedAddress := common.HexToAddress(expectedSignerEOA).Hex()
+
+	log.Printf("Registration request signature verification - Recovered: %s, Expected: %s", recoveredAddress, expectedAddress)
 
 	return recoveredAddress == expectedAddress
 }

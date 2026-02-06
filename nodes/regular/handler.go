@@ -136,8 +136,10 @@ func (rh *RegularNodeHandler) Run(ctx context.Context) {
 	rh.regularNode.SetRegularNodePrivateKey(privateKey)
 	log.Printf("EOA Address: %s", eoaAddress)
 
-	// Get the local IP address of the node
-	ip := utils.GetLocalIP() // Use dynamic IP retrieval
+	ip, err := rh.getNodeIP()
+	if err != nil {
+		log.Fatalf("Failed to get IP address: %v", err)
+	}
 
 	// Save the node's information (IP, Port, PeerID, EOA address)
 	nodeInfo := utils.NodeInfo{
@@ -455,13 +457,37 @@ func (rh *RegularNodeHandler) checkActivationStatus(ctx context.Context, client 
 	return false, false
 }
 
+func (rh *RegularNodeHandler) getNodeIP() (string, error) {
+	envCfg := appconfig.Get()
+	if envCfg.Status == "prod" {
+		return utils.GetPublicIP()
+	}
+	return utils.GetLocalIP()
+}
+
 // sendRegistrationRequestToLeader sends the registration request to the leader node
 func (rh *RegularNodeHandler) sendRegistrationRequestToLeader(ctx context.Context, h core.Host, leaderID peer.ID, eoaAddress string, privateKey *ecdsa.PrivateKey) {
+	envCfg := appconfig.Get()
+
+	ip, err := rh.getNodeIP()
+	if err != nil {
+		log.Printf("Failed to get IP address: %v", err)
+		return
+	}
+
 	req := utils.RegistrationRequest{
 		EOAAddress: eoaAddress,
-		Signature:  utils.SignData(eoaAddress, privateKey),
 		PeerID:     h.ID().String(),
+		IP:         ip,
+		Port:       envCfg.Port,
 	}
+
+	signature, err := utils.SignRegistrationRequestContent(req, privateKey)
+	if err != nil {
+		log.Printf("Failed to sign registration request: %v", err)
+		return
+	}
+	req.Signature = signature
 
 	stream, err := h.NewStream(ctx, leaderID, "/register")
 	if err != nil {
