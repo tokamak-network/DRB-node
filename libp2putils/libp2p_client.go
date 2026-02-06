@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 
 	"github.com/libp2p/go-libp2p"
@@ -139,8 +140,12 @@ func (p *P2PClient) CreateHost(port string, nodeType string) (host.Host, peer.ID
 
 // ConnectToPeer connects to a specified peer using its multiaddress.
 func (p *P2PClient) ConnectToPeer(ctx context.Context, leaderIP, leaderPort, leaderPeerID string) (*peer.AddrInfo, error) {
-	// leaderAddrString := fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
-	leaderAddrString := fmt.Sprintf("/dns/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
+	var leaderAddrString string
+	if net.ParseIP(leaderIP) != nil {
+		leaderAddrString = fmt.Sprintf("/ip4/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
+	} else {
+		leaderAddrString = fmt.Sprintf("/dns/%s/tcp/%s/p2p/%s", leaderIP, leaderPort, leaderPeerID)
+	}
 	log.Printf("Leader multiaddress: %s", leaderAddrString)
 
 	leaderAddr, err := multiaddr.NewMultiaddr(leaderAddrString)
