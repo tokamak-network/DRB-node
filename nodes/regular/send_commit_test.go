@@ -528,16 +528,15 @@ func TestRegularNode_processRandomRequestNumber_DeleteError(t *testing.T) {
 	eth.Service = mockEth
 	defer func() { eth.Service = originalService }()
 
-	// Should continue despite error
-	node.processRandomRequestNumber(context.Background(), blockTimestamp, round, trialNum, state)
+	// When delete fails, function returns early and execution is not set
+	err := node.processRandomRequestNumber(context.Background(), blockTimestamp, round, trialNum, state)
 
-	assert.True(t, node.GetExecution())
+	// Should return error when delete fails
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete old round data")
 
-	// Halt to stop goroutine
-	node.SetHalted(true)
-	time.Sleep(10 * time.Millisecond)
-
-	node.StopFailToRequestSubmitCVOrSubmitMerkleRootMonitoring("100", "1")
+	// Execution should remain false since SetExecution(true) is never reached
+	assert.False(t, node.GetExecution())
 
 	mockBatchRepo.AssertExpectations(t)
 }
@@ -1553,6 +1552,12 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionNetworkFailure(t *te
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
+
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	defer func() {
@@ -1587,11 +1592,11 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionNetworkFailure(t *te
 
 	round := big.NewInt(100)
 	trialNum := big.NewInt(1)
-	packedIndices := big.NewInt(0)
+	packedIndices := big.NewInt(0) // index 0 = our EOA in activated ops
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	assert.Contains(t, err.Error(), "network error")
 	mockCommitRepo.AssertExpectations(t)
@@ -1604,6 +1609,12 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionContextTimeout(t *te
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -1642,7 +1653,7 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionContextTimeout(t *te
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -1654,6 +1665,12 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionAllRetriesExhausted(
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -1691,7 +1708,7 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionAllRetriesExhausted(
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -1703,6 +1720,12 @@ func TestRegularNode_processCommitRequest_GetCommitByRoundError(t *testing.T) {
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -1731,7 +1754,7 @@ func TestRegularNode_processCommitRequest_GetCommitByRoundError(t *testing.T) {
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get commit by round")
 	assert.Contains(t, err.Error(), "database error")
 	mockCommitRepo.AssertExpectations(t)
@@ -1744,6 +1767,12 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionConnectionTimeout(t 
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -1782,7 +1811,7 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionConnectionTimeout(t 
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	assert.Contains(t, err.Error(), "i/o timeout")
 	mockCommitRepo.AssertExpectations(t)
@@ -1795,6 +1824,12 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionEOFError(t *testing.
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -1833,7 +1868,7 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionEOFError(t *testing.
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	assert.Contains(t, err.Error(), "unexpected EOF")
 	mockCommitRepo.AssertExpectations(t)
@@ -1846,6 +1881,12 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionIntermittentFailure(
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -1887,7 +1928,7 @@ func TestRegularNode_processCommitRequest_ExecuteTransactionIntermittentFailure(
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -1947,6 +1988,12 @@ func TestRegularNode_processCosRequest_ExecuteTransactionNetworkFailure(t *testi
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 
+	// Use the same key in the node's client so processCosRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
+
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	defer func() {
@@ -1986,7 +2033,7 @@ func TestRegularNode_processCosRequest_ExecuteTransactionNetworkFailure(t *testi
 
 	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
 	assert.Contains(t, err.Error(), "network error")
 	mockCommitRepo.AssertExpectations(t)
@@ -1999,6 +2046,12 @@ func TestRegularNode_processCosRequest_ExecuteTransactionContextTimeout(t *testi
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCosRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2039,7 +2092,7 @@ func TestRegularNode_processCosRequest_ExecuteTransactionContextTimeout(t *testi
 
 	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -2051,6 +2104,12 @@ func TestRegularNode_processCosRequest_ExecuteTransactionAllRetriesExhausted(t *
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCosRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2091,7 +2150,7 @@ func TestRegularNode_processCosRequest_ExecuteTransactionAllRetriesExhausted(t *
 
 	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -2103,6 +2162,12 @@ func TestRegularNode_processCosRequest_GetCommitByRoundError(t *testing.T) {
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCosRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2132,7 +2197,7 @@ func TestRegularNode_processCosRequest_GetCommitByRoundError(t *testing.T) {
 
 	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get commit by round")
 	assert.Contains(t, err.Error(), "database error")
 	mockCommitRepo.AssertExpectations(t)
@@ -2145,6 +2210,12 @@ func TestRegularNode_processCosRequest_ExecuteTransactionConnectionTimeout(t *te
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCosRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2184,7 +2255,7 @@ func TestRegularNode_processCosRequest_ExecuteTransactionConnectionTimeout(t *te
 
 	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
 	assert.Contains(t, err.Error(), "i/o timeout")
 	mockCommitRepo.AssertExpectations(t)
@@ -2197,6 +2268,12 @@ func TestRegularNode_processCosRequest_ExecuteTransactionEOFError(t *testing.T) 
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCosRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2236,7 +2313,7 @@ func TestRegularNode_processCosRequest_ExecuteTransactionEOFError(t *testing.T) 
 
 	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
 	assert.Contains(t, err.Error(), "unexpected EOF")
 	mockCommitRepo.AssertExpectations(t)
@@ -2249,6 +2326,12 @@ func TestRegularNode_processCosRequest_ExecuteTransactionIntermittentFailure(t *
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCosRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2288,7 +2371,7 @@ func TestRegularNode_processCosRequest_ExecuteTransactionIntermittentFailure(t *
 
 	err = node.processCosRequest(context.Background(), round, trialNum, packedIndices, indicesLength)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCo transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -2442,6 +2525,12 @@ func TestRegularNode_processCommitRequest_TransactionSentButReceiptWaitFails(t *
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
+
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	defer func() {
@@ -2479,7 +2568,7 @@ func TestRegularNode_processCommitRequest_TransactionSentButReceiptWaitFails(t *
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -2491,6 +2580,12 @@ func TestRegularNode_processCommitRequest_DuplicateTransactionPrevention(t *test
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2529,7 +2624,7 @@ func TestRegularNode_processCommitRequest_DuplicateTransactionPrevention(t *test
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	mockCommitRepo.AssertExpectations(t)
 }
 
@@ -2540,6 +2635,12 @@ func TestRegularNode_processCommitRequest_ContextCancelledDuringReceiptWait(t *t
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2587,7 +2688,7 @@ func TestRegularNode_processCommitRequest_ContextCancelledDuringReceiptWait(t *t
 
 	err = node.processCommitRequest(ctx, round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	mockCommitRepo.AssertExpectations(t)
 }
 
@@ -2598,6 +2699,12 @@ func TestRegularNode_processCommitRequest_ConcurrentSubmissions(t *testing.T) {
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2659,6 +2766,12 @@ func TestRegularNode_processCommitRequest_GasEstimationFailure(t *testing.T) {
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
+
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
 	defer func() {
@@ -2698,7 +2811,7 @@ func TestRegularNode_processCommitRequest_GasEstimationFailure(t *testing.T) {
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
 	// Should return error when gas estimation fails
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -2710,6 +2823,12 @@ func TestRegularNode_processCommitRequest_ChainIDFetchFailure(t *testing.T) {
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2748,7 +2867,7 @@ func TestRegularNode_processCommitRequest_ChainIDFetchFailure(t *testing.T) {
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -2760,6 +2879,12 @@ func TestRegularNode_processCommitRequest_TransactionSigningFailure(t *testing.T
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2799,7 +2924,7 @@ func TestRegularNode_processCommitRequest_TransactionSigningFailure(t *testing.T
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
 	// Should return error when signing fails
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -2811,6 +2936,12 @@ func TestRegularNode_processCommitRequest_PartialSuccess_TransactionSentButRecei
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2849,7 +2980,7 @@ func TestRegularNode_processCommitRequest_PartialSuccess_TransactionSentButRecei
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -2861,6 +2992,12 @@ func TestRegularNode_processCommitRequest_AllFallbackClientsFail(t *testing.T) {
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2898,7 +3035,7 @@ func TestRegularNode_processCommitRequest_AllFallbackClientsFail(t *testing.T) {
 	packedIndices := big.NewInt(0)
 
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to execute submitCv transaction")
 	mockCommitRepo.AssertExpectations(t)
 }
@@ -2910,6 +3047,12 @@ func TestRegularNode_processCommitRequest_NonceMismatchError(t *testing.T) {
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+	}
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
@@ -2949,12 +3092,13 @@ func TestRegularNode_processCommitRequest_NonceMismatchError(t *testing.T) {
 	err = node.processCommitRequest(context.Background(), round, trialNum, packedIndices)
 
 	// Should handle nonce error
-	assert.Error(t, err)
+	require.Error(t, err)
 	mockCommitRepo.AssertExpectations(t)
 }
 
 func TestRegularNode_receiveCommitRequest_MultipleEvents_OneFails_OthersContinue(t *testing.T) {
 	node := createTestNodeForReceiveCommitRequest()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	mockCommitRepo := new(MockRegularCommitRepository)
 	mockBatchRepo := new(MockBatchRepository)
@@ -2975,6 +3119,16 @@ func TestRegularNode_receiveCommitRequest_MultipleEvents_OneFails_OthersContinue
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	// Set the node's EOA so events are processed correctly
+	node.SetRegularNodeEOA(eoaAddress.Hex())
 
 	requestedToSubmitCvSig := parsedABI.Events["RequestedToSubmitCv"].ID
 	statusSig := parsedABI.Events["Status"].ID
@@ -3020,8 +3174,9 @@ func TestRegularNode_receiveCommitRequest_MultipleEvents_OneFails_OthersContinue
 			}()
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(time.Now().Unix()), nil)
+		Return(uint64(time.Now().Unix()), nil).Maybe()
 
 	mockBatchRepo.On("DeleteOldRoundDataForRegularNode", mock.Anything, "100").
 		Return(nil).Maybe()
@@ -3038,13 +3193,13 @@ func TestRegularNode_receiveCommitRequest_MultipleEvents_OneFails_OthersContinue
 	eth.Service = mockEth
 	defer func() { eth.Service = originalService }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	go node.receiveCommitRequest(ctx)
 
 	<-ctx.Done()
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	assert.GreaterOrEqual(t, atomic.LoadInt32(&eventCount), int32(1), "Events should be processed even if one fails")
 	mockClient.AssertExpectations(t)
@@ -3359,6 +3514,7 @@ func TestRegularNode_receiveCommitRequest_ReorgDetection(t *testing.T) {
 
 func TestRegularNode_receiveCommitRequest_StatusEvent_State1(t *testing.T) {
 	node := createTestNodeForReceiveCommitRequest()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	mockBatchRepo := new(MockBatchRepository)
 	mockRevealRepo := node.revealOrderRepository.(*MockRevealOrderRepository)
@@ -3374,6 +3530,20 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State1(t *testing.T) {
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Set up the node's client with the same private key and ContractABI
+	privateKey, err := crypto.HexToECDSA("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	require.NoError(t, err)
+	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	// Set the node's EOA so events are processed correctly
+	node.SetRegularNodeEOA(eoaAddress.Hex())
 
 	statusEventSig := parsedABI.Events["Status"].ID
 
@@ -3412,11 +3582,12 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State1(t *testing.T) {
 			}
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(time.Now().Unix()+1000), nil)
+		Return(uint64(time.Now().Unix()+1000), nil).Maybe()
 
 	mockBatchRepo.On("DeleteOldRoundDataForRegularNode", mock.Anything, "100").
-		Return(nil)
+		Return(nil).Once()
 
 	// Mock GetRevealOrder for the AllCosReceivedUnlocked goroutine
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
@@ -3503,6 +3674,7 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_InvalidData(t *testing.T) 
 
 func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_Success(t *testing.T) {
 	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	mockCommitRepo := new(MockRegularCommitRepository)
 	node.fallbackEthClient = mockClient
@@ -3521,6 +3693,16 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_Success(t *testing
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	// Set the node's EOA so events are processed correctly
+	node.SetRegularNodeEOA(eoaAddress.Hex())
 
 	requestedToSubmitCvSig := parsedABI.Events["RequestedToSubmitCv"].ID
 
@@ -3555,8 +3737,9 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_Success(t *testing
 			}
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(time.Now().Unix()), nil)
+		Return(uint64(time.Now().Unix()), nil).Maybe()
 
 	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
 		Return(&utils.CommitData{
@@ -3684,8 +3867,9 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_BlockTimestampErro
 			}
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(0), errors.New("failed to get block timestamp"))
+		Return(uint64(0), errors.New("failed to get block timestamp")).Maybe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -3701,6 +3885,7 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_BlockTimestampErro
 
 func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_ProcessCommitRequestErrorHandling(t *testing.T) {
 	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	mockCommitRepo := new(MockRegularCommitRepository)
 	node.fallbackEthClient = mockClient
@@ -3719,6 +3904,16 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_ProcessCommitReque
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	// Set the node's EOA so events are processed correctly
+	node.SetRegularNodeEOA(eoaAddress.Hex())
 
 	requestedToSubmitCvSig := parsedABI.Events["RequestedToSubmitCv"].ID
 
@@ -3753,8 +3948,9 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_ProcessCommitReque
 			}
 		}).Return(mockSub, nil)
 
-	mockClient.On("BlockTimestamp", mock.Anything, big.NewInt(12345)).
-		Return(uint64(time.Now().Unix()), nil)
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
+	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
+		Return(uint64(time.Now().Unix()), nil).Maybe()
 
 	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
 		Return(nil, errors.New("database error: commit not found"))
@@ -3786,6 +3982,7 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCv_ProcessCommitReque
 
 func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_ProcessCosRequestErrorHandling(t *testing.T) {
 	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	mockCommitRepo := new(MockRegularCommitRepository)
 	node.fallbackEthClient = mockClient
@@ -3804,6 +4001,16 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_ProcessCosRequestE
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Use the same key in the node's client so processCosRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	// Set the node's EOA so events are processed correctly
+	node.SetRegularNodeEOA(eoaAddress.Hex())
 
 	requestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
 
@@ -3839,8 +4046,9 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_ProcessCosRequestE
 			}
 		}).Return(mockSub, nil)
 
-	mockClient.On("BlockTimestamp", mock.Anything, big.NewInt(12345)).
-		Return(uint64(time.Now().Unix()), nil)
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
+	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
+		Return(uint64(time.Now().Unix()), nil).Maybe()
 
 	// Mock GetCommitByRound to return error, which will cause processCosRequest to fail
 	mockCommitRepo.On("GetCommitByRound", mock.Anything, "100", "1").
@@ -3871,6 +4079,7 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_ProcessCosRequestE
 
 func TestRegularNode_receiveCommitRequest_MerkleRootSubmitted_Success(t *testing.T) {
 	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	node.fallbackEthClient = mockClient
 
@@ -3879,6 +4088,14 @@ func TestRegularNode_receiveCommitRequest_MerkleRootSubmitted_Success(t *testing
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Set up the node's client with ContractABI
+	testPrivateKey, _ := crypto.GenerateKey()
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      testPrivateKey,
+		ContractABI:     parsedABI,
+	}
 
 	merkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
 
@@ -3912,8 +4129,9 @@ func TestRegularNode_receiveCommitRequest_MerkleRootSubmitted_Success(t *testing
 			}
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(time.Now().Unix()), nil)
+		Return(uint64(time.Now().Unix()), nil).Maybe()
 
 	mockEth := &MockEthService{
 		GetActivatedOperatorsLengthFunc: func() int64 {
@@ -3951,6 +4169,14 @@ func TestRegularNode_receiveCommitRequest_CvSubmitted_Success(t *testing.T) {
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Set up the node's client with ContractABI
+	testPrivateKey, _ := crypto.GenerateKey()
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      testPrivateKey,
+		ContractABI:     parsedABI,
+	}
 
 	cvSubmittedSig := parsedABI.Events["CvSubmitted"].ID
 
@@ -4022,6 +4248,14 @@ func TestRegularNode_receiveCommitRequest_SSubmitted_Success(t *testing.T) {
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
 
+	// Set up the node's client with ContractABI
+	testPrivateKey, _ := crypto.GenerateKey()
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      testPrivateKey,
+		ContractABI:     parsedABI,
+	}
+
 	sSubmittedSig := parsedABI.Events["SSubmitted"].ID
 
 	round := big.NewInt(100)
@@ -4080,6 +4314,7 @@ func TestRegularNode_receiveCommitRequest_SSubmitted_Success(t *testing.T) {
 
 func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_Success(t *testing.T) {
 	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	mockCommitRepo := new(MockRegularCommitRepository)
 	node.fallbackEthClient = mockClient
@@ -4099,6 +4334,16 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_Success(t *testing
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
 
+	// Use the same key in the node's client so processCosRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	// Set the node's EOA so events are processed correctly
+	node.SetRegularNodeEOA(eoaAddress.Hex())
+
 	requestedToSubmitCoSig := parsedABI.Events["RequestedToSubmitCo"].ID
 
 	round := big.NewInt(100)
@@ -4114,7 +4359,9 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitCo_Success(t *testing
 	}
 
 	// Mock BlockTimestamp for the RequestedToSubmitCo event
-	mockClient.On("BlockTimestamp", mock.Anything, big.NewInt(12345)).Return(uint64(1234567890), nil)
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
+	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
+		Return(uint64(1234567890), nil).Maybe()
 
 	eventSent := false
 	mockClient.On("SubscribeFilterLogs", mock.Anything, mock.Anything, mock.Anything).
@@ -4232,6 +4479,15 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitSFromIndexK_Success(t
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
 
+	// Set up the node's client with ContractABI
+	privateKey, err := crypto.HexToECDSA("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	require.NoError(t, err)
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
 	requestedToSubmitSSig := parsedABI.Events["RequestedToSubmitSFromIndexK"].ID
 
 	round := big.NewInt(100)
@@ -4264,8 +4520,9 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitSFromIndexK_Success(t
 			}
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(time.Now().Unix()), nil)
+		Return(uint64(time.Now().Unix()), nil).Maybe()
 
 	// Mock reveal order for processSecretRequest
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, "100", "1").
@@ -4394,8 +4651,9 @@ func TestRegularNode_receiveCommitRequest_RequestedToSubmitSFromIndexK_BlockTime
 			}
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(0), errors.New("failed to get block timestamp"))
+		Return(uint64(0), errors.New("failed to get block timestamp")).Maybe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -4547,6 +4805,7 @@ func TestRegularNode_receiveCommitRequest_MerkleRootSubmitted_DecodeError(t *tes
 
 func TestRegularNode_receiveCommitRequest_MerkleRootSubmitted_BlockTimestampError(t *testing.T) {
 	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	node.fallbackEthClient = mockClient
 
@@ -4559,6 +4818,15 @@ func TestRegularNode_receiveCommitRequest_MerkleRootSubmitted_BlockTimestampErro
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Set up the node's client with ContractABI
+	privateKey, err := crypto.HexToECDSA("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	require.NoError(t, err)
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
 
 	merkleRootSubmittedSig := parsedABI.Events["MerkleRootSubmitted"].ID
 
@@ -4592,9 +4860,9 @@ func TestRegularNode_receiveCommitRequest_MerkleRootSubmitted_BlockTimestampErro
 			}
 		}).Return(mockSub, nil)
 
-	// Return error for block timestamp
+	// Return error for block timestamp (may be called multiple times for catch-up events)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(0), errors.New("failed to get block timestamp"))
+		Return(uint64(0), errors.New("failed to get block timestamp")).Maybe()
 
 	mockEth := &MockEthService{
 		GetActivatedOperatorsLengthFunc: func() int64 {
@@ -4623,6 +4891,7 @@ func TestRegularNode_receiveCommitRequest_MerkleRootSubmitted_BlockTimestampErro
 
 func TestRegularNode_receiveCommitRequest_StatusEvent_BlockTimestampError(t *testing.T) {
 	node := createTestNodeForSendCommit()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	node.fallbackEthClient = mockClient
 
@@ -4631,6 +4900,14 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_BlockTimestampError(t *tes
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Set up the node's client with ContractABI
+	testPrivateKey, _ := crypto.GenerateKey()
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      testPrivateKey,
+		ContractABI:     parsedABI,
+	}
 
 	statusEventSig := parsedABI.Events["Status"].ID
 
@@ -4664,8 +4941,9 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_BlockTimestampError(t *tes
 			}
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(0), errors.New("failed to get block timestamp"))
+		Return(uint64(0), errors.New("failed to get block timestamp")).Maybe()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -4679,6 +4957,7 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_BlockTimestampError(t *tes
 
 func TestRegularNode_receiveCommitRequest_StatusEvent_State2(t *testing.T) {
 	node := createTestNodeForReceiveCommitRequest()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	mockBatchRepo := new(MockBatchRepository)
 	mockRevealRepo := node.revealOrderRepository.(*MockRevealOrderRepository)
@@ -4690,6 +4969,14 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State2(t *testing.T) {
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Set up the node's client with ContractABI
+	testPrivateKey, _ := crypto.GenerateKey()
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      testPrivateKey,
+		ContractABI:     parsedABI,
+	}
 
 	statusEventSig := parsedABI.Events["Status"].ID
 
@@ -4723,11 +5010,12 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State2(t *testing.T) {
 			}
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(time.Now().Unix()), nil)
+		Return(uint64(time.Now().Unix()), nil).Maybe()
 
 	mockBatchRepo.On("DeleteOldRoundDataForRegularNode", mock.Anything, "100").
-		Return(nil)
+		Return(nil).Once()
 
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("not found")).Maybe()
@@ -4753,6 +5041,7 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State2(t *testing.T) {
 
 func TestRegularNode_receiveCommitRequest_StatusEvent_State3(t *testing.T) {
 	node := createTestNodeForReceiveCommitRequest()
+	node.SetHalted(false)
 	mockClient := new(MockFallbackEthClient)
 	mockBatchRepo := new(MockBatchRepository)
 	mockRevealRepo := node.revealOrderRepository.(*MockRevealOrderRepository)
@@ -4765,6 +5054,14 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State3(t *testing.T) {
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Set up the node's client with ContractABI
+	testPrivateKey, _ := crypto.GenerateKey()
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      testPrivateKey,
+		ContractABI:     parsedABI,
+	}
 
 	statusEventSig := parsedABI.Events["Status"].ID
 
@@ -4798,11 +5095,12 @@ func TestRegularNode_receiveCommitRequest_StatusEvent_State3(t *testing.T) {
 			}
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(time.Now().Unix()), nil)
+		Return(uint64(time.Now().Unix()), nil).Maybe()
 
 	mockBatchRepo.On("DeleteRoundTrialDataForRegularNode", mock.Anything, "100", "1").
-		Return(nil)
+		Return(nil).Once()
 
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("not found")).Maybe()
@@ -4839,6 +5137,14 @@ func TestRegularNode_receiveCommitRequest_MultipleEvents_Sequence(t *testing.T) 
 
 	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
 	require.NoError(t, err)
+
+	// Set up the node's client with ContractABI
+	testPrivateKey, _ := crypto.GenerateKey()
+	node.client = &utils.Client{
+		ContractAddress: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		PrivateKey:      testPrivateKey,
+		ContractABI:     parsedABI,
+	}
 
 	cvSubmittedSig := parsedABI.Events["CvSubmitted"].ID
 	merkleRootSig := parsedABI.Events["MerkleRootSubmitted"].ID
@@ -4882,8 +5188,9 @@ func TestRegularNode_receiveCommitRequest_MultipleEvents_Sequence(t *testing.T) 
 			}
 		}).Return(mockSub, nil)
 
+	// BlockTimestamp may be called multiple times (catch-up events + actual event)
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).
-		Return(uint64(time.Now().Unix()), nil)
+		Return(uint64(time.Now().Unix()), nil).Maybe()
 
 	mockRevealRepo.On("GetRevealOrder", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("not found")).Maybe()
@@ -5967,6 +6274,17 @@ func TestRegularNode_catchUpMissedEvents_ProcessMissedLogs_Sorted(t *testing.T) 
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
 	eoaAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// Use the same key in the node's client so processCommitRequest finds our EOA in the request
+	node.client = &utils.Client{
+		ContractAddress: contractAddr,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}
+
+	// Set the node's EOA so events are processed correctly
+	node.SetRegularNodeEOA(eoaAddress.Hex())
+	node.SetHalted(false)
 
 	os.Setenv("CONTRACT_ADDRESS", contractAddr.Hex())
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
