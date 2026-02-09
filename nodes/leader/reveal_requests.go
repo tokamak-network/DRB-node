@@ -328,8 +328,14 @@ func (n *LeaderNode) StartFailToSubmitSMonitoring(ctx context.Context, round str
 
 // startMonitoringWithPeriod starts the actual monitoring with the given period
 func (n *LeaderNode) startMonitoringWithPeriod(ctx context.Context, round string, trialNum string, period *big.Int) {
-	// Calculate deadline: s_previousSSubmitTimestamp + s_onChainSubmissionPeriodPerOperator
-	deadline := new(big.Int).Add(n.GetLastSubmitSTimestamp(), period)
+	blockTimeSeconds, err := utils.GetBlockTimeSeconds()
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
+	// Calculate deadline: s_previousSSubmitTimestamp + s_onChainSubmissionPeriodPerOperator + blockTime
+	deadline := new(big.Int).Add(new(big.Int).Add(n.GetLastSubmitSTimestamp(), period), blockTimeSeconds)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)

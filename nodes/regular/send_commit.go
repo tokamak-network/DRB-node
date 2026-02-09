@@ -598,9 +598,18 @@ func (n *RegularNode) StartLeaderMonitoring(ctx context.Context, startTime *big.
 	// Get timing parameters from config
 	periods := appconfig.GetContractPeriods()
 
-	// Calculate deadline: startTime + offChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
+	// Get block time from constants
+	blockTimeSeconds, err := utils.GetBlockTimeSeconds()
+	if err != nil {
+		log.Printf("%v", err)
+		atomic.StoreInt32(&n.leaderMonitoringActive, 0)
+		return
+	}
+
+	// Calculate deadline: startTime + offChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod + blockTime
 	deadline := new(big.Int).Add(startTime, periods.OffChainSubmissionPeriod)
 	deadline.Add(deadline, periods.RequestOrSubmitOrFailDecisionPeriod)
+	deadline.Add(deadline, blockTimeSeconds)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -695,9 +704,16 @@ func (n *RegularNode) StartMerkleRootMonitoring(ctx context.Context, round strin
 	// Get timing parameters from config
 	periods := appconfig.GetContractPeriods()
 
-	// Calculate deadline: requestedToSubmitCvTime + onChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod
+	// Get block time from constants
+	blockTimeSeconds, err := utils.GetBlockTimeSeconds()
+	if err != nil {
+		return fmt.Errorf("%v", err)
+	}
+
+	// Calculate deadline: requestedToSubmitCvTime + onChainSubmissionPeriod + requestOrSubmitOrFailDecisionPeriod + blockTime
 	deadline := new(big.Int).Add(requestedToSubmitCvTime, periods.OnChainSubmissionPeriod)
 	deadline.Add(deadline, periods.RequestOrSubmitOrFailDecisionPeriod)
+	deadline.Add(deadline, blockTimeSeconds)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -806,11 +822,18 @@ func (n *RegularNode) StartRequestToSubmitSOrGenerateRandomNumberMonitoring(ctx 
 		return
 	}
 
-	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod
-	deadline := new(big.Int).Add(referenceTime, periods.OffChainSubmissionPeriod)
+	blockTimeSeconds, err := utils.GetBlockTimeSeconds()
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
+	// Calculate deadline: s_merkleRootSubmittedTime + s_offChainSubmissionPeriod + (s_offChainSubmissionPeriodPerOperator * activatedOperatorsLength) + s_requestOrSubmitOrFailDecisionPeriod + blockTime
 	operatorDelay := new(big.Int).Mul(periods.OffChainSubmissionPeriodPerOperator, activatedOperatorsLength)
+	deadline := new(big.Int).Add(referenceTime, periods.OffChainSubmissionPeriod)
 	deadline.Add(deadline, operatorDelay)
 	deadline.Add(deadline, periods.RequestOrSubmitOrFailDecisionPeriod)
+	deadline.Add(deadline, blockTimeSeconds)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)

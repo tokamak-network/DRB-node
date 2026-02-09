@@ -20,7 +20,6 @@ import (
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/eth"
-	"github.com/tokamak-network/DRB-node/pkg/constants"
 	"github.com/tokamak-network/DRB-node/utils"
 )
 
@@ -644,8 +643,15 @@ func (n *LeaderNode) startFailToSubmitCoMonitoring(ctx context.Context, round st
 		n.requestedToSubmitCoMonitoringTimer = nil
 	}
 
-	// Calculate deadline: requestedToSubmitCoTimestamp + s_onChainSubmissionPeriod
-	deadline := new(big.Int).Add(requestedToSubmitCoTimestamp, appconfig.GetContractPeriods().OnChainSubmissionPeriod)
+	blockTimeSeconds, err := utils.GetBlockTimeSeconds()
+	if err != nil {
+		log.Printf("%v", err)
+		atomic.StoreInt32(&n.requestedToSubmitCoMonitoringActive, 0)
+		return
+	}
+
+	// Calculate deadline: requestedToSubmitCoTimestamp + s_onChainSubmissionPeriod + blockTime
+	deadline := new(big.Int).Add(new(big.Int).Add(requestedToSubmitCoTimestamp, appconfig.GetContractPeriods().OnChainSubmissionPeriod), blockTimeSeconds)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -758,8 +764,15 @@ func (n *LeaderNode) startFailToSubmitCvMonitoring(ctx context.Context, round st
 	// Get timing parameters from config
 	periods := appconfig.GetContractPeriods()
 
-	// Calculate deadline: requestedToSubmitCvTimestamp + s_onChainSubmissionPeriod
-	deadline := new(big.Int).Add(requestedToSubmitCvTimestamp, periods.OnChainSubmissionPeriod)
+	blockTimeSeconds, err := utils.GetBlockTimeSeconds()
+	if err != nil {
+		log.Printf("%v", err)
+		atomic.StoreInt32(&n.requestedToSubmitCvMonitoringActive, 0)
+		return
+	}
+
+	// Calculate deadline: requestedToSubmitCvTimestamp + s_onChainSubmissionPeriod + blockTime
+	deadline := new(big.Int).Add(new(big.Int).Add(requestedToSubmitCvTimestamp, periods.OnChainSubmissionPeriod), blockTimeSeconds)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -900,10 +913,17 @@ func (n *LeaderNode) startRequestToSubmitCvMonitoring(ctx context.Context, round
 	// Get timing parameters from config
 	periods := appconfig.GetContractPeriods()
 
-	// Calculate deadline: startTime + s_offChainSubmissionPeriod + s_requestOrSubmitOrFailDecisionPeriod
+	blockTimeSeconds, err := utils.GetBlockTimeSeconds()
+	if err != nil {
+		log.Printf("%v", err)
+		atomic.StoreInt32(&n.requestToSubmitCvMonitoringActive, 0)
+		return
+	}
+
+	// Calculate deadline: startTime + s_offChainSubmissionPeriod + s_requestOrSubmitOrFailDecisionPeriod + blockTime
 	totalPeriod := new(big.Int).Add(periods.OffChainSubmissionPeriod, periods.RequestOrSubmitOrFailDecisionPeriod)
 	totalPeriod = new(big.Int).Sub(totalPeriod, big.NewInt(20)) // 20 seconds can vary according to block chain network
-	deadline := new(big.Int).Add(startTime, totalPeriod)
+	deadline := new(big.Int).Add(new(big.Int).Add(startTime, totalPeriod), blockTimeSeconds)
 
 	// Convert deadline to time.Duration
 	deadlineTime := time.Unix(deadline.Int64(), 0)
@@ -1190,20 +1210,19 @@ func (n *LeaderNode) startRequestToSubmitCoMonitoring(ctx context.Context, round
 	// Get timing parameters from config
 	periods := appconfig.GetContractPeriods()
 
-	// Calculate the deadline: merkleRootSubmittedTime + s_offChainSubmissionPeriod + s_requestOrSubmitOrFailDecisionPeriod
-	deadline := new(big.Int).Add(merkleRootSubmittedTime, periods.OffChainSubmissionPeriod)
-	deadline.Add(deadline, periods.RequestOrSubmitOrFailDecisionPeriod)
+	blockTimeSeconds, err := utils.GetBlockTimeSeconds()
+	if err != nil {
+		log.Printf("%v", err)
+		n.SetRequestToSubmitCoTimerMonitoringActive(false)
+		return
+	}
+
+	// Calculate the deadline: merkleRootSubmittedTime + s_offChainSubmissionPeriod + s_requestOrSubmitOrFailDecisionPeriod + blockTime
+	deadline := new(big.Int).Add(new(big.Int).Add(new(big.Int).Add(merkleRootSubmittedTime, periods.OffChainSubmissionPeriod), periods.RequestOrSubmitOrFailDecisionPeriod), blockTimeSeconds)
 
 	currentTime := big.NewInt(time.Now().Unix())
 
-	// Determine chainID from client and compute seconds buffer from configured block time
-	chainID, err := n.fallbackEthClient.NetworkID(ctx)
-	if err != nil {
-		log.Printf("Failed to get network ID: %v", err)
-		return
-	}
-	blockTime := constants.Chains[chainID.Uint64()].BlockTime
-	bufferSeconds := int64(5*3) * int64(blockTime.Seconds())
+	bufferSeconds := int64(5*3) * blockTimeSeconds.Int64()
 	buffer := big.NewInt(bufferSeconds)
 	// Calculate how long to wait
 	duration := new(big.Int).Sub(deadline, currentTime)

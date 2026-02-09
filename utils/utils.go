@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	appconfig "github.com/tokamak-network/DRB-node/config"
+	"github.com/tokamak-network/DRB-node/pkg/constants"
 )
 
 type RegistrationRequest struct {
@@ -456,4 +457,14 @@ func VerifyRegistrationRequestContentSignature(req RegistrationRequest, expected
 	log.Printf("Registration request signature verification - Recovered: %s, Expected: %s", recoveredAddress, expectedAddress)
 
 	return recoveredAddress == expectedAddress
+}
+
+func GetBlockTimeSeconds() (*big.Int, error) {
+	chainID := appconfig.GetChainIDAsBigInt()
+	if chainID == nil {
+		return nil, fmt.Errorf("CHAIN_ID environment variable is not set or invalid")
+	}
+	blockTime := constants.Chains[chainID.Uint64()].BlockTime
+	blockTimeSeconds := big.NewInt(int64(blockTime.Seconds()))
+	return blockTimeSeconds, nil
 }
