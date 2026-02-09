@@ -1333,14 +1333,30 @@ func (n *LeaderNode) requestToSubmitCo(ctx context.Context, roundNum string, tri
 
 // prepareArgumentsForRequestToSubmitCo prepares arguments for COS request
 func (n *LeaderNode) prepareArgumentsForRequestToSubmitCo(ctx context.Context, roundNum string, trialNum string, missingIndices []*big.Int) ([]CvAndSigRS, *big.Int, *big.Int, *big.Int, error) {
+	// Split missingIndices into two groups based on n.indices:
+	// - notOnChain: operators whose CVs are NOT yet on-chain (will be sent with CV + signature)
+	// - onChain: operators whose CVs are already on-chain via requestToSubmitCv (only need index)
+	notOnChainIndices, onChainIndices := n.orderedPackedIndices(missingIndices)
+
+	// Mark the notOnChain CVs as on-chain in n.indices so that
+	// prepareArgumentsForRequestToSubmitS later excludes their signatures,
+	for _, i := range notOnChainIndices {
+		n.AppendToIndices(i)
+	}
+
+	// Re-sort indices to maintain sorted order required by the two-pointer
+	// loop in prepareArgumentsForRequestToSubmitS.
+	indices := n.GetIndices()
+	sort.Slice(indices, func(i, j int) bool {
+		return indices[i].Cmp(indices[j]) < 0
+	})
+	n.SetIndices(indices)
 	cvs, _, _, vs, rs, ss, err := n.LoadNodeData(ctx, roundNum, trialNum)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to load node data for round %s trial %s: %w", roundNum, trialNum, err)
 	}
 
 	indicesLength := big.NewInt(int64(len(missingIndices)))
-
-	notOnChainIndices, onChainIndices := n.orderedPackedIndices(missingIndices)
 
 	allOrderedIndices := append(notOnChainIndices, onChainIndices...)
 	packedOrderedIndices := PackIndices(allOrderedIndices)
