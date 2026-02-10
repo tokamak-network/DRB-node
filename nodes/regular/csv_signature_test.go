@@ -26,11 +26,10 @@ func TestRegularNode_GenerateCvsSignature_Success(t *testing.T) {
 
 	// Set up environment variables
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 
@@ -55,10 +54,9 @@ func TestRegularNode_GenerateCvsSignature_Success(t *testing.T) {
 
 func TestRegularNode_GenerateCvsSignature_MissingContractAddress(t *testing.T) {
 	os.Unsetenv("CONTRACT_ADDRESS")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	defer func() {
-		os.Unsetenv("CHAIN_ID")
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 
@@ -69,7 +67,15 @@ func TestRegularNode_GenerateCvsSignature_MissingContractAddress(t *testing.T) {
 func TestRegularNode_GenerateCvsSignature_MissingChainID(t *testing.T) {
 	// Set CONTRACT_ADDRESS but not CHAIN_ID
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	origChainID, hadOrigChainID := os.LookupEnv("CHAIN_ID")
 	os.Unsetenv("CHAIN_ID")
+	t.Cleanup(func() {
+		if hadOrigChainID {
+			_ = os.Setenv("CHAIN_ID", origChainID)
+		} else {
+			_ = os.Unsetenv("CHAIN_ID")
+		}
+	})
 	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
@@ -85,11 +91,10 @@ func TestRegularNode_GenerateCvsSignature_InvalidChainID(t *testing.T) {
 	node := createTestRegularNode()
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "invalid_chain_id")
+	t.Setenv("CHAIN_ID", "invalid_chain_id")
 	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 
@@ -108,11 +113,10 @@ func TestRegularNode_GenerateCvsSignature_InvalidChainID(t *testing.T) {
 
 func TestRegularNode_GenerateCvsSignature_MissingPrivateKey(t *testing.T) {
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	os.Unsetenv("EOA_PRIVATE_KEY")
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 	}()
 
 	// Check that EOA_PRIVATE_KEY is required
@@ -124,11 +128,10 @@ func TestRegularNode_GenerateCvsSignature_InvalidPrivateKey(t *testing.T) {
 	node := createTestRegularNode()
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	os.Setenv("EOA_PRIVATE_KEY", "invalid_hex_key")
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 
@@ -154,11 +157,10 @@ func TestRegularNode_GenerateCvsSignature_DifferentInputs(t *testing.T) {
 	privateKeyHex := hex.EncodeToString(crypto.FromECDSA(privateKey))
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 
@@ -233,8 +235,7 @@ func TestRegularNode_GenerateCvsSignature_DifferentChainIDs(t *testing.T) {
 
 	for _, chainID := range chainIDs {
 		t.Run("ChainID_"+chainID, func(t *testing.T) {
-			os.Setenv("CHAIN_ID", chainID)
-			defer os.Unsetenv("CHAIN_ID")
+			t.Setenv("CHAIN_ID", chainID)
 
 			v, r, s, err := node.GenerateCvsSignature(round, trialNum, cvs)
 
@@ -261,11 +262,10 @@ func TestRegularNode_GenerateCvsSignature_EmptyCVS(t *testing.T) {
 	privateKeyHex := hex.EncodeToString(crypto.FromECDSA(privateKey))
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 
@@ -290,11 +290,10 @@ func TestRegularNode_GenerateCvsSignature_FullCVS(t *testing.T) {
 	privateKeyHex := hex.EncodeToString(crypto.FromECDSA(privateKey))
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 
@@ -340,11 +339,10 @@ func TestRegularNode_GenerateCvsSignature_ContractAddressWithoutPrefix(t *testin
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			os.Setenv("CONTRACT_ADDRESS", tc.contractAddress)
-			os.Setenv("CHAIN_ID", "1")
+			t.Setenv("CHAIN_ID", "1")
 			os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
 			defer func() {
 				os.Unsetenv("CONTRACT_ADDRESS")
-				os.Unsetenv("CHAIN_ID")
 				os.Unsetenv("EOA_PRIVATE_KEY")
 			}()
 
@@ -371,11 +369,10 @@ func TestRegularNode_SignatureComponents_Format(t *testing.T) {
 	privateKeyHex := hex.EncodeToString(crypto.FromECDSA(privateKey))
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 
@@ -407,11 +404,10 @@ func TestRegularNode_SignatureDeterminism(t *testing.T) {
 	privateKeyHex := hex.EncodeToString(crypto.FromECDSA(privateKey))
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 
@@ -445,11 +441,10 @@ func TestRegularNode_GenerateCvsSignature_ZeroRoundAndTrial(t *testing.T) {
 	privateKeyHex := hex.EncodeToString(crypto.FromECDSA(privateKey))
 
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	os.Setenv("EOA_PRIVATE_KEY", privateKeyHex)
 	defer func() {
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 		os.Unsetenv("EOA_PRIVATE_KEY")
 	}()
 

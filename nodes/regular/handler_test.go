@@ -472,10 +472,18 @@ func TestMain(m *testing.M) {
 	// Setup: Create ABI file before tests
 	setupTestEnvironment()
 
+	origChainID, hadOrigChainID := os.LookupEnv("CHAIN_ID")
+	_ = os.Setenv("CHAIN_ID", "1")
+
 	// Run tests
 	code := m.Run()
 
 	// Cleanup
+	if hadOrigChainID {
+		_ = os.Setenv("CHAIN_ID", origChainID)
+	} else {
+		_ = os.Unsetenv("CHAIN_ID")
+	}
 	cleanupTestEnvironment()
 
 	os.Exit(code)
@@ -2670,11 +2678,10 @@ func TestRegularNodeHandler_sendCommitToLeader_StreamCreationError(t *testing.T)
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	defer func() {
 		os.Unsetenv("EOA_PRIVATE_KEY")
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 	}()
 
 	mockCommitRepo.On("UpdateCommit", mock.Anything, mock.Anything).Return(nil)
@@ -2980,11 +2987,10 @@ func TestRegularNodeHandler_sendCommitToLeader_GenerateSignatureError(t *testing
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "invalid")
+	t.Setenv("CHAIN_ID", "invalid")
 	defer func() {
 		os.Unsetenv("EOA_PRIVATE_KEY")
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 	}()
 
 	handler.sendCommitToLeader(ctx, mockHost, testPeerID, commitData, "100", "1", eoaAddress)
@@ -3011,11 +3017,10 @@ func TestRegularNodeHandler_sendCommitToLeader_UpdateCommitError(t *testing.T) {
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	defer func() {
 		os.Unsetenv("EOA_PRIVATE_KEY")
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 	}()
 
 	mockCommitRepo.On("UpdateCommit", mock.Anything, mock.Anything).
@@ -3047,11 +3052,10 @@ func TestRegularNodeHandler_sendCommitToLeader_EncodeSuccess_UpdateFails(t *test
 
 	os.Setenv("EOA_PRIVATE_KEY", hex.EncodeToString(crypto.FromECDSA(privateKey)))
 	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
-	os.Setenv("CHAIN_ID", "1")
+	t.Setenv("CHAIN_ID", "1")
 	defer func() {
 		os.Unsetenv("EOA_PRIVATE_KEY")
 		os.Unsetenv("CONTRACT_ADDRESS")
-		os.Unsetenv("CHAIN_ID")
 	}()
 
 	// First update succeeds, second fails

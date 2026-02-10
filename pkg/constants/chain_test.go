@@ -88,7 +88,7 @@ func TestChains_MapNotEmpty(t *testing.T) {
 
 // TestChains_MapSize verifies the expected number of chains
 func TestChains_MapSize(t *testing.T) {
-	expectedSize := 4 // Ethereum Mainnet, Sepolia, Optimism Mainnet, Sepolia
+	expectedSize := 6
 	assert.Equal(t, expectedSize, len(Chains), "Chains map should contain exactly %d entries", expectedSize)
 }
 
