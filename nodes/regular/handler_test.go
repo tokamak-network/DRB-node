@@ -38,6 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/eth"
 	"github.com/tokamak-network/DRB-node/libp2putils"
@@ -3130,6 +3131,9 @@ func (suite *RegularHandlerTestSuite) SetupSuite() {
 
 // SetupTest runs before each test
 func (suite *RegularHandlerTestSuite) SetupTest() {
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	appconfig.Reload() // refresh cached config so NewRegularNodeHandler sees CONTRACT_ADDRESS
 	suite.peerCommitRepo = database.NewPeerCommitRepository(suite.db)
 	suite.revealOrderRepo = database.NewRevealOrderRepository(suite.db)
 	suite.regularCommitRepo = database.NewRegularCommitRepository(suite.db)
@@ -3152,6 +3156,8 @@ func (suite *RegularHandlerTestSuite) SetupTest() {
 
 // TearDownTest runs after each test to clean up data
 func (suite *RegularHandlerTestSuite) TearDownTest() {
+	os.Unsetenv("EOA_PRIVATE_KEY")
+	os.Unsetenv("CONTRACT_ADDRESS")
 	// Clean up all tables to avoid constraint violations in subsequent tests
 	if suite.db != nil {
 		_, _ = suite.db.Exec("DELETE FROM commit_data_schemes")
@@ -3340,6 +3346,13 @@ func TestRegularNodeHandler_NewRegularNodeHandler_WithRealDB(t *testing.T) {
 	}
 	defer db.Close()
 
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	appconfig.Reload() // refresh cached config so NewRegularNodeHandler sees CONTRACT_ADDRESS
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
 	mockFallbackClient := new(MockFallbackEthClient)
 	handler, err := NewRegularNodeHandler(mockFallbackClient, db)
 	require.NoError(t, err)

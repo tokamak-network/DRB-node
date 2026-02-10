@@ -411,11 +411,10 @@ func TestLeaderCommitRepository_GetByRoundAndTrialNum_ErrorHandling(t *testing.T
 	assert.NoError(t, err, "Failed to drop table for test")
 
 	// Try to get commits - should get an error because table doesn't exist
-	// Should return empty slice on error (not nil)
+	// Should return nil slice on error
 	leaderCommits, err := repo.GetLeaderCommitsByRoundAndTrialNum(ctx, "test_round", "test_trial")
 	assert.Error(t, err, "Expected error when table is missing")
-	assert.NotNil(t, leaderCommits, "Should return non-nil slice")
-	assert.Equal(t, 0, len(leaderCommits), "Should return empty slice on error")
+	assert.Nil(t, leaderCommits, "Should return nil slice on error")
 
 	// Restore the schema
 	dsn := "postgres://postgres:123@localhost:5433/testdb?sslmode=disable"

@@ -3,6 +3,7 @@ package regular_node
 import (
 	"context"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/go-pg/pg/v10"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 	commitreveal2 "github.com/tokamak-network/DRB-node/commit-reveal2"
 	"github.com/tokamak-network/DRB-node/database"
 	"github.com/tokamak-network/DRB-node/libp2putils"
@@ -1187,6 +1189,13 @@ func createRegularNodeWithValidDeps(t *testing.T, testDB *pg.DB, fallbackClient 
 }
 
 func TestNewRegularNode_InvalidDependencyStates(t *testing.T) {
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	appconfig.Reload() // refresh cached config so NewRegularNode sees CONTRACT_ADDRESS
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
 	ctx := context.Background()
 
 	t.Run("RegularCommitRepository with nil database panics", func(t *testing.T) {
@@ -1485,6 +1494,13 @@ func TestNewRegularNode_InvalidDependencyStates(t *testing.T) {
 }
 
 func TestNewRegularNode_PartialDependencyInjection(t *testing.T) {
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	appconfig.Reload() // refresh cached config so NewRegularNode sees CONTRACT_ADDRESS
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
 	t.Run("Constructor requires all dependencies", func(t *testing.T) {
 		testDB := getTestDB(t)
 		if testDB == nil {
@@ -1518,6 +1534,13 @@ func TestNewRegularNode_PartialDependencyInjection(t *testing.T) {
 }
 
 func TestNewRegularNode_RuntimeDatabaseDisconnection(t *testing.T) {
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	appconfig.Reload() // refresh cached config so NewRegularNode sees CONTRACT_ADDRESS
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
 	ctx := context.Background()
 
 	const (
@@ -1650,6 +1673,13 @@ func TestNewRegularNode_RuntimeDatabaseDisconnection(t *testing.T) {
 }
 
 func TestNewRegularNode_ConstructorNilValidation(t *testing.T) {
+	os.Setenv("EOA_PRIVATE_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	os.Setenv("CONTRACT_ADDRESS", "0x1234567890123456789012345678901234567890")
+	appconfig.Reload() // refresh cached config so NewRegularNode sees CONTRACT_ADDRESS
+	defer func() {
+		os.Unsetenv("EOA_PRIVATE_KEY")
+		os.Unsetenv("CONTRACT_ADDRESS")
+	}()
 	t.Run("NewRegularNode rejects nil fallbackEthClient", func(t *testing.T) {
 		testDB := getTestDB(t)
 		if testDB == nil {
