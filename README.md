@@ -189,7 +189,7 @@ In a new terminal, run the integration tests:
 
 ```bash
 # From project root
-go test ./integration_test -v -timeout 120m
+go test ./integration_test -v -timeout 180m
 ```
 
 The integration test framework will:
@@ -204,7 +204,7 @@ The integration test framework will:
 **Note**: 
 - Integration tests use their own isolated environment and do not require or use the root `.env` file.
 - Keep the Geth terminal running until all integration tests complete.
-- Integration tests have a default timeout of 120 minutes.
+- Integration tests have a default timeout of 180 minutes.
 
 #### Integration Test Details
 
@@ -327,6 +327,7 @@ LEADER_EOA=<Your Leader Ethereum Address>
 LEADER_PORT=61280
 LEADER_PEER_ID=<Generated from test/run_leader_generator_test.sh>
 
+
 # Regular Nodes Configuration
 REGULAR1_PEER_ID=<Generated from test/run_regular_generator_test.sh>
 REGULAR1_PORT=61281
@@ -353,6 +354,7 @@ POSTGRES_PASSWORD=password
 **Note**: 
 - The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section below for detailed instructions.
 - **For local/test environment**: The `STATUS` variable is **not required**. The node will automatically use local IP addresses.
+- **LEADER_IP** (used in `test/docker-compose.yml` for regular nodes): If you want the leader address to be resolved via **DNS**, keep `LEADER_IP=leadernode`. If you already have the **leader node IP**, set `LEADER_IP=<LEADER_NODE_IP>` (regular nodes will connect directly to that IP). The code uses an IP multiaddress (`/ip4/...`) when the value parses as an IP, and a DNS multiaddress (`/dns/...`) otherwise.
 
 #### Configuration by Chain ID
 
@@ -551,6 +553,7 @@ STATUS=prod
 - The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section for the correct values based on your network.
 - **For production deployment**: Set `STATUS=prod` to use public IP addresses. This is required for nodes deployed on AWS or other cloud platforms where nodes need to communicate over the internet.
 - **For local development**: Do **NOT** set the `STATUS` variable. Leave it unset in your `.env` file. The node will automatically use local/Docker network IP addresses.
+- **LEADER_IP** (used in `deployment/regular/docker-compose.yml` for regular nodes): If you want the leader address to be resolved via **DNS**, keep `LEADER_IP=leadernode`. If you already have the **leader node IP**, set `LEADER_IP=<LEADER_NODE_IP>` (regular nodes will connect directly to that IP). The code uses an IP multiaddress (`/ip4/...`) when the value parses as an IP, and a DNS multiaddress (`/dns/...`) otherwise.
 
 #### Regular Node Deployment Steps
 
