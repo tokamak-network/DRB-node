@@ -9,7 +9,7 @@ This document explains how the libp2p resource manager parameters are calculated
 
 ## Broadcast Optimization
 
-When broadcasting CVS, COS, or secret values, the leader **skips the originating operator**. The operator who submitted the data already has it locally, so there's no need to send it back to them. This reduces network overhead and stream usage.
+When broadcasting CVS, COS, or secret values, the leader is configured to broadcast to **all** operators (i.e., `maxOperators` recipients per value). `calculateOptimalLimits()` in `libp2putils/libp2p_client.go`.
 
 ## Stream Protocols
 
@@ -62,39 +62,39 @@ Rounds execute sequentially. Values below are for a single round with `maxOperat
 
 ### Streams (per round)
 
-**Inbound = 3104 streams (base):**
+**Inbound = 3200 streams (base):**
 
 | Source | Count | Calculation |
 |---|---|---|
 | Registration | 32 | 1 per operator |
 | CVS commits | 32 | 1 per operator |
-| CVS acks | 992 | 32 CVS values × 31 operators acknowledging each (originator skipped) |
+| CVS acks | 1024 | 32 CVS values × 32 operators acknowledging each |
 | COS submissions | 32 | 1 per operator |
-| COS acks | 992 | 32 COS values × 31 operators acknowledging each |
+| COS acks | 1024 | 32 COS values × 32 operators acknowledging each |
 | Secret submissions | 32 | 1 per operator |
-| Secret acks | 992 | 32 secret values × 31 operators acknowledging each |
+| Secret acks | 1024 | 32 secret values × 32 operators acknowledging each |
 
-**Outbound = 2976 streams (base):**
+**Outbound = 3072 streams (base):**
 
 | Source | Count | Calculation |
 |---|---|---|
-| CVS broadcasts | 992 | 32 CVS values × 31 operators (originator skipped) |
-| COS broadcasts | 992 | 32 COS values × 31 operators (originator skipped) |
-| Secret broadcasts | 992 | 32 secret values × 31 operators (originator skipped) |
+| CVS broadcasts | 1024 | 32 CVS values × 32 operators |
+| COS broadcasts | 1024 | 32 COS values × 32 operators |
+| Secret broadcasts | 1024 | 32 secret values × 32 operators |
 
-A **25% safety margin** is applied, giving final values of **3880 inbound** and **3720 outbound**.
+A **25% safety margin** is applied, giving final values of **4000 inbound** and **3840 outbound**.
 
 ### Per-Connection Limits
 
 | Parameter | Base Value | With 25% Buffer | Reasoning |
 |---|---|---|---|
-| `ConnBaseLimit.StreamsInbound` | 97 | 121 | 31 CVS acks + 31 COS acks + 31 Secret acks + 4 submissions |
-| `ConnBaseLimit.StreamsOutbound` | 280 | 350 | `3 × 31 × 3 retries + 1` = 280 |
+| `ConnBaseLimit.StreamsInbound` | 100 | 125 | 32 CVS acks + 32 COS acks + 32 Secret acks + 4 submissions |
+| `ConnBaseLimit.StreamsOutbound` | 289 | 361 | `3 × 32 × 3 retries + 1` = 289 |
 
 The outbound per-connection limit accounts for:
-- 31 CVS broadcasts (for other operators' CVS values)
-- 31 COS broadcasts (for other operators' COS values)
-- 31 Secret broadcasts (for other operators' secrets)
+- 32 CVS broadcasts
+- 32 COS broadcasts
+- 32 Secret broadcasts
 - 1 secret value request
 - × 3 retries for reliability
 
@@ -103,11 +103,11 @@ The outbound per-connection limit accounts for:
 | Parameter | Value | Formula |
 |---|---|---|
 | `FD` | 160 | `estimatedConnections × 4` (4 FDs per connection for socket + multiplexer) |
-| `Memory` | ~500MB | `(40 × 512KB) + (3880 × 32KB) + (3720 × 32KB) + 256MB` |
+| `Memory` | ~521MB | `(40 × 512KB) + (4000 × 32KB) + (3840 × 32KB) + 256MB` |
 
 ## Regular Node Calculations
 
-A regular node only connects to the leader. It receives broadcasts for all **other** operators (not its own) and sends acks.
+A regular node only connects to the leader. It receives broadcasts for **all** operators (including its own) and sends acks.
 
 ### Connections
 
@@ -120,22 +120,22 @@ A regular node only connects to the leader. It receives broadcasts for all **oth
 
 The leader retries broadcasts up to **3 times** if no acknowledgment is received.
 
-**Inbound = 279 streams (base), 348 with 25% buffer:**
+**Inbound = 288 streams (base), 360 with 25% buffer:**
 
 | Source | Count | Calculation |
 |---|---|---|
-| CVS broadcasts | 93 | 31 other operators × 3 retries |
-| COS broadcasts | 93 | 31 other operators × 3 retries |
-| Secret broadcasts | 93 | 31 other operators × 3 retries |
+| CVS broadcasts | 96 | 32 operators × 3 retries |
+| COS broadcasts | 96 | 32 operators × 3 retries |
+| Secret broadcasts | 96 | 32 operators × 3 retries |
 
-**Outbound = 96 streams (base), 120 with 25% buffer:**
+**Outbound = 99 streams (base), 123 with 25% buffer:**
 
 | Source | Count | Calculation |
 |---|---|---|
 | CVS commit | 1 | Own commitment |
 | COS submission | 1 | Own COS |
 | Secret submission | 1 | Own secret |
-| ACKs | 93 | 1 ack per received broadcast (31 other operators × 3 phases) |
+| ACKs | 96 | 1 ack per received broadcast (32 operators × 3 phases) |
 
 ### Per-Connection Limits
 
@@ -143,37 +143,27 @@ Per-connection limits equal system limits since the regular node has only one me
 
 | Parameter | Base Value | With 25% Buffer |
 |---|---|---|
-| `StreamsInbound` | 279 | 348 |
-| `StreamsOutbound` | 96 | 120 |
+| `StreamsInbound` | 288 | 360 |
+| `StreamsOutbound` | 99 | 123 |
 
 ### File Descriptors and Memory
 
 | Parameter | Value | Formula |
 |---|---|---|
 | `FD` | 32 | Minimal — only 2 connections × 4 FDs + buffer |
-| `Memory` | ~47MB | `((348 + 120) × 32KB) + 32MB base` |
+| `Memory` | ~47MB | `((360 + 123) × 32KB) + 32MB base` |
 
 ## Summary
-
-### Broadcast Optimization Impact
-
-The broadcast optimization (skipping originator) reduces:
-- Leader outbound streams: 3072 → 2976 (before safety margin)
-- Leader inbound acks: 3072 → 2976 (before safety margin)
-- Regular node inbound broadcasts: 288 → 279
-- Regular node outbound acks: 96 → 93
-
-This optimization saves ~3% of network overhead while ensuring operators don't receive redundant copies of their own data.
 
 ### Final Values Summary
 
 | Node Type | Parameter | Final Value |
 |---|---|---|
-| Leader | System Streams Inbound | 3880 |
-| Leader | System Streams Outbound | 3720 |
-| Leader | Conn Streams Inbound | 121 |
-| Leader | Conn Streams Outbound | 350 |
-| Leader | Memory | ~500MB |
-| Regular | System Streams Inbound | 348 |
-| Regular | System Streams Outbound | 120 |
+| Leader | System Streams Inbound | 4000 |
+| Leader | System Streams Outbound | 3840 |
+| Leader | Conn Streams Inbound | 125 |
+| Leader | Conn Streams Outbound | 361 |
+| Leader | Memory | ~521MB |
+| Regular | System Streams Inbound | 360 |
+| Regular | System Streams Outbound | 123 |
 | Regular | Memory | ~47MB |

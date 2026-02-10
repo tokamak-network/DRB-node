@@ -51,15 +51,15 @@ func calculateOptimalLimits(nodeType string, maxOperators int) rcmgr.ScalingLimi
 	if nodeType == "leader" {
 		estimatedConnections := maxOperators + (maxOperators / 4)
 
-		streamsInbound := 3104
-		streamsOutbound := 2976
+		streamsInbound := 3200
+		streamsOutbound := 3072
 
 		// 25% safety margin
 		streamsInbound = streamsInbound + (streamsInbound / 4)
 		streamsOutbound = streamsOutbound + (streamsOutbound / 4)
 
-		connStreamsInbound := 97
-		connStreamsOutbound := 280
+		connStreamsInbound := 100
+		connStreamsOutbound := 289
 		// 25% safety margin for per-connection limits
 		connStreamsInbound = connStreamsInbound + (connStreamsInbound / 4)
 		connStreamsOutbound = connStreamsOutbound + (connStreamsOutbound / 4)
@@ -82,8 +82,9 @@ func calculateOptimalLimits(nodeType string, maxOperators int) rcmgr.ScalingLimi
 
 		maxRetries := 3
 
-		streamsInbound := 3 * (maxOperators - 1) * maxRetries
-		streamsOutbound := 3 + (3 * (maxOperators - 1))
+		// Regular node receives broadcasts for all operators (including its own)
+		streamsInbound := 3 * maxOperators * maxRetries
+		streamsOutbound := 3 + (3 * maxOperators)
 
 		streamsInbound = streamsInbound + (streamsInbound / 4)
 		streamsOutbound = streamsOutbound + (streamsOutbound / 4)
