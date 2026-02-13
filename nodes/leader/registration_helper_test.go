@@ -62,13 +62,16 @@ func (s *RegistrationHelperSuite) Test_RegisterNode_Success() {
 	// generate EOA and signature
 	pk, _ := ethcrypto.GenerateKey()
 	addr := ethcrypto.PubkeyToAddress(pk.PublicKey).Hex()
-	sig := utils.SignData(addr, pk)
 
 	// mark as activated
 	eth.Service.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
 
-	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "peer-1"}
-	err := s.ln.registerNodeInternal(s.ctx, req, "/ip4/10.0.0.1/tcp/7000")
+	req := utils.RegistrationRequest{EOAAddress: addr, PeerID: "peer-1", IP: "10.0.0.1", Port: "7000"}
+	sig, err := utils.SignRegistrationRequestContent(req, pk)
+	s.Require().NoError(err)
+	req.Signature = sig
+
+	err = s.ln.registerNodeInternal(s.ctx, req, "/ip4/10.0.0.1/tcp/7000")
 	s.Require().NoError(err)
 	s.Equal(1, s.repo.addCalled)
 	s.Equal("10.0.0.1", s.repo.addArg.IP)
@@ -78,10 +81,10 @@ func (s *RegistrationHelperSuite) Test_RegisterNode_Success() {
 }
 
 func (s *RegistrationHelperSuite) Test_RegisterNode_InvalidJSON() {
-	// stream with invalid json
+	// empty request fails at signature verification
 	err := s.ln.registerNodeInternal(s.ctx, utils.RegistrationRequest{}, "/ip4/127.0.0.1/tcp/9000")
 	s.Error(err)
-	s.Contains(err.Error(), "failed to verify signature")
+	s.Contains(err.Error(), "signature verification failed for registration request from EOA")
 }
 
 func (s *RegistrationHelperSuite) Test_RegisterNode_InvalidSignature() {
@@ -90,34 +93,40 @@ func (s *RegistrationHelperSuite) Test_RegisterNode_InvalidSignature() {
 	// invalid signature: random bytes
 	sig := []byte("invalid")
 	eth.Service.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
-	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "p"}
+	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "p", IP: "1.2.3.4", Port: "1234"}
 	err := s.ln.registerNodeInternal(s.ctx, req, "/ip4/1.2.3.4/tcp/1234")
 	s.Error(err)
-	s.Contains(err.Error(), "failed to verify signature for PeerID: p")
+	s.Contains(err.Error(), "signature verification failed for registration request from EOA")
 }
 
 func (s *RegistrationHelperSuite) Test_RegisterNode_EOA_NotActivated() {
 	pk, _ := ethcrypto.GenerateKey()
 	addr := ethcrypto.PubkeyToAddress(pk.PublicKey).Hex()
-	sig := utils.SignData(addr, pk)
 	// do not set activated operators (empty)
-	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "p"}
-	err := s.ln.registerNodeInternal(s.ctx, req, "/ip4/1.1.1.1/tcp/3030")
+	req := utils.RegistrationRequest{EOAAddress: addr, PeerID: "p", IP: "1.1.1.1", Port: "3030"}
+	sig, err := utils.SignRegistrationRequestContent(req, pk)
+	s.Require().NoError(err)
+	req.Signature = sig
+
+	err = s.ln.registerNodeInternal(s.ctx, req, "/ip4/1.1.1.1/tcp/3030")
 	s.Error(err)
 	s.Contains(err.Error(), "is not activated, registration denied")
 }
 
-func (s *RegistrationHelperSuite) Test_RegisterNode_InvalidRemoteAddr() {
+func (s *RegistrationHelperSuite) Test_RegisterNode_MissingIPOrPort() {
 	pk, _ := ethcrypto.GenerateKey()
 	addr := ethcrypto.PubkeyToAddress(pk.PublicKey).Hex()
-	sig := utils.SignData(addr, pk)
 	eth.Service.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
 
-	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "p"}
-	// invalid multiaddr (too short path parts)
-	err := s.ln.registerNodeInternal(s.ctx, req, "/ip4/10.0.0.1")
+	// Sign a request with empty IP and Port
+	req := utils.RegistrationRequest{EOAAddress: addr, PeerID: "p", IP: "", Port: ""}
+	sig, err := utils.SignRegistrationRequestContent(req, pk)
+	s.Require().NoError(err)
+	req.Signature = sig
+
+	err = s.ln.registerNodeInternal(s.ctx, req, "/ip4/10.0.0.1")
 	s.Error(err)
-	s.Contains(err.Error(), "invalid remote address format")
+	s.Contains(err.Error(), "IP or Port not provided in registration request")
 }
 
 var _ database.INodeInfoRepository = (*mockNodeInfoRepo)(nil)
@@ -129,10 +138,12 @@ func TestRegistrationHelperSuite(t *testing.T) {
 func (s *RegistrationHelperSuite) Test_RegisterNode_Function_Success() {
 	pk, _ := ethcrypto.GenerateKey()
 	addr := ethcrypto.PubkeyToAddress(pk.PublicKey).Hex()
-	sig := utils.SignData(addr, pk)
 
 	eth.Service.SetActivatedOperatorsCached([]common.Address{common.HexToAddress(addr)})
-	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "peer-X"}
+	req := utils.RegistrationRequest{EOAAddress: addr, PeerID: "peer-X", IP: "10.0.0.1", Port: "7000"}
+	sig, err := utils.SignRegistrationRequestContent(req, pk)
+	s.Require().NoError(err)
+	req.Signature = sig
 	payload, _ := json.Marshal(req)
 
 	// mocknet setup
@@ -233,7 +244,7 @@ func (s *RegistrationHelperSuite) Test_RegisterNode_Function_InvalidJSON() {
 func (s *RegistrationHelperSuite) Test_RegisterNode_Function_InvalidSignature() {
 	pk, _ := ethcrypto.GenerateKey()
 	addr := ethcrypto.PubkeyToAddress(pk.PublicKey).Hex()
-	req := utils.RegistrationRequest{EOAAddress: addr, Signature: []byte("bad"), PeerID: "p"}
+	req := utils.RegistrationRequest{EOAAddress: addr, Signature: []byte("bad"), PeerID: "p", IP: "1.2.3.4", Port: "1234"}
 	payload, _ := json.Marshal(req)
 
 	mn := mocknet.New()
@@ -272,7 +283,7 @@ func (s *RegistrationHelperSuite) Test_RegisterNode_Function_InvalidSignature() 
 			s.T().Skip("Mock stream doesn't support deadlines, skipping test")
 			return
 		}
-		s.Contains(err.Error(), "failed to verify signature for PeerID: p")
+		s.Contains(err.Error(), "signature verification failed for registration request from EOA")
 	case <-ctx.Done():
 		s.Fail("test context timeout - RegisterNode handler did not complete")
 	case <-time.After(3 * time.Second):
@@ -283,8 +294,10 @@ func (s *RegistrationHelperSuite) Test_RegisterNode_Function_InvalidSignature() 
 func (s *RegistrationHelperSuite) Test_RegisterNode_Function_EOA_NotActivated() {
 	pk, _ := ethcrypto.GenerateKey()
 	addr := ethcrypto.PubkeyToAddress(pk.PublicKey).Hex()
-	sig := utils.SignData(addr, pk)
-	req := utils.RegistrationRequest{EOAAddress: addr, Signature: sig, PeerID: "p"}
+	req := utils.RegistrationRequest{EOAAddress: addr, PeerID: "p", IP: "10.0.0.1", Port: "3030"}
+	sig, err := utils.SignRegistrationRequestContent(req, pk)
+	s.Require().NoError(err)
+	req.Signature = sig
 	payload, _ := json.Marshal(req)
 
 	mn := mocknet.New()

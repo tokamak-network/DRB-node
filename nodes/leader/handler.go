@@ -370,6 +370,30 @@ func (lh *LeaderNodeHandler) allCommitsReceivedUnlocked(uniqueKey string) bool {
 	}
 	return true
 }
+// UpdatedallCommitsReceivedUnlocked returns per-operator CVS receipt status.
+// For each activated operator, the map value is true if the operator has submitted
+// a non-empty CVS for the given uniqueKey, false otherwise.
+func (lh *LeaderNodeHandler) UpdatedallCommitsReceivedUnlocked(ctx context.Context, client fallback_ethclient.IFallbackEthClient, uniqueKey string) map[string]bool {
+	ops := lh.ethService.GetActivatedOperatorsCached()
+	result := make(map[string]bool, len(ops))
+
+	roundCommits, roundExists := utils.GetCommittedNodes(uniqueKey)
+
+	for _, op := range ops {
+		if !roundExists {
+			result[op.Hex()] = false
+			continue
+		}
+		data, ok := roundCommits[op]
+		if ok && data.Cvs != [32]byte{} {
+			result[op.Hex()] = true
+		} else {
+			result[op.Hex()] = false
+		}
+	}
+	return result
+}
+
 func (lh *LeaderNodeHandler) allCosReceivedUnlocked(uniqueKey string) bool {
 	ops := lh.ethService.GetActivatedOperatorsCached()
 	if len(ops) == 0 {

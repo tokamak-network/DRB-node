@@ -1042,6 +1042,11 @@ func TestDefaultEthService(t *testing.T) {
 // TestExecuteTransaction_SequentialExecution verifies that concurrent ExecuteTransaction
 // calls are serialized by the txMu mutex (no concurrent execution)
 func TestExecuteTransaction_SequentialExecution(t *testing.T) {
+	// Set CHAIN_ID so ExecuteTransaction proceeds past config check
+	// and reaches the actual client calls that we can mock.
+	os.Setenv("CHAIN_ID", "1")
+	defer os.Unsetenv("CHAIN_ID")
+
 	numTransactions := 3
 	txDelay := 100 * time.Millisecond // Simulated transaction processing time
 
@@ -1064,9 +1069,10 @@ func TestExecuteTransaction_SequentialExecution(t *testing.T) {
 			privateKey, err := crypto.GenerateKey()
 			require.NoError(t, err)
 
-			// Setup mock - ChainID will track concurrent execution
-			// ExecuteTransaction retries ChainID up to 3 times
-			mockClient.On("ChainID", ctx).Run(func(args mock.Arguments) {
+			// Setup mock - SuggestGasTipCap is the first client method called
+			// inside sendWithRetry after ExecuteTransaction acquires the mutex.
+			// We track concurrent execution here to verify the mutex serializes calls.
+			mockClient.On("SuggestGasTipCap", ctx).Run(func(args mock.Arguments) {
 				// Increment counter when entering critical section
 				current := atomic.AddInt32(&activeCount, 1)
 
@@ -1082,7 +1088,7 @@ func TestExecuteTransaction_SequentialExecution(t *testing.T) {
 
 				// Decrement counter when leaving
 				atomic.AddInt32(&activeCount, -1)
-			}).Return(nil, errors.New("simulated error")).Times(3)
+			}).Return(nil, errors.New("simulated error"))
 
 			abiJSON := `[{"constant":false,"inputs":[],"name":"testMethod","outputs":[],"type":"function"}]`
 			parsedABI, err := abi.JSON(strings.NewReader(abiJSON))
@@ -1094,7 +1100,7 @@ func TestExecuteTransaction_SequentialExecution(t *testing.T) {
 				PrivateKey:      privateKey,
 			}
 
-			// Execute transaction (will fail on first ChainID call)
+			// Execute transaction (will fail on SuggestGasTipCap after retries)
 			_, _, _ = ExecuteTransaction(ctx, client, mockClient, "testMethod", big.NewInt(0))
 		}(i)
 	}

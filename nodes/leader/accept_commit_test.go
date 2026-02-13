@@ -240,6 +240,12 @@ func createTestNodeForAcceptCommit() *LeaderNode {
 	// Initialize with default eth service
 	node.ethService = eth.Service
 
+	// Load the test ABI so that receiveCommit can parse event signatures
+	parsedABI, err := utils.LoadContractABI("contract/abi/Commit2RevealDRB.json")
+	if err == nil {
+		node.client.ContractABI = parsedABI
+	}
+
 	// Set up a default mock client with ChainID mocked to prevent panics when timers fire
 	// Tests can override this if they need a different mock setup
 	if node.fallbackEthClient == nil {
@@ -257,7 +263,7 @@ func createTestNodeForAcceptCommit() *LeaderNode {
 
 func setMockEthServiceForStatusEvents(node *LeaderNode) {
 	node.ethService = &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {},
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error { return nil },
 		GetActivatedOperatorsCachedFunc: func() []common.Address {
 			return []common.Address{}
 		},
@@ -341,7 +347,8 @@ func TestProcessCOS_IndexOutOfBounds(t *testing.T) {
 	index := big.NewInt(10) // Out of bounds
 
 	err := node.processCOS(context.Background(), round, trialNum, cos, index)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "out of bounds")
 }
 
 // TestProcessCOS_Success tests successful COS processing
@@ -408,7 +415,8 @@ func TestProcessCVS_IndexOutOfBounds(t *testing.T) {
 	index := big.NewInt(10)
 
 	err := node.processCVS(context.Background(), round, trialNum, cvs, index)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "out of bounds")
 }
 
 // TestProcessCVS_Success tests successful CVS processing
@@ -4802,19 +4810,20 @@ func TestLeaderNode_startRequestToSubmitCoMonitoring_AlreadyActive(t *testing.T)
 	assert.True(t, node.GetRequestToSubmitCoTimerMonitoringActive())
 }
 
-func TestLeaderNode_startRequestToSubmitCoMonitoring_NetworkIDError(t *testing.T) {
-	node := createTestNodeForAcceptCommit()
-	mockClient := new(MockFallbackEthClientForAcceptCommit)
-	node.fallbackEthClient = mockClient
+func TestLeaderNode_startRequestToSubmitCoMonitoring_ChainIDError(t *testing.T) {
+	// Temporarily unset CHAIN_ID to trigger GetBlockTimeSeconds() error
+	origChainID := os.Getenv("CHAIN_ID")
+	os.Setenv("CHAIN_ID", "")
+	defer os.Setenv("CHAIN_ID", origChainID)
 
-	mockClient.On("NetworkID", mock.Anything).
-		Return(nil, errors.New("network error"))
+	node := createTestNodeForAcceptCommit()
 
 	timestamp := big.NewInt(time.Now().Unix() + 1000)
 
 	node.startRequestToSubmitCoMonitoring(context.Background(), "100", "1", timestamp)
 
-	mockClient.AssertExpectations(t)
+	// Monitoring should not be active since GetBlockTimeSeconds() failed
+	assert.False(t, node.GetRequestToSubmitCoTimerMonitoringActive())
 }
 
 func TestLeaderNode_CheckHaltedState_ProcessIsHalted(t *testing.T) {
@@ -7954,8 +7963,9 @@ func TestLeaderNode_receiveCommit_EventsDuringReconnection(t *testing.T) {
 
 	// processRandomRequestNumber() expects ethService + batchRepository; mock eth to avoid real chain calls.
 	node.ethService = &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
 			// No-op
+			return nil
 		},
 		GetActivatedOperatorsCachedFunc: func() []common.Address {
 			return []common.Address{}
@@ -8869,8 +8879,9 @@ func TestLeaderNode_CompleteFlow_ConnectProcessDisconnectReconnect(t *testing.T)
 		Return(uint64(time.Now().Unix()), nil).Maybe()
 
 	mockEth := &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error {
 			// No-op
+			return nil
 		},
 	}
 	node.ethService = mockEth
@@ -8953,7 +8964,7 @@ func TestLeaderNode_CatchUpFromSameBlock(t *testing.T) {
 
 	// Needed by Status processing.
 	node.ethService = &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {},
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error { return nil },
 	}
 	mockClient.On("CallContract", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, nil).Maybe()
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).Return(uint64(time.Now().Unix()), nil).Maybe()
@@ -9015,7 +9026,7 @@ func TestLeaderNode_catchUpMissedEvents_OnlyDuplicates_NoUpdate(t *testing.T) {
 	eventData, _ := parsedABI.Events["Status"].Inputs.Pack(round, trialNum, state)
 
 	node.ethService = &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {},
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error { return nil },
 	}
 	mockClient.On("CallContract", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, nil).Maybe()
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).Return(uint64(time.Now().Unix()), nil).Maybe()
@@ -9078,7 +9089,7 @@ func TestLeaderNode_catchUpMissedEvents_SameBlockSameTxHigherLogIndex_Processes(
 	eventData, _ := parsedABI.Events["Status"].Inputs.Pack(round, trialNum, state)
 
 	node.ethService = &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {},
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error { return nil },
 	}
 	mockClient.On("CallContract", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, nil).Maybe()
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).Return(uint64(time.Now().Unix()), nil).Maybe()
@@ -9188,7 +9199,7 @@ func TestLeaderNode_catchUpMissedEvents_Idempotent(t *testing.T) {
 	eventData, _ := parsedABI.Events["Status"].Inputs.Pack(round, trialNum, state)
 
 	node.ethService = &MockEthServiceForAcceptCommit{
-		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) {},
+		UpdateActivatedOperatorsFunc: func(ctx context.Context, client fallback_ethclient.IFallbackEthClient) error { return nil },
 	}
 	mockClient.On("CallContract", mock.Anything, mock.Anything, mock.Anything).Return([]byte{}, nil).Maybe()
 	mockClient.On("BlockTimestamp", mock.Anything, mock.Anything).Return(uint64(time.Now().Unix()), nil).Maybe()

@@ -782,6 +782,10 @@ func TestLeaderNode_checkRoundsForCompletion_AllSubmitted_NoCvOnChain(t *testing
 	defer func() { eth.Service = originalService }()
 
 	mockRepo := &mockLeaderCommitRepo{
+		byRoundTrial: []*utils.LeaderCommitData{
+			{EOAAddress: addr1.Hex(), RandomNumberGenerated: false},
+			{EOAAddress: addr2.Hex(), RandomNumberGenerated: false},
+		},
 		getByEOAData: map[string]*utils.LeaderCommitData{
 			addr1.Hex(): {
 				EOAAddress:  addr1.Hex(),
@@ -852,6 +856,10 @@ func TestLeaderNode_checkRoundsForCompletion_AllSubmitted_CvOnChain(t *testing.T
 	defer func() { eth.Service = originalService }()
 
 	mockRepo := &mockLeaderCommitRepo{
+		byRoundTrial: []*utils.LeaderCommitData{
+			{EOAAddress: addr1.Hex(), RandomNumberGenerated: false},
+			{EOAAddress: addr2.Hex(), RandomNumberGenerated: false},
+		},
 		getByEOAData: map[string]*utils.LeaderCommitData{
 			addr1.Hex(): {
 				EOAAddress:  addr1.Hex(),
@@ -1052,6 +1060,11 @@ func TestLeaderNode_checkRoundsForCompletion_CvOnChain_WithIndices(t *testing.T)
 	defer func() { eth.Service = originalService }()
 
 	mockRepo := &mockLeaderCommitRepo{
+		byRoundTrial: []*utils.LeaderCommitData{
+			{EOAAddress: addr1.Hex(), RandomNumberGenerated: false},
+			{EOAAddress: addr2.Hex(), RandomNumberGenerated: false},
+			{EOAAddress: addr3.Hex(), RandomNumberGenerated: false},
+		},
 		getByEOAData: map[string]*utils.LeaderCommitData{
 			addr1.Hex(): {
 				EOAAddress:  addr1.Hex(),
@@ -1500,6 +1513,11 @@ func TestMain(m *testing.M) {
 }
 
 func setupTestEnvironment() {
+	// Set CHAIN_ID so GetBlockTimeSeconds() works in monitoring tests
+	if os.Getenv("CHAIN_ID") == "" {
+		os.Setenv("CHAIN_ID", "1")
+	}
+
 	err := os.MkdirAll("contract/abi", 0755)
 	if err != nil {
 		log.Fatal("Failed to create test directory:", err)

@@ -1607,7 +1607,7 @@ func TestDetermineRevealOrder(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.False(t, result)
-		assert.Contains(t, err.Error(), "failed to load leader commit")
+		assert.Contains(t, err.Error(), "leader commit data not found")
 		mockRevealOrderRepo.AssertExpectations(t)
 		mockLeaderCommitRepo.AssertExpectations(t)
 	})
@@ -1766,7 +1766,7 @@ func TestDetermineRegularRevealOrder(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.False(t, result)
-		assert.Contains(t, err.Error(), "failed to load peer commit")
+		assert.Contains(t, err.Error(), "peer commit data not found")
 		mockRevealOrderRepo.AssertExpectations(t)
 		mockPeerCommitRepo.AssertExpectations(t)
 	})
