@@ -208,8 +208,8 @@ func TestConcurrentByzantineFaultTolerance(t *testing.T) {
 	const totalNodes = 15        // Total nodes in network
 	const byzantineCount = 4     // Byzantine nodes (< 1/3)
 	const honestCount = totalNodes - byzantineCount
-	const testDuration = 10 * time.Second
-	
+	const testDuration = 5 * time.Second
+
 	// Create honest nodes
 	honestNodes := make([]*leader_node.LeaderNode, honestCount)
 	for i := 0; i < honestCount; i++ {

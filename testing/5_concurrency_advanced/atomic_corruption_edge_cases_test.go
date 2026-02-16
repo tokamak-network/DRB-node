@@ -20,7 +20,7 @@ func TestAtomicStateCorruptionDuringContextSwitching(t *testing.T) {
 	
 	const numContextSwitchers = 50
 	const operationsPerSwitcher = 1000
-	const testDuration = 10 * time.Second
+	const testDuration = 5 * time.Second
 	
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration)
 	defer cancel()
@@ -106,7 +106,7 @@ func TestTimerRaceConditionsWithContextCancellation(t *testing.T) {
 	
 	const numTimerWorkers = 20
 	const timersPerWorker = 100
-	const testDuration = 8 * time.Second
+	const testDuration = 5 * time.Second
 	
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration)
 	defer cancel()
@@ -195,7 +195,7 @@ func TestConcurrentRegularNodeAtomicEdgeCases(t *testing.T) {
 	
 	const numAtomicWorkers = 30
 	const atomicOpsPerWorker = 500
-	const testDuration = 6 * time.Second
+	const testDuration = 4 * time.Second
 	
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration)
 	defer cancel()

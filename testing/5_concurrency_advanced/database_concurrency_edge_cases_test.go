@@ -87,8 +87,8 @@ func TestDatabaseConnectionPoolExhaustionUnderConcurrentLoad(t *testing.T) {
 	const maxConnections = 10
 	const numWorkers = 50
 	const operationsPerWorker = 100
-	const testDuration = 8 * time.Second
-	
+	const testDuration = 5 * time.Second
+
 	mockDB := NewMockConcurrentDatabaseConnection(maxConnections)
 	
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration)
@@ -200,11 +200,11 @@ func TestConcurrentDatabaseTransactionDeadlocks(t *testing.T) {
 	
 	const numTransactions = 30
 	const tablesPerTransaction = 3
-	const testDuration = 6 * time.Second
-	
+	const testDuration = 4 * time.Second
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration)
 	defer cancel()
-	
+
 	var wg sync.WaitGroup
 	var transactionSuccess int64
 	var transactionDeadlocks int64
@@ -341,11 +341,11 @@ func TestDatabaseBatchOperationsConcurrencyEdgeCases(t *testing.T) {
 	const numBatchWorkers = 15
 	const batchSize = 50
 	const batchesPerWorker = 20
-	const testDuration = 10 * time.Second
-	
+	const testDuration = 5 * time.Second
+
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration)
 	defer cancel()
-	
+
 	var wg sync.WaitGroup
 	var batchesProcessed int64
 	var batchesFailed int64

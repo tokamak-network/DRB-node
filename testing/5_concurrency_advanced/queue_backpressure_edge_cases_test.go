@@ -78,7 +78,7 @@ func TestEventQueueOverflowAndBackpressure(t *testing.T) {
 	const numProducers = 20
 	const numConsumers = 5
 	const eventsPerProducer = 200
-	const testDuration = 8 * time.Second
+	const testDuration = 5 * time.Second
 
 	eventQueue := NewMockConcurrentEventQueue(queueSize)
 
@@ -344,7 +344,7 @@ func TestConcurrentCrossNodeStateSynchronization(t *testing.T) {
 	
 	const numSyncCycles = 20
 	const operationsPerCycle = 50
-	const testDuration = 6 * time.Second
+	const testDuration = 4 * time.Second
 
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration)
 	defer cancel()

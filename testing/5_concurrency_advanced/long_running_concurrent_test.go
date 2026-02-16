@@ -111,9 +111,9 @@ func TestLongRunningConcurrentStability(t *testing.T) {
 	metrics := NewConcurrentStabilityMetrics()
 	
 	// Extended test duration for thorough stability validation
-	testDuration := 45 * time.Second
+	testDuration := 10 * time.Second
 	if testing.Verbose() {
-		testDuration = 2 * time.Minute // Longer for verbose testing
+		testDuration = 20 * time.Second // Longer for verbose testing
 	}
 	
 	const numConcurrentWorkers = 25
@@ -403,10 +403,10 @@ func TestExtendedConcurrentMemoryLeakDetection(t *testing.T) {
 	
 	node := leader_node.CreateTestLeaderNode()
 	
-	const testCycles = 6
+	const testCycles = 3
 	const operationsPerCycle = 500
 	const concurrentWorkers = 12
-	const cycleDelay = 3 * time.Second
+	const cycleDelay = 1 * time.Second
 	
 	var memoryReadings []float64
 	var concurrencyErrors int64

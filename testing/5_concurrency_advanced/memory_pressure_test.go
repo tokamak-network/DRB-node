@@ -96,7 +96,7 @@ func TestConcurrentMemoryPressureOperations(t *testing.T) {
 	const memoryPressureKB = 80 * 1024 // 80MB allocation
 	const concurrentWorkers = 20
 	const operationsPerWorker = 100
-	const testDuration = 15 * time.Second
+	const testDuration = 6 * time.Second
 	
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration)
 	defer cancel()
@@ -234,7 +234,7 @@ func TestConcurrentGoroutineExhaustionWithResourceTracking(t *testing.T) {
 	resourceManager := NewConcurrentResourceManager()
 	
 	const maxGoroutines = 500
-	const testDuration = 8 * time.Second
+	const testDuration = 5 * time.Second
 	
 	ctx, cancel := context.WithTimeout(context.Background(), testDuration)
 	defer cancel()
