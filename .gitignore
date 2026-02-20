@@ -27,6 +27,14 @@ config.json
 service.log
 
 ./cmd/service.log
+*.log
+
+# static-key
+static-key/
+
+# binary file
+main
+peer_id_generator
 
 node_info.json
 peer_id.json
@@ -37,3 +45,9 @@ leader_peer_id.json
 regular_peer_id.json
 reveal_orders.json
 registered_nodes.json
+peerNodeInfo.json
+regular_reveal_order.json
+broadcast_trackers.json
+
+.idea
+.vscode

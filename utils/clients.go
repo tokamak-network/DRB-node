@@ -3,17 +3,18 @@ package utils
 import (
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/crypto"
+	appconfig "github.com/tokamak-network/DRB-node/config"
 )
 
 type Client struct {
-	Client          *ethclient.Client
 	ContractABI     abi.ABI
 	ContractAddress common.Address
 	PrivateKey      *ecdsa.PrivateKey // Explicitly use *ecdsa.PrivateKey
@@ -40,4 +41,51 @@ func LoadContractABI(filename string) (abi.ABI, error) {
 	}
 
 	return parsedABI, nil
+}
+
+// NewClient creates a new Client with the given ABI path and private key.
+func NewClient(abiPath string, privateKeyHex string) (*Client, error) {
+	contractAddressStr := appconfig.Get().ContractAddress
+	if contractAddressStr == "" {
+		return nil, errors.New("CONTRACT_ADDRESS is not set in environment variables")
+	}
+	contractAddress := common.HexToAddress(contractAddressStr)
+
+	parsedABI, err := LoadContractABI(abiPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load contract ABI: %v", err)
+	}
+
+	if privateKeyHex == "" {
+		return nil, errors.New("private key is not provided")
+	}
+
+	privateKey, err := crypto.HexToECDSA(privateKeyHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode private key: %v", err)
+	}
+
+	return &Client{
+		ContractAddress: contractAddress,
+		PrivateKey:      privateKey,
+		ContractABI:     parsedABI,
+	}, nil
+}
+
+// NewLeaderClient creates a new Client using the leader's private key.
+func NewLeaderClient(abiPath string) (*Client, error) {
+	privateKeyHex := appconfig.Get().LeaderPrivateKey
+	if privateKeyHex == "" {
+		return nil, errors.New("LEADER_PRIVATE_KEY is not set in environment variables")
+	}
+	return NewClient(abiPath, privateKeyHex)
+}
+
+// NewEOAClient creates a new Client using the EOA's private key.
+func NewEOAClient(abiPath string) (*Client, error) {
+	privateKeyHex := appconfig.Get().EOAPrivateKey
+	if privateKeyHex == "" {
+		return nil, errors.New("EOA_PRIVATE_KEY is not set in environment variables")
+	}
+	return NewClient(abiPath, privateKeyHex)
 }

@@ -1,106 +1,154 @@
 package utils
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
+	"sync"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
-const commitDataFile = "commits.json"
+var CommittedNodes = make(map[string]map[common.Address]LeaderCommitData)
+var CommittedNodesMu sync.RWMutex
+
+// CommittedNodes thread-safe access functions
+func GetCommittedNodes(uniqueKey string) (map[common.Address]LeaderCommitData, bool) {
+	CommittedNodesMu.RLock()
+	defer CommittedNodesMu.RUnlock()
+	roundMap, exists := CommittedNodes[uniqueKey]
+	if !exists {
+		return nil, false
+	}
+	// Return a copy to prevent external modifications
+	result := make(map[common.Address]LeaderCommitData)
+	for k, v := range roundMap {
+		result[k] = v
+	}
+	return result, true
+}
+
+func SetCommittedNodesRound(uniqueKey string, roundMap map[common.Address]LeaderCommitData) {
+	CommittedNodesMu.Lock()
+	defer CommittedNodesMu.Unlock()
+	if CommittedNodes == nil {
+		CommittedNodes = make(map[string]map[common.Address]LeaderCommitData)
+	}
+	CommittedNodes[uniqueKey] = roundMap
+}
+
+func GetCommittedNodeData(uniqueKey string, eoa common.Address) (LeaderCommitData, bool) {
+	CommittedNodesMu.RLock()
+	defer CommittedNodesMu.RUnlock()
+	roundMap, roundExists := CommittedNodes[uniqueKey]
+	if !roundExists {
+		return LeaderCommitData{}, false
+	}
+	data, exists := roundMap[eoa]
+	return data, exists
+}
+
+func SetCommittedNodeData(uniqueKey string, eoa common.Address, data LeaderCommitData) {
+	CommittedNodesMu.Lock()
+	defer CommittedNodesMu.Unlock()
+	if CommittedNodes == nil {
+		CommittedNodes = make(map[string]map[common.Address]LeaderCommitData)
+	}
+	if CommittedNodes[uniqueKey] == nil {
+		CommittedNodes[uniqueKey] = make(map[common.Address]LeaderCommitData)
+	}
+	CommittedNodes[uniqueKey][eoa] = data
+}
+
+func EnsureCommittedNodesRoundExists(uniqueKey string) {
+	CommittedNodesMu.Lock()
+	defer CommittedNodesMu.Unlock()
+	if CommittedNodes == nil {
+		CommittedNodes = make(map[string]map[common.Address]LeaderCommitData)
+	}
+	if CommittedNodes[uniqueKey] == nil {
+		CommittedNodes[uniqueKey] = make(map[common.Address]LeaderCommitData)
+	}
+}
 
 type CommitRequest struct {
-	Round      string            `json:"round"`
-	Cvs        [32]byte          `json:"cvs"`
-	EOAAddress string            `json:"eoa_address"`
-	Signature  []byte            `json:"signed_round"`
-	Sign       map[string]string `json:"sign"` // New field for v, r, s
+	UniqueKey  string   `json:"unique_key"`
+	Round      string   `json:"round"`
+	TrialNum   string   `json:"trial_num"`
+	Cvs        [32]byte `json:"cvs"`
+	EOAAddress string   `json:"eoa_address"`
+	Signature  []byte   `json:"signed_round"`
+	Sign       SignInfo `json:"sign"` // New field for v, r, s
 }
 
 type CosRequest struct {
+	UniqueKey  string   `json:"unique_key"`
 	Round      string   `json:"round"`
+	TrialNum   string   `json:"trial_num"`
 	Cos        [32]byte `json:"cos"`
 	EOAAddress string   `json:"eoa_address"`
 	Signature  []byte   `json:"signed_round"`
 }
 
+// LeaderCommitData defines the structure for storing commit data in the leader node.
+type LeaderCommitData struct {
+	UniqueKey             string   `json:"unique_key"`
+	Round                 string   `json:"round"`
+	TrialNum              string   `json:"trial_num"`
+	EOAAddress            string   `json:"eoa_address"`
+	Cvs                   [32]byte `json:"cvs"`
+	CvsHex                string   `json:"cvs_hex,omitempty"`
+	Cos                   [32]byte `json:"cos"`
+	CosHex                string   `json:"cos_hex"`
+	SecretValue           [32]byte `json:"secret_value"`
+	SecretValueHex        string   `json:"secret_value_hex"`
+	Sign                  SignInfo `json:"sign"` // New field for v, r, s
+	SubmitMerkleRootDone  bool     `json:"submit_merkle_root_done"`
+	RandomNumberGenerated bool     `json:"random_number_generated"`
+	CreatedAt             int64    `json:"created_at"` // Unix timestamp when this commit was created
+}
+
 // CommitData defines the structure for storing commit data for the regular node.
 type CommitData struct {
-	Round           string            `json:"round"`
-	SecretValue     [32]byte          `json:"secret_value"`
-	Cos             [32]byte          `json:"cos"`
-	Cvs             [32]byte          `json:"cvs"`
-	SendToLeader    bool              `json:"send_to_leader"`
-	SendCosToLeader bool              `json:"send_cos_to_leader"`
-	Sign            map[string]string `json:"sign"` // New field for v, r, s
+	UniqueKey       string   `json:"unique_key"`
+	Round           string   `json:"round"`
+	TrialNum        string   `json:"trial_num"`
+	SecretValue     [32]byte `json:"secret_value"`
+	Cos             [32]byte `json:"cos"`
+	Cvs             [32]byte `json:"cvs"`
+	SendToLeader    bool     `json:"send_to_leader"`
+	SendCosToLeader bool     `json:"send_cos_to_leader"`
+	Sign            SignInfo `json:"sign"` // New field for v, r, s
+}
+
+type PeerCommitData struct {
+	Round       string   `json:"round"`
+	TrialNum    string   `json:"trial_num"`
+	SecretValue [32]byte `json:"secret_value"`
+	Cos         [32]byte `json:"cos"`
+	Cvs         [32]byte `json:"cvs"`
+	EOAAddress  string   `json:"eoa_address"`
 }
 
 type Request struct {
 	Round      string `json:"round"`
+	TrialNum   string `json:"trial_num"`
 	EOAAddress string `json:"eoa_address"`
 	Signature  []byte `json:"signed_round"`
 }
 
-// LoadCommitData loads the commit data for a given round number
-func LoadCommitData(roundNum string) (*CommitData, error) {
-	// Open the commit file
-	file, err := os.Open(commitDataFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("commit not found") // No commits for this round
-		}
-		return nil, fmt.Errorf("error opening commit data file: %v", err)
-	}
-	defer file.Close()
-
-	// Decode JSON data
-	var commits map[string]CommitData
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&commits)
-	if err != nil {
-		return nil, fmt.Errorf("error decoding commit data: %v", err)
-	}
-
-	// Check if commit data exists for the given round
-	commitData, exists := commits[roundNum]
-	if !exists {
-		return nil, fmt.Errorf("commit not found")
-	}
-
-	return &commitData, nil
+type SignInfo struct {
+	R string `json:"r"`
+	S string `json:"s"`
+	V string `json:"v"`
 }
 
-// saveCommitData saves the commit data to a file
-func SaveCommitData(commitData CommitData) error {
-	// Open the commit file (create if doesn't exist)
-	file, err := os.OpenFile(commitDataFile, os.O_CREATE|os.O_RDWR, 0666)
-	if err != nil {
-		return fmt.Errorf("error opening commit data file for writing: %v", err)
-	}
-	defer file.Close()
+func ConvertByteArray(b []byte) [32]byte {
+	var arr [32]byte
+	copy(arr[:], b)
+	return arr
+}
 
-	// Read existing commits
-	var commits map[string]CommitData
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&commits)
-	if err != nil && err.Error() != "EOF" {
-		return fmt.Errorf("error decoding existing commit data: %v", err)
-	}
-
-	// Add new commit data
-	if commits == nil {
-		commits = make(map[string]CommitData)
-	}
-	commits[commitData.Round] = commitData
-
-	// Seek to the beginning of the file to overwrite it
-	file.Seek(0, 0)
-
-	// Encode and save the updated commit data
-	encoder := json.NewEncoder(file)
-	err = encoder.Encode(commits)
-	if err != nil {
-		return fmt.Errorf("error encoding commit data: %v", err)
-	}
-
-	return nil
+// DeleteCommittedNodes deletes all data for a specific uniqueKey
+func DeleteCommittedNodes(uniqueKey string) {
+	CommittedNodesMu.Lock()
+	defer CommittedNodesMu.Unlock()
+	delete(CommittedNodes, uniqueKey)
 }

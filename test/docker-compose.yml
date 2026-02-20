@@ -1,0 +1,196 @@
+version: "3.8"
+
+services:
+  leaderpostgres:
+    image: postgres:14.13
+    container_name: leaderpostgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file: ../.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - leaderpostgres-data:/var/lib/postgresql/data
+    networks:
+      - anvil-net
+  leadernode:
+    build:
+      context: ..
+      dockerfile: test/Dockerfile
+    container_name: leadernode
+    depends_on:
+      leaderpostgres:
+        condition: service_healthy
+    env_file: ../.env
+    environment:
+      LEADER_PORT: ${LEADER_PORT}
+      NODE_TYPE: leader
+      POSTGRES_HOST: "leaderpostgres"
+      POSTGRES_PORT: 5432
+      REGULAR_PEER_ID: ${REGULAR1_PEER_ID}
+    volumes:
+      - ./static-key:/app/static-key
+    ports:
+      - "${LEADER_PORT}:${LEADER_PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost ${LEADER_PORT}"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - anvil-net
+    restart: on-failure
+  regular1postgres:
+    image: postgres:14.13
+    container_name: regular1postgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file: ../.env
+    ports:
+      - "5433:5432"
+    volumes:
+      - regular1postgres-data:/var/lib/postgresql/data
+    networks:
+      - anvil-net
+  regular2postgres:
+    image: postgres:14.13
+    container_name: regular2postgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file: ../.env
+    ports:
+      - "5434:5432"
+    volumes:
+      - regular2postgres-data:/var/lib/postgresql/data
+    networks:
+      - anvil-net
+  regular3postgres:
+    image: postgres:14.13
+    container_name: regular3postgres
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    env_file: ../.env
+    ports:
+      - "5435:5432"
+    volumes:
+      - regular3postgres-data:/var/lib/postgresql/data
+    networks:
+      - anvil-net
+  regularnode1:
+    build:
+      context: ..
+      dockerfile: test/Dockerfile
+    container_name: regularnode1
+    depends_on:
+      leadernode:
+        condition: service_healthy
+      regular1postgres:
+        condition: service_healthy
+    ports:
+      - "${REGULAR1_PORT}:${REGULAR1_PORT}"
+    env_file: ../.env
+    environment:
+      LEADER_IP: leadernode
+      LEADER_PORT: ${LEADER_PORT}
+      LEADER_PEER_ID: ${LEADER_PEER_ID}
+      PORT: ${REGULAR1_PORT}
+      REGULAR_NODE_NUMBER: "1"
+      REGULAR_PEER_ID: ${REGULAR1_PEER_ID}
+      EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_1
+      NODE_TYPE: regular
+      POSTGRES_HOST: "regular1postgres"
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./static-key:/app/static-key
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - anvil-net
+    restart: on-failure
+  regularnode2:
+    build:
+      context: ..
+      dockerfile: test/Dockerfile
+    container_name: regularnode2
+    depends_on:
+      leadernode:
+        condition: service_healthy
+      regular2postgres:
+        condition: service_healthy
+    ports:
+      - "${REGULAR2_PORT}:${REGULAR2_PORT}"
+    env_file: ../.env
+    environment:
+      LEADER_IP: leadernode
+      LEADER_PORT: ${LEADER_PORT}
+      LEADER_PEER_ID: ${LEADER_PEER_ID}
+      PORT: ${REGULAR2_PORT}
+      REGULAR_NODE_NUMBER: "2"
+      REGULAR_PEER_ID: ${REGULAR2_PEER_ID}
+      EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_2
+      NODE_TYPE: regular
+      POSTGRES_HOST: "regular2postgres"
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./static-key:/app/static-key
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - anvil-net
+    restart: on-failure
+  regularnode3:
+    build:
+      context: ..
+      dockerfile: test/Dockerfile
+    container_name: regularnode3
+    depends_on:
+      leadernode:
+        condition: service_healthy
+      regular3postgres:
+        condition: service_healthy
+    ports:
+      - "${REGULAR3_PORT}:${REGULAR3_PORT}"
+    env_file: ../.env
+    environment:
+      LEADER_IP: leadernode
+      LEADER_PORT: ${LEADER_PORT}
+      LEADER_PEER_ID: ${LEADER_PEER_ID}
+      PORT: ${REGULAR3_PORT}
+      REGULAR_NODE_NUMBER: "3"
+      REGULAR_PEER_ID: ${REGULAR3_PEER_ID}
+      EOA_PRIVATE_KEY: $EOA_PRIVATE_KEY_3
+      NODE_TYPE: regular
+      POSTGRES_HOST: "regular3postgres"
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./static-key:/app/static-key
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - anvil-net
+    restart: on-failure
+
+volumes:
+  leaderpostgres-data:
+  regular1postgres-data:
+  regular2postgres-data:
+  regular3postgres-data:
+
+networks:
+  anvil-net:
+    driver: bridge

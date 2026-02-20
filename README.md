@@ -9,165 +9,583 @@ This document provides comprehensive instructions for configuring and running a 
 Before setting up the DRB node, ensure the following requirements are met:
 
 1. **Install Go**:  
-   Ensure Go is installed on your system. **Go version 1.23.3 or greater** is required. [Refer to the Go installation guide](https://go.dev/doc/install) for details.
+   Ensure Go is installed on your system. **Go version 1.24.0 or greater** is required. [Refer to the Go installation guide](https://go.dev/doc/install) for details.
+   
+   Verify installation: `go version`
+   
 
-2. **Install Docker (optional)**:  
-   Docker is required if you prefer running the node in a containerized environment. [Refer to Docker installation guide](https://docs.docker.com/get-docker/) for details.
+2. **Install Docker**:  
+   Docker is required for running the nodes. [Refer to Docker installation guide](https://docs.docker.com/get-docker/) for details.
 
 3. **Smart Contract Deployment**:  
    Deploy the DRB smart contract and obtain its address.  
-   You can get the DRB smart contract from [here](https://github.com/tokamak-network/Commit-Reveal2/tree/service).
+   You can get the DRB smart contract from [here](https://github.com/tokamak-network/Commit-Reveal2/tree/audit/main-fixes).
 
-4. **Graph Node**:  
-   A running Subgraph instance is required for monitoring on-chain events.  
-   The Subgraph repository is available [here](https://github.com/tokamak-network/DRB-subgraph).
-
-5. **Ethereum Account Balance**:  
+4. **Account Balance**:  
    Ensure the Leader Node and Regular Node accounts have sufficient balance to perform transactions.
-   - The **Leader Node** must have enough ETH to interact with the Ethereum network, such as submitting Merkle roots and generating random numbers.
-   - The **Regular Node** must have enough ETH to cover the deposit requirements set by the contract.
+   - The **Leader Node** must have enough tokens to interact with the blockchain network, such as submitting Merkle roots and generating random numbers.
+   - The **Regular Node** must have enough tokens to cover the deposit requirements set by the contract.
 
 ---
 
-## Environment Variables
+## Testing
 
-The `.env` file is required for node configuration. Below are the settings for each type of node:
+The DRB Node project includes comprehensive unit tests and integration tests to ensure code quality and reliability. **All testing-related scripts and configurations are located in the `test/` directory**, which is separate from the deployment setup.
 
-### Leader Node Configuration
+### Unit Testing
+
+Unit tests verify individual components and functions in isolation. The test scripts automatically set up a test database using Docker Compose, run the tests, and clean up afterward.
+
+#### Prerequisites for Unit Testing
+
+Before running unit tests, ensure the following requirements are met:
+
+1. **Docker** (Required):  
+   Docker and Docker Compose are required for running unit tests. The test scripts use Docker Compose to set up test databases.
+   - [Refer to Docker installation guide](https://docs.docker.com/get-docker/) for details.
+   
+   Verify installation:
+   ```bash
+   docker --version
+   docker-compose --version
+   docker compose version
+   ```
+   
+   Expected output should show:
+   ```
+   Docker version 28.4.0, build d8eb465
+   Docker Compose version v2.39.4-desktop.1
+   Docker Compose version v2.39.4-desktop.1
+   ```
+   
+   Ensure Docker is installed and running before executing unit tests.
+
+2. **PostgreSQL** (Required):  
+   PostgreSQL version 14.18 or greater is required for unit tests. The test scripts use Docker Compose to set up PostgreSQL test databases.
+   - Verify Docker PostgreSQL container is running: The test scripts automatically start PostgreSQL containers via Docker Compose.
+
+3. **Go** (Required):  
+   Go version 1.24.0 or greater is required for running unit tests.
+   
+   Verify installation: `go version`
+   
+
+#### Running Unit Tests
+
+**Using Shell Scripts** (from `test/` directory):
+
+The project provides shell scripts in the `test/` directory for running unit tests for specific packages. These scripts automatically handle database setup and cleanup:
+
+```bash
+# Navigate to test directory
+cd test/
+
+# Test utils package
+./run_utils_test.sh
+
+# Test database package
+./run_database_test.sh
+
+# Test nodes/leader package
+./run_leader_tests.sh
+
+# Test nodes/regular package
+./run_regular_tests.sh
+
+# Test commit-reveal2 package
+./run_commit-reveal2_test.sh
+```
+
+**Using Go Test Command Directly**:
+
+You can also run tests directly using Go commands from the project root:
+
+```bash
+# Test specific packages (without coverage)
+go test -v ./utils/...
+go test -v ./database/...
+go test -v ./nodes/leader/...
+go test -v ./nodes/regular/...
+go test -v ./commit-reveal2/...
+
+# Test specific packages with coverage (generates coverage.out)
+go test -v -coverprofile=coverage.out ./utils/...
+go test -v -coverprofile=coverage.out ./database/...
+go test -v -coverprofile=coverage.out ./nodes/leader/...
+go test -v -coverprofile=coverage.out ./nodes/regular/...
+go test -v -coverprofile=coverage.out ./commit-reveal2/...
+```
+
+**Generating Coverage Report**:
+
+```bash
+# Generate HTML coverage report from coverage.out
+go tool cover -html=coverage.out -o coverage.html
+```
+
+### Integration Testing
+
+Integration tests verify the interaction between multiple components, including Docker containers, blockchain nodes, and databases. These tests require additional setup and take longer to execute.
+
+#### Prerequisites for Integration Testing
+
+Before running integration tests, ensure the following requirements are met:
+
+1. **Geth** (Required):  
+   Geth version 1.16.3-stable or greater is required for integration tests. Geth is an Ethereum client used for integration tests. Install with:
+   ```bash
+   go install github.com/ethereum/go-ethereum/cmd/geth@latest
+   ```
+   Verify installation: `geth version`
+   
+
+2. **PostgreSQL** (Required):  
+   PostgreSQL version 14.18 or greater is required for integration tests. Ensure PostgreSQL is running on `localhost:5432`.
+   - **macOS**: `brew services start postgresql`
+   - **Linux**: `sudo systemctl start postgresql`
+   - Verify: `pg_isready -h localhost -p 5432`
+
+3. **Docker** (Required):  
+   Docker and Docker Compose are required for running Docker-based integration tests. Ensure Docker is installed and running.
+   - [Refer to Docker installation guide](https://docs.docker.com/get-docker/) for details.
+   
+   Verify installation:
+   ```bash
+   docker --version
+   docker-compose --version
+   docker compose version
+   ```
+   
+   Expected output should show:
+   ```
+   Docker version 28.4.0, build d8eb465
+   Docker Compose version v2.39.4-desktop.1
+   Docker Compose version v2.39.4-desktop.1
+   ```
+
+4. **Go** (Required):  
+   Go version 1.24.0 or greater is required for running integration tests.
+   
+   Verify installation: `go version`
+
+#### Running Integration Tests
+
+Integration tests require Geth to be running first. Follow these steps:
+
+**Step 1: Start Geth Node**
+
+Start Geth in a separate terminal:
+
+```bash
+cd test/
+./run_geth_test.sh
+```
+
+This will start Geth in development mode and keep it running. **Leave this terminal open** and keep Geth running while you execute the integration tests.
+
+**Step 2: Run Integration Tests**
+
+In a new terminal, run the integration tests:
+
+```bash
+# From project root
+go test ./integration_test -v -timeout 180m
+```
+
+The integration test framework will:
+1. Connect to the running Geth node
+2. Generate peer IDs for leader and regular nodes
+3. Create `.env.docker-test` file with all required configuration
+4. Deploy smart contracts
+5. Start all Docker containers
+6. Run the tests
+7. Clean up resources after completion
+
+**Note**: 
+- Integration tests use their own isolated environment and do not require or use the root `.env` file.
+- Keep the Geth terminal running until all integration tests complete.
+- Integration tests have a default timeout of 180 minutes.
+
+#### Integration Test Details
+
+Integration tests include:
+- **Docker-based Node Testing**: Tests the full DRB node system with leader and regular nodes running in Docker containers
+- **Blockchain Interaction Testing**: Verifies contract deployment, transactions, and event handling using Geth blockchain nodes
+- **Database Testing**: Tests database operations with PostgreSQL instances
+- **End-to-End Protocol Testing**: Validates the complete commit-reveal protocol flow
+
+
+### Test Environment Setup
+
+This section explains how to run your code in a test environment with all nodes (1 leader + 3 regular nodes) running together. 
+
+**Note**: This is different from integration tests. Integration tests automatically configure everything. The test environment requires manual `.env` file configuration.
+
+#### Prerequisites for Test Environment
+
+Before setting up the test environment, ensure the following:
+
+1. **Docker** (Required):  
+   Docker and Docker Compose must be installed and running.
+
+2. **PostgreSQL** (Required):  
+   PostgreSQL version 14.18 or greater is required. The test environment uses Docker Compose to set up PostgreSQL instances automatically, so you don't need to install PostgreSQL separately on your system.
+
+#### Steps to Run Test Environment
+
+**Step 1: Generate Test Node Key Files**
+
+Generate the required peer ID key files for testing:
+
+```bash
+cd test/
+
+# Generate leader node key file
+./run_leader_generator_test.sh
+
+# Generate regular node key files (regularnode1.bin, regularnode2.bin, regularnode3.bin)
+./run_regular_generator_test.sh
+```
+
+**Note**: If the key files already exist in `test/static-key/`, the scripts will not overwrite them. The leader node generator will skip generation if `leadernode.bin` exists, and the regular node generator will use existing files and only generate missing ones. To generate new peer IDs, delete the existing files first.
+
+After generation, the scripts will output the peer IDs. **Save these peer IDs** as you'll need them for the `.env` file.
+
+**Step 2: Configure .env File**
+
+Configure your `.env` file with the test environment variables. See the [Test Environment Configuration](#test-environment-configuration) section for the required variables.
+
+**Step 3: Build and Start Test Nodes**
+
+Navigate to the test directory and run the build script:
+
+```bash
+cd test/
+./build.sh
+```
+
+This script will:
+- Check for required key files in `test/static-key/`
+- Verify `.env` file exists in project root
+- Build and start all test nodes (1 leader + 3 regular nodes) using Docker Compose
+- Set up separate PostgreSQL instances for each node
+
+**Step 4: Monitor Test Nodes**
+
+View logs for each node:
+
+```bash
+# Leader node logs
+docker logs -f leadernode
+
+# Regular node 1 logs
+docker logs -f regularnode1
+
+# Regular node 2 logs
+docker logs -f regularnode2
+
+# Regular node 3 logs
+docker logs -f regularnode3
+```
+
+**Step 5: Stop Test Environment**
+
+To stop all test nodes:
+
+```bash
+cd test/
+docker compose --env-file ../.env down
+```
+
+**Note**: The test environment uses:
+- Test-specific Docker Compose configuration
+- Multiple regular nodes running simultaneously for testing
+- Test-specific peer ID files in `test/static-key/`
+- Root `.env` file for configuration
+
+For production deployment, see the [Deployment](#deployment) section.
+
+---
+
+## Test Environment Variables
+
+This section describes the `.env` file configuration required for the test environment when running `test/build.sh` to test your code with all nodes.
+
+**Important**: 
+- Integration tests (`go test ./integration_test`) do NOT use the root `.env` file. They automatically create their own `.env.docker-test` file with all required configuration.
+- For production deployment configuration, see the [Leader Node Configuration](#leader-node-configuration) and [Regular Node Configuration](#regular-node-configuration) sections under Deployment.
+
+### Test Environment Configuration
+
+When running the test environment (`test/build.sh`), configure your `.env` file with the following variables:
+
+```bash
+
+# Leader Node Configuration
+LEADER_PRIVATE_KEY=<Your Leader Node Private Key>
+LEADER_EOA=<Your Leader Ethereum Address>
+LEADER_PORT=61280
+LEADER_PEER_ID=<Generated from test/run_leader_generator_test.sh>
+
+
+# Regular Nodes Configuration
+REGULAR1_PEER_ID=<Generated from test/run_regular_generator_test.sh>
+REGULAR1_PORT=61281
+REGULAR2_PEER_ID=<Generated from test/run_regular_generator_test.sh>
+REGULAR2_PORT=61282
+REGULAR3_PEER_ID=<Generated from test/run_regular_generator_test.sh>
+REGULAR3_PORT=61283
+
+# Ethereum Configuration
+ETH_RPC_URLS=<Your Ethereum RPC URLs separated by , (comma)>
+CONTRACT_ADDRESS=<Deployed DRB Contract Address>
+CHAIN_ID=<Chain_ID>
+
+# Regular Node Private Keys (for test environment with 3 regular nodes)
+EOA_PRIVATE_KEY_1=<Your Regular Node Private Key for Account 1>
+EOA_PRIVATE_KEY_2=<Your Regular Node Private Key for Account 2>
+EOA_PRIVATE_KEY_3=<Your Regular Node Private Key for Account 3>
+
+# Database Configuration
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=password
+```
+
+**Note**: 
+- The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section below for detailed instructions.
+- **For local/test environment**: The `STATUS` variable is **not required**. The node will automatically use local IP addresses.
+- **LEADER_IP** (used in `test/docker-compose.yml` for regular nodes): If you want the leader address to be resolved via **DNS**, keep `LEADER_IP=leadernode`. If you already have the **leader node IP**, set `LEADER_IP=<LEADER_NODE_IP>` (regular nodes will connect directly to that IP). The code uses an IP multiaddress (`/ip4/...`) when the value parses as an IP, and a DNS multiaddress (`/dns/...`) otherwise.
+
+#### Configuration by Chain ID
+
+The contract period configuration variables control the timing windows for various operations in the DRB protocol. **You must add these variables to your `.env` file** based on your `CHAIN_ID`.
+
+**Important**: Add the following environment variables to your `.env` file based on which network you are using:
+
+**For ThanosSepolia (CHAIN_ID = 111551119090), Anvil (CHAIN_ID = 31337), or OpSepolia (CHAIN_ID = 11155111):**
+
+If you are using ThanosSepolia, Anvil, or OpSepolia, **add the following to your `.env` file**:
+
+```bash
+OFF_CHAIN_SUBMISSION_PERIOD=40
+REQUEST_OR_SUBMIT_OR_FAIL_DECISION_PERIOD=30
+ON_CHAIN_SUBMISSION_PERIOD=60
+OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR=20
+ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR=30
+```
+
+**For Sepolia (CHAIN_ID = 11155420):**
+
+If you are using Sepolia, **add the following to your `.env` file**:
+
+```bash
+OFF_CHAIN_SUBMISSION_PERIOD=80
+REQUEST_OR_SUBMIT_OR_FAIL_DECISION_PERIOD=60
+ON_CHAIN_SUBMISSION_PERIOD=120
+OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR=20
+ON_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR=40
+```
+
+> **Note:** `OFF_CHAIN_SUBMISSION_PERIOD_PER_OPERATOR` also controls the timeout for waiting for secret value responses from regular nodes. Adjust this value based on your chain's block time (e.g., lower for fast chains like Arbitrum, higher for slower chains).
+
+
+## Deployment
+
+**Deployment and testing are separated in this project.** All deployment-related scripts and configurations are located in the `deployment/` directory, which is separate from the testing setup.
+
+### Deployment Structure
+
+The deployment directory is organized as follows:
+
+```
+deployment/
+├── leader/              # Leader node deployment
+│   ├── build.sh         # Build and start leader node
+│   ├── docker-compose.yml
+│   ├── Dockerfile
+│   ├── generate-peer-id.sh  # Generate leader peer ID
+│   └── static-key/      # Leader node key storage
+│       └── leadernode.bin
+└── regular/             # Regular node deployment
+    ├── build.sh         # Build and start regular node
+    ├── docker-compose.yml
+    ├── Dockerfile
+    ├── generate-peer-id.sh  # Generate regular peer ID
+    └── static-key/      # Regular node key storage
+        └── regularnode.bin
+```
+
+### Prerequisites for Deployment
+
+Before deploying nodes, ensure the following:
+
+1. **Deploy the Smart Contract**:  
+   Clone the repository for the DRB smart contract and deploy it to your preferred Ethereum network. Obtain the contract address. The leader node should be the owner of the contract, so deploy the contract with the leader node private key.
+   - You can get the DRB smart contract from [here](https://github.com/tokamak-network/Commit-Reveal2/tree/audit/main-fixes).
+
+2. **Create Docker Network** (Required):  
+   The deployment uses an external Docker network `drb-production-net`. Create it before deploying:
+   ```bash
+   docker network create drb-production-net
+   ```
+
+3. **Configure Environment Status** (Required for Production):  
+   Set the `STATUS` environment variable in your `.env` file based on your deployment environment:
+   
+   **For Production Deployment (AWS, Cloud Platforms):**
+   ```bash
+   STATUS=prod
+   ```
+   - Nodes will use public IP addresses for communication
+   - Required when nodes are deployed on different networks/VPCs
+   - Required for internet-based communication between nodes
+   
+   **For Local Development:**
+   ```bash
+   # Do NOT set STATUS variable - leave it unset
+   ```
+   - Nodes will automatically use local/Docker network IP addresses
+   - No configuration needed for local testing
+   - Works automatically with Docker Compose networks
+   - **Important**: Do not add `STATUS` variable to your `.env` file for local development
+
+### Deploying Leader Node
+
+If you want to run a Leader Node on your system, follow these steps:
+
+#### Leader Node Configuration
+
+Configure your `.env` file in the project root with the following variables for Leader Node:
 
 ```bash
 # Leader Node Configuration
-LEADER_PORT=61280
 LEADER_PRIVATE_KEY=<Your Leader Node Private Key>
 LEADER_EOA=<Your Leader Ethereum Address>
-NODE_TYPE=leader
+LEADER_PORT=<Your Leader Node Port>
+LEADER_PEER_ID=<Generated from deployment/leader/generate-peer-id.sh>
 
-ETH_RPC_URL=<Your Ethereum RPC URL>
+# Ethereum Configuration
+ETH_RPC_URLS=<Your Ethereum RPC URLs separated by , (comma)>
 CONTRACT_ADDRESS=<Deployed DRB Contract Address>
-SUBGRAPH_URL=<Your Subgraph URL>
+CHAIN_ID=<Chain_ID>
+
+# Database Configuration
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=password
+
+# Environment Status (Required for Production Deployment)
+STATUS=prod
+
+# Contract Period Configuration (based on CHAIN_ID)
 ```
 
-### Regular Node Configuration
+**Note**: 
+- The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section for the correct values based on your network.
+- **For production deployment**: Set `STATUS=prod` to use public IP addresses. This is required for nodes deployed on AWS or other cloud platforms where nodes need to communicate over the internet.
+- **For local development**: Do **NOT** set the `STATUS` variable. Leave it unset in your `.env` file. The node will automatically use local/Docker network IP addresses.
+
+#### Leader Node Deployment Steps
+
+1. **Generate Leader Peer ID** (if not already generated):
+   ```bash
+   cd deployment/leader/
+   ./generate-peer-id.sh
+   ```
+   This will create `deployment/leader/static-key/leadernode.bin` and output the `LEADER_PEER_ID`. Update the `LEADER_PEER_ID` in your `.env` file with the generated peer ID.
+   
+   **Note**: If `deployment/leader/static-key/leadernode.bin` already exists, the script will not generate a new peer ID. To generate a fresh peer ID, delete the existing file first.
+
+2. **Build and Start Leader Node**:
+   ```bash
+   cd deployment/leader/
+   ./build.sh
+   ```
+   This will:
+   - Build the leader node Docker image
+   - Start the leader node and its PostgreSQL database
+   - Connect to the `drb-production-net` network
+
+3. **View Leader Node Logs**:
+   ```bash
+   docker logs -f leadernode
+   ```
+
+**Note**: If you have permission issues with the scripts, make them executable:
+```bash
+chmod +x deployment/leader/build.sh
+chmod +x deployment/leader/generate-peer-id.sh
+```
+
+### Deploying Regular Node
+
+If you want to run a Regular Node on your system, follow these steps:
+
+#### Regular Node Configuration
+
+Configure your `.env` file in the project root with the following variables for Regular Node:
 
 ```bash
 # Regular Node Configuration
-LEADER_IP=<Leader Node IP Address>
-LEADER_PORT=61280
 LEADER_PEER_ID=<Leader Node Peer ID>
 LEADER_EOA=<Leader Ethereum Address>
-EOA_PRIVATE_KEY=<Your Regular Node Private Key>
-NODE_TYPE=regular
-PORT=61281
-CHAIN_ID=111551119090
+LEADER_PORT=<Leader Node Port>
+PORT=<This Regular Node's Port>
+EOA_PRIVATE_KEY=<This Regular Node's Private Key>
+REGULAR_PEER_ID=<Generated from deployment/regular/generate-peer-id.sh>
 
-ETH_RPC_URL=<Your Ethereum RPC URL>
+
+# Ethereum Configuration
+ETH_RPC_URLS=<Your Ethereum RPC URLs separated by , (comma)>
 CONTRACT_ADDRESS=<Deployed DRB Contract Address>
-SUBGRAPH_URL=<Your Subgraph URL>
+CHAIN_ID=<Chain_ID>
+
+# Database Configuration
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=<Your Production Database Password>
+
+# Environment Status (Required for Production Deployment)
+STATUS=prod
+
+# Contract Period Configuration (based on CHAIN_ID)
 ```
 
-### Running the Node
+**Note**: 
+- The contract period configuration values must be set according to your `CHAIN_ID`. See the [Configuration by Chain ID](#configuration-by-chain-id) section for the correct values based on your network.
+- **For production deployment**: Set `STATUS=prod` to use public IP addresses. This is required for nodes deployed on AWS or other cloud platforms where nodes need to communicate over the internet.
+- **For local development**: Do **NOT** set the `STATUS` variable. Leave it unset in your `.env` file. The node will automatically use local/Docker network IP addresses.
+- **LEADER_IP** (used in `deployment/regular/docker-compose.yml` for regular nodes): If you want the leader address to be resolved via **DNS**, keep `LEADER_IP=leadernode`. If you already have the **leader node IP**, set `LEADER_IP=<LEADER_NODE_IP>` (regular nodes will connect directly to that IP). The code uses an IP multiaddress (`/ip4/...`) when the value parses as an IP, and a DNS multiaddress (`/dns/...`) otherwise.
 
-## 1. Deploy the Smart Contract and Set Up Graph Node
+#### Regular Node Deployment Steps
 
-Before running the DRB Node, follow these steps:
+1. **Generate Regular Peer ID** (if not already generated):
+   ```bash
+   cd deployment/regular/
+   ./generate-peer-id.sh
+   ```
+   This will create `deployment/regular/static-key/regularnode.bin`. The peer ID will be displayed.
+   
+   **Note**: If `deployment/regular/static-key/regularnode.bin` already exists, the script will load the existing peer ID and will not generate a new one. To generate a fresh peer ID, delete the existing file first.
 
-Deploy the Smart Contract:
+2. **Build and Start Regular Node**:
+   ```bash
+   cd deployment/regular/
+   ./build.sh
+   ```
+   This will:
+   - Build the regular node Docker image
+   - Start the regular node and its PostgreSQL database
+   - Connect to the `drb-production-net` network
 
-Clone the repository for the DRB smart contract.
-Deploy the contract to your preferred Ethereum network and obtain the contract address.
-Run the Graph Node and Deploy Subgraph:
+3. **View Regular Node Logs**:
+   ```bash
+   docker logs -f regularnode
+   ```
 
-Clone the DRB Subgraph repository.
-Deploy the Subgraph and ensure it is running to track on-chain events for your smart contract.
-
-## 2. Run the Nodes
-
-After deploying the smart contract and running the Subgraph, you can proceed to run the nodes.
-
-- **Step-by-Step Node Execution**
-  Note: Always run the Leader Node first, and then start at least 2 Regular Nodes for proper network setup.
-
-- **1. Leader Node**
-To run the Leader Node individually, use the following script:
-
-Set the environment variables first in leader bash file.
-
+**Note**: If you have permission issues with the scripts, make them executable:
 ```bash
-./run_leader.sh
+chmod +x deployment/regular/build.sh
+chmod +x deployment/regular/generate-peer-id.sh
 ```
-
-- **2. Regular Nodes**
-After the Leader Node is running, you can run the Regular Node with the following script separately:
-
-Set the environment variables first in regular bash file.
-
-```bash
-./run_regular.sh
-```
-
-The Regular Node will use the Leader's private key as required. You can also start multiple Regular Nodes by running the script multiple times.
-
-## 3. Other Ways to Run Node
-
-You can run the DRB Node using one of the following methods:
-
-- **1. Using the Combined Start Script**
-If you prefer to run both Leader and Regular Nodes in one go, use the combined start script:
-
-Set the environment variables first in leader and regular bash file to avoid any conflicts.
-
-```bash
-./start_drb_nodes.sh
-```
-
-- **2. Run Directly**
-
-```bash
-go run cmd/main.go --nodeType leader
-```
-
-- **3. Build and Execute**
-Generate a binary file and execute it:
-
-
-Build the node:
-
-```bash
-go build -o drb-node cmd/main.go
-./drb-node
-```
-
-- **4. Using Docker**
-Build and run the node in a containerized environment:
-
-Ensure Docker is installed, and the .env file is correctly configured.
-
-```bash
-docker-compose up --build
-```
-
-## 3. Stopping the Nodes
-To stop the nodes, use the following script:
-
-```bash
-./stop_drb_nodes.sh
-```
-
-This will stop any processes running on the specified ports.
-
-
-### Troubleshooting Tips
-
-Here are some common issues you might encounter and their solutions:
-
-- **Issue**: Unable to connect to Ethereum RPC.
-- **Solution**: Check if your Ethereum RPC URL is correctly configured in the .env file. Ensure that the Ethereum node is running and accessible.
-
-- **Issue**: Node not connecting to Leader Node.
-- **Solution**: Ensure that the IP, port, and Peer ID of the Leader Node are correctly set in the Regular Node's .env configuration. Check the service.log file for error messages related to peer connections.
-
-- **Issue**: Insufficient balance for transaction.
-- **Solution**: Ensure that the Leader Node and Regular Node Ethereum accounts have enough balance to perform transactions and make the required deposit.
 
 ---
 
@@ -176,6 +594,7 @@ Here are some common issues you might encounter and their solutions:
 After running the node, you can verify the setup using the following methods:
 
 #### **1. Node Registration Logs**
+
 Check the logs to confirm successful peer connections. Look for entries indicating successful connections and Ethereum transactions.
 
 - **For Regular Node Registration**, the logs should show like:
@@ -198,11 +617,11 @@ Check the logs to confirm successful peer connections. Look for entries indicati
 
 "failed to save registered nodes: <error>"
 
-"failed to activate EOA <EOA Address> on-chain: <error>"
+"failed to activate EOA 0xdD4793AC06D46939078767E3C5ee04802aA4503b on-chain: <error>"
 
 - After on-chain activation, the log should confirm that the node registration and activation were completed with a message:
 
-"Node registration and activation completed"
+"Activation successful"
 
 - **Regular Node Connections**
   Ensure that the Regular Nodes are connected to the Leader Node. You can check this in the logs or by inspecting the peer connections.
@@ -211,28 +630,28 @@ Check the logs to confirm successful peer connections. Look for entries indicati
   Use your Ethereum RPC provider to monitor and verify on-chain interactions, such as random number generation and Merkle root submissions. You can check the contract for updates using a tool like Etherscan or any Ethereum block explorer.
 
 log message for executing merkle root onchain (leader node):
+
 - **Success Case**:
 
-"Successfully submitted Merkle root for round <round number>"
+"Successfully submitted Merkle root for round 0 with trail 0"
 
 "Transaction <hash> confirmed in block <block number>"
 
 - **Failure Case**:
 
-"Failed to submit Merkle root for round <round number>: <error>"
-
+"Failed to submit Merkle root for round 0 with trail 0"
 
 log message for execuitng generate random number onchain (leader node):
 
 - **Success Case**:
 
-"All EOAs have submitted for round <round number>. Initiating random number generation."
+"All EOAs have submitted for round 0 with trail 0. Initiating random number generation."
 
 "Transaction submitted. TX Hash: <hash>"
 
 - **Failure Case**:
 
-"failed to execute generateRandomNumber transaction: <error>"
+"Failed to execute random number generation transaction for round 0 with trail 0"
 
 ---
 
@@ -242,89 +661,184 @@ The repository is organized into several directories based on functionality. Her
 
 ```
 ├── cmd/                          # Entry point for running the DRB Node
-│   └── main.go                    # Main file to start the DRB node
-├── contracts/                     # Folder containing contract ABI files
-│   └── abi                         # ABI file for the Commit2RevealDRB smart contract
-│       ├── Commit2RevealDRB.json
-├── eth/                           # Ethereum-related functions for smart contract interactions
-│   └── eth.go                    # Ethereum client functions and smart contract interaction
-├── libp2putils/                   # Helper utilities for libp2p peer-to-peer communication
-│   └── libp2putils.go            # Libp2p utilities for handling peer-to-peer communication
-├── nodes/                         # Core functions for managing nodes, including registration and communication
-│   ├── leaderNode.go             # Logic for the Leader Node (managing commitments, Merkle root generation)
-│   ├── regularNode.go            # Logic for the Regular Node (commitment submission, deposit check)
-│   ├── leaderNode_helper/        # Helper functions for Leader Node
-│   │   ├── secret_value_handler.go  # Helper function for handling secret value submission
-│   │   ├── registration_helper.go   # Helper function for node registration
-│   │   ├── monitorCommits.go    # Helper function for monitoring commitments from regular nodes
-│   │   └── reveal_requests.go   # Helper function for managing secret value requests from regular nodes
-│   └── regularNode_helper/       # Helper functions for Regular Node
-│       ├── generateCvsSignature.go # Helper function for generating CVS signatures
-│       └── handleCommitRequest.go # Helper function for handling commitment requests from the leader node
-├── commit-reveal2/                # Logic for generating commitments, Merkle tree, and reveal order
+│   ├── main.go                   # Main file to start the DRB node
+│   ├── generator/                # Peer ID generator for leader node
+│   │   └── main.go
+│   └── regulargenerator/         # Peer ID generator for regular nodes
+│       └── main.go
+├── commit-reveal2/               # Logic for generating commitments, Merkle tree, and reveal order
 │   ├── commit.go                 # Logic for commitment generation and Merkle tree handling
 │   ├── merkleTree.go             # Logic for Merkle tree root generation
-│   ├── reveal_order.go           # Logic for determining the reveal order for committed nodes
-├── transactions/                  # Functions to handle Ethereum transactions
-│   ├── callFunction.go           # Smart contract interaction (helper function for calling contract methods)
-│   ├── execute.go                # Helper function for executing Ethereum transactions
-├── utils/                         # Utility functions for various tasks (e.g., signing, IP retrieval)
+│   └── reveal_order.go           # Logic for determining the reveal order for committed nodes
+├── contract/                     # Smart contract related files
+│   ├── abi/                      # Contract ABI files
+│   │   ├── Commit2RevealDRB.abi  # Contract ABI file
+│   │   ├── Commit2RevealDRB.bin  # Contract bytecode
+│   │   └── Commit2RevealDRB.json # Contract metadata and ABI
+│   └── Commit2RevealDRB/         # Generated Go bindings
+│       ├── Commit2RevealDRB.go   # Go contract bindings
+│       └── Commit2RevealDRB.sol  # Solidity contract source
+├── database/                     # Database layer for persistent storage
+│   ├── migrations/               # Database migration files
+│   │   └── 001_init_schema.sql   # Initial database schema
+│   ├── batch_delete.go           # Batch deletion operations
+│   ├── broadcast_tracker.go      # Tracking broadcast messages
+│   ├── config.go                 # Database configuration
+│   ├── connection.go             # Database connection management
+│   ├── leader_commit.go          # Leader commit data operations
+│   ├── migrations.go             # Migration execution logic
+│   ├── node_info.go              # Node information storage
+│   ├── peer_commit.go            # Peer commit data operations
+│   ├── regular_commit.go         # Regular node commit operations
+│   ├── reveal_order.go           # Reveal order storage
+│   └── scheme.go                 # Database schema definitions
+├── deployment/                   # Production deployment configurations
+│   ├── leader/                   # Leader node deployment
+│   │   ├── build.sh              # Build and start leader node script
+│   │   ├── docker-compose.yml    # Docker Compose for leader node
+│   │   ├── Dockerfile            # Leader node Docker configuration
+│   │   ├── generate-peer-id.sh  # Generate leader peer ID script
+│   │   └── static-key/           # Leader node key storage
+│   │       └── leadernode.bin
+│   └── regular/                  # Regular node deployment
+│       ├── build.sh              # Build and start regular node script
+│       ├── docker-compose.yml    # Docker Compose for regular node
+│       ├── Dockerfile            # Regular node Docker configuration
+│       ├── generate-peer-id.sh  # Generate regular peer ID script
+│       └── static-key/           # Regular node key storage
+│           └── regularnode.bin
+├── eth/                          # Ethereum client and smart contract interactions
+│   ├── eth.go                    # Core Ethereum client functions and transaction handling
+│   └── eth_test.go               # Tests for Ethereum functionality
+├── libp2putils/                  # Helper utilities for libp2p peer-to-peer communication
+│   └── libp2putils.go           # Libp2p utilities for handling peer-to-peer communication
+├── logger/                       # Logging utilities
+│   └── logger.go                 # Centralized logging configuration
+├── nodes/                        # Core node implementation and logic
+│   ├── leaderNode.go             # Leader Node implementation (registration, commitment processing)
+│   ├── regularNode.go            # Regular Node implementation (deposit, activation, commitment submission)
+│   ├── leaderNode_helper/        # Helper functions for Leader Node operations
+│   │   ├── acceptCommit.go       # Event processing and monitoring logic
+│   │   ├── broadCast.go          # Broadcasting messages to regular nodes
+│   │   ├── monitor_commits.go    # Monitoring commitments and round completion
+│   │   ├── registration_helper.go # Node registration handling
+│   │   ├── reveal_requests.go    # Secret value request management and monitoring
+│   │   └── secret_value_handler.go # Secret value processing and verification
+│   └── regularNode_helper/       # Helper functions for Regular Node operations
+│       ├── generateCvsSignature.go # CVS signature generation
+│       ├── receiveValues.go      # Processing received values from leader
+│       ├── secretValueHandler.go # Handling secret value requests
+│       └── sendCommit.go         # Commitment submission and event monitoring
+├── pkg/                          # Reusable packages and utilities
+│   ├── constants/                # Project constants
+│   │   └── chain.go              # Chain-specific constants
+│   ├── fallback_ethclient/       # Fallback Ethereum client for reliability
+│   │   └── fallback_rpc.go       # Multi-RPC client with failover support
+│   └── types/                    # Common type definitions
+│       └── networkinfo.go        # Network information structures
+├── test/                         # Testing configurations and scripts
+│   ├── build.sh                  # Build all test nodes (1 leader + 3 regular)
+│   ├── docker-compose.yml        # Docker Compose for test environment
+│   ├── docker-compose.test.yml   # Docker Compose for unit tests
+│   ├── Dockerfile                # Test Docker configuration
+│   ├── run_commit-reveal2_test.sh # Test commit-reveal2 package
+│   ├── run_database_test.sh      # Test database package
+│   ├── run_geth_test.sh          # Start Geth for integration tests
+│   ├── run_leader_generator_test.sh # Generate leader peer ID for testing
+│   ├── run_leader_tests.sh       # Test nodes/leader package
+│   ├── run_regular_generator_test.sh # Generate regular peer IDs for testing
+│   ├── run_regular_tests.sh      # Test nodes/regular package
+│   ├── run_utils_test.sh         # Test utils package
+│   └── static-key/               # Test node key storage
+│       ├── leadernode.bin
+│       ├── regularnode1.bin
+│       ├── regularnode2.bin
+│       └── regularnode3.bin
+├── utils/                        # Utility functions and helpers
+│   ├── broadcast.go              # Broadcasting utilities and message structures
 │   ├── clients.go                # Ethereum client setup and contract ABI loading
-│   ├── commit.go                 # Commit data structures and commit data management
-│   ├── graphql_queries.go        # GraphQL queries for fetching round data and activated operators
-│   ├── ip_retriever.go           # Retrieves local and public IP addresses
-│   ├── leaderNodeData.go         # Logic for handling leader commit data
-│   ├── node_info.go              # Logic for saving/loading node information
-│   ├── peer_id_storage.go        # Handles storing and loading libp2p PeerID
-│   ├── streamHandler.go          # Handles libp2p stream creation and data sending
-│   ├── utils.go                  # Various utility functions (e.g., signature verification)
-├── .env                           # Configuration file for environment variables
-├── README.md                      # This file
+│   ├── commit.go                 # Commit data structures and management
+│   ├── ip_retriever.go           # IP address retrieval utilities
+│   ├── node_info.go              # Node information handling
+│   ├── reveal_order.go           # Reveal order utilities
+│   ├── streamHandler.go          # LibP2P stream handling
+│   └── utils.go                  # General utility functions (signature verification, etc.)
+├── integration_test/             # Integration test suite
+│   ├── docker_nodes_quick_test.go # Docker-based integration tests
+│   └── setup/                    # Test environment setup utilities
+│       ├── test_setup.go         # Test environment configuration
+│       └── geth_setup.go         # Geth blockchain node setup for tests
+├── go.mod                        # Go module dependencies
+├── go.sum                        # Go module checksums
+├── .env                          # Environment variables configuration (not in repo)
+└── README.md                     # This documentation file
 ```
 
 ### nodes/ Folder
 
 The `nodes/` folder contains the core logic for managing node operations, including registration, activation, communication, and interaction between leader and regular nodes.
 
-- **`leaderNode.go`**: Implements the behavior of the Leader Node, including the registration of nodes, processing of commitments, generating Merkle roots, and submitting data to Ethereum.
-- **`regularNode.go`**: Implements the behavior of the Regular Node, handling peer-to-peer communication, deposit checks, and commitment submissions to the Leader Node.
-- **`leaderNode_helper/`**: Contains helper functions for Leader Node operations such as registration, commitment monitoring, and handling secret values.
-  - **`secret_value_handler.go`**: Handles the secret value submission from regular nodes.
-  - **`registration_helper.go`**: Manages the registration of nodes.
-  - **`monitorCommits.go`**: Monitors commitments, generates Merkle roots, and manages random number generation for rounds.
-  - **`reveal_requests.go`**: Manages sending and receiving secret value requests from regular nodes.
-- **`regularNode_helper/`**: Contains helper functions specific to the regular node, such as generating CVS signatures and handling commit requests from the leader node.
+- **`leaderNode.go`**: Implements the behavior of the Leader Node, including node registration, processing of commitments, generating Merkle roots, and coordinating the DRB protocol across multiple rounds.
+- **`regularNode.go`**: Implements the behavior of the Regular Node, handling peer-to-peer communication, deposit/activation management, and commitment submissions to the Leader Node with monitoring capabilities.
 
-### Core Functions
+#### leaderNode_helper/ Directory
 
-Below are the core functions and their responsibilities across different components:
+Contains specialized helper functions for Leader Node operations:
 
-### Leader Node (leaderNode.go)
+- **`acceptCommit.go`**: Core event processing and monitoring logic, including Status events, CVS/COS submissions, secret submissions, and time-based monitoring for automatic requests and failure handling.
+- **`broadCast.go`**: Broadcasting messages to regular nodes with acknowledgment tracking and retry mechanisms, including synchronous broadcasting for critical operations.
+- **`monitor_commits.go`**: Monitors commitments and round completion, validates blockchain state, and triggers random number generation when all requirements are met.
+- **`registration_helper.go`**: Handles node registration, EOA activation verification, and maintains the registry of participating nodes.
+- **`reveal_requests.go`**: Manages the sequential secret value request process, including timing-based monitoring for submission failures and automatic retry mechanisms.
+- **`secret_value_handler.go`**: Processes and verifies secret values from regular nodes, implements sequential revelation protocol, and manages hash verification.
 
-- **RunLeaderNode**: Initializes the Leader Node, processes incoming commit data, and generates Merkle roots when all commitments are received.
-- **handleCommitRequest**: Processes CVS commit data from regular nodes.
-- **generateMerkleRoot**: Generates the Merkle Root from the collected CVS values.
-- **submitMerkleRoot**: Submits the Merkle Root to Ethereum.
-- **monitorCommits**: Monitors the status of commitments from regular nodes, checks for completed rounds, and triggers necessary actions such as generating random numbers.
+#### regularNode_helper/ Directory
 
-### Regular Node (regularNode.go)
+Contains specialized helper functions for Regular Node operations:
 
-- **RunRegularNode**: Initializes the Regular Node, checks deposits, and sends commitments to the Leader Node.
-- **sendCommitToLeader**: Sends the generated commit (CVS) to the Leader Node.
-- **sendCosToLeader**: Sends the Commitment Output (COS) to the Leader Node after verification.
-- **generateRandomNumber**: Generates a random number after all commitments have been received and processed.
-- **checkActivationStatus**: Checks if the Regular Node's Ethereum Address (EOA) is activated for a given round.
+- **`generateCvsSignature.go`**: Generates CVS (Commitment Value Signature) for commitment verification and handles signature creation for various protocol messages.
+- **`receiveValues.go`**: Processes received values from the leader node, handles event subscriptions, and manages acknowledgment responses with signature verification.
+- **`secretValueHandler.go`**: Handles secret value requests from the leader, implements sequential revelation checks, and ensures proper order verification before secret submission.
+- **`sendCommit.go`**: Manages commitment submission to the leader and implements comprehensive event monitoring with time-based failure detection and automatic retry mechanisms.
 
-### Helper Functions for Leader Node (leaderNode_helper/)
+### Key Components and Architecture
 
-- **StartSecretValueRequests**: Initiates the process of requesting secret values from regular nodes according to the reveal order.
-- **sendSecretValueRequestToNode**: Sends the secret value request to a specific regular node, signing the round number and ensuring the correct node is targeted.
-- **HandleSecretValueResponse**: Handles responses to secret value requests and continues sending requests to the next node in the reveal order.
+The DRB node system is built around several key architectural components:
 
-### Helper Functions for Regular Node (regularNode_helper/)
+#### Database Layer (`database/`)
 
-- **generateCvsSignature**: Generates the CVS (Commitment Value Signature) for verifying the commitment.
-- **handleCommitRequest**: Handles incoming commitment requests from the leader and processes the CVS (Commitment Value Signature).
+- **Persistent Storage**: PostgreSQL-based storage for commit data, node information, and reveal orders
+- **Migration System**: Automatic database schema management and updates
+- **Data Models**: Structured storage for leader commits, regular commits, broadcast tracking, and node registry
+
+#### Network Layer (`libp2putils/`, `pkg/fallback_ethclient/`)
+
+- **P2P Communication**: LibP2P-based peer-to-peer networking for node communication
+- **Blockchain Connectivity**: Fallback RPC client with automatic failover for reliable Ethereum connectivity
+- **Event Monitoring**: Real-time blockchain event subscription and processing
+
+#### Protocol Implementation (`commit-reveal2/`, `nodes/`)
+
+- **Commit-Reveal Protocol**: Multi-phase cryptographic commitment and revelation process
+- **Merkle Tree Generation**: Efficient proof generation for commitment verification
+- **Time-Based Monitoring**: Automatic request submission and failure detection with configurable timeouts
+- **Sequential Revelation**: Ordered secret revelation process with verification
+
+#### Monitoring and Reliability
+
+- **Event-Driven Architecture**: Responsive to blockchain events with automatic state transitions
+- **Failure Detection**: Time-based monitoring for missing submissions with automatic retry
+- **State Validation**: Blockchain state verification to prevent stale operations
+- **Graceful Degradation**: Robust error handling and recovery mechanisms
+
+### Core Protocol Flow
+
+1. **Node Registration**: Regular nodes register with the leader and activate on-chain
+2. **Round Initialization**: Status events trigger new DRB rounds with automatic monitoring
+3. **Commitment Phase**: Regular nodes submit CVS values with time-based request automation
+4. **Revelation Phase**: Sequential merkle root submission followed by COS submission
+5. **Secret Phase**: Ordered secret revelation with broadcast verification
+6. **Completion**: Random number generation and round finalization
 
 ### Contributing to the Project
 
@@ -335,37 +849,12 @@ To contribute to the project, follow these steps:
 
 `git clone https://github.com/tokamak-network/DRB-node`
 
-3. **branch**: main
+3. **branch**: dispute-mechanishm
 4. **Make your changes**: Modify or add new features as needed.
 5. **Submit a Pull Request**: Once your changes are ready, submit a pull request with a description of your changes.
 
-
-### **Bugs/Error s**
+### **Bugs/Errors**
 
 **Observed Issue:**
 
 - When the leader node receives a high volume of commit/reveal values from regular nodes simultaneously, it sometimes fails to store one or more values due to file I/O contention or other concurrency issues.
-
-**Potential Causes:**
-
-- High concurrency: too many simultaneous writes leading to missed file entries.
-- Lack of a retry or confirmation mechanism.
-
-**Suggested Improvements:**
-
-1. **Post-Wait Retry Mechanism (Leader-Initiated):**
-    - **Process:**
-        1. Leader waits after receiving the bulk of CVS/COS/secret values.
-        2. If any value is missing, leader requests that specific regular node to resend it.
-        3. Upon receiving the missing value, the leader stores it.
-        4. If missing values aren’t received after multiple retries, the leader may omit the node from the round, abort the round, or use another fallback.
-2. **Rate Limiting at Regular Nodes (Regular Node-Initiated):**
-    - **Process:**
-        - Implement a brief waiting period (e.g., 5–10 seconds) before a regular node sends another value (CVS, COS, or secret) to the leader node.
-        - This reduces the risk of overwhelming the leader node’s I/O operations and ensures more orderly handling of incoming data.
-
-**Benefits:**
-
-- **Data Integrity:** Both approaches help ensure that all values are accurately stored.
-- **System Reliability:** Introducing waiting periods and retry mechanisms improves fault tolerance and system stability.
-- **Scalability:** As the network grows and more regular nodes become active, these measures help maintain system responsiveness and correctness.
